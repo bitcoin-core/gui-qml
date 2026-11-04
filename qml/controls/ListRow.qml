@@ -51,13 +51,15 @@ AbstractButton {
                 ? root.hoverBackgroundColor
                 : "transparent"
 
+        // Inset, since FormSection clips its rows.
         FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
-            borderRadius: root.cornerRadius + 2
-            topMargin: -2
-            bottomMargin: -2
-            leftMargin: -2
-            rightMargin: -2
+            borderRadius: root.cornerRadius
+            topMargin: 0
+            bottomMargin: 0
+            leftMargin: 0
+            rightMargin: 0
         }
     }
 
