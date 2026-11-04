@@ -170,6 +170,9 @@ set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml
 set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests PROPERTIES
   ENVIRONMENT "${gui_test_environment}")
+set_tests_properties(bitcoinqml_qmltests PROPERTIES
+  FAIL_REGULAR_EXPRESSION "CommandConsole\\.qml:[0-9:]+ Parameter \"event\" is not declared"
+)
 
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
