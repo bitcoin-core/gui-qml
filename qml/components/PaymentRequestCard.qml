@@ -203,7 +203,9 @@ Pane {
 
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
-            if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
+            // Pass the url itself: the url overload turns it into a local path
+            // for the platform, such as C:/... on Windows.
+            if (!result.saveToFile(fileUrl))
                 root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
         })
     }
