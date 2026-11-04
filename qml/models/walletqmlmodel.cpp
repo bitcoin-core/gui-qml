@@ -1315,7 +1315,10 @@ QVariantList WalletQmlModel::watchOnlyExports() const
         item.insert(QStringLiteral("receiveChain"), receive->branch.mid(1));
         item.insert(QStringLiteral("changeChain"), change ? change->branch.mid(1) : QString{});
         item.insert(QStringLiteral("xpub"), receive->xpub);
-        item.insert(QStringLiteral("extendedKey"), Slip132ExtendedKey(receive->xpub, type));
+        // A bare key implies /0/* and /1/*, so any other layout needs the descriptor.
+        const bool key_covers_both{receive->branch == QLatin1String("/0") &&
+                                   (!change || (!descriptor.parts.isEmpty() && change->branch == QLatin1String("/1")))};
+        item.insert(QStringLiteral("extendedKey"), key_covers_both ? Slip132ExtendedKey(receive->xpub, type) : QString{});
         item.insert(QStringLiteral("fingerprint"), receive->fingerprint);
         item.insert(QStringLiteral("derivationPath"), receive->derivation_path);
         exports.append(item);

@@ -52,11 +52,12 @@ Control {
                     : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
                 width: Math.max(0, (segmentsRow.width - segmentsRow.spacing * (root.model.length - 1)) / Math.max(1, root.model.length))
                 height: segmentsRow.height
+                enabled: typeof modelData !== "object" || modelData === null || modelData.enabled !== false
                 autoExclusive: true
                 checked: index === root.currentIndex
                 text: root.optionText(modelData)
                 bgRadius: 5
-                textColor: Theme.color.neutral9
+                textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
                 textHoverColor: checked ? Theme.color.white : Theme.color.neutral9
                 textActiveColor: Theme.color.white
                 textActiveBold: true

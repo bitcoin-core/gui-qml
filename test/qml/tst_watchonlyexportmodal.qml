@@ -41,11 +41,32 @@ TestCase {
         description: "",
         scriptName: "wpkh",
         xpub: "tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L",
-        descriptor: "wpkh([621f5481/84h/1h/0h]tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L/0/*)#hv6zap77\nwpkh(tpubOther/1/*)#aaaaaaaa",
-        descriptorParts: {},
+        descriptor: "wpkh([621f5481/84h/1h/0h]tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L/<0;1>/*)#hv6zap77",
+        descriptorParts: {
+            opening: "wpkh(",
+            origin: "[621f5481/84h/1h/0h]",
+            key: "tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L",
+            path: "/<0;1>/*",
+            closing: ")",
+            checksum: "hv6zap77"
+        },
         extendedKey: "vpubSegwit",
         fingerprint: "621f5481",
         derivationPath: "m/84h/1h/0h",
+        receiveChain: "0",
+        changeChain: "1"
+    })
+    readonly property var legacy: ({
+        id: "legacy",
+        label: "Base58 (Legacy)",
+        description: "",
+        scriptName: "pkh",
+        xpub: "tpubDDLegacyReceive0000000000000000000000",
+        descriptor: "pkh([621f5481/44h/1h/0h]tpubDDLegacyReceive0000000000000000000000/0/*)#aaaaaaaa\npkh([621f5481/45h/1h/0h]tpubDDLegacyChange00000000000000000000000/1/*)#bbbbbbbb",
+        descriptorParts: {},
+        extendedKey: "",
+        fingerprint: "621f5481",
+        derivationPath: "m/44h/1h/0h",
         receiveChain: "0",
         changeChain: "1"
     })
@@ -132,13 +153,13 @@ TestCase {
     }
 
     function test_unjoined_descriptor_falls_back_to_text() {
-        const modal = openModal([taproot, segwit], "bech32")
-        findChild(modal, "watchOnlyExportAddressTypePicker").activated("bech32")
+        const modal = openModal([taproot, legacy], "bech32")
+        findChild(modal, "watchOnlyExportAddressTypePicker").activated("legacy")
         verify(findChild(modal, "watchOnlyExportDescriptor").visible)
         verify(!findChild(modal, "watchOnlyExportDescriptorOpening").visible)
         verify(findChild(modal, "watchOnlyExportDescriptorPlain").visible)
-        compare(findChild(modal, "watchOnlyExportDescriptorPlain").text, segwit.descriptor)
-        compare(findChild(modal, "watchOnlyExportNote").text, "Only includes funds on Bech32 (SegWit) addresses.")
+        compare(findChild(modal, "watchOnlyExportDescriptorPlain").text, legacy.descriptor)
+        compare(findChild(modal, "watchOnlyExportNote").text, "Only includes funds on Base58 (Legacy) addresses.")
     }
 
     function test_clicking_descriptor_copies_it() {
@@ -165,6 +186,26 @@ TestCase {
 
         findChild(modal, "watchOnlyExportFormatPicker").selected(0, "Descriptor")
         compare(modal.payload, segwit.descriptor)
+    }
+
+    function test_extended_key_skips_types_it_cannot_cover() {
+        const modal = openModal([taproot, segwit, legacy], "legacy")
+        findChild(modal, "watchOnlyExportAddressTypePicker").activated("legacy")
+        findChild(modal, "watchOnlyExportFormatPicker").selected(1, "Extended key")
+        verify(modal.extendedKeyFormat)
+        compare(modal.addressType, "bech32m")
+        compare(modal.payload, taproot.extendedKey)
+        compare(optionIds(modal), ["bech32m", "bech32"])
+    }
+
+    function test_extended_key_is_disabled_without_a_covering_key() {
+        const modal = openModal([legacy], "legacy")
+        verify(!modal.extendedKeyAvailable)
+        verify(!findItem(modal.contentItem, "watchOnlyExportFormatPickerOption_1").enabled)
+        verify(findItem(modal.contentItem, "watchOnlyExportFormatPickerOption_0").enabled)
+        findChild(modal, "watchOnlyExportFormatPicker").selected(1, "Extended key")
+        verify(!modal.extendedKeyFormat)
+        compare(modal.payload, legacy.descriptor)
     }
 
     function test_address_type_focus_outline_stays_inside_the_row() {
