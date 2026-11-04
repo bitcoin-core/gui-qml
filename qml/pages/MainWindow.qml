@@ -75,14 +75,36 @@ ApplicationWindow {
         return typeof target.undo === "function"
                 || typeof target.redo === "function"
                 || typeof target.copy === "function"
+                || typeof target.copySelection === "function"
                 || typeof target.paste === "function"
             ? target
             : null
     }
 
+    // Views that select across items, like MonospaceOutputView, expose
+    // hasSelection and copySelection() rather than a TextEdit's copy().
+    function canCopyFrom(target) {
+        if (!target) {
+            return false
+        }
+        if (typeof target.copySelection === "function") {
+            return target.hasSelection === true
+        }
+        return typeof target.copy === "function"
+            && !!target.selectedText
+            && target.selectedText.length > 0
+    }
+
     function invokeEditCommand(method) {
         const target = appWindow.editTarget(appWindow.activeFocusItem)
-        if (!target || typeof target[method] !== "function") {
+        if (!target) {
+            return
+        }
+        if (method === "copy" && typeof target.copySelection === "function") {
+            target.copySelection()
+            return
+        }
+        if (typeof target[method] !== "function") {
             return
         }
         target[method]()
@@ -168,10 +190,7 @@ ApplicationWindow {
         canRedo: appWindow.menuEditTarget
             && typeof appWindow.menuEditTarget.redo === "function"
             && appWindow.menuEditTarget.canRedo === true
-        canCopy: appWindow.menuEditTarget
-            && typeof appWindow.menuEditTarget.copy === "function"
-            && appWindow.menuEditTarget.selectedText
-            && appWindow.menuEditTarget.selectedText.length > 0
+        canCopy: appWindow.canCopyFrom(appWindow.menuEditTarget)
         canPaste: appWindow.menuEditTarget
             && typeof appWindow.menuEditTarget.paste === "function"
             && appWindow.menuEditTarget.readOnly !== true

@@ -7,6 +7,7 @@
 
 #include <QAbstractListModel>
 #include <QColor>
+#include <QVariantMap>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -23,9 +24,15 @@ class RpcConsoleWorker;
  * List model exposing the console output rows.
  *
  * Owned by RpcConsoleModel and exposed to QML via the outputModel property;
- * the MonospaceOutputView in CommandConsole.qml binds to it directly. Rows
- * are capped at kMaxRows — the oldest rows are dropped when the cap is hit,
- * protecting against runaway output from chatty RPCs.
+ * the MonospaceOutputView in CommandConsole.qml binds to it directly. One row
+ * holds one *line* of output, never a whole reply, so the view can virtualize.
+ * Rows are capped at kMaxRows — the oldest are dropped when the cap is hit.
+ *
+ * Each row carries the content twice: contentHtml for rendering and
+ * contentPlain for search offsets, accessibility and copying. Rows appended in
+ * one batch share an entry id, so a whole reply can be selected and copied.
+ * The rows echoing a submitted command also carry it in the command role, and
+ * whether secrets were redacted from it, so the view can offer to run it again.
  */
 class RpcOutputListModel : public QAbstractListModel
 {
@@ -36,10 +43,20 @@ public:
     enum Role {
         TimestampRole = Qt::UserRole + 1,
         ContentRole,
+        PlainContentRole,
         CategoryRole,
+        EntryRole,
+        CommandRole,
+        RedactedRole,
     };
 
-    static constexpr int kMaxRows = 5000;
+    /** Lines, not replies: bounds the buffer at ~12 MB of text. */
+    static constexpr int kMaxRows = 50000;
+
+    struct OutputLine {
+        QString html;
+        QString plain;
+    };
 
     explicit RpcOutputListModel(QObject* parent = nullptr);
 
@@ -47,7 +64,12 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void appendRow(const QString& timestamp, const QString& contentHtml, int category);
+    /** Role values of @p row keyed by role name, as QML's ListModel::get(). */
+    Q_INVOKABLE QVariantMap get(int row) const;
+
+    /** Append a block of lines as one batch; only its first row is stamped. */
+    void appendLines(const QString& timestamp, const QVector<OutputLine>& lines, int category,
+                     const QString& command = {}, bool redacted = false);
     void resetAll();
 
 Q_SIGNALS:
@@ -57,9 +79,14 @@ private:
     struct Row {
         QString timestamp;
         QString contentHtml;
+        QString contentPlain;
         int category;
+        int entry;
+        QString command;
+        bool redacted;
     };
     QVector<Row> m_rows;
+    int m_next_entry{0};
 };
 
 /**
@@ -138,7 +165,8 @@ private Q_SLOTS:
 
 private:
     void setExecuting(bool executing);
-    void appendFormattedRow(const QString& time, int category, const QString& rawText);
+    void appendFormattedRow(const QString& time, int category, const QString& rawText,
+                            const QString& command = {}, bool redacted = false);
 
     interfaces::Node& m_node;
     bool m_executing{false};
