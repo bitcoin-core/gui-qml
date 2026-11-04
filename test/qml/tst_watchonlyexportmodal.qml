@@ -239,4 +239,26 @@ TestCase {
         tryCompare(modal, "opened", false)
         tryVerify(() => modal.exports.length === 0)
     }
+
+    function test_closes_when_wallet_changes_while_opening() {
+        const modal = createTemporaryObject(modalComponent, this, {wallet: makeWallet([taproot], "bech32m")})
+        verify(modal.openForWallet())
+        verify(modal.visible)
+        verify(!modal.opened)
+        modal.wallet = makeWallet([segwit], "bech32")
+        tryCompare(modal, "visible", false)
+        verify(!modal.opened)
+        compare(modal.exports.length, 0)
+        compare(modal.payload, "")
+    }
+
+    function test_wallet_change_closes_save_dialog() {
+        const modal = openModal([taproot], "bech32m")
+        const dialog = findChild(modal, "watchOnlyExportSaveDialog")
+        modal.openSaveDialog()
+        verify(dialog.visible)
+        modal.wallet = makeWallet([segwit], "bech32")
+        verify(!dialog.visible)
+        tryCompare(modal, "visible", false)
+    }
 }
