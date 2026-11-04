@@ -21,8 +21,7 @@ SettingsPage {
     readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
-    readonly property bool canExportWatchOnly: root.walletLoaded && !!root.wallet
-        && root.wallet.watchOnlyExports().length > 0
+    readonly property bool canExportWatchOnly: root.walletLoaded && !!root.wallet && root.wallet.canExportWatchOnly
 
     signal selectWalletRequested()
     signal passwordRequested()
