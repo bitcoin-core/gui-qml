@@ -15,12 +15,15 @@ Popup {
 
     property var wallet: walletController.selectedWallet
     property var exports: []
+    // Descriptors that no longer give out addresses but may still hold funds.
+    property var inactiveExports: []
     property bool extendedKeyFormat: false
     // Empty means all address types, which only the descriptor format supports.
     property string addressType: ""
     property string errorText: ""
     property var clipboard: Clipboard
     readonly property bool allTypes: !extendedKeyFormat && addressType === ""
+    readonly property var completeExports: exports.concat(inactiveExports)
     readonly property bool extendedKeyAvailable: exports.some(item => item.extendedKey !== "")
     readonly property var currentExport: {
         for (const item of exports) {
@@ -28,11 +31,11 @@ Popup {
         }
         return null
     }
-    readonly property string payload: allTypes ? exports.map(item => item.descriptor).join("\n")
+    readonly property string payload: allTypes ? completeExports.map(item => item.descriptor).join("\n")
         : !currentExport ? "" : extendedKeyFormat ? currentExport.extendedKey : currentExport.descriptor
     readonly property string sharedFingerprint: {
-        const fingerprints = new Set(exports.map(item => item.fingerprint))
-        return fingerprints.size === 1 ? exports[0].fingerprint : ""
+        const fingerprints = new Set(completeExports.map(item => item.fingerprint))
+        return fingerprints.size === 1 ? completeExports[0].fingerprint : ""
     }
     readonly property var typeOptions: {
         const options = exports.filter(item => !extendedKeyFormat || item.extendedKey !== "").map(item => ({
@@ -41,7 +44,7 @@ Popup {
             description: item.description,
             objectName: "watchOnlyExportAddressType_" + item.id
         }))
-        if (extendedKeyFormat || exports.length < 2) return options
+        if (extendedKeyFormat || completeExports.length < 2) return options
         return [{
             id: "",
             label: qsTr("All address types"),
@@ -59,8 +62,9 @@ Popup {
     function openForWallet() {
         exports = wallet ? wallet.watchOnlyExports() : []
         if (exports.length === 0) return false
+        inactiveExports = wallet.inactiveWatchOnlyExports()
         extendedKeyFormat = false
-        addressType = exports.length > 1 ? "" : exports[0].id
+        addressType = completeExports.length > 1 ? "" : exports[0].id
         errorText = ""
         open()
         return true
@@ -119,6 +123,7 @@ Popup {
     }
     onClosed: {
         exports = []
+        inactiveExports = []
         addressType = ""
         errorText = ""
     }
@@ -275,20 +280,25 @@ Popup {
                         : qsTr("Each descriptor covers receive and change addresses.")
 
                     Repeater {
-                        model: root.allTypes ? root.exports : []
+                        model: root.allTypes ? root.completeExports : []
 
                         ListRow {
                             required property var modelData
                             required property int index
-                            objectName: "watchOnlyExportType_" + modelData.id
+                            readonly property bool inactive: index >= root.exports.length
+                            readonly property string rowId: inactive ? "inactive" + (index - root.exports.length) : modelData.id
+                            objectName: "watchOnlyExportType_" + rowId
                             Layout.fillWidth: true
                             title: modelData.label
-                            description: root.shortDescriptor(modelData)
-                            showDivider: index < root.exports.length - 1
-                            showsDisclosureIndicator: true
-                            onClicked: root.addressType = modelData.id
+                            description: inactive
+                                //: Shown under an address type in the watch-only export list for keys that no longer give out new addresses, such as keys from before a password was set. %1 is a shortened descriptor.
+                                ? qsTr("Previous key %1").arg(root.shortDescriptor(modelData))
+                                : root.shortDescriptor(modelData)
+                            showDivider: index < root.completeExports.length - 1
+                            showsDisclosureIndicator: !inactive
+                            onClicked: if (!inactive) root.addressType = modelData.id
                             trailingItem: CopyButton {
-                                objectName: "watchOnlyExportTypeCopy_" + modelData.id
+                                objectName: "watchOnlyExportTypeCopy_" + rowId
                                 displayMode: CopyButton.IconOnly
                                 Accessible.name: qsTr("Copy %1 descriptor").arg(modelData.label)
                                 onCopyRequested: root.clipboard.setText(modelData.descriptor)
@@ -385,6 +395,10 @@ Popup {
                             return qsTr("Anyone with this export can see all of this wallet's addresses and transactions, but cannot spend from it.")
                         }
                         let note = qsTr("Only includes funds on %1 addresses.").arg(root.currentExport.label)
+                        if (root.inactiveExports.some(item => item.id === root.currentExport.id)) {
+                            //: Added to the watch-only export note when this address type also has keys from before, such as from before a password was set. The complete export is the "All address types" option.
+                            note += " " + qsTr("Addresses from previous keys are only in the complete export.")
+                        }
                         if (root.extendedKeyFormat && root.currentExport.id === "bech32m") {
                             note += " " + qsTr("Most wallets need the descriptor format to import Taproot keys.")
                         }

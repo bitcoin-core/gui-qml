@@ -210,6 +210,7 @@ public:
     Q_INVOKABLE void setDefaultReceiveAddressType(const QString& address_type);
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& address_type) const;
     Q_INVOKABLE QVariantList watchOnlyExports() const;
+    Q_INVOKABLE QVariantList inactiveWatchOnlyExports() const;
     Q_INVOKABLE QString saveWatchOnlyExport(const QString& path, const QString& contents) const;
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);
