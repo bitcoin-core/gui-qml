@@ -364,6 +364,39 @@ TestCase {
         compare(popup.showDismissed, false)
     }
 
+    function test_dismissed_warnings_stay_reachable_from_node_details() {
+        nodeModel.setWarningsForTest(["Clock skew warning"])
+        const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem)
+        runner.width = testWindow.width
+        runner.height = testWindow.height
+        const warnings = findChild(runner, "nodeWarningsPopup")
+        const details = findChild(runner, "nodeDetailsPopup")
+        verify(warnings !== null && details !== null)
+
+        findChild(runner, "blockClockWarnings").clicked()
+        tryCompare(warnings, "opened", true)
+        findChild(warnings.contentItem, "nodeWarningDismiss_0").clicked()
+        findChild(warnings.contentItem, "nodeWarningsCloseButton").clicked()
+        tryCompare(warnings, "visible", false)
+        compare(findChild(runner, "blockClockWarnings").shown, false)
+        compare(findChild(runner, "nodeStatusBarWarnings").shown, false)
+
+        runner.openNodeDetails()
+        tryCompare(details, "opened", true)
+        const link = findChild(details.contentItem, "nodeDetailsWarnings")
+        compare(link.shown, true)
+        compare(link.text, "1 dismissed warning")
+        link.clicked()
+        tryCompare(details, "visible", false)
+        tryCompare(warnings, "opened", true)
+
+        findChild(warnings.contentItem, "nodeWarningsShowDismissed").clicked()
+        findChild(warnings.contentItem, "nodeWarningsRestoreAll").clicked()
+        compare(nodeModel.activeWarningList, ["Clock skew warning"])
+        compare(link.text, "1 warning")
+        warnings.close()
+    }
+
     function test_warnings_popup_says_when_there_are_none() {
         const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
         popup.open()

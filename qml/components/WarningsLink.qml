@@ -15,10 +15,22 @@ AbstractButton {
 
     property NodeStatus status: NodeStatus {}
     property var textStyle: Theme.text.caption
+    // Keeps the dialog reachable to restore warnings once all are dismissed.
+    property bool showDismissed: false
 
-    readonly property bool shown: status.warningsText.length > 0
+    readonly property int dismissedCount: status.dismissedWarnings.length
+    readonly property bool dismissedOnly: status.warningCount === 0 && showDismissed && dismissedCount > 0
+    readonly property bool shown: status.warningsText.length > 0 || dismissedOnly
     visible: shown
-    text: status.warningsText
+    text: {
+        if (!dismissedOnly) return status.warningsText
+        if (dismissedCount === 1) {
+            //: Link that reopens the node warnings dialog after the user dismissed the only current warning.
+            return qsTr("1 dismissed warning")
+        }
+        //: Link that reopens the node warnings dialog after the user dismissed every current warning. %1 is the count.
+        return qsTr("%1 dismissed warnings").arg(dismissedCount)
+    }
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     padding: 0
@@ -46,7 +58,7 @@ AbstractButton {
             text: root.text
             textStyle: root.textStyle
             wrap: false
-            color: Theme.color.warningText
+            color: root.dismissedOnly ? Theme.color.neutral7 : Theme.color.warningText
         }
     }
 

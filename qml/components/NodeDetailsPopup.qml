@@ -175,6 +175,7 @@ DialogPopup {
             WarningsLink {
                 objectName: "nodeDetailsWarnings"
                 status: root.status
+                showDismissed: true
                 onClicked: {
                     root.close()
                     root.actionTriggered("warnings")
