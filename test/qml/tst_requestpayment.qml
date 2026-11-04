@@ -751,6 +751,22 @@ TestCase {
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
     }
 
+    function test_request_again_waits_for_unsaved_edits() {
+        const page = createPage()
+        const card = createRequest(page)
+        const again = findChild(card, "requestPaymentAgainMenuButton")
+        verify(again.enabled)
+        editField(card, "requestPaymentNoteSelfInput", "Unsaved note")
+        verify(!again.enabled)
+        again.clicked()
+        verify(page.requestModal.opened)
+        compare(testWalletModel.lastTemplateRequestId, "")
+        findChild(card, "requestPaymentUpdateButton").clicked()
+        verify(again.enabled)
+        editField(card, "requestPaymentMessageInput", "Unsaved message")
+        verify(!again.enabled)
+    }
+
     function test_request_again_reveals_populated_hidden_fields() {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "0.001").editingFinished()
