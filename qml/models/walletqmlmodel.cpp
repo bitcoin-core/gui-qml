@@ -818,7 +818,8 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
     auto handlers = std::make_tuple(std::move(m_handler_status_changed), std::move(m_handler_address_list_changed),
-                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload));
+                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload),
+                                   std::move(m_handler_can_get_addresses_changed));
     if (m_bump_transaction_model) m_bump_transaction_model->detachWallet();
     if (m_imported_psbt_model) m_imported_psbt_model->detachWallet();
     auto wallet = std::move(m_wallet);
@@ -1288,6 +1289,11 @@ QString WalletQmlModel::receiveAddressTypeLabel(const QString& address_type) con
         }
     }
     return {};
+}
+
+bool WalletQmlModel::canExportWatchOnly() const
+{
+    return !watchOnlyExports().isEmpty();
 }
 
 QVariantList WalletQmlModel::watchOnlyExports() const
@@ -3403,6 +3409,12 @@ void WalletQmlModel::subscribeToWalletSignals()
             pending->fetch_sub(1);
         }, Qt::QueuedConnection);
     });
+    // Core signals this when the active descriptors change.
+    m_handler_can_get_addresses_changed = m_wallet->handleCanGetAddressesChanged([guard, bridge] {
+        QMetaObject::invokeMethod(bridge.get(), [guard] {
+            if (guard && !guard->m_stopping) Q_EMIT guard->watchOnlyExportsChanged();
+        }, Qt::QueuedConnection);
+    });
     m_handler_unload = handleUnload([guard, bridge, unload_requested = m_unload_requested] {
         unload_requested->store(true);
         QMetaObject::invokeMethod(bridge.get(), [guard] {
@@ -3427,6 +3439,9 @@ void WalletQmlModel::unsubscribeFromWalletSignals()
     }
     if (m_handler_unload) {
         m_handler_unload->disconnect();
+    }
+    if (m_handler_can_get_addresses_changed) {
+        m_handler_can_get_addresses_changed->disconnect();
     }
 }
 

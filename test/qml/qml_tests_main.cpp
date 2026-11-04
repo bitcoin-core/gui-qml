@@ -1199,6 +1199,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString privateKeysStatus MEMBER m_private_keys_status NOTIFY walletInfoChanged)
     Q_PROPERTY(QString externalSignerStatus MEMBER m_external_signer_status NOTIFY walletInfoChanged)
     Q_PROPERTY(bool canManagePassphrase MEMBER m_can_manage_passphrase NOTIFY walletInfoChanged)
+    Q_PROPERTY(bool canExportWatchOnly READ canExportWatchOnly CONSTANT)
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(int backupWalletCalls READ backupWalletCalls NOTIFY backupWalletCallsChanged)
@@ -1325,6 +1326,7 @@ public:
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
     Q_INVOKABLE QVariantList watchOnlyExports() const { return {}; }
+    bool canExportWatchOnly() const { return false; }
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }

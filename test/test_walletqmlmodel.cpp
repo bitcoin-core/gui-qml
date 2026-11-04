@@ -175,6 +175,11 @@ class ReviewMockWallet : public MockWallet
 public:
     explicit ReviewMockWallet(wallet::CWallet* raw_wallet = nullptr) : m_raw_wallet{raw_wallet} {}
     wallet::CWallet* wallet() override { return m_raw_wallet; }
+    std::unique_ptr<interfaces::Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) override
+    {
+        if (!m_raw_wallet) return {};
+        return interfaces::MakeSignalHandler(m_raw_wallet->NotifyCanGetAddressesChanged.connect(fn));
+    }
     util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>& recipients,
         const wallet::CCoinControl& coin_control, bool sign, std::optional<unsigned int> change_pos) override
     {
@@ -838,6 +843,7 @@ private Q_SLOTS:
     void watchOnlyExportsJoinReceiveAndChange();
     void watchOnlyExportsUseMainnetSlip132Prefixes();
     void watchOnlyExportsSkipMultiKeyDescriptors();
+    void canExportWatchOnlyFollowsActiveDescriptors();
     void saveWatchOnlyExportWritesFile();
     void encryptWalletUpdatesSecurityState();
     void changeWalletPassphraseForwardsPasswords();
@@ -1028,6 +1034,25 @@ void WalletQmlModelTests::watchOnlyExportsSkipMultiKeyDescriptors()
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
     QVERIFY(model->watchOnlyExports().isEmpty());
+}
+
+void WalletQmlModelTests::canExportWatchOnlyFollowsActiveDescriptors()
+{
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "watch-only-availability-test", nullptr};
+    QVERIFY(raw_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    QVERIFY(!model->canExportWatchOnly());
+    QSignalSpy changed{model.get(), &WalletQmlModel::watchOnlyExportsChanged};
+
+    CExtKey master;
+    master.SetSeed(std::array<std::byte, 32>{});
+    LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(master, 84) + "/0/*)", OutputType::BECH32);
+    QTRY_VERIFY(changed.count() > 0);
+    QVERIFY(model->canExportWatchOnly());
 }
 
 void WalletQmlModelTests::saveWatchOnlyExportWritesFile()
