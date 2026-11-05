@@ -10,6 +10,8 @@ import sys
 
 
 _EXPECTED_STDERR = (
+    r"qt\.qml\.propertyCache\.append: Member enabled of the object .* overrides a member of the base object\. Consider renaming it or adding final or override specifier",
+    r"qt\.qpa\.fonts: Populating font family aliases took \d+ ms\. Replace uses of missing font family \"Sans Serif\" with one that exists to avoid this cost\.",
     r"This plugin does not support application fonts",
     r'Failed to load font resource: ":/fonts/(?:bitcoincoresans/(?:regular|semibold)|robotomono/regular)"',
     r"(?:qt.core.qobject.connect: )?QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged\(QScreen\*\)",
