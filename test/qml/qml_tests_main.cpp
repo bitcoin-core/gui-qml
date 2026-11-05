@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -484,10 +485,35 @@ public:
     {
         return row >= 0 && row < rowCount() ? m_rows.at(row).label : QString{};
     }
+    Q_INVOKABLE QVariantMap entryForAddress(const QString& address) const
+    {
+        const auto paid = m_paid_display_amounts.find(address);
+        if (paid != m_paid_display_amounts.end()) {
+            return {{QStringLiteral("address"), address}, {QStringLiteral("isUsed"), true},
+                    {QStringLiteral("displayAmount"), paid->second}, {QStringLiteral("hasAmount"), true}};
+        }
+        for (const Entry& entry : m_rows) {
+            if (entry.address != address) continue;
+            return {{QStringLiteral("address"), address}, {QStringLiteral("isUsed"), false},
+                    {QStringLiteral("displayAmount"), QStringLiteral("₿ 0")}, {QStringLiteral("hasAmount"), false}};
+        }
+        return {};
+    }
+    // Like a payment arriving: the address becomes used, so the rebuilt
+    // list hides it while used addresses are not shown.
+    Q_INVOKABLE void receivePaymentForTest(const QString& address, const QString& display_amount)
+    {
+        beginResetModel();
+        std::erase_if(m_rows, [&](const Entry& entry) { return entry.address == address; });
+        m_paid_display_amounts[address] = display_amount;
+        endResetModel();
+        Q_EMIT countChanged();
+    }
     Q_INVOKABLE void resetForTest()
     {
         beginResetModel();
         m_rows.clear();
+        m_paid_display_amounts.clear();
         populateRows();
         endResetModel();
         Q_EMIT countChanged();
@@ -515,6 +541,7 @@ private:
     }
 
     std::vector<Entry> m_rows;
+    std::map<QString, QString> m_paid_display_amounts;
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
@@ -1210,6 +1237,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastTemplateRequestId MEMBER m_last_template_request_id NOTIFY lastTemplateRequestIdChanged)
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
     Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
+    Q_PROPERTY(bool updatePaymentRequestResult MEMBER m_update_payment_request_result NOTIFY updatePaymentRequestResultChanged)
 
 public:
     enum class KeyScheme {
@@ -1241,6 +1269,7 @@ public:
     QString m_last_template_request_id;
     QString m_last_removed_request_id;
     bool m_remove_receive_request_result{true};
+    bool m_update_payment_request_result{true};
     bool m_receive_request_reconciliation_pending{false};
     QString m_saved_payment_request_label;
     QString m_saved_payment_request_message;
@@ -1587,7 +1616,7 @@ public:
     Q_INVOKABLE bool updatePaymentRequest(const QString& id, qint64 amount, const QString& label, const QString& message, const QString& note)
     {
         auto* request = &m_detail_payment_request;
-        if (request->m_id != id) return false;
+        if (!m_update_payment_request_result || request->m_id != id) return false;
         if (request->m_payment_received && (amount != request->m_amount.satoshi() || label != request->m_label || message != request->m_message)) return false;
         request->m_amount.setSatoshi(amount);
         request->setProperty("label", label);
@@ -1702,6 +1731,7 @@ Q_SIGNALS:
     void lastTemplateRequestIdChanged();
     void lastRemovedRequestIdChanged();
     void removeReceiveRequestResultChanged();
+    void updatePaymentRequestResultChanged();
     void receiveRequestReconciliationPendingChanged();
 
 private:

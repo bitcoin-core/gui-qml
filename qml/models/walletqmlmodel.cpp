@@ -1199,6 +1199,13 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         }
     }
 
+    // An address that has received a payment is not offered for a new
+    // request. Refuse it here too: the Receive page would otherwise
+    // replace it with a fresh address without telling the user.
+    if (usedAddresses().count(QString::fromStdString(EncodeDestination(destination))) > 0) {
+        return false;
+    }
+
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
     m_current_payment_request->setNoteSelf(getAddressLabel(address));

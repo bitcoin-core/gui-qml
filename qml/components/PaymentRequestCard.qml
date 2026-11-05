@@ -29,8 +29,16 @@ Pane {
     }
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
-    readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
+    readonly property bool addressShareable: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
+    // The QR code and copied request encode the saved request, so they are
+    // offered only while the public fields in the form still match it,
+    // including after a failed update. The private note is never shared.
+    readonly property bool publicDetailsEdited: saved
+        && (amountInput.modified && amountInSatoshis(amountInput.text) !== request.amount.satoshi
+            || labelInput.modified && labelInput.text !== request.label
+            || messageInput.modified && messageInput.text !== request.message)
+    readonly property bool sharing: addressShareable && !publicDetailsEdited
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -195,7 +203,9 @@ Pane {
 
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
-            if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
+            // Pass the url itself: the url overload turns it into a local path
+            // for the platform, such as C:/... on Windows.
+            if (!result.saveToFile(fileUrl))
                 root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
         })
     }
@@ -349,8 +359,11 @@ Pane {
                     ContextMenuDivider { visible: !root.paymentReceived }
                     ContextMenuButton {
                         objectName: "requestPaymentAgainMenuButton"
+                        // A new request starts from the saved one, so it would
+                        // silently drop edits that are not saved yet.
+                        enabled: !root.modified
                         text: qsTr("Request again")
-                        onTriggered: root.requestAgain(root.request.id)
+                        onTriggered: if (!root.modified) root.requestAgain(root.request.id)
                     }
                     ContextMenuDivider {}
                     ContextMenuButton {
@@ -396,7 +409,23 @@ Pane {
                 Layout.preferredHeight: 184
                 Layout.alignment: Qt.AlignHCenter
                 radius: 10
-                color: "white"
+                color: root.publicDetailsEdited ? "transparent" : "white"
+                InfoBanner {
+                    objectName: "requestPaymentQRUnappliedEdits"
+                    visible: root.publicDetailsEdited
+                    anchors.fill: parent
+                    bannerLayout: InfoBanner.Layout.Vertical
+                    contentMargin: 16
+                    contentSpacing: 10
+                    iconSource: "image://images/qr-code"
+                    iconSize: 32
+                    //: Shown in place of the payment request QR code while an edited amount, Pay to or message is not yet saved.
+                    message: qsTr("Update the payment request to show its QR code.")
+                    messageObjectName: "requestPaymentQRUnappliedEditsText"
+                    backgroundColor: Qt.rgba(Theme.color.blue.r, Theme.color.blue.g, Theme.color.blue.b, 0.25)
+                    iconColor: Theme.color.blue
+                    messageColor: Theme.color.blue
+                }
                 QRImage {
                     id: qrImage
                     objectName: "requestPaymentQRImage"
@@ -441,7 +470,7 @@ Pane {
                 objectName: "paymentRequestCreatedDate"
                 visible: root.saved && !!root.request.createdIso
                 Layout.fillWidth: true
-                Layout.topMargin: root.sharing ? 4 : 0
+                Layout.topMargin: root.sharing || root.publicDetailsEdited ? 4 : 0
                 text: visible ? qsTr("Created %1").arg(Qt.formatDateTime(new Date(root.request.createdIso), "MMM d, h:mm AP")) : ""
                 font: Theme.text.caption.font
                 color: Theme.color.neutral7
@@ -470,7 +499,7 @@ Pane {
                 Layout.topMargin: 8
                 address: root.request ? root.request.address : ""
                 textStyle: Theme.text.monoDescription
-                interactive: !root.saved || root.sharing
+                interactive: !root.saved || root.addressShareable
                 clipboard: root.clipboard
                 embedded: true
             }

@@ -64,6 +64,18 @@ SettingsPage {
         root.errorText = qsTr("This address is no longer available.");
     }
 
+    // The popup shows the row as it was when opened. Refresh the parts a
+    // payment changes whenever the list is rebuilt: once the address is
+    // used its row can disappear while the popup is still open.
+    function refreshSelectedDetails() {
+        if (!detailsPopup.visible || root.selectedAddress === "") return;
+        const entry = root.addressModel.entryForAddress(root.selectedAddress);
+        if (entry.address !== root.selectedAddress) return;
+        root.selectedAmount = entry.displayAmount;
+        root.selectedHasAmount = entry.hasAmount;
+        root.selectedUsed = entry.isUsed;
+    }
+
     function pendingNote(address, fallbackLabel) {
         const note = root.pendingNotesByAddress[address]
         return note === undefined ? fallbackLabel : note
@@ -110,6 +122,11 @@ SettingsPage {
     }
 
     Component.onCompleted: addressModel.refresh()
+
+    Connections {
+        target: root.addressModel
+        function onModelReset() { root.refreshSelectedDetails() }
+    }
 
     ContextMenu {
         id: pageMenu
