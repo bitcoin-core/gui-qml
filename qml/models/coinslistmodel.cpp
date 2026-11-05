@@ -13,9 +13,8 @@ CoinsListModel::CoinsListModel(WalletQmlModel* parent)
     : QAbstractListModel(parent), m_wallet_model(parent)
 {
     if (parent) {
-        connect(parent, &WalletQmlModel::transactionChanged, this, &CoinsListModel::update);
-        connect(parent, &WalletQmlModel::addressListChanged, this, &CoinsListModel::update);
-        connect(parent, &WalletQmlModel::balanceChanged, this, &CoinsListModel::update);
+        connect(parent, &WalletQmlModel::walletStateChanged, this, &CoinsListModel::update);
+        connect(parent, &WalletQmlModel::coinLockStateChanged, this, &CoinsListModel::lockOperationStateChanged);
     }
     update();
 }
@@ -75,7 +74,8 @@ void CoinsListModel::update()
     }
     // Remove spent inputs without changing surviving manual selections. Locked
     // coins remain valid when the user explicitly selects them.
-    for (const auto& selected : m_wallet_model->listSelectedCoins()) {
+    const auto selection = m_wallet_model->listSelectedCoins();
+    for (const auto& selected : selection) {
         if (std::none_of(coins.begin(), coins.end(), [&](const auto& coin) { return coin.outpoint == selected; }))
             m_wallet_model->unselectCoin(selected);
     }
@@ -86,7 +86,7 @@ void CoinsListModel::update()
     rebuildView();
     Q_EMIT coinCountChanged();
     Q_EMIT lockedCoinsCountChanged();
-    Q_EMIT selectedCoinsCountChanged();
+    if (selection != m_wallet_model->listSelectedCoins()) Q_EMIT selectedCoinsCountChanged();
 }
 void CoinsListModel::rebuildView()
 {
@@ -155,7 +155,7 @@ void CoinsListModel::refreshSelection()
 void CoinsListModel::beginSelection()
 {
     if (!m_wallet_model || m_previous_selection) return;
-    update();
+    m_wallet_model->requestWalletStateRefresh();
     m_previous_selection = m_wallet_model->listSelectedCoins();
 }
 void CoinsListModel::applySelection() { m_previous_selection.reset(); }
@@ -174,17 +174,14 @@ void CoinsListModel::cancelSelection()
 bool CoinsListModel::setCoinsLocked(const QStringList& ids, bool locked)
 {
     if (!m_wallet_model) return false;
-    bool success = true;
+    std::vector<COutPoint> outputs;
     for (const auto& coin : m_coins) {
-        if (!ids.contains(coin.id()) || coin.locked == locked) continue;
-        const bool changed = locked ? m_wallet_model->lockCoin(coin.outpoint) : m_wallet_model->unlockCoin(coin.outpoint);
-        success = changed && success;
-        if (changed && locked) m_wallet_model->unselectCoin(coin.outpoint);
+        if (ids.contains(coin.id())) outputs.push_back(coin.outpoint);
     }
-    update();
-    m_wallet_model->scheduleFeeEstimates();
-    return success;
+    return m_wallet_model->setCoinsLocked(std::move(outputs), locked);
 }
+bool CoinsListModel::lockOperationPending() const { return m_wallet_model && m_wallet_model->coinLockPending(); }
+QString CoinsListModel::lockOperationError() const { return m_wallet_model ? m_wallet_model->coinLockError() : QString{}; }
 int CoinsListModel::lockedCoinsCount() const { return std::count_if(m_coins.begin(), m_coins.end(), [](const auto& c) { return c.locked; }); }
 int CoinsListModel::selectedCoinsCount() const { return m_wallet_model ? static_cast<int>(m_wallet_model->listSelectedCoins().size()) : 0; }
 qint64 CoinsListModel::totalSelectedSatoshi() const

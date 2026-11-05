@@ -1528,7 +1528,9 @@ void WalletQmlControllerTests::publishOpenWalletsInfoEmitsWalletInfoChangedForEa
     controller.initialize();
 
     controller.setSelectedWallet("alpha_wallet", "sqlite");
+    QTRY_VERIFY(controller.selectedWallet()->walletStateReady());
     controller.setSelectedWallet("beta_wallet", "sqlite");
+    QTRY_VERIFY(controller.selectedWallet()->walletStateReady());
     QSignalSpy info_spy(&controller, &WalletQmlController::walletInfoChanged);
     controller.publishOpenWalletsInfo();
 

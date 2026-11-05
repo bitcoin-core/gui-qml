@@ -32,7 +32,7 @@ def run_test():
         assert gui.get_property("feeSelectionEstimateLabel", "value") == "—"
         gui.set_text("sendAmountInput", "")
         gui.save_screenshot(os.path.join(artifacts, "01-empty.png"))
-        gui.set_text("sendNoteInput", "My private note")
+        gui.type_text("sendNoteInput", "My private note")
         uri = f"bitcoin:{addresses[1]}?amount=0.018&label=Alice&message=September%20rent"
         gui.set_clipboard_text(uri)
         gui.wait_for_property("clipboardUriPasteButton", "visible", True)
@@ -48,7 +48,7 @@ def run_test():
         gui.wait_for_property("sendRecipientCard_0", "expanded", False)
         gui.set_text("sendAddressInput", addresses[2])
         gui.set_text("sendAmountInput", "0.025")
-        gui.set_text("sendNoteInput", "Donation")
+        gui.type_text("sendNoteInput", "Donation")
         gui.click("feeSelectionPickerButton")
         gui.click("feeSelectionOption3")
         gui.set_text("feeSelectionCustomRateInput", "4.2")
@@ -88,10 +88,14 @@ def run_test():
         gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
         gui.wait_for_property("coinsLockButton", "enabled", True)
         gui.click("coinsLockButton")
+        gui.wait_for_property("coinSelectionListView", "model.lockedCoinsCount", 1)
+        gui.wait_for_property("coinSelectionListView", "model.lockOperationPending", False)
         assert len(rpc_call(harness.gui_rpc_port, "listlockunspent", wallet="send_create")) == 1
         gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
         gui.wait_for_property("coinsUnlockButton", "enabled", True)
         gui.click("coinsUnlockButton")
+        gui.wait_for_property("coinSelectionListView", "model.lockedCoinsCount", 0)
+        gui.wait_for_property("coinSelectionListView", "model.lockOperationPending", False)
         assert rpc_call(harness.gui_rpc_port, "listlockunspent", wallet="send_create") == []
         gui.set_property("appWindow", "width", 800)
         gui.set_property("appWindow", "height", 665)

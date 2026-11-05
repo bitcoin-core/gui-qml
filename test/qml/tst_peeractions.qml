@@ -147,7 +147,7 @@ TestCase {
         confirm.clicked()
 
         compare(nodeModel.disconnectPeerCalls, 1)
-        compare(peerTableModel.refreshCalls, 1)
+        tryCompare(peerTableModel, "refreshCalls", 1)
         compare(popup.opened, false)
     }
 
@@ -521,7 +521,7 @@ TestCase {
         verify(confirm !== null)
         confirm.clicked()
         compare(nodeModel.disconnectPeerCalls, 1)
-        compare(peerTableModel.refreshCalls, 1)
+        tryCompare(peerTableModel, "refreshCalls", 1)
         tryCompare(confirmation, "opened", false)
         tryCompare(confirmation, "visible", false)
     }
@@ -545,8 +545,8 @@ TestCase {
         confirm.clicked()
 
         compare(nodeModel.banPeerCalls, 1)
-        compare(peerTableModel.refreshCalls, 1)
-        compare(banListModel.refreshCalls, 1)
+        tryCompare(peerTableModel, "refreshCalls", 1)
+        tryCompare(banListModel, "refreshCalls", 1)
         tryCompare(confirmation, "opened", false)
         tryCompare(confirmation, "visible", false)
     }
@@ -626,8 +626,8 @@ TestCase {
 
         compare(nodeModel.banPeerCalls, 1)
         compare(confirmation.opened, false)
-        compare(peerTableModel.refreshCalls, 1)
-        compare(banListModel.refreshCalls, 1)
+        tryCompare(peerTableModel, "refreshCalls", 1)
+        tryCompare(banListModel, "refreshCalls", 1)
         compare(popup.opened, false)
     }
 
@@ -642,7 +642,7 @@ TestCase {
 
         compare(nodeModel.banPeerCalls, 1)
         compare(peerTableModel.refreshCalls, 0)
-        compare(banListModel.refreshCalls, 0)
+        tryCompare(banListModel, "refreshCalls", 1)
         verifyPeerActionError(page, "Could not ban peer.")
     }
 
@@ -656,6 +656,7 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
+        tryCompare(banListModel, "actionPending", false)
         compare(banListModel.refreshCalls, 0)
         compare(popup.opened, false)
     }
@@ -669,6 +670,7 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
+        tryCompare(banListModel, "actionPending", false)
         compare(banListModel.refreshCalls, 0)
         verifyUnbanActionError(page)
     }
@@ -684,6 +686,7 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
+        tryCompare(banListModel, "actionPending", false)
         compare(banListModel.refreshCalls, 0)
         compare(popup.opened, false)
     }
@@ -698,7 +701,93 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
+        tryCompare(banListModel, "actionPending", false)
         compare(banListModel.refreshCalls, 0)
         verifyUnbanActionError(page)
     }
+    function test_disconnect_pending_blocks_duplicates_and_waits_for_result() {
+        nodeModel.peerActionAutoComplete = false
+        const page = createPeerDetailsPage()
+        page.requestDisconnect()
+        page.disconnectPeer()
+        verify(nodeModel.peerActionPending)
+        compare(nodeModel.disconnectPeerCalls, 1)
+        compare(peerTableModel.refreshCalls, 0)
+        page.disconnectPeer()
+        compare(nodeModel.disconnectPeerCalls, 1)
+        verify(!findChild(page, "peerActionErrorPopup").opened)
+        nodeModel.completePeerAction(true)
+        compare(peerTableModel.refreshCalls, 1)
+        verify(!nodeModel.peerActionPending)
+    }
+
+    function test_hidden_peer_action_drops_late_error_but_keeps_global_completion() {
+        nodeModel.peerActionAutoComplete = false
+        const page = createPeerDetailsPage()
+        page.requestDisconnect()
+        page.disconnectPeer()
+        page.visible = false
+        nodeModel.completePeerAction(false)
+        verify(!findChild(page, "peerActionErrorPopup").opened)
+        compare(page.submittedPeerAction, "")
+    }
+
+    function test_context_confirmation_captures_original_target() {
+        nodeModel.peerActionAutoComplete = false
+        const page = createPeersPage()
+        page.contextPeerDetails = testPeerDetailsModel
+        page.requestContextPeerDisconnect()
+        const expectedId = testPeerDetailsModel.nodeId
+        const confirmation = findChild(page, "peerListDisconnectConfirmationPopup")
+        const message = confirmation.message
+        page.contextPeerDetails = null
+        compare(confirmation.message, message)
+        verify(message.indexOf(testPeerDetailsModel.address) >= 0)
+        page.disconnectContextPeer()
+        compare(nodeModel.lastDisconnectedNodeId, expectedId)
+        nodeModel.completePeerAction(true)
+    }
+
+    function test_unban_pending_disables_button_and_reports_result() {
+        banListModel.actionAutoComplete = false
+        const page = createPeersPageWithBannedPopup()
+        const button = waitForChild(testWindow.contentItem, "unbanButton_0")
+        const popup = findChild(page, "bannedPeersPopup")
+        button.clicked()
+        verify(banListModel.actionPending)
+        verify(!button.enabled)
+        popup.unbanPeer(0)
+        compare(banListModel.unbanCalls, 1)
+        verify(!findChild(page, "unbanActionErrorPopup").opened)
+        banListModel.completeUnban(false)
+        verifyUnbanActionError(page)
+        verify(button.enabled)
+    }
+
+    function test_pending_disconnect_defers_ban_notification_and_blocks_unban() {
+        nodeModel.peerActionAutoComplete = false
+        const page = createPeersPageWithBannedPopup()
+        const button = waitForChild(testWindow.contentItem, "unbanButton_0")
+        verify(nodeModel.disconnectPeer(testPeerDetailsModel.nodeId))
+        verify(banListModel.actionPending)
+        verify(!button.enabled)
+        banListModel.refresh()
+        compare(banListModel.refreshCalls, 0)
+        nodeModel.completePeerAction(true)
+        verify(!banListModel.actionPending)
+        compare(banListModel.refreshCalls, 1)
+        verify(button.enabled)
+    }
+
+    function test_closed_unban_popup_drops_late_error() {
+        banListModel.actionAutoComplete = false
+        const page = createPeersPageWithBannedPopup()
+        const popup = findChild(page, "bannedPeersPopup")
+        popup.unbanPeer(0)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        banListModel.completeUnban(false)
+        verify(!findChild(page, "unbanActionErrorPopup").opened)
+    }
+
 }

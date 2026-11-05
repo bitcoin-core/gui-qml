@@ -27,8 +27,11 @@ Pane {
     onAmountUnitChanged: {
         if (amountInput && amountInSatoshis(amountInput.text) >= 0) amountErrorText = ""
     }
+    property string pendingOperation: ""
+    property string pendingRequestId: ""
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
+    readonly property bool hasCurrentPayment: !!request && request.receivedAmountSatoshi > 0
     readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
@@ -91,10 +94,13 @@ Pane {
         if (request.label.trim() !== "") showRecipientName = true
     }
     onRequestChanged: {
+        pendingOperation = ""
+        pendingRequestId = ""
         resetFields()
         if (request && request.label.trim() !== "") showRecipientName = true
         revealTemplateFields()
     }
+    onWalletChanged: { pendingOperation = ""; pendingRequestId = "" }
     Component.onCompleted: resetFields()
 
     function amountInSatoshis(text) {
@@ -135,7 +141,8 @@ Pane {
                 actionErrorText = qsTr("The changes could not be saved. Please try again.")
                 return false
             }
-            resetFields()
+            pendingOperation = "update"
+            pendingRequestId = request.id
             return true
         }
         return saveField("amount", amountInput) && saveField("label", labelInput)
@@ -152,7 +159,7 @@ Pane {
     function createRequest() {
         if (!wallet || !request || saved || !saveFields()) return
         actionErrorText = ""
-        if (wallet.commitReceivingPaymentRequest()) created(request.id)
+        if (wallet.commitReceivingPaymentRequest()) pendingOperation = "save"
         else actionErrorText = qsTr("The payment request could not be created. Please try again.")
     }
     function copyRequest() {
@@ -195,7 +202,7 @@ Pane {
 
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
-            if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
+            if (!imageSave.save(result.image, fileUrl))
                 root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
         })
     }
@@ -206,10 +213,34 @@ Pane {
             actionErrorText = qsTr("The payment request could not be deleted. Please try again.")
             return false
         }
-        // Discard local edits so closing the modal cannot try to save a deleted request.
-        resetFields()
-        deleted(requestId)
+        pendingOperation = "remove"
+        pendingRequestId = requestId
         return true
+    }
+
+    ImageSaveModel {
+        id: imageSave
+        onFinished: function(success) {
+            if (!success) root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
+        }
+    }
+    // Keep notification handlers owned by the card when their targets change.
+    readonly property Connections walletCompletion: Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (root.pendingOperation !== operation) return
+            root.pendingOperation = ""
+            const operationError = root.wallet.receiveOperationError
+            root.actionErrorText = operationError
+            if (!success) return
+            if (operation === "save") root.created(root.request.id)
+            else if (operation === "remove") {
+                root.resetFields()
+                root.deleted(root.pendingRequestId)
+            } else if (operation === "update") root.resetFields()
+            root.pendingRequestId = ""
+            root.actionErrorText = operationError
+        }
     }
 
     BitcoinAmount {
@@ -222,7 +253,7 @@ Pane {
         satoshi: root.request ? root.request.receivedAmountSatoshi : 0
         unit: optionsModel.displayUnit
     }
-    Connections {
+    readonly property Connections requestNotifications: Connections {
         target: root.request
         function onIsEditingChanged() { root.revealTemplateFields() }
         function onLabelChanged() {
@@ -302,6 +333,7 @@ Pane {
     }
 
     contentItem: ColumnLayout {
+        enabled: !root.wallet || !root.wallet.receiveOperationPending
         spacing: 16
         RowLayout {
             visible: root.modalView
@@ -459,8 +491,8 @@ Pane {
                     id: statusLabel
                     objectName: "paymentRequestStatus"
                     anchors.centerIn: parent
-                    text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
-                    color: root.paymentReceived ? Theme.color.green : Theme.color.lavender
+                    text: root.hasCurrentPayment ? qsTr("Payment received") : qsTr("Awaiting payment")
+                    color: root.hasCurrentPayment ? Theme.color.green : Theme.color.lavender
                     font: Theme.text.captionStrong.font
                 }
             }
