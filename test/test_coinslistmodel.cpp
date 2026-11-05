@@ -96,6 +96,44 @@ public:
 class CoinsListModelTests : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void snapshotRefreshPreservesSelectionNotifications() {
+        auto wallet = std::make_shared<CoinWallet>();
+        wallet->add(0, 1000, 1700000000, 1, "First");
+        WalletQmlModel model{wallet};
+        QTRY_VERIFY(model.walletStateReady());
+        auto* coins = model.coinsListModel();
+        QSignalSpy selection_changed{coins, &CoinsListModel::selectedCoinsCountChanged};
+        QSignalSpy state_changed{&model, &WalletQmlModel::walletStateChanged};
+
+        model.requestWalletStateRefresh();
+        QTRY_COMPARE(state_changed.count(), 1);
+        QCOMPARE(selection_changed.count(), 0);
+
+        coins->toggleCoinSelection(0);
+        QCOMPARE(selection_changed.count(), 1);
+        QCOMPARE(coins->selectedCoinsCount(), 1);
+        selection_changed.clear();
+        state_changed.clear();
+        {
+            std::lock_guard<std::mutex> lock{wallet->mutex};
+            wallet->locked.insert(COutPoint{Txid{}, 0});
+        }
+        model.requestWalletStateRefresh();
+        QTRY_COMPARE(state_changed.count(), 1);
+        QCOMPARE(coins->lockedCoinsCount(), 1);
+        QCOMPARE(selection_changed.count(), 0);
+
+        state_changed.clear();
+        {
+            std::lock_guard<std::mutex> lock{wallet->mutex};
+            wallet->coins.clear();
+        }
+        model.requestWalletStateRefresh();
+        QTRY_COMPARE(state_changed.count(), 1);
+        QCOMPARE(coins->selectedCoinsCount(), 0);
+        QCOMPARE(selection_changed.count(), 1);
+    }
+
     void lockRequestsStayPendingThroughReadback() {
         auto wallet = std::make_shared<CoinWallet>();
         wallet->add(0, 1000, 1700000000, 1, "First");

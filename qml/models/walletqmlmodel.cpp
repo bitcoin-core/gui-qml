@@ -685,6 +685,8 @@ void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
     if (labels_changed) Q_EMIT addressListChanged();
     if (balance_changed) Q_EMIT balanceChanged();
     Q_EMIT sendAmountExhaustsBalanceChanged();
+    // New funds and lock changes affect previews without editing the draft.
+    scheduleFeeEstimates();
 }
 
 void WalletQmlModel::applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry)
