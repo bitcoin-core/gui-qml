@@ -63,18 +63,32 @@ QByteArray clickObject(QObject* obj)
         QQuickWindow* window = item->window();
         if (window && item->isVisible() && item->isEnabled() &&
             item->width() > 0 && item->height() > 0) {
-            QTimer clicked_timer;
+            QTimer action_timer;
             QMetaObject::Connection clicked_connection;
+            QMetaObject::Connection toggled_connection;
             if (meta->indexOfSignal("clicked()") >= 0) {
-                clicked_timer.setSingleShot(true);
-                clicked_timer.setInterval(10000);
                 clicked_connection = QObject::connect(
                     obj,
                     SIGNAL(clicked()),
-                    &clicked_timer,
+                    &action_timer,
                     SLOT(stop()),
                     Qt::DirectConnection);
-                if (clicked_connection) clicked_timer.start();
+            }
+            // A toggle can disable the control while its setting is saved,
+            // canceling clicked() after the checked state already changed.
+            if (obj->property("checkable").toBool() && meta->indexOfSignal("toggled()") >= 0) {
+                toggled_connection = QObject::connect(
+                    obj,
+                    SIGNAL(toggled()),
+                    &action_timer,
+                    SLOT(stop()),
+                    Qt::DirectConnection);
+            }
+            const bool observing_action{clicked_connection || toggled_connection};
+            if (observing_action) {
+                action_timer.setSingleShot(true);
+                action_timer.setInterval(10000);
+                action_timer.start();
             }
 
             const QPointF center = item->mapToScene(
@@ -92,7 +106,7 @@ QByteArray clickObject(QObject* obj)
 
             // Preserve exclusive-group behavior if the backend missed the mouse
             // click. Calling toggle() would uncheck an already-selected choice.
-            if (clicked_connection && clicked_timer.isActive()) {
+            if (observing_action && action_timer.isActive()) {
                 item->forceActiveFocus(Qt::OtherFocusReason);
                 QKeyEvent key_press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
                 QKeyEvent key_release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
@@ -100,11 +114,12 @@ QByteArray clickObject(QObject* obj)
                 QCoreApplication::sendEvent(item, &key_release);
             }
 
-            if (clicked_connection) {
-                const bool clicked_emitted{!clicked_timer.isActive()};
+            if (observing_action) {
+                const bool action_emitted{!action_timer.isActive()};
                 QObject::disconnect(clicked_connection);
-                clicked_timer.stop();
-                if (clicked_emitted) return okResponse();
+                QObject::disconnect(toggled_connection);
+                action_timer.stop();
+                if (action_emitted) return okResponse();
             } else {
                 return okResponse();
             }
