@@ -49,6 +49,8 @@ def run_tests():
         open_settings(gui, "storage")
         if not gui.get_property("pruneSwitch", "checked"):
             gui.click("pruneSwitch")
+        gui.wait_for_property("pruneSwitch", "checked", True)
+        gui.wait_for_property("pruneTargetInput", "enabled", True)
         type_integer(gui, "pruneTargetInput", "1,000")
         # Navigating away commits through editingFinished on focus loss.
         gui.click("settingsSidebar_mempool")
