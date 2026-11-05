@@ -74,7 +74,8 @@ void CoinsListModel::update()
     }
     // Remove spent inputs without changing surviving manual selections. Locked
     // coins remain valid when the user explicitly selects them.
-    for (const auto& selected : m_wallet_model->listSelectedCoins()) {
+    const auto selection = m_wallet_model->listSelectedCoins();
+    for (const auto& selected : selection) {
         if (std::none_of(coins.begin(), coins.end(), [&](const auto& coin) { return coin.outpoint == selected; }))
             m_wallet_model->unselectCoin(selected);
     }
@@ -85,7 +86,7 @@ void CoinsListModel::update()
     rebuildView();
     Q_EMIT coinCountChanged();
     Q_EMIT lockedCoinsCountChanged();
-    Q_EMIT selectedCoinsCountChanged();
+    if (selection != m_wallet_model->listSelectedCoins()) Q_EMIT selectedCoinsCountChanged();
 }
 void CoinsListModel::rebuildView()
 {
