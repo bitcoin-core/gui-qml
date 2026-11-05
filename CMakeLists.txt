@@ -189,6 +189,15 @@ endif()
 
 # Put it all together
 add_executable(bitcoin-core-app main.cpp)
+if(WIN32)
+  function(add_qml_windows_application_manifest target)
+    foreach(var PROJECT_SOURCE_DIR CLIENT_VERSION_MAJOR CLIENT_VERSION_MINOR CLIENT_VERSION_BUILD)
+      get_directory_property(${var} DIRECTORY bitcoin DEFINITION ${var})
+    endforeach()
+    add_windows_application_manifest(${target})
+  endfunction()
+  add_qml_windows_application_manifest(bitcoin-core-app)
+endif()
 target_include_directories(bitcoin-core-app
   PRIVATE
     # to keep the convention of #include <qml/*.h>
@@ -222,4 +231,7 @@ if(BUILD_APP_TESTS)
   include(CTest)
   enable_testing()
   add_subdirectory(test)
+  if(WIN32)
+    add_qml_windows_application_manifest(bitcoinqml_integration_tests)
+  endif()
 endif()

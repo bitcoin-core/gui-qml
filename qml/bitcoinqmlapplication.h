@@ -21,8 +21,6 @@ public:
     BitcoinQmlApplication(const BitcoinQmlApplication&) = delete;
     BitcoinQmlApplication& operator=(const BitcoinQmlApplication&) = delete;
 
-    // Use native Unicode arguments on Windows; run() keeps explicit test arguments.
-    int runFromCommandLine(int argc, char* argv[]);
     int run(int argc, char* argv[]);
 
     // Runtime objects are available from windowCreated until run returns.
