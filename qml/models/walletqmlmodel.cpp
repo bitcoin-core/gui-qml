@@ -21,6 +21,7 @@
 #include <qml/models/transactionflow.h>
 #include <qml/util.h>
 
+#include <base58.h>
 #include <chainparams.h>
 #include <common/types.h>
 #include <consensus/amount.h>
@@ -38,7 +39,9 @@
 #include <policy/truc_policy.h>
 #include <primitives/transaction.h>
 #include <psbt.h>
+#include <pubkey.h>
 #include <qml/bitcoinunits.h>
+#include <script/descriptor.h>
 #include <script/solver.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
@@ -55,6 +58,7 @@
 #include <QDateTime>
 #include <QMetaObject>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QScopedValueRollback>
 #include <QSettings>
 #include <QVariantList>
@@ -522,6 +526,139 @@ bool WalletUsesMultiKeyDescriptor(const wallet::CWallet& wallet)
     return false;
 }
 
+struct SingleKeyDescriptor {
+    QString descriptor;
+    QString script;
+    QString origin;
+    QString fingerprint;
+    QString derivation_path;
+    QString xpub;
+    QString branch;
+    QString closing;
+    QString checksum;
+};
+
+// Matches a normalized single-key descriptor such as wpkh([fp/84h/0h/0h]xpub/0/*).
+std::optional<SingleKeyDescriptor> ParseSingleKeyDescriptor(const wallet::ScriptPubKeyMan* spk_man)
+{
+    const auto* descriptor_spk_man = dynamic_cast<const wallet::DescriptorScriptPubKeyMan*>(spk_man);
+    std::string descriptor;
+    if (!descriptor_spk_man || !descriptor_spk_man->GetDescriptorString(descriptor, /*priv=*/false)) {
+        return std::nullopt;
+    }
+
+    static const QRegularExpression single_key_descriptor{QStringLiteral(
+        R"(^((?:pkh|wpkh|sh\(wpkh|tr)\())"
+        R"((\[([0-9a-f]{8})((?:/[0-9]+[h']?)*)\])?)"
+        R"(([xt]pub[1-9A-HJ-NP-Za-km-z]+)((?:/[0-9]+)*)/\*(\)+)(?:#([0-9a-z]{8}))?$)")};
+    const QRegularExpressionMatch match{single_key_descriptor.match(QString::fromStdString(descriptor))};
+    if (!match.hasMatch()) return std::nullopt;
+
+    return SingleKeyDescriptor{
+        .descriptor = match.captured(0),
+        .script = match.captured(1),
+        .origin = match.captured(2),
+        .fingerprint = match.captured(3),
+        .derivation_path = match.captured(2).isEmpty() ? QString{} : QStringLiteral("m") + match.captured(4),
+        .xpub = match.captured(5),
+        .branch = match.captured(6),
+        .closing = match.captured(7),
+        .checksum = match.captured(8),
+    };
+}
+
+struct WatchOnlyDescriptor {
+    QString text;
+    // Empty when receive and change could not be joined and are listed separately.
+    QVariantMap parts;
+};
+
+// Joins the receive and change chains into one BIP 389 multipath descriptor.
+WatchOnlyDescriptor MakeWatchOnlyDescriptor(const SingleKeyDescriptor& receive, const std::optional<SingleKeyDescriptor>& change)
+{
+    QString path{receive.branch + QStringLiteral("/*")};
+    QString checksum{receive.checksum};
+    QString text{receive.descriptor};
+    if (change) {
+        static const QRegularExpression single_step{QStringLiteral(R"(^/[0-9]+$)")};
+        if (change->script != receive.script || change->origin != receive.origin || change->xpub != receive.xpub ||
+            !single_step.match(receive.branch).hasMatch() || !single_step.match(change->branch).hasMatch()) {
+            return {.text = receive.descriptor + QLatin1Char('\n') + change->descriptor, .parts = {}};
+        }
+        path = QStringLiteral("/<%1;%2>/*").arg(receive.branch.mid(1), change->branch.mid(1));
+        const std::string descriptor{QString{receive.script + receive.origin + receive.xpub + path + receive.closing}.toStdString()};
+        checksum = QString::fromStdString(GetDescriptorChecksum(descriptor));
+        text = QString::fromStdString(descriptor) + QLatin1Char('#') + checksum;
+    }
+
+    QVariantMap parts;
+    parts.insert(QStringLiteral("opening"), receive.script);
+    parts.insert(QStringLiteral("origin"), receive.origin);
+    parts.insert(QStringLiteral("key"), receive.xpub);
+    parts.insert(QStringLiteral("path"), path);
+    parts.insert(QStringLiteral("closing"), receive.closing);
+    parts.insert(QStringLiteral("checksum"), checksum);
+    return {.text = text, .parts = parts};
+}
+
+constexpr std::array WATCH_ONLY_EXPORT_TYPES{OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY};
+
+std::optional<OutputType> SingleKeyOutputType(const QString& script)
+{
+    if (script == QLatin1String("tr(")) return OutputType::BECH32M;
+    if (script == QLatin1String("wpkh(")) return OutputType::BECH32;
+    if (script == QLatin1String("sh(wpkh(")) return OutputType::P2SH_SEGWIT;
+    if (script == QLatin1String("pkh(")) return OutputType::LEGACY;
+    return std::nullopt;
+}
+
+QString DescriptorScriptName(OutputType type)
+{
+    switch (type) {
+    case OutputType::BECH32M:
+        return QStringLiteral("tr");
+    case OutputType::BECH32:
+        return QStringLiteral("wpkh");
+    case OutputType::P2SH_SEGWIT:
+        return QStringLiteral("sh(wpkh)");
+    case OutputType::LEGACY:
+        return QStringLiteral("pkh");
+    case OutputType::UNKNOWN:
+        return {};
+    }
+    return {};
+}
+
+// SLIP-132 prefixes (ypub, zpub, ...) tell xpub-only wallets which script type to derive.
+QString Slip132ExtendedKey(const QString& xpub, OutputType type)
+{
+    using Version = std::array<unsigned char, 4>;
+    static constexpr Version MAINNET_XPUB{0x04, 0x88, 0xb2, 0x1e};
+    Version mainnet;
+    Version testnet;
+    switch (type) {
+    case OutputType::P2SH_SEGWIT:
+        mainnet = {0x04, 0x9d, 0x7c, 0xb2};
+        testnet = {0x04, 0x4a, 0x52, 0x62};
+        break;
+    case OutputType::BECH32:
+        mainnet = {0x04, 0xb2, 0x47, 0x46};
+        testnet = {0x04, 0x5f, 0x1c, 0xf6};
+        break;
+    default:
+        return xpub;
+    }
+
+    std::vector<unsigned char> data;
+    if (!DecodeBase58Check(xpub.toStdString(), data, BIP32_EXTKEY_WITH_VERSION_SIZE) ||
+        data.size() != BIP32_EXTKEY_WITH_VERSION_SIZE) {
+        return {};
+    }
+    const Version& version{std::equal(MAINNET_XPUB.begin(), MAINNET_XPUB.end(), data.begin()) ? mainnet : testnet};
+    std::copy(version.begin(), version.end(), data.begin());
+    return QString::fromStdString(EncodeBase58Check(data));
+}
+
 QString LocalizedString(const bilingual_str& value)
 {
     return QString::fromStdString(value.translated.empty() ? value.original : value.translated);
@@ -692,7 +829,8 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
     auto handlers = std::make_tuple(std::move(m_handler_status_changed), std::move(m_handler_address_list_changed),
-                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload));
+                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload),
+                                   std::move(m_handler_can_get_addresses_changed));
     if (m_bump_transaction_model) m_bump_transaction_model->detachWallet();
     if (m_imported_psbt_model) m_imported_psbt_model->detachWallet();
     auto wallet = std::move(m_wallet);
@@ -1160,6 +1298,109 @@ QString WalletQmlModel::receiveAddressTypeLabel(const QString& address_type) con
         if (type.value(QStringLiteral("id")).toString() == address_type) {
             return type.value(QStringLiteral("label")).toString();
         }
+    }
+    return {};
+}
+
+bool WalletQmlModel::canExportWatchOnly() const
+{
+    return !watchOnlyExports().isEmpty();
+}
+
+QVariantList WalletQmlModel::watchOnlyExports() const
+{
+    const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
+    if (!raw_wallet) return {};
+
+    QVariantList exports;
+    LOCK(raw_wallet->cs_wallet);
+    for (const OutputType type : WATCH_ONLY_EXPORT_TYPES) {
+        const auto receive = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false));
+        if (!receive) continue;
+        const auto change = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true));
+        QVariantMap item;
+        item.insert(QStringLiteral("id"), OutputTypeId(type));
+        item.insert(QStringLiteral("label"), OutputTypeLabel(type));
+        item.insert(QStringLiteral("description"), OutputTypeDescription(type));
+        const WatchOnlyDescriptor descriptor{MakeWatchOnlyDescriptor(*receive, change)};
+        item.insert(QStringLiteral("scriptName"), DescriptorScriptName(type));
+        item.insert(QStringLiteral("descriptor"), descriptor.text);
+        item.insert(QStringLiteral("descriptorParts"), descriptor.parts);
+        item.insert(QStringLiteral("receiveChain"), receive->branch.mid(1));
+        item.insert(QStringLiteral("changeChain"), change ? change->branch.mid(1) : QString{});
+        item.insert(QStringLiteral("xpub"), receive->xpub);
+        // A bare key implies /0/* and /1/*, so any other layout needs the descriptor.
+        const bool key_covers_both{receive->branch == QLatin1String("/0") &&
+                                   (!change || (!descriptor.parts.isEmpty() && change->branch == QLatin1String("/1")))};
+        item.insert(QStringLiteral("extendedKey"), key_covers_both ? Slip132ExtendedKey(receive->xpub, type) : QString{});
+        item.insert(QStringLiteral("fingerprint"), receive->fingerprint);
+        item.insert(QStringLiteral("derivationPath"), receive->derivation_path);
+        exports.append(item);
+    }
+    return exports;
+}
+
+QVariantList WalletQmlModel::inactiveWatchOnlyExports() const
+{
+    const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
+    if (!raw_wallet) return {};
+
+    struct Inactive {
+        SingleKeyDescriptor descriptor;
+        OutputType type;
+        bool used;
+    };
+    std::vector<Inactive> found;
+    LOCK(raw_wallet->cs_wallet);
+    for (const wallet::ScriptPubKeyMan* spk_man : raw_wallet->GetAllScriptPubKeyMans()) {
+        if (raw_wallet->IsActiveScriptPubKeyMan(*spk_man)) continue;
+        const auto descriptor = ParseSingleKeyDescriptor(spk_man);
+        const auto type = descriptor ? SingleKeyOutputType(descriptor->script) : std::nullopt;
+        if (!type) continue;
+        const auto& desc_man = static_cast<const wallet::DescriptorScriptPubKeyMan&>(*spk_man);
+        LOCK(desc_man.cs_desc_man);
+        found.push_back({*descriptor, *type, desc_man.GetWalletDescriptor().next_index > 0});
+    }
+    std::ranges::sort(found, {}, [](const Inactive& item) {
+        return std::tuple{std::ranges::find(WATCH_ONLY_EXPORT_TYPES, item.type) - WATCH_ONLY_EXPORT_TYPES.begin(),
+                          item.descriptor.origin, item.descriptor.xpub, item.descriptor.branch};
+    });
+
+    QVariantList exports;
+    const auto append = [&](const Inactive& receive, const std::optional<SingleKeyDescriptor>& change) {
+        QVariantMap item;
+        item.insert(QStringLiteral("id"), OutputTypeId(receive.type));
+        item.insert(QStringLiteral("label"), OutputTypeLabel(receive.type));
+        item.insert(QStringLiteral("scriptName"), DescriptorScriptName(receive.type));
+        item.insert(QStringLiteral("descriptor"), MakeWatchOnlyDescriptor(receive.descriptor, change).text);
+        item.insert(QStringLiteral("xpub"), receive.descriptor.xpub);
+        item.insert(QStringLiteral("fingerprint"), receive.descriptor.fingerprint);
+        exports.append(item);
+    };
+    for (auto it = found.begin(); it != found.end();) {
+        const auto end = std::find_if(it, found.end(), [&](const Inactive& item) {
+            return item.type != it->type || item.descriptor.origin != it->descriptor.origin ||
+                   item.descriptor.xpub != it->descriptor.xpub;
+        });
+        // next_index only moves once an address is handed out or seen in a transaction.
+        if (std::any_of(it, end, [](const Inactive& item) { return item.used; })) {
+            if (end - it == 2) {
+                append(*it, std::next(it)->descriptor);
+            } else {
+                std::for_each(it, end, [&](const Inactive& item) { append(item, std::nullopt); });
+            }
+        }
+        it = end;
+    }
+    return exports;
+}
+
+QString WalletQmlModel::saveWatchOnlyExport(const QString& path, const QString& contents) const
+{
+    QSaveFile file(PsbtQmlModel::LocalFilePath(path));
+    const QByteArray data{(contents + QLatin1Char('\n')).toUtf8()};
+    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        return tr("Could not save the export: %1").arg(file.errorString());
     }
     return {};
 }
@@ -3234,6 +3475,12 @@ void WalletQmlModel::subscribeToWalletSignals()
             pending->fetch_sub(1);
         }, Qt::QueuedConnection);
     });
+    // Core signals this when the active descriptors change.
+    m_handler_can_get_addresses_changed = m_wallet->handleCanGetAddressesChanged([guard, bridge] {
+        QMetaObject::invokeMethod(bridge.get(), [guard] {
+            if (guard && !guard->m_stopping) Q_EMIT guard->watchOnlyExportsChanged();
+        }, Qt::QueuedConnection);
+    });
     m_handler_unload = handleUnload([guard, bridge, unload_requested = m_unload_requested] {
         unload_requested->store(true);
         QMetaObject::invokeMethod(bridge.get(), [guard] {
@@ -3258,6 +3505,9 @@ void WalletQmlModel::unsubscribeFromWalletSignals()
     }
     if (m_handler_unload) {
         m_handler_unload->disconnect();
+    }
+    if (m_handler_can_get_addresses_changed) {
+        m_handler_can_get_addresses_changed->disconnect();
     }
 }
 

@@ -322,6 +322,7 @@ private Q_SLOTS:
     void validateXpubRejectsGarbage();
     void validateXpubRejectsEmpty();
     void validateXpubTrimsWhitespace();
+    void homeFileUrlIsALocalFileUrl();
     void createWatchOnlyInvalidXpubSetsError();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
     void externalSignerCreationRequiresConfiguredPath();
@@ -619,6 +620,17 @@ void WalletQmlControllerTests::validateXpubRejectsEmpty()
     DrainingWalletController controller(node);
 
     QVERIFY(!controller.validateXpub(""));
+}
+
+void WalletQmlControllerTests::homeFileUrlIsALocalFileUrl()
+{
+    MockNode node;
+    DrainingWalletController controller(node);
+
+    QCOMPARE(controller.homeFileUrl(), QUrl::fromLocalFile(QDir::homePath()));
+    const QUrl file{controller.homeFileUrl(QStringLiteral("wallet-watch-only.txt"))};
+    QVERIFY(file.isLocalFile());
+    QCOMPARE(file.toLocalFile(), QDir::home().filePath(QStringLiteral("wallet-watch-only.txt")));
 }
 
 void WalletQmlControllerTests::validateXpubTrimsWhitespace()

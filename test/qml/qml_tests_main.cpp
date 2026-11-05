@@ -1199,6 +1199,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString privateKeysStatus MEMBER m_private_keys_status NOTIFY walletInfoChanged)
     Q_PROPERTY(QString externalSignerStatus MEMBER m_external_signer_status NOTIFY walletInfoChanged)
     Q_PROPERTY(bool canManagePassphrase MEMBER m_can_manage_passphrase NOTIFY walletInfoChanged)
+    Q_PROPERTY(bool canExportWatchOnly READ canExportWatchOnly CONSTANT)
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(int backupWalletCalls READ backupWalletCalls NOTIFY backupWalletCallsChanged)
@@ -1324,6 +1325,9 @@ public:
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
+    Q_INVOKABLE QVariantList watchOnlyExports() const { return {}; }
+    Q_INVOKABLE QVariantList inactiveWatchOnlyExports() const { return {}; }
+    bool canExportWatchOnly() const { return false; }
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }
@@ -1867,6 +1871,10 @@ public:
     QString walletImportErrorDescription() const { return m_wallet_load_error; }
     QString walletImportErrorHelpText() const { return QString{}; }
     Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
+    Q_INVOKABLE QUrl homeFileUrl(const QString& file_name = {}) const
+    {
+        return QUrl::fromLocalFile(file_name.isEmpty() ? homePath() : homePath() + QLatin1Char('/') + file_name);
+    }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }

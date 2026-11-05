@@ -124,6 +124,7 @@ private:
     Q_PROPERTY(QString privateKeysStatus READ privateKeysStatus CONSTANT)
     Q_PROPERTY(QString externalSignerStatus READ externalSignerStatus CONSTANT)
     Q_PROPERTY(bool canManagePassphrase READ canManagePassphrase CONSTANT)
+    Q_PROPERTY(bool canExportWatchOnly READ canExportWatchOnly NOTIFY watchOnlyExportsChanged)
     Q_PROPERTY(QString transactionError READ transactionError NOTIFY transactionErrorChanged)
     Q_PROPERTY(bool transactionNeedsUnlock READ transactionNeedsUnlock NOTIFY transactionNeedsUnlockChanged)
     Q_PROPERTY(bool currentTransactionCanSend READ currentTransactionCanSend NOTIFY currentTransactionChanged)
@@ -208,6 +209,9 @@ public:
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE void setDefaultReceiveAddressType(const QString& address_type);
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& address_type) const;
+    Q_INVOKABLE QVariantList watchOnlyExports() const;
+    Q_INVOKABLE QVariantList inactiveWatchOnlyExports() const;
+    Q_INVOKABLE QString saveWatchOnlyExport(const QString& path, const QString& contents) const;
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);
     Q_INVOKABLE void discardCurrentTransaction();
@@ -282,6 +286,7 @@ public:
     QString privateKeysStatus() const;
     QString externalSignerStatus() const;
     bool canManagePassphrase() const;
+    bool canExportWatchOnly() const;
     QString transactionError() const { return m_transaction_error; }
     bool transactionNeedsUnlock() const { return m_transaction_needs_unlock; }
     bool currentTransactionCanSend() const { return m_current_transaction && m_current_transaction_can_send; }
@@ -312,6 +317,7 @@ Q_SIGNALS:
     void externalSignerApprovalFailed(const QString& message, bool signerNotFound);
     void displayUnitChanged(int unit);
     void securityStateChanged();
+    void watchOnlyExportsChanged();
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
     void availableChanged();
@@ -425,6 +431,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
+    std::unique_ptr<interfaces::Handler> m_handler_can_get_addresses_changed;
     std::shared_ptr<std::atomic<bool>> m_unload_requested{std::make_shared<std::atomic<bool>>(false)};
     int m_display_unit{0};
     PsbtQmlModel* m_imported_psbt_model{nullptr};
