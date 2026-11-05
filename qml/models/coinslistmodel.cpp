@@ -78,14 +78,18 @@ void CoinsListModel::update()
         if (std::none_of(coins.begin(), coins.end(), [&](const auto& coin) { return coin.outpoint == selected; }))
             m_wallet_model->unselectCoin(selected);
     }
-    beginResetModel();
-    m_coins = std::move(coins);
-    m_visible.clear();
-    endResetModel();
-    rebuildView();
-    Q_EMIT coinCountChanged();
-    Q_EMIT lockedCoinsCountChanged();
-    Q_EMIT selectedCoinsCountChanged();
+    // Each new block refreshes wallet state; keep the rows when no coin changed.
+    if (coins != m_coins) {
+        beginResetModel();
+        m_coins = std::move(coins);
+        m_visible.clear();
+        endResetModel();
+        rebuildView();
+        Q_EMIT coinCountChanged();
+        Q_EMIT lockedCoinsCountChanged();
+    }
+    // The wallet model can also drop selected coins before this refresh.
+    if (m_wallet_model->listSelectedCoins() != m_announced_selection) refreshSelection();
 }
 void CoinsListModel::rebuildView()
 {
@@ -149,6 +153,7 @@ bool CoinsListModel::toggleCoinSelectionById(const QString& coin_id)
 void CoinsListModel::refreshSelection()
 {
     if (rowCount()) Q_EMIT dataChanged(index(0), index(rowCount() - 1), {SelectedRole});
+    m_announced_selection = m_wallet_model->listSelectedCoins();
     Q_EMIT selectedCoinsCountChanged();
 }
 void CoinsListModel::beginSelection()

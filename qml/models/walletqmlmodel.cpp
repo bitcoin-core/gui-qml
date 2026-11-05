@@ -664,6 +664,7 @@ void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
     const bool name_changed = state.name != m_wallet_state.name;
     const bool labels_changed = state.labels != m_wallet_state.labels;
     const bool balance_changed = !m_wallet_state_ready || state.balance != m_wallet_state.balance || state.available_balance != m_wallet_state.available_balance;
+    const bool spendable_changed = balance_changed || state.locked_coins != m_wallet_state.locked_coins;
     const bool was_encrypted = m_is_encrypted;
     const bool was_locked = m_is_locked;
     m_wallet_state = std::move(state);
@@ -688,6 +689,8 @@ void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
     if (labels_changed) Q_EMIT addressListChanged();
     if (balance_changed) Q_EMIT balanceChanged();
     Q_EMIT sendAmountExhaustsBalanceChanged();
+    // New funds and lock changes affect previews without editing the draft; other snapshots keep them.
+    if (spendable_changed) scheduleFeeEstimates();
 }
 
 void WalletQmlModel::applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry)

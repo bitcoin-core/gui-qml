@@ -97,12 +97,14 @@ private:
         QDateTime date;
         bool locked;
         QString id() const;
+        bool operator==(const Coin&) const = default;
     };
     void rebuildView();
     QString groupTitle(const Coin& coin) const;
     WalletQmlModel* m_wallet_model;
     std::vector<Coin> m_coins;
     std::vector<size_t> m_visible;
+    std::vector<COutPoint> m_announced_selection;
     std::optional<std::vector<COutPoint>> m_previous_selection;
     QString m_search;
     QString m_sort{"date"};

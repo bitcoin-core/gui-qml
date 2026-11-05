@@ -735,6 +735,24 @@ private Q_SLOTS:
         QCOMPARE(model->estimatedFeeSatoshi(), -1);
         QVERIFY(model->isSelectedCoin(selected));
     }
+    void unchangedSnapshotKeepsFeePreview() {
+        auto [wallet, model] = MakeWalletModel();
+        std::atomic<CAmount> available{100'000};
+        wallet->get_available_balance_fn = [&](const wallet::CCoinControl&) { return available.load(); };
+        model->requestWalletStateRefresh();
+        QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+        SetValidRecipient(*model);
+        QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
+        QSignalSpy pending{model.get(), &WalletQmlModel::feeEstimatePendingChanged};
+        // Like a snapshot after a label or Receive command, this one leaves the spendable coins unchanged.
+        model->requestWalletStateRefresh();
+        QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+        QCOMPARE(pending.size(), 0);
+
+        available = 200'000;
+        model->requestWalletStateRefresh();
+        QTRY_VERIFY(pending.size() > 0);
+    }
     void previewExposesFeeInputCountAndTotalDebit() {
         auto [wallet, model] = MakeWalletModel();
         SetValidRecipient(*model);
