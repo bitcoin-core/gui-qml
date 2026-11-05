@@ -141,7 +141,9 @@ TestCase {
         motion.toClock()
         motion.reducedMotion = false
         motion.toLogo()
-        wait(100)
+        // Interrupt only once the return has visibly started; otherwise the
+        // network check below could pass before toNetwork() changes anything.
+        tryVerify(function() { return motion.networkProgress < 0.9 }, 1000)
         motion.toNetwork()
         tryCompare(motion, "networkProgress", 1, 1800)
         compare(motion.blocksProgress, 0)
@@ -153,19 +155,34 @@ TestCase {
         const motion = createTemporaryObject(animatedMotion, this)
         verify(motion !== null)
         const initial = motion.dotPoint(0)
-        wait(300)
-        const drifting = motion.dotPoint(0)
-        verify(Math.hypot(drifting[0] - initial[0], drifting[1] - initial[1]) > 1)
-        verify(motion.driftProgress < 1)
-        verify(motion.assembly > 0.001)
-        compare(motion.logoOpacity, 0)
-        wait(300)
-        compare(motion.driftProgress, 1)
-        verify(motion.assembly < 1)
-        wait(1000)
-        compare(motion.logoOpacity, 0)
-        tryVerify(function() { return motion.logoOpacity > 0.01 }, 600)
-        tryCompare(motion, "logoOpacity", 1, 1000)
+        // Record the state as the animation updates instead of at fixed
+        // times, so a slow frame cannot skip past the state being checked.
+        let assemblyWhileDrifting = 0
+        let logoWhileDrifting = 0
+        let assemblyWhenLogoStarts = -1
+        let driftWhenLogoStarts = -1
+        motion.assemblyChanged.connect(function() {
+            if (motion.driftProgress < 1) {
+                assemblyWhileDrifting = Math.max(assemblyWhileDrifting, motion.assembly)
+                logoWhileDrifting = Math.max(logoWhileDrifting, motion.logoOpacity)
+            }
+        })
+        motion.logoOpacityChanged.connect(function() {
+            if (assemblyWhenLogoStarts < 0 && motion.logoOpacity > 0) {
+                assemblyWhenLogoStarts = motion.assembly
+                driftWhenLogoStarts = motion.driftProgress
+            }
+        })
+        tryVerify(function() {
+            const drifting = motion.dotPoint(0)
+            return Math.hypot(drifting[0] - initial[0], drifting[1] - initial[1]) > 1
+        }, 1000)
+        tryCompare(motion, "driftProgress", 1, 1000)
+        verify(assemblyWhileDrifting > 0)
+        compare(logoWhileDrifting, 0)
+        tryCompare(motion, "logoOpacity", 1, 3000)
+        compare(driftWhenLogoStarts, 1)
+        verify(assemblyWhenLogoStarts > 0.9)
     }
 
     function test_animated_handoff_reaches_each_page_state() {
