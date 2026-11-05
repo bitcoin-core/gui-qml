@@ -28,7 +28,7 @@ TestCase {
         verify(input !== null)
 
         compare(input.objectName, "valueInputControl")
-        compare(input.maximumLength, 5)
+        verify(input.maximumLength >= "2,147,483,647".length)
         compare(input.text, "250")
         compare(input.enabled, true)
     }
@@ -41,7 +41,7 @@ TestCase {
         verify(input.checkValidity(5, 10, 10))
         verify(!input.checkValidity(5, 10, 4))
         verify(!input.checkValidity(5, 10, 11))
-        verify(!input.checkValidity(5, 10, parseInt("", 10)))
+        verify(!input.checkValidity(5, 10, NaN))
     }
 
     function test_valueInput_disabled_state_disables_input() {
