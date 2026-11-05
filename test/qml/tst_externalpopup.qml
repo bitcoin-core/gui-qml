@@ -20,7 +20,6 @@ TestCase {
         ExternalPopup {
             link: "https://bitcoincore.org"
             width: 400
-            height: 300
         }
     }
 
@@ -61,12 +60,17 @@ TestCase {
         return popup
     }
 
+    function openPopup(popup) {
+        popup.open()
+        tryCompare(popup, "opened", true)
+        verify(waitForRendering(popup.contentItem))
+    }
+
     // A successful open closes the popup and never enters the error state.
     function test_successful_open_closes_popup() {
         const popup = createPopup()
         UrlOpener.setOpenResult(true)
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
 
         const ok = findObjectByName(popup, "externalLinkConfirm")
         verify(ok !== null)
@@ -76,12 +80,35 @@ TestCase {
         verify(!popup.openFailed)
     }
 
+    function test_return_and_escape_follow_dialog_state() {
+        const popup = createPopup()
+        UrlOpener.setOpenResult(false)
+        openPopup(popup)
+        keyClick(Qt.Key_Return)
+        tryCompare(popup, "openFailed", true)
+        compare(UrlOpener.lastUrl(), popup.link)
+
+        const copy = findObjectByName(popup, "externalLinkCopy")
+        tryCompare(copy, "activeFocus", true)
+        keyClick(Qt.Key_Return)
+        verify(popup.linkCopied)
+        compare(Clipboard.text(), popup.link)
+        compare(popup.opened, true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "opened", false)
+
+        UrlOpener.reset()
+        openPopup(popup)
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "opened", false)
+        compare(UrlOpener.lastUrl(), "")
+    }
+
     // The destination is selectable text, so it can be copied and opened by
     // hand even before an open attempt.
     function test_link_is_selectable() {
         const popup = createPopup()
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
 
         const url = findObjectByName(popup, "externalLinkUrl")
         verify(url !== null)
@@ -96,8 +123,7 @@ TestCase {
     function test_failed_open_shows_copy_fallback() {
         const popup = createPopup()
         UrlOpener.setOpenResult(false)
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
 
         const ok = findObjectByName(popup, "externalLinkConfirm")
         verify(ok !== null)
@@ -115,8 +141,7 @@ TestCase {
     function test_copy_fallback_copies_link() {
         const popup = createPopup()
         UrlOpener.setOpenResult(false)
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
         popup.attemptOpen()
         verify(popup.openFailed)
 
@@ -136,8 +161,7 @@ TestCase {
         const popup = createPopup()
         UrlOpener.setOpenResult(true)
         popup.link = "file:///etc/passwd"
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
 
         popup.attemptOpen()
 
@@ -151,8 +175,7 @@ TestCase {
         const popup = createPopup()
         UrlOpener.setOpenResult(false)
         popup.copiedFeedbackMs = 120
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
         popup.attemptOpen()
         verify(popup.openFailed)
 
@@ -176,16 +199,14 @@ TestCase {
     function test_reopen_resets_failure_state() {
         const popup = createPopup()
         UrlOpener.setOpenResult(false)
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
         popup.attemptOpen()
         verify(popup.openFailed)
 
         popup.close()
         tryCompare(popup, "opened", false)
 
-        popup.open()
-        tryCompare(popup, "opened", true)
+        openPopup(popup)
         verify(!popup.openFailed)
         verify(!popup.linkCopied)
     }

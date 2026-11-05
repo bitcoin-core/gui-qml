@@ -16,11 +16,21 @@ ApplicationWindow {
     minimumWidth: 800
     minimumHeight: 665
     color: Theme.color.background
+    palette.highlight: Theme.color.selection
+    palette.highlightedText: Theme.color.selectedText
     visible: true
 
     property bool completed: false
     property bool starting: false
     signal finished()
+    signal startupErrorAcknowledged()
+
+    // Startup errors while this window is open show here instead of in a
+    // second window.
+    function showStartupError(text) {
+        startupErrorAlert.message = text
+        startupErrorAlert.open()
+    }
 
     OnboardingWizard {
         anchors.fill: parent
@@ -44,10 +54,10 @@ ApplicationWindow {
         anchors.margins: 20
         visible: !appWindow.starting && optionsModel.previewError.length > 0
         text: optionsModel.previewError
-        color: Theme.color.blue
+        color: Theme.color.dangerText
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        font.pixelSize: 15
+        textStyle: Theme.text.description
     }
 
     Item {
@@ -58,7 +68,7 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "black"
+            color: Theme.color.background
         }
 
         MouseArea {
@@ -67,9 +77,12 @@ ApplicationWindow {
             hoverEnabled: true
         }
 
-        BusyIndicator {
+        SpinningIndicator {
             objectName: "preInitStartupBusyIndicator"
             anchors.centerIn: parent
+            width: 32
+            height: 32
+            strokeWidth: 3
             running: appWindow.starting
         }
 
@@ -82,5 +95,20 @@ ApplicationWindow {
         Keys.onPressed: (event) => {
             event.accepted = true
         }
+    }
+
+    AlertPopup {
+        id: startupErrorAlert
+        objectName: "preInitStartupErrorPopup"
+        title: qsTr("There was an issue starting up.")
+        messageObjectName: "preInitStartupErrorMessage"
+        messageTextFormat: Text.PlainText
+
+        AlertAction {
+            text: qsTr("Close")
+            buttonObjectName: "preInitStartupErrorCloseButton"
+        }
+
+        onClosed: appWindow.startupErrorAcknowledged()
     }
 }

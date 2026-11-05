@@ -9,7 +9,7 @@ Item {
     id: root
 
     property int thickness: 1
-    property int verticalMargin: 6
+    property int verticalMargin: Theme.space.s
     property int horizontalInset: 10
 
     Layout.fillWidth: true
@@ -24,6 +24,6 @@ Item {
         anchors.rightMargin: root.horizontalInset
         anchors.verticalCenter: parent.verticalCenter
         height: root.thickness
-        color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        color: Theme.color.menuDivider
     }
 }

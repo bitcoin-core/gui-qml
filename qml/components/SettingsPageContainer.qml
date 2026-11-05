@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 
 import "../controls"
 
@@ -17,8 +18,19 @@ Page {
     readonly property bool canGoBack: internal.currentStack ? internal.currentStack.canGoBack : false
     readonly property var currentItem: internal.currentStack ? internal.currentStack.currentItem : null
     readonly property var stack: internal.currentStack
+    // Gives each section's root page a Back button that emits rootBackRequested
+    // (compact SettingsView, where the sidebar is the previous screen).
+    property bool showRootBackButton: false
 
     signal sectionChanged(string sectionId)
+    signal rootBackRequested()
+
+    function configureRootPage(rootPage) {
+        if (!rootPage || rootPage.showBackButton === undefined || rootPage.back === undefined) return
+        rootPage.showBackButton = Qt.binding(function() { return root.showRootBackButton })
+        if (rootPage.backButtonObjectName === "") rootPage.backButtonObjectName = "settingsSectionBackButton"
+        rootPage.back.connect(root.rootBackRequested)
+    }
 
     function showSection(sectionId, page, properties) {
         if (!page) {
@@ -47,6 +59,7 @@ Page {
             nextSectionStacks[sectionId] = nextStack
             internal.sectionStacks = nextSectionStacks
             nextStack.push(page, properties || {}, StackView.Immediate)
+            root.configureRootPage(nextStack.currentItem)
         }
 
         if (internal.currentStack) internal.currentStack.visible = false
@@ -92,6 +105,34 @@ Page {
         root.sectionChanged("")
     }
 
+    function focusReasonFor(item) {
+        return item.focusReason === undefined ? Qt.OtherFocusReason : item.focusReason
+    }
+
+    function trackEditorFocus() {
+        if (!internal.currentStack || !internal.currentStack.enabled) return
+        const focused = root.Window.window ? root.Window.window.activeFocusItem : null
+        let item = focused
+        while (item && item !== internal.currentStack) item = item.parent
+        if (!item) {
+            internal.focusedEditor = null
+        } else if (focused !== internal.focusedEditor) {
+            internal.focusedEditor = focused
+            internal.editorFocusReason = root.focusReasonFor(focused)
+        }
+    }
+
+    function restoreEditorFocusReason() {
+        const item = internal.focusedEditor
+        if (!item || !item.visible || !item.enabled || !item.activeFocus
+            || root.focusReasonFor(item) === internal.editorFocusReason) return
+        // Disabling a focused editor for a save replaces its focus reason.
+        // Restore the ring only if focus has stayed on that same editor.
+        const reason = internal.editorFocusReason
+        item.focus = false
+        item.forceActiveFocus(reason)
+    }
+
     background: null
     clip: true
 
@@ -100,6 +141,23 @@ Page {
         property string currentSectionId: ""
         property var currentStack: null
         property var sectionStacks: ({})
+        property Item focusedEditor: null
+        property int editorFocusReason: Qt.OtherFocusReason
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() { root.trackEditorFocus() }
+    }
+
+    Connections {
+        target: internal.focusedEditor
+        ignoreUnknownSignals: true
+        function onFocusReasonChanged() {
+            if (internal.currentStack && internal.currentStack.enabled && internal.focusedEditor.enabled) {
+                internal.editorFocusReason = root.focusReasonFor(internal.focusedEditor)
+            }
+        }
     }
 
     Item {
@@ -113,6 +171,7 @@ Page {
         PageStack {
             required property string sectionId
             enabled: root.disabledSectionIds.indexOf(sectionId) < 0
+            onEnabledChanged: if (enabled) root.restoreEditorFocusReason()
             objectName: "settingsNavigationStack_" + sectionId
             anchors.fill: parent
             visible: false

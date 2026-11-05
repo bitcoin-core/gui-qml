@@ -153,18 +153,18 @@ TestCase {
 
         const surface = findChild(popup, "alertPopupSurface")
         verify(surface !== null)
-        compare(surface.color, Theme.color.neutral1)
-        compare(surface.border.color, Theme.color.neutral2)
+        compare(surface.color, Theme.color.surface1)
+        compare(surface.border.color, Theme.color.surface2)
         compare(surface.radius, 10)
         compare(popup.dim, true)
-        verify(popup.enter !== null)
-        verify(popup.exit !== null)
+        verify(popup.enterTransition !== null)
+        verify(popup.exitTransition !== null)
 
         compare(popup.visibleActions.length, 2)
         compare(popup.visibleActions[1].buttonObjectName, "alertDeleteButton")
         const deleteButton = waitForChild(testWindow.contentItem, "alertDeleteButton")
         verify(deleteButton !== null)
-        compare(deleteButton.backgroundColor, Theme.color.red)
+        compare(deleteButton.backgroundColor, Theme.color.danger)
 
         deleteButton.clicked()
         tryCompare(popup, "opened", false)
@@ -280,10 +280,6 @@ TestCase {
         verify(runtimePopup !== null)
         verify(fatalPopup !== null)
 
-        compare(warningsPopup.contentMargin, 28)
-        compare(informationPopup.contentMargin, 28)
-        compare(runtimePopup.contentMargin, 28)
-        compare(fatalPopup.contentMargin, 28)
         verify(warningsPopup.width > 460)
         verify(informationPopup.width > 520)
         verify(runtimePopup.width > 420)
@@ -327,10 +323,10 @@ TestCase {
         tryCompare(popup, "opened", true)
         wait(0)
 
-        const title = findChild(popup, "nodeRuntimeDialogTitle")
+        const title = findChild(popup.contentItem, "alertTitle")
         const message = findChild(popup, "nodeRuntimeDialogMessage")
-        const ok = findChild(popup, "nodeRuntimeDialogButtonOk")
-        const abort = findChild(popup, "nodeRuntimeDialogButtonAbort")
+        const ok = findChild(popup.contentItem, "nodeRuntimeDialogButtonOk")
+        const abort = findChild(popup.contentItem, "nodeRuntimeDialogButtonAbort")
         verify(title !== null)
         verify(message !== null)
         verify(ok !== null)
@@ -340,9 +336,26 @@ TestCase {
         compare(ok.visible, true)
         compare(abort.visible, true)
 
+        waitForRendering(popup.contentItem, 1000)
         mouseClick(ok, ok.width / 2, ok.height / 2)
         tryCompare(popup, "opened", false)
         compare(nodeModel.runtimeDialogVisible, false)
+    }
+
+    function test_runtime_dialog_closes_when_answered_while_opening() {
+        Theme.motion.mode = "full"
+        try {
+            const popup = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem)
+            nodeModel.setRuntimeDialogForTest("Question", "Continue?", DialogButtonBox.Ok, true)
+            compare(popup.visible, true)
+            compare(popup.opened, false)
+
+            nodeModel.answerRuntimeDialog(DialogButtonBox.Ok)
+            compare(nodeModel.runtimeDialogVisible, false)
+            tryCompare(popup, "visible", false, 2000)
+        } finally {
+            Theme.motion.resetMode()
+        }
     }
 
     function test_runtime_dialog_exposes_all_core_buttons() {
@@ -367,10 +380,30 @@ TestCase {
 
         const names = ["Ok", "Yes", "No", "Abort", "Retry", "Ignore", "Close", "Cancel", "Discard", "Help", "Apply", "Reset"]
         for (let i = 0; i < names.length; ++i) {
-            const button = findChild(popup, "nodeRuntimeDialogButton" + names[i])
+            const button = findChild(popup.contentItem, "nodeRuntimeDialogButton" + names[i])
             verify(button !== null, "missing button " + names[i])
             verify(button.visible, "button not visible " + names[i])
         }
+    }
+
+    function test_runtime_dialog_escape_answers_safely_data() {
+        return [
+            { tag: "ok and abort", buttons: DialogButtonBox.Ok | DialogButtonBox.Abort, answer: DialogButtonBox.Abort },
+            { tag: "yes and no", buttons: DialogButtonBox.Yes | DialogButtonBox.No, answer: DialogButtonBox.No },
+            { tag: "ok only", buttons: DialogButtonBox.Ok, answer: DialogButtonBox.Ok }
+        ]
+    }
+
+    function test_runtime_dialog_escape_answers_safely(data) {
+        const popup = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem)
+        verify(popup !== null)
+
+        nodeModel.setRuntimeDialogForTest("Question", "Continue?", data.buttons, true)
+        tryCompare(popup, "opened", true)
+        tryCompare(popup.contentItem, "activeFocus", true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "opened", false)
+        compare(nodeModel.lastRuntimeDialogAnswer, data.answer)
     }
 
     function test_runtime_dialog_wraps_long_message() {
@@ -395,8 +428,12 @@ TestCase {
         const text = findChild(popup, "nodeFatalErrorText")
         verify(text !== null)
         compare(text.text, "Fatal init failure")
-        const button = findChild(popup, "nodeFatalShutdownButton")
+        tryCompare(popup.contentItem, "activeFocus", true)
+        keyClick(Qt.Key_Escape)
+        compare(popup.opened, true)
+        const button = findChild(popup.contentItem, "nodeFatalShutdownButton")
         verify(button !== null)
+        waitForRendering(popup.contentItem, 1000)
         mouseClick(button)
         compare(shutdownSpy.count, 1)
     }

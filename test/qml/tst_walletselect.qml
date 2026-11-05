@@ -119,11 +119,35 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
         const list = findChild(popup, "walletSelectList")
+        verify(waitForItemPolished(list))
         for (const group of ["open", "closed"]) {
             const heading = findChild(list, "walletSelectSection_" + group)
             compare(heading !== null && heading.visible, data.groups.indexOf(group) !== -1)
             if (heading !== null) compare(heading.text, group === "open" ? "Open wallets" : "Closed wallets")
         }
+    }
+
+    function test_rows_are_reachable_and_selectable_by_keyboard() {
+        const popup = openWalletSelect()
+        const list = findChild(popup, "walletSelectList")
+        const first = list.itemAtIndex(0)
+        const second = list.itemAtIndex(1)
+        const secondRing = findChild(second, second.objectName + "FocusBorder")
+        verify(secondRing !== null)
+
+        first.forceActiveFocus(Qt.TabFocusReason)
+        verify(first.activeFocus)
+        keyClick(Qt.Key_Down)
+        tryCompare(second, "activeFocus", true)
+        verify(secondRing.visible)
+        keyClick(Qt.Key_Up)
+        tryCompare(first, "activeFocus", true)
+        compare(secondRing.visible, false)
+
+        keyClick(Qt.Key_Down)
+        tryCompare(second, "activeFocus", true)
+        keyClick(Qt.Key_Return)
+        compare(walletController.lastSelectedWalletName, "secondarywallet")
     }
 
     function test_closed_wallet_menu_opens_wallet() {

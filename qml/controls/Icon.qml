@@ -20,10 +20,13 @@ Button {
     icon.width: root.size
     enabled: false
     background: null
+    // Decorative: the control that shows the icon carries the name.
+    Accessible.ignored: true
 
     Behavior on icon.color {
+        enabled: Theme.motion.animated
         ColorAnimation {
-            duration: 150
+            duration: Theme.motion.normal
         }
     }
 }

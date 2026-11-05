@@ -58,20 +58,17 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Block storage")
-        isOnSurface: root.onboarding
-        showGradientBorder: false
+        surfaceLevel: root.onboarding ? 1 : 0
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Store recent blocks only")
-            dividerColor: root.onboarding ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             supportingText: root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "pruneSwitch"
-                checked: root.pruneSetting.enabled
-                onToggled: root.pruneSetting.enabled = checked
-            }
+            switchObjectName: "pruneSwitch"
+            checked: root.pruneSetting.enabled
+            onToggled: root.pruneSetting.enabled = checked
         }
 
         TextFieldRow {
@@ -105,8 +102,7 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Data directory")
-        isOnSurface: root.onboarding
-        showGradientBorder: false
+        surfaceLevel: root.onboarding ? 1 : 0
         description: qsTr("Selected before startup. The data directory cannot be changed while the node is running.")
 
         FormRow {
@@ -118,19 +114,18 @@ SettingsPage {
                 Layout.fillWidth: true
                 text: root.settingsModel.dataDir
                 color: Theme.color.neutral7
-                font: Theme.text.caption.font
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.monoCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
         }
     }
 
-    SettingsRestartNotice {
+    ToastBanner {
         objectName: "storageRestartNotice"
-        visible: !root.onboarding && root.settingsModel.storageSettingsDirty
+        shown: !root.onboarding && root.settingsModel.storageSettingsDirty
         Layout.fillWidth: true
         Layout.maximumWidth: root.contentLayout.width
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 }

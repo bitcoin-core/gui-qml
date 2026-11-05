@@ -16,7 +16,7 @@ import tempfile
 import time
 
 from qml_driver import QmlDriver, QmlDriverError
-from qml_test_harness import GUI_STARTUP_TIMEOUT, complete_onboarding, find_gui_binary, qml_onboarded_args, qml_qpa_platform, qsettings_sandbox_args
+from qml_test_harness import GUI_STARTUP_TIMEOUT, TEST_MOTION_ARGS, complete_onboarding, find_gui_binary, qml_onboarded_args, qml_qpa_platform, qsettings_sandbox_args
 
 
 RPC_USER = "qmlwallettest"
@@ -245,7 +245,7 @@ class WalletFlowHarness:
             self.gui_binary,
             f"-datadir={self.gui_datadir}",
             f"-test-automation={self.socket_path}",
-        ] + settings_args + qml_onboarded_args(
+        ] + TEST_MOTION_ARGS + settings_args + qml_onboarded_args(
             extra_args,
             reset_settings=reset_gui_settings,
             start_onboarded=start_onboarded,

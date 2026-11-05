@@ -4,6 +4,10 @@
 
 #include <QtTest/QtTest>
 #include <QSettings>
+#include <QFileInfo>
+#include <QScopeGuard>
+#include <QTemporaryDir>
+#include <qml/globalsettings.h>
 
 #include <qml/bitcoinunits.h>
 #include <qml/models/settings_keys.h>
@@ -19,6 +23,7 @@ private Q_SLOTS:
     void init();
     void cleanup();
 
+    void globalSettingsMigrateOutsidePerChainSettings();
     void displayUnit_defaultIsBtc();
     void displayUnit_persistsToQSettings();
     void language_persistsToQSettings();
@@ -46,6 +51,32 @@ void DisplaySettingsTests::cleanup()
     settings.beginGroup(TEST_GROUP);
     settings.remove("");
     settings.endGroup();
+}
+
+void DisplaySettingsTests::globalSettingsMigrateOutsidePerChainSettings()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QSettings defaults;
+    const QString application = QFileInfo(dir.path()).fileName();
+    QSettings legacy{defaults.format(), defaults.scope(), defaults.organizationName(), application};
+    QSettings shared{defaults.format(), defaults.scope(), defaults.organizationName(), application + QStringLiteral("-global")};
+    const auto cleanup = qScopeGuard([&] { legacy.clear(); shared.clear(); });
+    legacy.setValue("palette", "core-light");
+    legacy.setValue("textScale", 1.2);
+    legacy.setValue("reduceMotion", true);
+    legacy.setValue("strDataDir", "mainnet-data");
+    GlobalSettings settings{application};
+    QCOMPARE(settings.value("palette").toString(), QStringLiteral("core-light"));
+    QCOMPARE(settings.value("textScale").toDouble(), 1.2);
+    QCOMPARE(settings.value("reduceMotion").toBool(), true);
+    QVERIFY(!settings.value("strDataDir").isValid());
+    settings.setValue("strDataDir", "separate-data");
+    QCOMPARE(legacy.value("strDataDir").toString(), QStringLiteral("mainnet-data"));
+    legacy.clear();
+    QCOMPARE(settings.value("palette").toString(), QStringLiteral("core-light"));
+    QCOMPARE(settings.value("textScale").toDouble(), 1.2);
+    QCOMPARE(settings.value("reduceMotion").toBool(), true);
 }
 
 void DisplaySettingsTests::displayUnit_defaultIsBtc()

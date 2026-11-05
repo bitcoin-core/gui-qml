@@ -183,8 +183,8 @@ SettingsPage {
     ToastBanner {
         objectName: "debugLogOpenErrorBanner"
         Layout.fillWidth: true
-        visible: debugLogModel.openError.length > 0
-        tintColor: debugLogModel.fileLoggingEnabled ? Theme.color.red : Theme.color.blue
+        shown: debugLogModel.openError.length > 0
+        tone: debugLogModel.fileLoggingEnabled ? ToastBanner.Error : ToastBanner.Info
         iconSource: "image://images/info-filled"
         text: debugLogModel.openError
         textObjectName: "debugLogOpenErrorText"
@@ -205,7 +205,7 @@ SettingsPage {
         objectName: "debugLogTableSection"
         Layout.fillWidth: true
         rowSpacing: 0
-        backgroundColor: Theme.color.neutral1
+        backgroundColor: Theme.color.surface1
 
         DebugLogTitlesHeader {
             id: titlesHeader
@@ -271,7 +271,7 @@ SettingsPage {
                 visible: logList.count === 0 && debugLogModel.logAvailable
                 text: root.emptyMessage()
                 color: Theme.color.neutral7
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }
@@ -282,8 +282,8 @@ SettingsPage {
             objectName: "debugLogTableFooter"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
-            color: Theme.color.neutral1
-            radius: 16
+            color: Theme.color.surface1
+            radius: Theme.radius.card
 
             Rectangle {
                 objectName: "debugLogTableFooterTopFill"
@@ -294,13 +294,11 @@ SettingsPage {
                 color: parent.color
             }
 
-            Rectangle {
+            Separator {
                 objectName: "debugLogTableFooterDivider"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: 1
-                color: Theme.color.neutral2
             }
 
             NeutralButton {

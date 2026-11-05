@@ -12,14 +12,17 @@ Item {
     property string title: ""
     property string description: ""
     property string footerText: ""
+    property string titleObjectName: objectName.length > 0 ? objectName + "Title" : ""
+    property string descriptionObjectName: objectName.length > 0 ? objectName + "Description" : ""
     property Component headerTrailingItem
     property bool showBackground: true
-    property bool showGradientBorder: true
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property int rowSpacing: 0
-    property int sectionSpacing: 8
-    property int cornerRadius: 16
-    property color backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    property int sectionSpacing: Theme.space.m
+    property int cornerRadius: Theme.radius.card
+    // Inset for custom layouts placed in the card, matching FormRow's padding.
+    readonly property int contentInset: Theme.space.cardInset
+    property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
     property var titleTextStyle: Theme.text.subheading
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption
@@ -36,22 +39,21 @@ Item {
             id: sectionHeader
             visible: root.title.length > 0 || root.description.length > 0 || headerLoader.active
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            spacing: 2
+            Layout.leftMargin: Theme.space.xs
+            Layout.rightMargin: Theme.space.xs
+            spacing: Theme.space.xxs
 
             RowLayout {
                 visible: root.title.length > 0 || headerLoader.active
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: Theme.space.m
 
                 CoreText {
+                    objectName: root.titleObjectName
                     Layout.fillWidth: true
                     text: root.title
                     color: Theme.color.neutral9
-                    font: root.titleTextStyle.font
-                    lineHeight: root.titleTextStyle.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: root.titleTextStyle
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     elide: Text.ElideRight
@@ -67,13 +69,12 @@ Item {
             }
 
             CoreText {
+                objectName: root.descriptionObjectName
                 visible: root.description.length > 0
                 Layout.fillWidth: true
                 text: root.description
                 color: Theme.color.neutral7
-                font: root.descriptionTextStyle.font
-                lineHeight: root.descriptionTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.descriptionTextStyle
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
@@ -86,18 +87,12 @@ Item {
             implicitHeight: contentColumn.height
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
-            clip: true
-
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                visible: root.showBackground && root.showGradientBorder
-                    && Qt.colorEqual(root.backgroundColor, Theme.color.neutral2)
-                surfaceColor: card.color
-                cornerRadius: card.radius
-            }
+            // Without a card, focus rings and field halos may extend past the edge.
+            clip: root.showBackground
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
 
             ColumnLayout {
@@ -113,13 +108,11 @@ Item {
             objectName: root.objectName.length > 0 ? root.objectName + "Footer" : ""
             visible: root.footerText.length > 0
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
+            Layout.leftMargin: Theme.space.xs
+            Layout.rightMargin: Theme.space.xs
             text: root.footerText
             color: Theme.color.neutral7
-            font: root.footerTextStyle.font
-            lineHeight: root.footerTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.footerTextStyle
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

@@ -42,50 +42,52 @@ function formatRemainingSyncTime(milliseconds) {
     var result = "";
     var estimatingStatus = false;
 
+    // Both English source forms pass the count so translators can supply all
+    // plural forms, while untranslated messages keep natural English.
     if (weeks > 0) {
         return {
-            text: "~" + weeks + (weeks === 1 ? " week" : " weeks") + " left",
+            text: weeks === 1 ? qsTr("~%n week left", "", weeks) : qsTr("~%n weeks left", "", weeks),
             estimating: false
         };
     }
     if (days > 0) {
         return {
-            text: "~" + days + (days === 1 ? " day" : " days") + " left",
+            text: days === 1 ? qsTr("~%n day left", "", days) : qsTr("~%n days left", "", days),
             estimating: false
         };
     }
     if (hours >= 5) {
         return {
-            text: "~" + hours + (hours === 1 ? " hour" : " hours") + " left",
+            text: qsTr("~%n hours left", "", hours),
             estimating: false
         };
     }
     if (hours > 0) {
         return {
-            text: "~" + hours + "h " + minutes + "m" + " left",
+            text: qsTr("~%1h %2m left").arg(hours).arg(minutes),
             estimating: false
         };
     }
     if (minutes >= 5) {
         return {
-            text: "~" + minutes + (minutes === 1 ? " minute" : " minutes") + " left",
+            text: qsTr("~%n minutes left", "", minutes),
             estimating: false
         };
     }
     if (minutes > 0) {
         return {
-            text: "~" + minutes + "m " + seconds + "s" + " left",
+            text: qsTr("~%1m %2s left").arg(minutes).arg(seconds),
             estimating: false
         };
     }
     if (seconds > 0) {
         return {
-            text: "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left",
+            text: seconds === 1 ? qsTr("~%n second left", "", seconds) : qsTr("~%n seconds left", "", seconds),
             estimating: false
         };
     } else {
         return {
-            text: "Estimating",
+            text: qsTr("Estimating"),
             estimating: true
         };
     }

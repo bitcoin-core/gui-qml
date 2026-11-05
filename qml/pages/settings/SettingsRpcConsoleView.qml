@@ -40,16 +40,16 @@ SettingsPage {
         Accessible.role: Accessible.Button
         Accessible.name: accessibleName
 
-        background: Rectangle {
-            color: fontSizeButton.hovered || fontSizeButton.pressed
-                ? Theme.color.neutral2
+        background: StateBackground {
+            stateColor: fontSizeButton.pressed ? Theme.color.surfacePressed
+                : fontSizeButton.hovered ? Theme.color.surfaceHover
                 : "transparent"
             radius: 8
         }
 
         FocusBorder {
             objectName: fontSizeButton.objectName + "FocusBorder"
-            visible: fontSizeButton.activeFocus
+            visible: fontSizeButton.visualFocus
             borderRadius: 12
             z: 1
         }
@@ -57,7 +57,7 @@ SettingsPage {
         contentItem: CoreText {
             objectName: fontSizeButton.objectName + "Label"
             text: "A"
-            color: fontSizeButton.enabled ? Theme.color.neutral9 : Theme.color.neutral4
+            color: fontSizeButton.enabled ? Theme.color.neutral9 : Theme.color.disabledContent
             font.family: Theme.text.family
             font.pixelSize: fontSizeButton.labelPixelSize
             horizontalAlignment: Text.AlignHCenter
@@ -80,14 +80,9 @@ SettingsPage {
         id: warningBanner
         objectName: "rpcConsoleWarningBanner"
         Layout.fillWidth: true
-        visible: root.warningVisible
-        iconSource: "image://images/alert-filled"
-        iconColor: Theme.color.red
+        shown: root.warningVisible
+        tone: ToastBanner.Error
         textColor: Theme.color.neutral9
-        backgroundColor: Qt.rgba(Theme.color.red.r,
-                                 Theme.color.red.g,
-                                 Theme.color.red.b,
-                                 0.12)
         showsCloseButton: true
         text: qsTr("Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")
         onDismissed: root.warningVisible = false
@@ -135,8 +130,8 @@ SettingsPage {
             Accessible.description: qsTr("%1 pixels").arg(rpcConsole.outputFontPixelSize)
 
             background: Rectangle {
-                color: Theme.color.neutral1
-                radius: 8
+                color: Theme.color.surface1
+                radius: Theme.radius.card
             }
 
             contentItem: RowLayout {
@@ -190,7 +185,7 @@ SettingsPage {
         Layout.rightMargin: 12
         text: qsTr("Use ↑↓ arrows to navigate history. Type help for an overview of available commands. Type help-console for console syntax help.")
         color: Theme.color.neutral7
-        font: Theme.text.caption.font
+        textStyle: Theme.text.caption
         horizontalAlignment: Text.AlignHCenter
         wrap: true
     }

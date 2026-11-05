@@ -7,25 +7,24 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
-import "../../components"
 
 Page {
     id: root
     objectName: "commandConsole"
     signal back()
     background: Rectangle {
-        color: Theme.color.neutral1
-        radius: 16
+        color: Theme.color.surface1
+        radius: Theme.radius.card
     }
     clip: true
 
     // Theme-aware palette for model-generated inline spans (welcome links and
     // JSON keys). Row-level colours are applied by QML so the
     // output follows the design-system tokens.
-    readonly property color consoleRequestColor: Theme.color.blue
+    readonly property color consoleRequestColor: Theme.color.infoText
     readonly property color consoleReplyColor:   Theme.color.neutral9
     readonly property color consoleTimeColor:    Theme.color.neutral7
-    readonly property color consoleKeyColor:     Theme.dark ? "#98C379" : "#3A7D2C"
+    readonly property color consoleKeyColor:     Theme.color.syntaxKey
     readonly property int minimumOutputFontPixelSize: 10
     readonly property int maximumOutputFontPixelSize: 18
     property int outputFontPixelSize: Theme.text.caption.pixelSize
@@ -53,7 +52,7 @@ Page {
     function _pushPalette() {
         rpcConsoleModel.requestColor = consoleRequestColor
         rpcConsoleModel.replyColor   = consoleReplyColor
-        rpcConsoleModel.errorColor   = Theme.color.red
+        rpcConsoleModel.errorColor   = Theme.color.dangerText
         rpcConsoleModel.keyColor     = consoleKeyColor
     }
     // Focus the command input when the console becomes the active view, so the
@@ -108,17 +107,10 @@ Page {
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "consoleBackButton"
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
-        centerItem: Header {
-            headerBold: true
-            headerSize: 18
-            header: qsTr("Console")
-        }
+        showBackButton: true
+        backButtonObjectName: "consoleBackButton"
+        onBackClicked: root.back()
+        title: qsTr("Console")
         TapHandler {
             grabPermissions: PointerHandler.TakeOverForbidden
             onTapped: inputField.focus = false
@@ -147,18 +139,15 @@ Page {
         rightColumnRole: ""
         categoryRole: "category"
         fontPixelSize: root.outputFontPixelSize
-        fontFamily: Theme.text.monoFamily
-        fontStyleName: "Regular"
         textLineHeight: Math.round(root.outputFontPixelSize * 1.4)
         contentColor: Theme.color.neutral9
         leftColumnColor: root.consoleTimeColor
         requestContentColor: root.consoleRequestColor
         replyContentColor: root.consoleReplyColor
-        errorContentColor: Theme.color.red
+        errorContentColor: Theme.color.dangerText
         requestLeftColumnColor: root.consoleRequestColor
         replyLeftColumnColor: root.consoleTimeColor
         errorLeftColumnColor: root.consoleTimeColor
-        selectionColor: Theme.color.orange
         accessibleName: qsTr("Console output")
         autoScrollToBottom: true
         searchText: root.searchText
@@ -182,8 +171,10 @@ Page {
         width: Math.min(inputField.width, 360)
         height: Math.min(autocompleteList.contentHeight + 2 * menuPadding, 228)
         minMenuWidth: 0
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         focus: false
+        // Modeless: the user keeps typing in the field while it is open.
+        modal: false
         // Deliberately NOT CloseOnPressOutside: a real mouse press on the submit
         // button would otherwise close this popup (and clear filteredCommands)
         // before the button's onClicked fires, so the button could never act on
@@ -237,10 +228,10 @@ Page {
             bottom: parent.bottom
         }
         height: 64
-        color: Theme.color.neutral1
-        radius: 16
+        color: Theme.color.surface1
+        radius: Theme.radius.card
 
-        Rectangle {
+        Separator {
             id: inputDivider
             objectName: "consoleInputDivider"
             anchors {
@@ -248,8 +239,6 @@ Page {
                 left: parent.left
                 right: parent.right
             }
-            height: 1
-            color: Theme.color.neutral2
         }
 
         RowLayout {
@@ -267,7 +256,7 @@ Page {
             Icon {
                 objectName: "consolePromptIcon"
                 source: "image://images/caret-right"
-                color: Theme.color.orange
+                color: Theme.color.accent
                 size: 16
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
@@ -279,21 +268,25 @@ Page {
                 objectName: "consoleInput"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                font.family: Theme.text.monoFamily
-                font.pixelSize: 13
+                font: Theme.text.monoCaption.font
                 color: Theme.color.neutral9
                 placeholderText: qsTr("Enter command…")
-                placeholderTextColor: Theme.color.neutral7
+                placeholderTextColor: Theme.color.placeholder
                 leftPadding: 12
                 rightPadding: 12
                 topPadding: 0
                 bottomPadding: 0
                 verticalAlignment: TextInput.AlignVCenter
                 background: Rectangle {
-                    color: Theme.color.neutral2
-                    radius: 8
-                    border.width: inputField.activeFocus ? 2 : 0
-                    border.color: Theme.color.orange
+                    color: Theme.color.surface2
+                    radius: Theme.radius.field
+
+                    FieldBorderRings {
+                        objectName: "consoleInputFocusRing"
+                        anchors.fill: parent
+                        visible: inputField.activeFocus
+                        cornerRadius: parent.radius
+                    }
                 }
 
                 // Enter accepts the highlighted autocomplete suggestion when the

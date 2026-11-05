@@ -8,108 +8,83 @@ import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
 
-Page {
+SettingsPage {
     id: root
-    signal back
 
     objectName: "settingsLanguagePage"
-    background: null
-    leftPadding: 20
-    rightPadding: 20
-    topPadding: 30
-    readonly property var languageStatus: (optionsModel.coreSettingStatuses || ({})).lang || ({})
+    title: qsTr("Choose language")
+    backButtonObjectName: "settingsLanguageBack"
 
-    header: SettingsHeader {
-        title: qsTr("Choose language")
-        backButtonObjectName: "settingsLanguageBack"
-        onBack: root.back()
+    readonly property var languageStatus: (optionsModel.coreSettingStatuses || ({})).lang || ({})
+    readonly property var languages: {
+        const all = optionsModel.availableLanguages
+        if (searchField.text.length === 0) return all
+        const query = searchField.text.toLowerCase()
+        return all.filter(function(tag) {
+            return optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
+        })
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
+    SearchBar {
+        id: searchField
+        Layout.fillWidth: true
+        fieldObjectName: "languageSearch"
+        placeholderText: qsTr("Search…")
+        accessibleName: qsTr("Search languages")
+    }
 
-        CoreTextField {
-            id: searchField
-            objectName: "languageSearch"
+    FormSection {
+        objectName: "languageListSection"
+        Layout.fillWidth: true
+        visible: root.languages.length > 0
+
+        // A positioner keeps the filtered Repeater out of the Qt 6.4 layout engine.
+        Column {
             Layout.fillWidth: true
-            Layout.bottomMargin: 8
-            placeholderText: qsTr("Search...")
-        }
 
-        Separator {
-            Layout.fillWidth: true
-        }
+            Repeater {
+                model: root.languages
 
-        ListView {
-            id: languageList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
+                delegate: ListRow {
+                    id: delegate
+                    // Declare modelData as a required property so Qt properly binds the
+                    // list element value (a language tag string) into this delegate and
+                    // all of its children. This avoids the delegate-scope leakage that
+                    // occurs when model roles are referenced inside a Loader.sourceComponent.
+                    required property string modelData
+                    required property int index
 
-            model: {
-                const all = optionsModel.availableLanguages
-                if (searchField.text.length === 0) return all
-                const query = searchField.text.toLowerCase()
-                return all.filter(function(tag) {
-                    return optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
-                })
-            }
+                    readonly property bool current: delegate.modelData === optionsModel.language
 
-            delegate: ItemDelegate {
-                id: delegate
-                // Declare modelData as a required property so Qt properly binds the
-                // list element value (a language tag string) into this delegate and
-                // all of its children. This avoids the delegate-scope leakage that
-                // occurs when model roles are referenced inside a Loader.sourceComponent.
-                required property string modelData
-
-                objectName: "language_" + delegate.modelData
-                Accessible.role: Accessible.ListItem
-                Accessible.name: optionsModel.languageLabel(delegate.modelData)
-                enabled: root.languageStatus.canEdit !== false
-                leftPadding: 0
-                rightPadding: 0
-                topPadding: 0
-                bottomPadding: 0
-                width: languageList.width
-
-                background: Item {
-                    Separator {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                    }
-                }
-
-                contentItem: RowLayout {
-                    spacing: 0
-
-                    CoreText {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 14
-                        Layout.bottomMargin: 14
-                        text: optionsModel.languageLabel(delegate.modelData)
-                        font.pixelSize: 18
-                        color: Theme.color.neutral9
-                        horizontalAlignment: Text.AlignLeft
-                        wrap: false
-                        elide: Text.ElideRight
-                    }
-
-                    Icon {
-                        visible: delegate.modelData === optionsModel.language
+                    objectName: "language_" + delegate.modelData
+                    width: parent.width
+                    title: optionsModel.languageLabel(delegate.modelData)
+                    enabled: root.languageStatus.canEdit !== false
+                    showDivider: delegate.index < root.languages.length - 1
+                    Accessible.description: delegate.current ? qsTr("Selected") : ""
+                    trailingItem: Icon {
+                        visible: delegate.current
                         source: "image://images/check"
-                        color: Theme.color.orange
-                        size: 24
+                        color: delegate.enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+                        size: Theme.size.icon.xl
                     }
-                }
 
-                onClicked: {
-                    optionsModel.language = delegate.modelData
-                    root.back()
+                    onClicked: {
+                        optionsModel.language = delegate.modelData
+                        root.back()
+                    }
                 }
             }
         }
+    }
+
+    CoreText {
+        objectName: "languageNoResults"
+        visible: root.languages.length === 0
+        Layout.fillWidth: true
+        text: qsTr("No languages match your search.")
+        textStyle: Theme.text.description
+        color: Theme.color.neutral7
+        horizontalAlignment: Text.AlignLeft
     }
 }

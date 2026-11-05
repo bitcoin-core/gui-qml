@@ -264,7 +264,6 @@ Page {
         id: navBar
         leftItem: WalletBadge {
             objectName: "walletBadge"
-            implicitHeight: 48
             checked: walletSelect.visible
             walletType: walletController.selectedWallet.keyScheme
             text: walletController.selectedWallet.displayName
@@ -330,7 +329,7 @@ Page {
         rightItem: RowLayout {
             spacing: 5
             NetworkIndicator {
-                textSize: 11
+                textStyle: Theme.text.caption
                 shorten: true
             }
             NavigationTab {
@@ -340,8 +339,11 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 3
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Block clock")
+                Accessible.description: blockClockTooltip.text
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
+                    selectedColor: blockClockTabButton.textActiveColor
                     renderingActive: root.visible
                 }
 
@@ -369,11 +371,11 @@ Page {
                         } else if (paused) {
                             qsTr("Paused")
                         } else if (connected && synced) {
-                            qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
+                            qsTr("Blocktime\n%1").arg(Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
                         } else if (connected && headerSyncActive) {
                             nodeModel.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers")
                         } else if (connected) {
-                            qsTr("Downloading blocks\n" +  syncState.text)
+                            qsTr("Downloading blocks\n%1").arg(syncState.text)
                         } else {
                             qsTr("Connecting")
                         }
@@ -389,6 +391,7 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 4
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Peers")
                 onCheckedChanged: {
                     if (checked) {
                         peerTableModel.startAutoRefresh()
@@ -413,6 +416,7 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 5
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Settings")
 
                 Tooltip {
                     anchors.top: settingsTabButton.bottom
@@ -423,11 +427,9 @@ Page {
                 }
             }
         }
-        background: Rectangle {
-            color: Theme.color.neutral2
+        background: Separator {
             anchors.bottom: navBar.bottom
             anchors.bottomMargin: 4
-            height: 1
             width: parent.width
         }
     }
@@ -536,7 +538,6 @@ Page {
     WalletMigrationPopup {
         id: migrationRequiredPopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPopup"
         errorTextObjectName: "walletMigrationErrorText"
         cancelButtonObjectName: "walletMigrationCancelButton"
@@ -553,7 +554,6 @@ Page {
     WalletPassphrasePopup {
         id: migrationPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPassphrasePopup"
         passphraseFieldObjectName: "walletMigrationPassphraseField"
         errorTextObjectName: "walletMigrationPassphraseErrorText"
@@ -562,7 +562,7 @@ Page {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
         confirmText: qsTr("Unlock and update")
-        busyConfirmText: qsTr("Updating...")
+        busyConfirmText: qsTr("Updating…")
         onSubmitted: (passphrase) => {
             migrationPassphrasePopup.busy = true
             walletController.migrateWallet(root.pendingMigrationPath, passphrase)
@@ -573,7 +573,6 @@ Page {
         id: loadErrorPopup
         objectName: "walletLoadErrorPopup"
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         title: qsTr("Failed to open wallet")
         messageObjectName: "walletLoadErrorPopupText"
 
@@ -587,8 +586,7 @@ Page {
         id: closeConfirmationPopup
         objectName: "walletCloseConfirmationPopup"
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
-        title: qsTr("Close wallet")
+        title: qsTr("Close wallet?")
 
         property string walletName: ""
         message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)

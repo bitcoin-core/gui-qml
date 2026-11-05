@@ -45,6 +45,7 @@ Item {
                 font: root.font
                 color: root.color
                 wrap: false
+                Accessible.ignored: true
             }
         }
     }

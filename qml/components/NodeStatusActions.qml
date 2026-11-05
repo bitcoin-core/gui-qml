@@ -10,36 +10,31 @@ import "../controls"
 
 RowLayout {
     id: root
-    spacing: 4
+    spacing: Theme.space.xs
 
     IconButton {
         objectName: "nodeWarningsButton"
         visible: nodeModel.hasWarnings
         iconSource: "image://images/alert-filled"
-        iconColor: Theme.color.orange
-        hoverColor: Theme.color.orangeLight1
-        activeColor: Theme.color.orange
+        iconColor: Theme.color.warning
+        hoverColor: Theme.color.warning
         size: 34
-        onClicked: warningsPopup.open()
+        accessibleName: qsTr("Node warnings")
+        onClicked: root.openWindowPopup("openNodeWarnings")
     }
 
     IconButton {
         objectName: "nodeInformationButton"
         iconSource: "image://images/info"
         iconColor: Theme.color.neutral7
-        hoverColor: Theme.color.neutral9
-        activeColor: Theme.color.orange
         size: 34
-        onClicked: informationPopup.open()
+        accessibleName: qsTr("Node information")
+        onClicked: root.openWindowPopup("openNodeInformation")
     }
 
-    NodeWarningsPopup {
-        id: warningsPopup
-        parent: Overlay.overlay
-    }
-
-    NodeInformationPopup {
-        id: informationPopup
-        parent: Overlay.overlay
+    // The window (MainWindow) owns the popups.
+    function openWindowPopup(name) {
+        const window = ApplicationWindow.window
+        if (window && typeof window[name] === "function") window[name]()
     }
 }

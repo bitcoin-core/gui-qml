@@ -3,13 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import "../../controls"
 
 Item {
     id: root
     property bool inactive: false
-    property color surfaceColor: Theme.color.neutral1
+    property color surfaceColor: Theme.color.surface1
     property string statusText: inactive ? qsTr("Associated payment request") : qsTr("Payment request fulfilled")
     implicitWidth: 18
     implicitHeight: 18
@@ -33,11 +32,13 @@ Item {
         Icon {
             anchors.centerIn: parent
             source: "qrc:/icons/check.svg"
-            color: Theme.color.green
+            color: Theme.color.success
             size: 10
         }
     }
     HoverHandler { id: hover }
-    ToolTip.visible: hover.hovered
-    ToolTip.text: Accessible.name
+    HoverToolTip {
+        visible: hover.hovered
+        text: root.statusText
+    }
 }

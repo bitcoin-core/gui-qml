@@ -27,26 +27,29 @@ Row {
     Repeater {
         model: 5
         Rectangle {
+            id: dot
+            objectName: "peerIndicatorDot" + index
+            readonly property real restingOpacity: (index === 0 && root.numOutboundPeers > 0)
+                || (index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
+            property real pulseOpacity: restingOpacity
             width: root.indicatorDimensions
             height: root.indicatorDimensions
             radius: width / 2
             color: Theme.color.neutral9
-            opacity: (index === 0 && root.numOutboundPeers > 0) || (index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
-            Behavior on opacity { OpacityAnimator { duration: 150 } }
-            SequentialAnimation on opacity {
+            opacity: pulse.running ? pulseOpacity : root.paused ? 0.45 : restingOpacity
+            Behavior on opacity { enabled: Theme.motion.animated && !pulse.running; OpacityAnimator { duration: Theme.motion.normal } }
+            SequentialAnimation on pulseOpacity {
+                id: pulse
                 loops: Animation.Infinite
                 running: root.presentationActive && numOutboundPeers === 0 && index === 0 && !root.paused
+                    && Theme.motion.decorativeLoops
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
             }
-            PropertyAnimation on opacity {
-                running: root.paused
-                to: .45;
-                duration: 150
-            }
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }
