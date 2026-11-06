@@ -11,6 +11,7 @@
 #include <QScopeGuard>
 #include <QStringList>
 
+#include <atomic>
 #include <vector>
 #include <QThread>
 
@@ -56,9 +57,20 @@ private:
 };
 
 struct BackendExecutor::ExecutorState {
+    enum class Phase { Queued, Running, Finished, Cancelled };
+    struct Control {
+        std::atomic<Phase> phase{Phase::Queued};
+        CancelPolicy policy;
+        explicit Control(CancelPolicy policy_in) : policy(policy_in) {}
+    };
+    struct Pending {
+        std::shared_ptr<Control> control;
+        std::function<void(std::optional<Cancelled>)> completion;
+    };
+
     BackendExecutorWorker* worker{new BackendExecutorWorker};
     QThread* worker_thread{new QThread};
-    std::map<TaskId, std::function<void(std::optional<Cancelled>)>> pending;
+    std::map<TaskId, Pending> pending;
     size_t active_callbacks{0};
     bool worker_barrier{false};
     bool finish_scheduled{false};
@@ -78,16 +90,17 @@ struct BackendExecutor::ExecutorState {
         Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
         const auto it = pending.find(id);
         if (it == pending.end()) return;
-        auto completion = std::move(it->second);
+        auto task = std::move(it->second);
         pending.erase(it);
         ++active_callbacks;
         const auto cleanup = qScopeGuard([&] {
-            completion = {};
+            task.completion = {};
             QMetaObject::invokeMethod(worker, [worker = worker, id] { worker->releaseTask(id); }, Qt::QueuedConnection);
             --active_callbacks;
             finishShutdownIfReady();
         });
-        completion(std::nullopt);
+        const bool cancelled = task.control->phase.load() == Phase::Cancelled;
+        task.completion(cancelled ? std::make_optional(Cancelled{Cancelled::Reason::Requested}) : std::nullopt);
     }
 };
 
@@ -156,7 +169,7 @@ bool BackendExecutor::enqueue(std::function<void()> work, std::function<void()> 
     return true;
 }
 
-BackendExecutor::TaskId BackendExecutor::enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion)
+BackendExecutor::TaskId BackendExecutor::enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion, CancelPolicy policy)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     const TaskId id{++m_next_task_id};
@@ -167,11 +180,37 @@ BackendExecutor::TaskId BackendExecutor::enqueueTask(std::function<void(bool)> w
         }, Qt::QueuedConnection);
         return id;
     }
-    m_state->pending.emplace(id, std::move(gui_completion));
-    QMetaObject::invokeMethod(m_state->worker, [worker = m_state->worker, id, work = std::move(work)] {
-        worker->runTask(id, [work] { work(true); });
+    auto control = std::make_shared<ExecutorState::Control>(policy);
+    m_state->pending.emplace(id, ExecutorState::Pending{control, std::move(gui_completion)});
+    QMetaObject::invokeMethod(m_state->worker, [worker = m_state->worker, id, control, work = std::move(work)] {
+        worker->runTask(id, [control, work] {
+            auto expected = ExecutorState::Phase::Queued;
+            const bool run = control->phase.compare_exchange_strong(expected, ExecutorState::Phase::Running);
+            work(run);
+            if (run) {
+                expected = ExecutorState::Phase::Running;
+                control->phase.compare_exchange_strong(expected, ExecutorState::Phase::Finished);
+            }
+        });
     }, Qt::QueuedConnection);
     return id;
+}
+
+bool BackendExecutor::cancel(TaskId id)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const auto it = m_state->pending.find(id);
+    if (it == m_state->pending.end()) return false;
+    auto& control = *it->second.control;
+    auto expected = ExecutorState::Phase::Queued;
+    if (control.phase.compare_exchange_strong(expected, ExecutorState::Phase::Cancelled)) {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [state = m_state, id] {
+            state->complete(id);
+        }, Qt::QueuedConnection);
+        return true;
+    }
+    if (control.policy != CancelPolicy::DiscardRunningResult || expected != ExecutorState::Phase::Running) return false;
+    return control.phase.compare_exchange_strong(expected, ExecutorState::Phase::Cancelled);
 }
 
 void BackendExecutor::shutdown()
