@@ -57,6 +57,7 @@ private Q_SLOTS:
     void taskDrainWaitsForCompletionCleanup();
     void discardedTaskResultIsDestroyedOnWorker_data();
     void discardedTaskResultIsDestroyedOnWorker();
+    void drainCallbacksAreQueuedAndLifetimeGuarded();
 };
 
 void BackendExecutorTests::threadJoinCompletesOnGui()
@@ -669,6 +670,11 @@ void BackendExecutorTests::taskCompletionSurvivesExecutorDestruction()
         QCOMPARE(std::get<int>(outcome), 42);
     });
     QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
+    bool executor_drained{false};
+    executor->whenDrained(&receiver, [&] {
+        executor_drained = true;
+        QCOMPARE(completions, 1);
+    });
     executor.reset();
     bool drained{false};
     BackendExecutor::shutdownAll(&receiver, [&] {
@@ -678,6 +684,7 @@ void BackendExecutorTests::taskCompletionSurvivesExecutorDestruction()
     QVERIFY(!drained);
     gate->release.release();
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
+    QTRY_VERIFY_WITH_TIMEOUT(executor_drained, TIMEOUT);
     QCOMPARE(completions, 1);
 }
 
@@ -723,7 +730,7 @@ void BackendExecutorTests::taskDrainWaitsForCompletionCleanup()
         delete value;
     }};
     bool drained{false};
-    connect(&executor, &BackendExecutor::drained, &receiver, [&] {
+    executor.whenDrained(&receiver, [&] {
         drained = true;
         QVERIFY(!callback_active);
         QVERIFY(completion_released.load());
@@ -822,6 +829,34 @@ void BackendExecutorTests::discardedTaskResultIsDestroyedOnWorker()
     });
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
     QCOMPARE(completions, cancel ? 1 : 0);
+}
+
+void BackendExecutorTests::drainCallbacksAreQueuedAndLifetimeGuarded()
+{
+    BackendExecutor executor;
+    QObject receiver;
+    int completions{0};
+    bool destroyed_receiver_called{false};
+    auto destroyed_receiver = std::make_unique<QObject>();
+    executor.whenDrained(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
+    destroyed_receiver.reset();
+    const auto gui_thread = QThread::currentThread();
+    executor.whenDrained(&receiver, [&] {
+        ++completions;
+        QVERIFY(executor.isDrained());
+        QCOMPARE(QThread::currentThread(), gui_thread);
+    });
+    connect(&executor, &BackendExecutor::drained, &receiver, [&] { QCOMPARE(completions, 0); });
+    executor.shutdown();
+    QCOMPARE(completions, 0);
+    QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
+    executor.whenDrained(&receiver, [&] { ++completions; });
+    QCOMPARE(completions, 1);
+    destroyed_receiver = std::make_unique<QObject>();
+    executor.whenDrained(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
+    destroyed_receiver.reset();
+    QTRY_COMPARE_WITH_TIMEOUT(completions, 2, TIMEOUT);
+    QVERIFY(!destroyed_receiver_called);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

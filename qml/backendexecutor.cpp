@@ -71,9 +71,11 @@ struct BackendExecutor::ExecutorState {
     BackendExecutorWorker* worker{new BackendExecutorWorker};
     QThread* worker_thread{new QThread};
     std::map<TaskId, Pending> pending;
+    std::vector<std::pair<QPointer<QObject>, std::function<void()>>> drain_callbacks;
     size_t active_callbacks{0};
     bool worker_barrier{false};
     bool finish_scheduled{false};
+    bool drained{false};
 
     void finishShutdownIfReady()
     {
@@ -120,11 +122,13 @@ BackendExecutor::BackendExecutor(QObject* parent)
     connect(worker_thread, &QThread::finished, QCoreApplication::instance(), [thread = worker_thread, owner = QPointer<BackendExecutor>{this}, state = m_state] {
         JoinThreadAsync(thread, QCoreApplication::instance(), [thread, owner, state] {
             GetExecutorRegistry().owners_by_thread.erase(thread);
+            state->drained = true;
             state->worker = nullptr;
             state->worker_thread = nullptr;
-            if (owner) {
-                owner->m_drained = true;
-                Q_EMIT owner->drained();
+            if (owner) Q_EMIT owner->drained();
+            auto callbacks = std::move(state->drain_callbacks);
+            for (auto& [receiver, done] : callbacks) {
+                if (receiver) QMetaObject::invokeMethod(receiver, std::move(done), Qt::QueuedConnection);
             }
             GetExecutorRegistry().notifyIfDrained();
         });
@@ -211,6 +215,22 @@ bool BackendExecutor::cancel(TaskId id)
     }
     if (control.policy != CancelPolicy::DiscardRunningResult || expected != ExecutorState::Phase::Running) return false;
     return control.phase.compare_exchange_strong(expected, ExecutorState::Phase::Cancelled);
+}
+
+void BackendExecutor::whenDrained(QObject* receiver, std::function<void()> done)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(receiver && receiver->thread() == thread());
+    if (m_state->drained) {
+        QMetaObject::invokeMethod(receiver, std::move(done), Qt::QueuedConnection);
+    } else {
+        m_state->drain_callbacks.emplace_back(receiver, std::move(done));
+    }
+}
+
+bool BackendExecutor::isDrained() const
+{
+    return m_state->drained;
 }
 
 void BackendExecutor::shutdown()

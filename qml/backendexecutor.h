@@ -87,12 +87,15 @@ public:
     // Running work is never interrupted; DiscardRunningResult delivers Cancelled
     // after the work returns. Draining waits for all worker cleanup.
     bool cancel(TaskId id);
+    // Always queued, including when already drained. Registration survives
+    // executor destruction while receiver lives.
+    void whenDrained(QObject* receiver, std::function<void()> done);
     // Drains accepted work without cancelling it, including submitTask completions
     // and worker cleanup. Rejection callbacks are queued independently and do not
     // delay draining.
     void shutdown();
     static void shutdownAll(QObject* receiver, std::function<void()> done);
-    bool isDrained() const { return m_drained; }
+    bool isDrained() const;
 
 Q_SIGNALS:
     void drained();
@@ -132,7 +135,6 @@ private:
     std::map<quint64, std::function<void()>> m_gui_completions;
     quint64 m_next_task_id{0};
     bool m_stopping{false};
-    bool m_drained{false};
 };
 
 #endif // BITCOIN_QML_BACKENDEXECUTOR_H
