@@ -133,7 +133,7 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
     Snapshot result;
     result.core = QmlCoreSettings::LoadDisplayValues(node, args);
     result.effective_core = result.core;
-    result.effective_mempool = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    result.effective_mempool = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("maxmempool"))).value_or(DEFAULT_MAX_MEMPOOL_SIZE_MB);
     result.statuses = QmlCoreSettings::BuildCoreSettingStatuses(args, QmlCoreSettings::CoreSettingNames());
     // Startup interactions remain effective until restart. Once the user saves
     // an override, show that saved request while retaining the source/status
@@ -149,10 +149,10 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
     };
     if (saved_override(QStringLiteral("listen"))) result.core.listen = SettingToBool(display_value(QStringLiteral("listen"))).value_or(result.core.listen);
     if (saved_override(QStringLiteral("natpmp"))) result.core.natpmp = SettingToBool(display_value(QStringLiteral("natpmp"))).value_or(result.core.natpmp);
-    result.dbcache = SettingTo<int64_t>(display_value(QStringLiteral("dbcache")), DEFAULT_DB_CACHE >> 20);
-    result.mempool = SettingTo<int64_t>(display_value(QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
-    result.threads = SettingTo<int64_t>(display_value(QStringLiteral("par")), DEFAULT_SCRIPTCHECK_THREADS);
-    result.signer = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("signer")), ""));
+    result.dbcache = SettingTo<int64_t>(display_value(QStringLiteral("dbcache"))).value_or(DEFAULT_KERNEL_CACHE / 1_MiB);
+    result.mempool = SettingTo<int64_t>(display_value(QStringLiteral("maxmempool"))).value_or(DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    result.threads = SettingTo<int64_t>(display_value(QStringLiteral("par"))).value_or(DEFAULT_SCRIPTCHECK_THREADS);
+    result.signer = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("signer"))).value_or(""));
     const QString gui_data_dir = QmlDataDir::ReadGuiDataDir();
     const QString active_data_dir = QString::fromStdString(args.GetDataDirBase().utf8string());
     result.default_data_dir = QmlDataDir::DefaultDataDirString();
@@ -161,7 +161,7 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
         ? active_data_dir : gui_data_dir;
     if (!QmlDataDir::IsDefaultDataDir(result.data_dir)) result.custom_data_dir = result.data_dir;
     QSettings settings;
-    result.language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("lang")), ""));
+    result.language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("lang"))).value_or(""));
     if (result.language.isEmpty() && !QmlCoreSettings::IsCommandLineOverridden(args, QStringLiteral("lang"))) {
         result.language = settings.value(SettingsKeys::LANGUAGE,
             QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(args.GetChainTypeString()))).toString();

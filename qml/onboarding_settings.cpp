@@ -90,7 +90,7 @@ QString ActiveDataDirString(const ArgsManager& args)
 // Preview has its own network paths and never changes process-wide Params().
 fs::path PreviewNetworkDataDir(const ArgsManager& args)
 {
-    return args.GetDataDirBase() / fs::PathFromString(CreateBaseChainParams(args.GetChainType())->DataDir());
+    return args.GetDataDirBase() / fs::PathFromString(CreateBaseChainParams(args, args.GetChainType())->DataDir());
 }
 
 std::optional<fs::path> PreviewSettingsPath(const ArgsManager& args)
@@ -187,7 +187,7 @@ fs::path BlocksDirPathNoCreate(const ArgsManager& args)
     }
 
     if (path.empty()) return {};
-    path /= fs::PathFromString(CreateBaseChainParams(args.GetChainType())->DataDir());
+    path /= fs::PathFromString(CreateBaseChainParams(args, args.GetChainType())->DataDir());
     path /= "blocks";
     return path;
 }
@@ -393,7 +393,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     }
 
     status.qml_onboarded = CommandLineBoolArg(preview_args, QML_ONBOARDED_KEY)
-        .value_or(SettingToBool(preview_args.GetPersistentSetting(QML_ONBOARDED_KEY), false));
+        .value_or(SettingToBool(preview_args.GetPersistentSetting(QML_ONBOARDED_KEY)).value_or(false));
     status.should_show_onboarding = !status.qml_onboarded;
     status.ok = true;
     return status;

@@ -21,7 +21,7 @@ jobs:
             # Jammy's default GCC 11 is below Bitcoin Core's GCC 12.1 minimum.
             extra_packages: 'g++-12 xvfb xauth'
             svg_package: 'libqt6svg6-dev'
-            cmake_env: 'cmake -E env CXXFLAGS="-Werror -Wno-error=free-nonheap-object -Wno-error=redundant-move -Wno-error=restrict -Wno-error=stringop-overread"'
+            cmake_env: 'cmake -E env CXXFLAGS="-Werror -Wno-error=free-nonheap-object -Wno-error=redundant-move -Wno-error=restrict -Wno-error=stringop-overread -Wno-error=maybe-uninitialized"'
             # Qt 6.2's offscreen plugin cannot capture software-rendered images.
             cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb'
             test_wrapper: 'xvfb-run -a'

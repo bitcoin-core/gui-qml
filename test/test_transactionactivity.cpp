@@ -507,8 +507,8 @@ void TransactionActivityTests::identitiesSurviveMetadataChanges()
     const auto before = TransactionActivity::fromWalletTx(wtx);
     QVERIFY(before);
     ++wtx.time;
-    wtx.value_map["replaces_txid"] = std::string(64, '1');
-    wtx.value_map["replaced_by_txid"] = std::string(64, '2');
+    wtx.replaces_txid = Txid::FromHex(std::string(64, '1'));
+    wtx.replaced_by_txid = Txid::FromHex(std::string(64, '2'));
     const auto after = TransactionActivity::fromWalletTx(wtx);
     QVERIFY(after);
     QCOMPARE(after->txid, QString::fromStdString(wtx.tx->GetHash().GetHex()));
@@ -542,7 +542,7 @@ void TransactionActivityTests::dataOutputsDoNotBecomePayments()
 void TransactionActivityTests::valueBearingNonAddressOutputRemainsVisible()
 {
     auto wtx = MakeWalletTx({{10'000, true}}, {{9'000, false, false, true}});
-    wtx.value_map["to"] = "not an address";
+    wtx.comment_to.emplace("not an address");
     const auto activity = TransactionActivity::fromWalletTx(wtx);
     QVERIFY(activity);
     QCOMPARE(activity->type, Type::Send);
