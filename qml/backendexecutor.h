@@ -22,9 +22,10 @@ class BackendExecutor : public QObject
     Q_OBJECT
 public:
     using TaskId = quint64;
+    enum class CancelPolicy { QueuedOnly, DiscardRunningResult };
     struct Cancelled {
         // Rejected means the submission arrived after shutdown began.
-        enum class Reason { Rejected };
+        enum class Reason { Requested, Rejected };
         Reason reason;
     };
     template <typename T>
@@ -62,7 +63,7 @@ public:
     // rejected work releases its captures on the calling thread.
     // Completion callbacks must not throw.
     template <typename Work, typename Done>
-    TaskId submitTask(QObject* receiver, Work work, Done done)
+    TaskId submitTask(QObject* receiver, Work work, Done done, CancelPolicy policy = CancelPolicy::QueuedOnly)
     {
         using Return = std::invoke_result_t<Work>;
         Q_ASSERT(receiver && receiver->thread() == thread());
@@ -78,9 +79,14 @@ public:
             } else {
                 std::invoke(*gui_completion, Outcome<Return>{std::in_place_index<0>, std::move(*task->result)});
             }
-        });
+        }, policy);
     }
 
+    // Returns true only for a newly accepted cancellation. Queued work reports
+    // Cancelled promptly; its captures may remain alive until the worker skips it.
+    // Running work is never interrupted; DiscardRunningResult delivers Cancelled
+    // after the work returns. Draining waits for all worker cleanup.
+    bool cancel(TaskId id);
     // Drains accepted work without cancelling it, including submitTask completions
     // and worker cleanup. Rejection callbacks are queued independently and do not
     // delay draining.
@@ -120,7 +126,7 @@ private:
     };
 
     struct ExecutorState;
-    TaskId enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion);
+    TaskId enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion, CancelPolicy policy);
     bool enqueue(std::function<void()> work, std::function<void()> gui_completion);
     std::shared_ptr<ExecutorState> m_state;
     std::map<quint64, std::function<void()>> m_gui_completions;
