@@ -46,6 +46,7 @@ public:
         KeySchemeKindRole,
         WalletSectionRole,
         BalanceSatoshiRole,
+        ImportingRole,
     };
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -60,6 +61,7 @@ Q_SIGNALS:
 public Q_SLOTS:
     void listWalletDir();
     void setWalletLoadState(const QString& name, LoadState state, const QString& error = {});
+    void setImportingWallet(const QString& name);
     void setDisplayUnit(int unit);
     void setWalletInfo(const QString& name, qint64 balance, int keySchemeKind);
     void refreshDisplayNames();
@@ -79,11 +81,13 @@ private:
     void updateLoadStateForAllRows();
     void emitTransientStateChanged();
     int rowForName(const QString& name) const;
+    void appendImportingItem(QList<Item>& items) const;
 
     int m_display_unit{0};
     QList<Item> m_items;
     QSet<QString> m_open_wallet_names;
     QString m_loading_wallet;
+    QString m_importing_wallet;
     QPair<QString, QString> m_load_error;
     interfaces::Node& m_node;
     bool m_wallet_dir_loaded{false};

@@ -46,7 +46,7 @@ TestCase {
         const model = createTemporaryObject(typedWalletModel, this)
         model.append({ name: "testwallet", displayName: "Test wallet",
             format: "sqlite", loadState: 1, errorMessage: "",
-            balance: "0", balanceSatoshi: 0, keySchemeKind: 0, walletSection: "open" })
+            balance: "0", balanceSatoshi: 0, keySchemeKind: 0, importing: false, walletSection: "open" })
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
         popup.open()
         tryCompare(popup, "opened", true)
@@ -82,7 +82,7 @@ TestCase {
         const model = createTemporaryObject(typedWalletModel, this)
         model.append({ name: "typedwallet", displayName: "Typed wallet",
             format: "sqlite", loadState: 1, errorMessage: "",
-            balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: data.kind, walletSection: "open" })
+            balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: data.kind, importing: false, walletSection: "open" })
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
         popup.open()
         tryCompare(popup, "opened", true)
@@ -112,7 +112,7 @@ TestCase {
         for (let i = 0; i < data.groups.length; ++i) {
             model.append({ name: "wallet" + i, displayName: "Wallet " + i,
                 format: "sqlite", loadState: data.groups[i] === "open" ? 1 : 0,
-                errorMessage: "", balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: 0,
+                errorMessage: "", balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: 0, importing: false,
                 walletSection: data.groups[i] })
         }
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
@@ -238,6 +238,26 @@ TestCase {
         tryCompare(load, "visible", true)
         compare(load.text, "Open wallet")
         compare(row.statusText, "Failed to open wallet")
+    }
+
+    function test_import_keeps_open_wallets_selectable() {
+        const popup = openWalletSelect()
+        const list = findChild(popup, "walletSelectList")
+        const openRow = list.itemAtIndex(0)
+        const importingRow = list.itemAtIndex(1)
+        walletController.walletImportInProgress = true
+        walletListModel.setImportingWallet("secondarywallet")
+
+        compare(importingRow.statusText, "Importing…")
+        compare(importingRow.enabled, false)
+        compare(findChild(importingRow, "walletSelectActions_secondarywallet").visible, false)
+        compare(openRow.enabled, true)
+        compare(findChild(popup, "walletSelectAddWalletButton").enabled, false)
+
+        importingRow.clicked()
+        compare(walletController.lastSelectedWalletName, "")
+        openRow.clicked()
+        compare(walletController.lastSelectedWalletName, "testwallet")
     }
 
     function test_settings_action_targets_its_wallet() {

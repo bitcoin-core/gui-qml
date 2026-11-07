@@ -299,4 +299,118 @@ TestCase {
         verify(findChild(window, "walletBadge") !== null)
         verify(findChild(window, "createWalletWizard") === null)
     }
+
+    function test_background_import_success_offers_to_open_wallet() {
+        const window = createMain(true)
+        compare(findChild(window, "walletCreationModal").opened, false)
+        walletController.setOpenWallets([testWalletModel, testSecondWalletModel])
+        walletController.lastImportedWalletName = "imported"
+        walletController.walletImportSucceeded(testSecondWalletModel)
+        const toast = findChild(window, "walletImportSucceededToast")
+        tryCompare(toast, "visible", true)
+        compare(findChild(toast, "walletImportSucceededToastText").text, "Wallet \"imported\" was imported.")
+        verify(walletController.lastSelectedWalletName !== testSecondWalletModel.name)
+        toast.actionTriggered()
+        compare(walletController.lastSelectedWalletName, testSecondWalletModel.name)
+        compare(toast.visible, false)
+    }
+
+    function test_import_success_with_modal_open_shows_no_toast() {
+        const window = createMain(true)
+        findChild(window, "desktopMenuActions").createWallet.trigger()
+        tryCompare(findChild(window, "walletCreationModal"), "opened", true)
+        walletController.lastImportedWalletName = "imported"
+        walletController.walletImportSucceeded(testSecondWalletModel)
+        compare(findChild(window, "walletImportSucceededToast").visible, false)
+    }
+
+    function startBackgroundImport(window, name) {
+        walletController.importingWalletName = name
+        walletController.walletImportInProgress = true
+        compare(findChild(window, "walletCreationModal").opened, false)
+    }
+
+    function quitDuringImportButton(popup, name) {
+        let button = null
+        tryVerify(function() {
+            button = findChild(popup.contentItem, name)
+            return button !== null
+        })
+        return button
+    }
+
+    function test_exit_without_import_quits_immediately() {
+        const window = createMain(true)
+        findChild(window, "desktopMenuActions").exit.trigger()
+        compare(shutdownSpy.count, 1)
+        compare(findChild(window, "quitDuringImportPopup").opened, false)
+    }
+
+    function test_exit_during_import_asks_before_quitting() {
+        const window = createMain(true)
+        startBackgroundImport(window, "bigwallet")
+        const popup = findChild(window, "quitDuringImportPopup")
+
+        findChild(window, "desktopMenuActions").exit.trigger()
+        tryCompare(popup, "opened", true)
+        compare(shutdownSpy.count, 0)
+        verify(popup.message.indexOf("\"bigwallet\"") >= 0)
+
+        quitDuringImportButton(popup, "quitDuringImportCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(shutdownSpy.count, 0)
+
+        findChild(window, "desktopMenuActions").exit.trigger()
+        tryCompare(popup, "opened", true)
+        quitDuringImportButton(popup, "quitDuringImportConfirmButton").clicked()
+        compare(shutdownSpy.count, 1)
+    }
+
+    function test_closing_window_during_import_asks_before_quitting() {
+        const window = createMain(true)
+        startBackgroundImport(window, "bigwallet")
+        window.close()
+        tryCompare(findChild(window, "quitDuringImportPopup"), "opened", true)
+        compare(shutdownSpy.count, 0)
+    }
+
+    function test_background_import_failure_offers_details_without_interrupting() {
+        const window = createMain(true)
+        const modal = findChild(window, "walletCreationModal")
+        startBackgroundImport(window, "bigwallet")
+        walletController.walletImportInProgress = false
+        walletController.importingWalletName = ""
+        walletController.walletLoadError = "Failed to rescan the wallet during initialization"
+        walletController.walletImportFailed()
+
+        const toast = findChild(window, "walletImportFailedToast")
+        tryCompare(toast, "visible", true)
+        compare(modal.opened, false)
+        compare(findChild(toast, "walletImportFailedToastText").text,
+            "Wallet \"bigwallet\" could not be imported.")
+
+        toast.actionTriggered()
+        compare(toast.visible, false)
+        tryCompare(modal, "opened", true)
+        tryVerify(function() { return findChild(modal, "walletImportErrorPage") !== null })
+    }
+
+    function test_newer_load_error_hides_import_failure_toast() {
+        const window = createMain(true)
+        walletController.walletLoadError = "Import failed"
+        walletController.walletImportFailed()
+        const toast = findChild(window, "walletImportFailedToast")
+        tryCompare(toast, "visible", true)
+        walletController.walletLoadError = ""
+        compare(toast.visible, false)
+    }
+
+    function test_import_failure_with_modal_open_shows_no_toast() {
+        const window = createMain(true)
+        findChild(window, "desktopMenuActions").createWallet.trigger()
+        tryCompare(findChild(window, "walletCreationModal"), "opened", true)
+        walletController.walletLoadError = "Import failed"
+        walletController.walletImportFailed()
+        compare(findChild(window, "walletImportFailedToast").visible, false)
+    }
 }
