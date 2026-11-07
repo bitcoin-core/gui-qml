@@ -85,7 +85,7 @@ SettingsPage {
         function onSigningFinished(success) {
             signPassphrasePopup.busy = false
             if (success) signPassphrasePopup.close()
-            else if (root.signVerifyModel.signingNeedsUnlock) {
+            else if (root.signVerifyModel.signingNeedsUnlock && root.visible) {
                 signPassphrasePopup.errorText = ""
                 signPassphrasePopup.open()
             } else if (signPassphrasePopup.visible) signPassphrasePopup.errorText = root.signVerifyModel.signingError

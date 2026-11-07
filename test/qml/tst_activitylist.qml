@@ -249,6 +249,29 @@ TestCase {
         compare(page.depth, 1)
     }
 
+    function test_failed_delete_after_hiding_shows_no_error() {
+        testWalletModel.removeReceiveRequestResult = false
+        testWalletModel.holdReceiveOperations = true
+        const page = createPage()
+        const item = findChild(page, "activityRequest_invoice")
+        mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
+        const menu = findChild(page, "activityRequestContextMenu")
+        tryCompare(menu, "opened", true)
+        mouseClick(findChild(menu.contentItem, "activityDeletePaymentRequest"))
+        const confirmation = findChild(page, "activityDeletePaymentRequestConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        // Switching wallets hides this wallet's view but keeps its wallet.
+        page.visible = false
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        wait(50)
+        compare(findChild(page, "activityDeletePaymentRequestConfirmationError").visible, false)
+        testWalletModel.removeReceiveRequestResult = true
+    }
+
     function test_rows_share_metadata_and_keep_batch_children_visible() {
         const page = createPage()
         const single = findRow(page, "single")
@@ -752,6 +775,21 @@ TestCase {
         compare(findChild(edited, "activityRowRequestBadge").parent,
             findChild(edited, "activityRowLabel").parent)
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
+    }
+
+    function test_export_result_waits_for_a_visible_page() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const result = findChild(page, "activityExportResultPopup")
+        proxy.autoCompleteExport = false
+        verify(proxy.exportCsv("/tmp/activity-list-hidden.csv"))
+        page.visible = false
+        proxy.completeExport()
+        wait(0)
+        verify(!result.visible)
+        page.visible = true
+        tryCompare(result, "opened", true)
+        compare(findChild(result.contentItem, "activityExportResultTitle").text, "Export complete")
     }
 
     function test_filter_menus_export_and_wallet_switch_data() {

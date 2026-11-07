@@ -95,6 +95,7 @@ TestCase {
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.holdReceiveOperations = false
         testWalletModel.ensureReceivingAddressResult = true
         testWalletModel.ensureReceivingAddressNeedsUnlock = false
         testWalletModel.lastPassphraseAddressType = ""
@@ -549,6 +550,38 @@ TestCase {
         card.createRequest()
         tryCompare(page.requestModal, "opened", true)
         compare(page.requestModal.card.request.address, address)
+    }
+
+    function test_failed_qr_save_reports_only_in_its_opening() {
+        const page = createPage()
+        const card = createRequest(page)
+        const failure = findChild(card, "requestPaymentActionFailurePopup")
+        tryCompare(findChild(card, "requestPaymentQRImage"), "status", Image.Ready)
+        const unwritable = "file:///nonexistent-claude-dir/qr.png"
+        verify(card.saveQRToFile(unwritable))
+        tryCompare(failure, "visible", true)
+        failure.close()
+        tryCompare(failure, "visible", false)
+
+        const imageSave = findChild(card, "requestPaymentImageSave")
+        let reopened = false
+        function reopenWhileSaving() {
+            if (!imageSave.pending) return
+            imageSave.pendingChanged.disconnect(reopenWhileSaving)
+            reopened = true
+            card.beginOpening()
+        }
+        imageSave.pendingChanged.connect(reopenWhileSaving)
+        verify(card.saveQRToFile(unwritable))
+        tryVerify(function() { return reopened && !imageSave.pending })
+        wait(0)
+        verify(!failure.visible)
+
+        verify(card.saveQRToFile(unwritable))
+        card.beginOpening()
+        wait(200)
+        verify(!imageSave.pending)
+        verify(!failure.visible)
     }
 
     function test_qr_context_menus_close_when_address_is_no_longer_shareable() {
@@ -1165,6 +1198,265 @@ TestCase {
         compare(card.request.id, "")
         compare(testPaymentRequest.id, "")
         verify(page.draftCard.visible)
+    }
+
+    function test_delayed_delete_does_not_close_a_later_opening_data() {
+        return [
+            { tag: "other request", nextRequestId: "2" },
+            { tag: "same request reopened", nextRequestId: "" },
+        ]
+    }
+
+    function test_delayed_delete_does_not_close_a_later_opening(data) {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        const nextRequestId = data.nextRequestId || requestId
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        verify(page.requestModal.openRequest(nextRequestId))
+        tryCompare(page.requestModal, "opened", true)
+        const shownAmount = card.request.amount.display
+        const shownMessage = card.request.message
+
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        compare(testWalletModel.lastRemovedRequestId, requestId)
+        if (nextRequestId === requestId) {
+            // The reopened request no longer exists, so its modal closes like a direct delete.
+            tryCompare(page.requestModal, "visible", false)
+            compare(testWalletModel.detailPaymentRequest.id, "")
+            compare(testPaymentRequest.id, "")
+            return
+        }
+        wait(50)
+        verify(page.requestModal.opened)
+        compare(card.request.id, nextRequestId)
+        compare(card.request.amount.display, shownAmount)
+        compare(card.request.message, shownMessage)
+        compare(card.errorText, "")
+        compare(findChild(card, "requestPaymentDeleteConfirmationError").opened, false)
+        compare(testPaymentRequest.id, "")
+    }
+
+    function test_reopened_password_prompt_starts_without_previous_error() {
+        const page = createPage()
+        const popup = findChild(page, "receivePassphrasePopup")
+        const error = "The wallet password you entered was incorrect."
+        testWalletModel.receivingAddress.needsUnlock = true
+        testWalletModel.receiveOperationFinished("address", false)
+        tryCompare(popup, "opened", true)
+        testWalletModel.receivingAddress.needsUnlock = false
+        testWalletModel.receivingAddress.unlockError = error
+        testWalletModel.receiveOperationFinished("address", false)
+        compare(popup.errorText, error)
+
+        findChild(popup.contentItem, "receivePassphraseCancelButton").clicked()
+        tryCompare(popup, "visible", false)
+        testWalletModel.receivingAddress.needsUnlock = true
+        testWalletModel.receiveOperationFinished("address", false)
+        tryCompare(popup, "opened", true)
+        compare(popup.errorText, "")
+        popup.close()
+        testWalletModel.receivingAddress.needsUnlock = false
+        testWalletModel.receivingAddress.unlockError = ""
+    }
+
+    Component {
+        id: secondWalletComponent
+        QtObject {
+            property var currentPaymentRequest: PaymentRequest {}
+            property var detailPaymentRequest: PaymentRequest {}
+            property bool receiveRequestReconciliationPending: false
+            property bool receiveOperationPending: false
+            property string receiveOperationError: ""
+            signal receiveOperationFinished(string operation, bool success)
+            function receiveAddressTypeLabel(value) { return value }
+            function loadPaymentRequestDetail(requestId) {
+                detailPaymentRequest.id = requestId
+                return true
+            }
+        }
+    }
+
+    function test_delayed_delete_only_clears_its_own_wallet() {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+
+        const secondWallet = createTemporaryObject(secondWalletComponent, this)
+        secondWallet.currentPaymentRequest.id = requestId
+        secondWallet.currentPaymentRequest.noteSelf = "Second wallet draft"
+        page.requestModal.wallet = secondWallet
+        verify(page.requestModal.openRequest(requestId))
+        tryCompare(page.requestModal, "opened", true)
+
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        compare(testWalletModel.lastRemovedRequestId, requestId)
+        tryCompare(testPaymentRequest, "id", "")
+        compare(secondWallet.currentPaymentRequest.id, requestId)
+        compare(secondWallet.currentPaymentRequest.noteSelf, "Second wallet draft")
+        verify(page.requestModal.opened)
+    }
+
+    function test_delete_finishing_while_closing_for_a_wallet_switch_data() {
+        return [{tag: "motion", motion: "full"}, {tag: "no motion", motion: "off"}]
+    }
+
+    function test_delete_finishing_while_closing_for_a_wallet_switch(data) {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        const secondWallet = createTemporaryObject(secondWalletComponent, this)
+        secondWallet.currentPaymentRequest.id = requestId
+        secondWallet.currentPaymentRequest.noteSelf = "Second wallet draft"
+        const motionMode = Theme.motion.mode
+        try {
+            Theme.motion.mode = data.motion
+            page.requestModal.wallet = secondWallet
+            if (data.motion === "full") verify(page.requestModal.visible)
+            testWalletModel.releaseReceiveOperation()
+            tryCompare(page.requestModal, "visible", false)
+            compare(secondWallet.currentPaymentRequest.id, requestId)
+            compare(secondWallet.currentPaymentRequest.noteSelf, "Second wallet draft")
+            compare(testPaymentRequest.id, "")
+        } finally {
+            Theme.motion.mode = motionMode
+        }
+    }
+
+    function test_failed_delete_after_a_wallet_switch_shows_no_error() {
+        const page = createPage()
+        const card = createRequest(page)
+        testWalletModel.removeReceiveRequestResult = false
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        const secondWallet = createTemporaryObject(secondWalletComponent, this)
+        const motionMode = Theme.motion.mode
+        try {
+            Theme.motion.mode = "full"
+            page.requestModal.wallet = secondWallet
+            verify(page.requestModal.visible)
+            testWalletModel.releaseReceiveOperation()
+            tryCompare(testWalletModel, "receiveOperationPending", false)
+            tryCompare(page.requestModal, "visible", false)
+            compare(findChild(card, "requestPaymentDeleteConfirmationError").visible, false)
+        } finally {
+            Theme.motion.mode = motionMode
+        }
+    }
+
+    function test_failed_delete_while_the_view_hides_shows_no_error() {
+        const page = createPage()
+        const card = createRequest(page)
+        testWalletModel.removeReceiveRequestResult = false
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        testWalletModel.holdReceiveOperations = false
+        const motionMode = Theme.motion.mode
+        try {
+            Theme.motion.mode = "full"
+            // Hiding the view closes its popups; the wallet stays the same.
+            page.requestModal.close()
+            verify(page.requestModal.visible)
+            testWalletModel.releaseReceiveOperation()
+            tryCompare(testWalletModel, "receiveOperationPending", false)
+            tryCompare(page.requestModal, "visible", false)
+            compare(findChild(card, "requestPaymentDeleteConfirmationError").visible, false)
+        } finally {
+            Theme.motion.mode = motionMode
+        }
+    }
+
+    function test_request_created_opens_after_switching_to_activity() {
+        const page = createPage()
+        const switchToActivity = function() { page.visible = false }
+        page.paymentRequestCreated.connect(switchToActivity)
+        editField(page.draftCard, "requestPaymentAmountInput", "0.01").editingFinished()
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        page.paymentRequestCreated.disconnect(switchToActivity)
+    }
+
+    SignalSpy {
+        id: createdSpy
+        signalName: "paymentRequestCreated"
+    }
+
+    function test_request_created_while_hidden_keeps_the_current_screen() {
+        const page = createPage()
+        createdSpy.clear()
+        createdSpy.target = page
+        editField(page.draftCard, "requestPaymentAmountInput", "0.01").editingFinished()
+        testWalletModel.holdReceiveOperations = true
+        page.draftCard.createRequest()
+        testWalletModel.holdReceiveOperations = false
+        page.visible = false
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        wait(50)
+        compare(createdSpy.count, 0)
+        createdSpy.target = null
+    }
+
+    function test_hidden_receive_does_not_ask_for_the_password() {
+        const page = createPage()
+        const popup = findChild(page, "receivePassphrasePopup")
+        page.visible = false
+        testWalletModel.receivingAddress.needsUnlock = true
+        testWalletModel.receiveOperationFinished("address", false)
+        wait(50)
+        compare(popup.visible, false)
+        testWalletModel.receivingAddress.needsUnlock = false
+    }
+
+    function test_request_created_while_hidden_opens_when_shown_again() {
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "0.01").editingFinished()
+        testWalletModel.holdReceiveOperations = true
+        page.draftCard.createRequest()
+        testWalletModel.holdReceiveOperations = false
+        page.visible = false
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        wait(50)
+        verify(!page.requestModal.visible)
+        verify(testPaymentRequest.id !== "")
+        page.visible = true
+        tryCompare(page.requestModal, "opened", true)
     }
 
     function test_delete_failure_preserves_request_and_modal() {

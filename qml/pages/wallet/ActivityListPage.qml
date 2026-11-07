@@ -15,6 +15,7 @@ Page {
     objectName: "activityPage"
     property var wallet: null
     property bool exportSucceeded: true
+    property bool exportResultPending: false
     property bool ready: false
     readonly property bool activitySourceEmpty: !wallet || wallet.transactionActivityModel.count === 0
     readonly property bool typeFilterActive: activityFilterProxy.typeFilters.length > 0
@@ -99,7 +100,9 @@ Page {
         target: activityFilterProxy
         function onExportFinished(success) {
             root.exportSucceeded = success
-            exportResultPopup.open()
+            // A hidden page shows the result once it is visible again.
+            if (root.visible) exportResultPopup.open()
+            else root.exportResultPending = true
         }
     }
 
@@ -539,11 +542,20 @@ Page {
         objectName: "activityExplorerLinkPopup"
     }
 
+    onVisibleChanged: {
+        if (!visible) {
+            deleteRequestConfirmation.stopReporting()
+        } else if (exportResultPending) {
+            exportResultPending = false
+            exportResultPopup.open()
+        }
+    }
+
     PaymentRequestDeleteConfirmation {
         id: deleteRequestConfirmation
         objectName: "activityDeletePaymentRequestConfirmation"
-        onDeleted: function(requestId) {
-            for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
+        onDeleted: function(requestId, requestWallet) {
+            for (const request of [requestWallet.currentPaymentRequest, requestWallet.detailPaymentRequest]) {
                 if (request && request.id === requestId) request.clear()
             }
         }

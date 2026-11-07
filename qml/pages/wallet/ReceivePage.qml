@@ -193,7 +193,10 @@ Page {
                     enabled: walletController.initialized && (!root.wallet || !root.wallet.receiveOperationPending)
                     onRetryAddressRequested: root.ensureReceivingAddress(root.submittedNextAddress, root.submittedAddressType)
                     onCreated: function(requestId) {
+                        // Read before announcing: creating switches to Activity and hides Receive.
+                        const shown = root.visible
                         root.presentedRequest = root.request
+                        if (!shown) return
                         root.paymentRequestCreated()
                         requestModal.openRequest(requestId)
                     }
@@ -224,6 +227,8 @@ Page {
         id: passphrasePopup
         parent: Overlay.overlay
         popupObjectName: "receivePassphrasePopup"
+        cancelButtonObjectName: "receivePassphraseCancelButton"
+        onClosed: errorText = ""
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
         titleText: qsTr("Enter wallet password")
         //: Explains why the wallet password is needed to prepare a payment request.
@@ -261,7 +266,7 @@ Page {
             passphrasePopup.busy = false
             root.addressErrorText = root.wallet.receiveOperationError
             if (success) passphrasePopup.close()
-            else if (root.wallet.receivingAddress.needsUnlock) passphrasePopup.open()
+            else if (root.wallet.receivingAddress.needsUnlock && root.visible) passphrasePopup.open()
             else if (passphrasePopup.visible) passphrasePopup.errorText = root.wallet.receivingAddress.unlockError
         }
     }

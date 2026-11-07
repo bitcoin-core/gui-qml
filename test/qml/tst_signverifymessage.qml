@@ -122,6 +122,25 @@ TestCase {
         compare(reopenedMessage.readOnly, false)
     }
 
+    function test_hiddenPageDoesNotPromptForSigningPassphrase() {
+        testCase.visible = true
+        const page = createPage()
+        const popup = findChild(page, "signMessagePassphrasePopup")
+        verify(popup !== null)
+        verify(page.visible)
+        page.visible = false
+        mockSignVerifyModel.signingNeedsUnlock = true
+        mockSignVerifyModel.signingFinished(false)
+        verify(!popup.visible)
+        page.visible = true
+        mockSignVerifyModel.signingFinished(false)
+        tryCompare(popup, "visible", true)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        mockSignVerifyModel.signingNeedsUnlock = false
+        testCase.visible = false
+    }
+
     function test_initialTabSelectsRequestedMode() {
         const page = createPage({
             "initialTab": SignVerifyMessage.VerifyTab

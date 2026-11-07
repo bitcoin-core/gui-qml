@@ -13,6 +13,7 @@ DialogPopup {
     property var openedWallet: null
     property real originY: -1
     property string deletedRequestId: ""
+    property var deletedRequestWallet: null
     property string repeatRequestId: ""
     readonly property alias card: card
 
@@ -32,18 +33,22 @@ DialogPopup {
         if (!wallet || !wallet.loadPaymentRequestDetail(requestId)) return false
         originY = fromY === undefined ? -1 : fromY
         card.resetFields()
+        card.beginOpening()
         openedWallet = wallet
         open()
         return true
     }
     onAboutToShow: if (scroll.contentItem) scroll.contentItem.contentY = 0
+    // A result arriving during the close animation belongs to an earlier opening.
+    onAboutToHide: card.beginOpening()
     onClosed: {
-        if (wallet && deletedRequestId) {
-            for (const request of [wallet.currentPaymentRequest, wallet.detailPaymentRequest]) {
+        if (deletedRequestWallet && deletedRequestId) {
+            for (const request of [deletedRequestWallet.currentPaymentRequest, deletedRequestWallet.detailPaymentRequest]) {
                 if (request && request.id === deletedRequestId) request.clear()
             }
         }
         deletedRequestId = ""
+        deletedRequestWallet = null
         openedWallet = null
         card.resetFields()
         if (repeatRequestId) {
@@ -83,9 +88,20 @@ DialogPopup {
                 root.repeatRequestId = requestId
                 root.close()
             }
-            onDeleted: function(requestId) {
+            onDeleted: function(requestId, requestWallet) {
                 root.deletedRequestId = requestId
+                root.deletedRequestWallet = requestWallet
                 root.close()
+            }
+            onDeletedInEarlierOpening: function(requestId, requestWallet) {
+                const request = requestWallet ? requestWallet.currentPaymentRequest : null
+                if (request && request.id === requestId) request.clear()
+                // The same request can be reopened while its deletion is pending.
+                if (requestWallet === root.wallet && card.request && card.request.id === requestId) {
+                    root.deletedRequestId = requestId
+                    root.deletedRequestWallet = requestWallet
+                    root.close()
+                }
             }
         }
     }

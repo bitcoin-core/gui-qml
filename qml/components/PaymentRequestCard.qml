@@ -29,6 +29,10 @@ Pane {
     }
     property string pendingOperation: ""
     property string pendingRequestId: ""
+    // Numbered so a late result only affects the opening that started it.
+    property int opening: 0
+    property int pendingOpening: 0
+    property int deleteOpening: 0
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
     readonly property bool hasCurrentPayment: !!request && request.receivedAmountSatoshi > 0
@@ -45,7 +49,8 @@ Pane {
     signal requestAgain(string requestId)
     signal created(string requestId)
     signal closeRequested()
-    signal deleted(string requestId)
+    signal deleted(string requestId, var requestWallet)
+    signal deletedInEarlierOpening(string requestId, var requestWallet)
 
     padding: modalView ? (width < 480 ? 16 : 24) : 0
     implicitWidth: 560
@@ -101,6 +106,8 @@ Pane {
         revealTemplateFields()
     }
     onWalletChanged: { pendingOperation = ""; pendingRequestId = "" }
+    property int saveOpening: -1
+    function beginOpening() { opening++ }
     Component.onCompleted: resetFields()
 
     function amountInSatoshis(text) {
@@ -143,6 +150,7 @@ Pane {
             }
             pendingOperation = "update"
             pendingRequestId = request.id
+            pendingOpening = opening
             return true
         }
         return saveField("amount", amountInput) && saveField("label", labelInput)
@@ -159,7 +167,10 @@ Pane {
     function createRequest() {
         if (!wallet || !request || saved || !saveFields()) return
         actionErrorText = ""
-        if (wallet.commitReceivingPaymentRequest()) pendingOperation = "save"
+        if (wallet.commitReceivingPaymentRequest()) {
+            pendingOperation = "save"
+            pendingOpening = opening
+        }
         else actionErrorText = qsTr("The payment request could not be created. Please try again.")
     }
     function copyRequest() {
@@ -210,14 +221,19 @@ Pane {
     }
 
     function saveQRToFile(fileUrl) {
+        const opening = root.opening
         return captureQR(function(result) {
-            if (!imageSave.save(result.image, fileUrl))
+            if (root.opening !== opening) return
+            if (imageSave.save(result.image, fileUrl))
+                root.saveOpening = opening
+            else
                 root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
         })
     }
     // Asks first; the request is deleted once the user confirms.
     function deleteRequest() {
         if (!wallet || !saved) return false
+        deleteOpening = opening
         deleteConfirmation.confirmDelete(wallet, request.id)
         return true
     }
@@ -236,17 +252,26 @@ Pane {
     PaymentRequestDeleteConfirmation {
         id: deleteConfirmation
         objectName: "requestPaymentDeleteConfirmation"
-        onDeleted: function(requestId) {
+        reportsFailures: false
+        onDeleted: function(requestId, requestWallet) {
+            if (root.deleteOpening !== root.opening || requestWallet !== root.wallet) {
+                root.deletedInEarlierOpening(requestId, requestWallet)
+                return
+            }
             // Discard local edits so closing the modal cannot try to save a deleted request.
             root.resetFields()
-            root.deleted(requestId)
+            root.deleted(requestId, requestWallet)
+        }
+        onDeleteFailed: function(requestId, error, requestWallet) {
+            if (root.deleteOpening === root.opening && requestWallet === root.wallet) deleteConfirmation.showFailure(error)
         }
     }
 
     ImageSaveModel {
         id: imageSave
+        objectName: "requestPaymentImageSave"
         onFinished: function(success) {
-            if (!success)
+            if (!success && root.saveOpening === root.opening)
                 root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
         }
     }
@@ -256,6 +281,10 @@ Pane {
         function onReceiveOperationFinished(operation, success) {
             if (root.pendingOperation !== operation) return
             root.pendingOperation = ""
+            if (root.pendingOpening !== root.opening) {
+                root.pendingRequestId = ""
+                return
+            }
             const operationError = root.wallet.receiveOperationError
             root.actionErrorText = operationError
             if (!success) return

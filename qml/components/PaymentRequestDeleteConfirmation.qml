@@ -15,8 +15,11 @@ AlertPopup {
     property var wallet: null
     property string requestId: ""
     property string pendingRequestId: ""
+    property bool reportsFailures: true
+    property bool reportPendingFailure: false
 
-    signal deleted(string requestId)
+    signal deleted(string requestId, var requestWallet)
+    signal deleteFailed(string requestId, string error, var requestWallet)
 
     function confirmDelete(requestWallet, id) {
         if (wallet !== requestWallet) pendingRequestId = ""
@@ -27,12 +30,23 @@ AlertPopup {
 
     function deleteRequest() {
         const id = requestId
+        reportPendingFailure = true
         if (!wallet || !wallet.removeReceiveRequest(id)) {
-            showFailure("")
+            fail(id, "")
             return false
         }
         pendingRequestId = id
         return true
+    }
+
+    // For a host that is hidden while the delete runs.
+    function stopReporting() {
+        reportPendingFailure = false
+    }
+
+    function fail(id, error) {
+        deleteFailed(id, error, wallet)
+        if (reportsFailures && reportPendingFailure) showFailure(error)
     }
 
     function showFailure(error) {
@@ -46,8 +60,8 @@ AlertPopup {
             if (operation !== "remove" || !root.pendingRequestId) return
             const id = root.pendingRequestId
             root.pendingRequestId = ""
-            if (success) root.deleted(id)
-            else root.showFailure(root.wallet.receiveOperationError)
+            if (success) root.deleted(id, root.wallet)
+            else root.fail(id, root.wallet.receiveOperationError)
         }
     }
 
