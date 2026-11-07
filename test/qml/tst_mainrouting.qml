@@ -311,6 +311,13 @@ TestCase {
         paymentUris = ["bitcoin:bcrt1qroutingaddress"]
         const window = createMain(true)
 
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        tryCompare(review, "opened", true)
+        compare(paymentUriHandler.hasPendingRequest, true)
+        findChild(review, "paymentRequestReviewApplyButton").clicked()
         tryCompare(paymentUriHandler, "hasPendingRequest", false)
         compare(testSendRecipient.address.address, "bcrt1qroutingaddress")
         compare(window.paymentUriDeliveryInFlight, false)
@@ -320,7 +327,7 @@ TestCase {
         testSendRecipient.address.setAddress("bcrt1qexistingaddress")
         paymentUris = ["bitcoin:bcrt1qroutingaddress"]
         const window = createMain(true)
-        // The replace confirmation holds the request.
+        // The review holds the request.
         tryCompare(window, "paymentUriDeliveryInFlight", true)
         wait(50)
         compare(window.paymentUriDeliveryInFlight, true)

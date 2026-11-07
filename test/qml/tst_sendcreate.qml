@@ -78,6 +78,209 @@ TestCase {
         keyClick(Qt.Key_V, Qt.ControlModifier)
     }
 
+    function makeVisibleSendPage() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        return page
+    }
+
+    function test_incoming_payment_request_is_reviewed_before_it_is_applied() {
+        const page = makeVisibleSendPage()
+        const sendPage = findChild(page, "walletSendPage")
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(sendPage !== null)
+        verify(review !== null)
+
+        const address = "bcrt1qreviewaddress"
+        const uri = "bitcoin:" + address + "?amount=0.02000000&label=Alice&message=Pay%20me"
+        page.applyPaymentRequest(uri, "command line")
+        tryCompare(review, "opened", true)
+
+        compare(review.address, address)
+        compare(review.hasAmount, true)
+        compare(review.amountSatoshi, 2000000)
+        compare(review.requestLabel, "Alice")
+        compare(review.requestMessage, "Pay me")
+        compare(review.source, "command line")
+        // The form still holds what it had: nothing is applied before Apply.
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+        compare(testSendRecipient.label, "")
+
+        const applyButton = findChild(review, "paymentRequestReviewApplyButton")
+        verify(applyButton !== null)
+        applyButton.clicked()
+        tryCompare(review, "opened", false)
+
+        compare(testSendRecipient.address.address, address)
+        compare(testSendRecipient.amount.satoshi, 2000000)
+        compare(testSendRecipient.paymentRequestLabel, "Alice")
+        compare(sendPage.paymentRequestStatus, "Payment request imported from command line")
+    }
+
+    function test_discarded_payment_request_leaves_the_form_untouched() {
+        testSendRecipient.amount.satoshi = 100000000
+        testSendRecipient.label = "existing label"
+
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qother?amount=0.03000000&label=Bob", "command line")
+        tryCompare(review, "opened", true)
+        // The request replaces populated fields, so the review says so.
+        compare(review.replacesValues, true)
+
+        const discardButton = findChild(review, "paymentRequestReviewDiscardButton")
+        verify(discardButton !== null)
+        discardButton.clicked()
+        tryCompare(review, "opened", false)
+
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+        compare(testSendRecipient.amount.satoshi, 100000000)
+        compare(testSendRecipient.label, "existing label")
+    }
+
+    function test_review_takes_keyboard_focus_from_the_form() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        const noteInput = findChild(page, "sendNoteInput")
+        verify(review !== null)
+        verify(noteInput !== null)
+
+        noteInput.forceActiveFocus()
+        verify(noteInput.activeFocus)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+        verify(review.activeFocus)
+        verify(!noteInput.activeFocus)
+
+        keyClick(Qt.Key_X)
+        compare(noteInput.text, "")
+
+        keyClick(Qt.Key_Escape)
+        tryCompare(review, "opened", false)
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+    }
+
+    function test_page_does_not_accept_a_request_while_one_is_under_review() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        compare(page.canAcceptPaymentRequest(), true)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+        compare(page.canAcceptPaymentRequest(), false)
+
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(review, "opened", false)
+        compare(page.canAcceptPaymentRequest(), true)
+    }
+
+    function test_review_with_a_long_message_keeps_its_actions_reachable() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        let longMessage = ""
+        for (let i = 0; i < 120; ++i) {
+            longMessage += "a message long enough to overflow the dialog "
+        }
+        page.applyPaymentRequest(
+            "bitcoin:bcrt1qreviewaddress?message=" + encodeURIComponent(longMessage),
+            "command line")
+        tryCompare(review, "opened", true)
+
+        verify(review.height <= page.height)
+        const applyButton = findChild(review, "paymentRequestReviewApplyButton")
+        verify(applyButton !== null)
+        const bottom = applyButton.mapToItem(review.contentItem, 0, applyButton.height).y
+        verify(bottom <= review.contentItem.height)
+
+        applyButton.clicked()
+        tryCompare(review, "opened", false)
+        compare(testSendRecipient.address.address, "bcrt1qreviewaddress")
+    }
+
+    function test_wallet_change_during_review_reports_the_request_as_interrupted() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        const outcomeSpy = createTemporaryObject(outcomeSpyComponent, testCase, {
+            "target": page,
+            "signalName": "paymentRequestOutcome"
+        })
+        verify(outcomeSpy !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+
+        page.wallet = testSecondWalletModel
+        tryCompare(review, "opened", false)
+
+        tryVerify(function() { return outcomeSpy.count > 0 })
+        compare(outcomeSpy.signalArguments[outcomeSpy.count - 1][0], "interrupted")
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+    }
+
+    function test_hiding_send_during_review_reports_the_request_as_interrupted() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        const outcomeSpy = createTemporaryObject(outcomeSpyComponent, testCase, {
+            "target": page,
+            "signalName": "paymentRequestOutcome"
+        })
+        verify(review !== null)
+        verify(outcomeSpy !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+
+        page.visible = false
+        compare(outcomeSpy.count, 1)
+        compare(outcomeSpy.signalArguments[0][0], "interrupted")
+        review.close()
+        tryCompare(review, "opened", false)
+        compare(outcomeSpy.count, 1)
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+    }
+
+    function test_uri_import_does_not_open_during_review() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        const importPopup = findChild(page, "sendUriImportPopup")
+        verify(review !== null)
+        verify(importPopup !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+
+        page.openPaymentRequestImport()
+        wait(50)
+        compare(importPopup.visible, false)
+        compare(review.opened, true)
+    }
+
+    function test_press_outside_review_keeps_the_request() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+
+        mouseClick(page, 2, 2)
+        wait(50)
+        compare(review.opened, true)
+        compare(page.canAcceptPaymentRequest(), false)
+    }
+
     function test_available_balance_keeps_caption_static() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
@@ -1151,6 +1354,19 @@ TestCase {
         popup.close()
     }
 
+    function test_rejected_incoming_request_names_its_source() {
+        const page = makeVisibleSendPage()
+        const sendPage = findChild(page, "walletSendPage")
+        verify(sendPage !== null)
+
+        page.applyPaymentRequest("bitcoin://bcrt1qreviewaddress", "command line")
+        tryCompare(sendPage, "paymentRequestIsError", true)
+        verify(sendPage.paymentRequestStatus.indexOf("Payment request from command line rejected: ") === 0,
+               sendPage.paymentRequestStatus)
+        verify(sendPage.paymentRequestStatus.indexOf("bitcoin://") >= 0, sendPage.paymentRequestStatus)
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+    }
+
     function test_send_incoming_payment_request_interrupted_when_wallet_leaves_before_delivery() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
             {width: testCase.width, height: testCase.height, visible: true})
@@ -1185,5 +1401,103 @@ TestCase {
         tryCompare(popup, "opened", false)
 
         compare(outcomeSpy.count, 0)
+    }
+
+    function test_review_shows_the_amount_a_request_without_one_keeps() {
+        testSendRecipient.amount.satoshi = 10000000
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qkeptaddress", "command line")
+        tryCompare(review, "opened", true)
+        compare(review.keptAmountSatoshi, 10000000)
+        const amountText = findChild(review, "paymentRequestReviewAmount").text
+        verify(amountText.indexOf("Not specified, keeps") === 0, amountText)
+        verify(amountText.indexOf("0.10000000") >= 0, amountText)
+        findChild(review, "paymentRequestReviewApplyButton").clicked()
+        tryCompare(review, "opened", false)
+        compare(testSendRecipient.amount.satoshi, 10000000)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qkeptaddress?amount=0.02", "command line")
+        tryCompare(review, "opened", true)
+        compare(review.keptAmountSatoshi, 0)
+        compare(findChild(review, "paymentRequestReviewAmount").text.indexOf("Not specified"), -1)
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(review, "opened", false)
+    }
+
+    function test_review_says_a_request_without_amount_keeps_use_maximum() {
+        testSendRecipient.amount.satoshi = 0
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        testWalletModel.useMaximum()
+
+        page.applyPaymentRequest("bitcoin:bcrt1qkeptaddress", "command line")
+        tryCompare(review, "opened", true)
+        compare(review.keepsMaximum, true)
+        const amountText = findChild(review, "paymentRequestReviewAmount")
+        compare(amountText.text, "Not specified, keeps the maximum amount")
+        verify(amountText.parent.visible)
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(review, "opened", false)
+    }
+
+    function test_psbt_import_does_not_open_during_review() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        const psbtDialog = findChild(page, "sendPsbtOpenDialog")
+        verify(review !== null)
+        verify(psbtDialog !== null)
+
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress?label=Alice", "command line")
+        tryCompare(review, "opened", true)
+
+        page.openPsbtFileImport()
+        wait(50)
+        compare(psbtDialog.targetWallet, null)
+        compare(review.opened, true)
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(review, "opened", false)
+    }
+
+    function test_transaction_review_holds_a_request_until_it_closes() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        const transactionReview = findChild(page, "transactionReviewPopup")
+        verify(transactionReview !== null)
+        const outcomeSpy = createTemporaryObject(outcomeSpyComponent, testCase, {target: page, signalName: "paymentRequestOutcome"})
+        const acceptableSpy = createTemporaryObject(outcomeSpyComponent, testCase, {target: page, signalName: "paymentRequestAcceptable"})
+
+        // Delivered, then the form is taken before the review would open.
+        page.applyPaymentRequest("bitcoin:bcrt1qreviewaddress", "command line")
+        page.openTransactionReview()
+        tryCompare(transactionReview, "opened", true)
+        tryCompare(outcomeSpy, "count", 1)
+        compare(outcomeSpy.signalArguments[0][0], "interrupted")
+        compare(review.opened, false)
+        compare(page.canAcceptPaymentRequest(), false)
+
+        transactionReview.close()
+        tryCompare(transactionReview, "opened", false)
+        tryVerify(function() { return acceptableSpy.count > 0 })
+        compare(page.canAcceptPaymentRequest(), true)
+    }
+
+    function test_clipboard_confirmation_releases_the_form_when_it_closes() {
+        testSendRecipient.label = "existing label"
+        const page = makeVisibleSendPage()
+        const sendPage = findChild(page, "walletSendPage")
+        const popup = findChild(page, "sendPaymentUriOverwritePopup")
+        const acceptableSpy = createTemporaryObject(outcomeSpyComponent, testCase, {target: page, signalName: "paymentRequestAcceptable"})
+
+        sendPage.handlePaymentUriPaste("bitcoin:bcrt1qotheraddress?message=Other", "label")
+        tryCompare(popup, "opened", true)
+        compare(page.canAcceptPaymentRequest(), false)
+
+        findChild(popup.contentItem, "sendPaymentUriOverwriteCancelButton").clicked()
+        tryCompare(acceptableSpy, "count", 1)
+        compare(page.canAcceptPaymentRequest(), true)
     }
 }

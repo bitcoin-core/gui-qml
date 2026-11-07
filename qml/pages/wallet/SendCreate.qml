@@ -42,6 +42,8 @@ PageStack {
 
     signal viewTransactionInActivity(string txid)
     signal paymentRequestOutcome(string outcome)
+    // Something that held the form is gone, so a waiting request can be offered again.
+    signal paymentRequestAcceptable()
 
     function confirmTransactionReview() {
         if (!root.wallet) return
@@ -76,11 +78,14 @@ PageStack {
     }
 
     function openPaymentRequestImport() {
+        // The request under review owns the form until it is applied or discarded.
+        if (paymentRequestReviewPopup.visible) return
         root.returnToSendForm()
         root.openWhileShown(sendPage.openPaymentRequestImport)
     }
 
     function openPsbtFileImport() {
+        if (paymentRequestReviewPopup.visible) return
         root.returnToSendForm()
         root.openWhileShown(sendPage.openPsbtFileImport)
     }
@@ -114,29 +119,40 @@ PageStack {
         root.paymentRequestOutcome(outcome)
     }
 
-    // A delivered request whose wallet is no longer shown, before or during its
-    // confirmation, is reported as interrupted, so it is offered again. It is
-    // reported now: the page may be destroyed before a popup emits closed.
+    // A delivered request whose Send page is no longer shown, before or during
+    // its review, is reported as interrupted, so it is offered again. It is
+    // reported now: the page may be destroyed before the popup emits closed.
     function interruptPaymentRequest() {
         root.finishIncomingPaymentRequest("interrupted")
     }
 
     function applyPaymentRequest(uri, source) {
-        root.returnToSendForm()
         sendPage.m_incomingPaymentRequest = true
         // Held in a local: the page may be destroyed, and already reported
         // interrupted, before this runs.
         const page = sendPage
         Qt.callLater(function() {
             if (!page || !page.m_incomingPaymentRequest) return
-            // The wallet can be unloaded before this runs.
-            if (root.wallet === null || root.recipient === null) {
+            // The wallet can be unloaded, or the form taken, before this runs.
+            if (!root.canAcceptPaymentRequest()) {
                 root.interruptPaymentRequest()
                 return
             }
             page.handleIncomingPaymentUri(uri, source)
         })
     }
+
+    // Coin selection and an open review both own the form; a request waits.
+    function canAcceptPaymentRequest() {
+        return root.wallet !== null
+            && root.recipient !== null
+            && root.depth === 1
+            && !paymentRequestReviewPopup.visible
+            && !paymentUriOverwritePopup.visible
+            && !transactionReviewPopup.visible
+    }
+
+    onDepthChanged: if (root.depth === 1) root.paymentRequestAcceptable()
 
     function clearPrepareTransactionError() {
         if (prepareTransactionErrorText.length > 0) {
@@ -188,6 +204,7 @@ PageStack {
         } else {
             root.hiddenCount++
             reviewSweepAlert.close()
+            root.interruptPaymentRequest()
         }
     }
     onWalletChanged: {
@@ -209,6 +226,7 @@ PageStack {
         root.interruptPaymentRequest()
         sendPage.clearPendingPaymentUriPaste()
         paymentUriOverwritePopup.close()
+        paymentRequestReviewPopup.close()
     }
 
     Connections {
@@ -381,6 +399,7 @@ PageStack {
                 if (wallet && wasImported) {
                     wallet.discardCurrentTransaction()
                 }
+                root.paymentRequestAcceptable()
             }
 
             background: null
@@ -522,7 +541,6 @@ PageStack {
         property var m_pendingPastedPaymentRequest: null
         property string m_pendingPastedPaymentRequestText: ""
         property string m_pendingPastedPaymentRequestSource: ""
-        property bool m_pendingPastedPaymentRequestIncoming: false
         property bool m_incomingPaymentRequest: false
 
         function looksLikePaymentUri(text) {
@@ -568,7 +586,6 @@ PageStack {
             m_pendingPastedPaymentRequest = null
             m_pendingPastedPaymentRequestText = ""
             m_pendingPastedPaymentRequestSource = ""
-            m_pendingPastedPaymentRequestIncoming = false
         }
 
         function applyPastedPaymentRequest(result, text, source) {
@@ -580,30 +597,48 @@ PageStack {
         }
 
         function handlePaymentUriPaste(text, sourceField) {
-            handlePaymentUriRequest(text, qsTr("clipboard"), sourceField, false)
+            handlePaymentUriRequest(text, qsTr("clipboard"), sourceField)
         }
 
         function handleIncomingPaymentUri(text, source) {
-            handlePaymentUriRequest(text, source, "", true)
+            const result = BitcoinUri.parseBitcoinUri(text)
+            if (!result.success) {
+                // Named, so it is not read as an error in the recipient already in the form.
+                paymentRequestStatus = qsTr("Payment request from %1 rejected: %2").arg(source).arg(result.error)
+                paymentRequestIsError = true
+                root.finishIncomingPaymentRequest("rejected")
+                return
+            }
+            m_pendingPastedPaymentRequest = result
+            m_pendingPastedPaymentRequestText = text
+            m_pendingPastedPaymentRequestSource = source
+            paymentRequestReviewPopup.source = source
+            paymentRequestReviewPopup.address = result.address
+            paymentRequestReviewPopup.hasAmount = result.hasAmount
+            paymentRequestReviewPopup.amountSatoshi = result.hasAmount ? result.amountSats : 0
+            paymentRequestReviewPopup.keptAmountSatoshi = result.hasAmount ? 0 : root.recipient.amount.satoshi
+            paymentRequestReviewPopup.keepsMaximum = !result.hasAmount
+                && root.wallet.maximumRecipient === root.recipient
+            paymentRequestReviewPopup.requestLabel = result.hasLabel ? result.label : ""
+            paymentRequestReviewPopup.requestMessage = result.hasMessage ? result.uriMessage : ""
+            paymentRequestReviewPopup.replacesValues = paymentUriConflicts(result, "")
+            paymentRequestReviewPopup.open()
         }
 
-        function handlePaymentUriRequest(text, source, sourceField, incoming) {
+        function handlePaymentUriRequest(text, source, sourceField) {
             const result = BitcoinUri.parseBitcoinUri(text)
             if (!result.success) {
                 applyParsedPaymentRequest(result, source)
-                if (incoming) root.finishIncomingPaymentRequest("rejected")
                 return
             }
             if (paymentUriConflicts(result, sourceField)) {
                 m_pendingPastedPaymentRequest = result
                 m_pendingPastedPaymentRequestText = text
                 m_pendingPastedPaymentRequestSource = source
-                m_pendingPastedPaymentRequestIncoming = incoming
                 paymentUriOverwritePopup.open()
                 return
             }
             applyPastedPaymentRequest(result, text, source)
-            if (incoming) root.finishIncomingPaymentRequest("resolved")
         }
 
         function handleClipboardPaste(field, editor) {
@@ -670,8 +705,8 @@ PageStack {
             sendPage.expandedRecipient = root.wallet.recipients.currentIndex - 1
             root.recipient.applyPaymentRequest(result.address, result.hasLabel ? result.label : "", result.hasMessage ? result.uriMessage : "")
             // Only fields present in the URI are applied. Amount is intentionally
-            // not cleared when the URI omits 'amount='. This matches Bitcoin Core
-            // Qt's URI import behaviour: only populate what the URI specifies.
+            // not cleared when the URI omits 'amount=', and the review of an
+            // incoming request shows the amount that stays.
             if (result.hasAmount) {
                 root.recipient.amount.satoshi = result.amountSats
             }
@@ -707,6 +742,24 @@ PageStack {
             applyParsedPaymentRequest(result, qsTr("file"))
         }
 
+        PaymentRequestReviewPopup {
+            id: paymentRequestReviewPopup
+            objectName: "sendPaymentRequestReviewPopup"
+            parent: Overlay.overlay
+
+            onClosed: {
+                const accept = accepted
+                const result = sendPage.m_pendingPastedPaymentRequest
+                const text = sendPage.m_pendingPastedPaymentRequestText
+                const source = sendPage.m_pendingPastedPaymentRequestSource
+                sendPage.clearPendingPaymentUriPaste()
+                if (accept && result) {
+                    sendPage.applyPastedPaymentRequest(result, text, source)
+                }
+                root.finishIncomingPaymentRequest("resolved")
+            }
+        }
+
         AlertPopup {
             id: paymentUriOverwritePopup
             objectName: "sendPaymentUriOverwritePopup"
@@ -716,11 +769,10 @@ PageStack {
             messageObjectName: "sendPaymentUriOverwriteMessage"
 
             // Escape and a press outside close the popup without going through
-            // an action, so the outcome is reported here.
+            // an action, so the form is released here.
             onClosed: {
-                const incoming = sendPage.m_pendingPastedPaymentRequestIncoming
                 sendPage.clearPendingPaymentUriPaste()
-                if (incoming) root.finishIncomingPaymentRequest("resolved")
+                root.paymentRequestAcceptable()
             }
 
             AlertAction {
