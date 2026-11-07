@@ -35,6 +35,7 @@ Popup {
         if (!wallet || !wallet.loadPaymentRequestDetail(requestId)) return false
         originY = fromY === undefined ? -1 : fromY
         card.resetFields()
+        card.beginOpening()
         openedWallet = wallet
         open()
         return true
@@ -49,6 +50,7 @@ Popup {
         deletedRequestId = ""
         openedWallet = null
         card.resetFields()
+        card.beginOpening()
         if (repeatRequestId) {
             const requestId = repeatRequestId
             const requestWallet = wallet
@@ -106,6 +108,10 @@ Popup {
             onDeleted: function(requestId) {
                 root.deletedRequestId = requestId
                 root.close()
+            }
+            onDeletedInEarlierOpening: function(requestId) {
+                const request = root.wallet ? root.wallet.currentPaymentRequest : null
+                if (request && request.id === requestId) request.clear()
             }
         }
     }

@@ -64,6 +64,7 @@ TestCase {
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.holdReceiveOperations = false
         testWalletModel.ensureReceivingAddressResult = true
         testWalletModel.receiveRequestReconciliationPending = false
         walletController.closePaymentRequestDetailRequests = 0
@@ -1089,6 +1090,40 @@ TestCase {
         compare(card.request.id, "")
         compare(testPaymentRequest.id, "")
         verify(page.draftCard.visible)
+    }
+
+    function test_delayed_delete_does_not_close_a_later_opening_data() {
+        return [
+            { tag: "other request", nextRequestId: "2" },
+            { tag: "same request reopened", nextRequestId: "" },
+        ]
+    }
+
+    function test_delayed_delete_does_not_close_a_later_opening(data) {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        const nextRequestId = data.nextRequestId || requestId
+        testWalletModel.holdReceiveOperations = true
+        verify(card.deleteRequest())
+        testWalletModel.holdReceiveOperations = false
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        verify(page.requestModal.openRequest(nextRequestId))
+        tryCompare(page.requestModal, "opened", true)
+        const shownAmount = card.request.amount.display
+        const shownMessage = card.request.message
+
+        testWalletModel.releaseReceiveOperation()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        compare(testWalletModel.lastRemovedRequestId, requestId)
+        wait(50)
+        verify(page.requestModal.opened)
+        compare(card.request.id, nextRequestId)
+        compare(card.request.amount.display, shownAmount)
+        compare(card.request.message, shownMessage)
+        compare(card.errorText, "")
+        compare(testPaymentRequest.id, "")
     }
 
     function test_delete_failure_preserves_request_and_modal() {

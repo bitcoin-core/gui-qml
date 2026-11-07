@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -1258,6 +1259,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString receiveOperationError MEMBER m_receive_operation_error NOTIFY receiveOperationErrorChanged)
     Q_PROPERTY(QVariantList receiveAddressTypes READ availableReceiveAddressTypes NOTIFY walletInfoChanged)
     Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
+    Q_PROPERTY(bool holdReceiveOperations MEMBER m_hold_receive_operations)
 
 public:
     enum class KeyScheme {
@@ -1292,18 +1294,26 @@ public:
     QString m_wallet_state_error;
     bool m_receive_operation_pending{false};
     QString m_receive_operation_error;
+    void completeReceiveOperation(const QString& operation, bool success)
+    {
+        m_receive_operation_pending = false;
+        m_receive_operation_error = success ? QString{} : QStringLiteral("The payment request could not be deleted. Please try again.");
+        Q_EMIT receiveOperationPendingChanged();
+        Q_EMIT receiveOperationErrorChanged();
+        Q_EMIT receiveOperationFinished(operation, success);
+    }
     void finishReceiveOperation(QString operation, bool success = true)
     {
         m_receive_operation_pending = true;
         Q_EMIT receiveOperationPendingChanged();
-        QTimer::singleShot(0, this, [this, operation, success] {
-            m_receive_operation_pending = false;
-            m_receive_operation_error = success ? QString{} : QStringLiteral("The payment request could not be deleted. Please try again.");
-            Q_EMIT receiveOperationPendingChanged();
-            Q_EMIT receiveOperationErrorChanged();
-            Q_EMIT receiveOperationFinished(operation, success);
-        });
+        if (m_hold_receive_operations) {
+            m_held_receive_operation = {operation, success};
+            return;
+        }
+        QTimer::singleShot(0, this, [this, operation, success] { completeReceiveOperation(operation, success); });
     }
+    bool m_hold_receive_operations{false};
+    std::optional<std::pair<QString, bool>> m_held_receive_operation;
     bool m_remove_receive_request_result{true};
     bool m_receive_request_reconciliation_pending{false};
     QString m_saved_payment_request_label;
@@ -1767,6 +1777,12 @@ public:
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
         finishReceiveOperation(QStringLiteral("rememberAddress"));
+    }
+    Q_INVOKABLE void releaseReceiveOperation()
+    {
+        if (!m_held_receive_operation) return;
+        const auto [operation, success] = *std::exchange(m_held_receive_operation, std::nullopt);
+        completeReceiveOperation(operation, success);
     }
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id)
     {
