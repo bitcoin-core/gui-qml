@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../../../controls"
+import "../../../components"
 
 DesignSystemSection {
     id: root
@@ -329,6 +330,52 @@ DesignSystemSection {
                     text: "Continue"
                 }
             }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemPaymentRequestReviewPopup"
+        Layout.fillWidth: true
+        name: "PaymentRequestReviewPopup"
+        note: "Shows an incoming payment request before it fills in the Send form. Label and message come from whoever built the request: shown as typed, and broken anywhere when they have no spaces."
+
+        DesignSystemState {
+            label: "amount, replacesValues: true"
+            NeutralButton {
+                objectName: "designSystemPaymentRequestReviewButton"
+                text: "Payment request"
+                onClicked: paymentRequestReview.open()
+            }
+        }
+        DesignSystemState {
+            label: "no amount, long values"
+            NeutralButton {
+                objectName: "designSystemLongPaymentRequestReviewButton"
+                text: "Long payment request"
+                onClicked: longPaymentRequestReview.open()
+            }
+        }
+
+        PaymentRequestReviewPopup {
+            id: paymentRequestReview
+            objectName: "designSystemPaymentRequestReview"
+            source: "command line"
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+            hasAmount: true
+            requestLabel: "Alice"
+            requestMessage: "Invoice 1042"
+            replacesValues: true
+            Component.onCompleted: amountSatoshi = 150000
+        }
+
+        PaymentRequestReviewPopup {
+            id: longPaymentRequestReview
+            objectName: "designSystemLongPaymentRequestReview"
+            source: "/Users/satoshi/Downloads/payment-request.txt"
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+            requestLabel: "<b>Alice</b>"
+            requestMessage: "https://example.com/invoices/" + "a1b2c3d4e5f6".repeat(8)
+            Component.onCompleted: keptAmountSatoshi = 2500
         }
     }
 }

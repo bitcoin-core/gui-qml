@@ -44,6 +44,7 @@ Item {
     signal settingsRequested()
     signal walletSelectionRequested()
     signal paymentRequestOutcome(string outcome)
+    signal paymentRequestAcceptable()
 
     function requestTab(tab) {
         root.currentTab = tab
@@ -201,11 +202,11 @@ Item {
             wallet: root.wallet
             onVisibleChanged: {
                 if (visible) return
-                if (!root.active) sendPage.interruptPaymentRequest()
                 root.pageHidden(sendPage)
             }
             onViewTransactionInActivity: (txid) => root.navigateToTransaction(txid)
             onPaymentRequestOutcome: (outcome) => root.paymentRequestOutcome(outcome)
+            onPaymentRequestAcceptable: root.paymentRequestAcceptable()
         }
         ReceivePage {
             id: receivePage

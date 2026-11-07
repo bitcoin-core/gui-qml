@@ -1152,6 +1152,15 @@ private:
     bool m_descending{true};
 };
 
+class MockImportedPsbt : public QObject
+{
+    Q_OBJECT
+
+public:
+    using QObject::QObject;
+    Q_INVOKABLE void clear() {}
+};
+
 class MockWalletQmlModel : public QObject
 {
     Q_OBJECT
@@ -1166,6 +1175,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
+    Q_PROPERTY(QObject* importedPsbt READ importedPsbt CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(QObject* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
@@ -1236,6 +1246,7 @@ public:
     bool m_available{true};
     QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
+    MockImportedPsbt* m_imported_psbt{new MockImportedPsbt(this)};
     QObject* m_recipients{nullptr};
     QObject* m_maximum_recipient{nullptr};
     QMetaObject::Connection m_maximum_amount_connection;
@@ -1270,6 +1281,7 @@ public:
 
     QObject* transactionActivityModel() const { return m_transaction_activity_model; }
     QObject* bumpModel() const { return m_bump_model; }
+    QObject* importedPsbt() const { return m_imported_psbt; }
     QObject* recipients() const { return m_recipients; }
     QObject* coinsListModel() const { return m_coins_list_model; }
     QObject* currentTransaction() const { return m_current_transaction; }

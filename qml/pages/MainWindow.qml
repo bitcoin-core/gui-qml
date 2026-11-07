@@ -48,6 +48,9 @@ ApplicationWindow {
     property bool postOnboardingWalletRouteResolved: false
     property bool shutdownInProgress: false
     property bool paymentUriDeliveryInFlight: false
+    // A request interrupted by leaving Send waits for Send; one interrupted by a wallet change does not.
+    property bool paymentUriInterrupted: false
+    property var paymentUriDeliveredWallet: null
     readonly property var menuEditTarget: appWindow.editTarget(appWindow.activeFocusItem)
     readonly property var menuWalletController: appWindow.desktopWalletMode ? walletController : null
     readonly property bool menuNavigationEnabled: main.depth === 1
@@ -111,18 +114,24 @@ ApplicationWindow {
         if (walletCreationModal.visible) {
             return
         }
-        if (!appWindow.desktopWalletMode) {
-            return
-        }
-        // selectedWallet is never null: an empty model stands in until a wallet
-        // is open. Every swap before initialization resets the Send form.
-        if (!walletController.initialized || !walletController.isWalletLoaded) {
+        if (!appWindow.desktopWalletMode || !walletController.initialized) {
             return
         }
         const shell = main.depth === 1 ? main.currentItem : null
         if (!shell || typeof shell.applyIncomingPaymentUri !== "function") {
             return
         }
+        // selectedWallet is never null: an empty model stands in until a wallet
+        // is open. Every swap before initialization resets the Send form.
+        if (!walletController.isWalletLoaded) {
+            return
+        }
+        const waitForSend = appWindow.paymentUriInterrupted
+            && appWindow.paymentUriDeliveredWallet === walletController.selectedWallet
+        if (!shell.canAcceptPaymentUri(waitForSend)) {
+            return
+        }
+        appWindow.paymentUriDeliveredWallet = walletController.selectedWallet
         //: Source of a payment request passed on the command line, inserted as %1 in messages such as "Payment request imported from %1".
         const source = qsTr("command line")
         appWindow.paymentUriDeliveryInFlight = true
@@ -136,6 +145,7 @@ ApplicationWindow {
             return
         }
         appWindow.paymentUriDeliveryInFlight = false
+        appWindow.paymentUriInterrupted = outcome === "interrupted"
         if (outcome !== "interrupted") {
             paymentUriHandler.completePendingRequest()
         }
@@ -427,6 +437,7 @@ ApplicationWindow {
                 walletCreationModal.open()
             }
             onPaymentRequestOutcome: (outcome) => appWindow.finishPendingPaymentUri(outcome)
+            onPaymentRequestAcceptable: Qt.callLater(appWindow.deliverPendingPaymentUri)
             onActiveViewChanged: Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
     }

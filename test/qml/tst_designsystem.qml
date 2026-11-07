@@ -62,7 +62,7 @@ TestCase {
         "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemTooltip",
         "designSystemSkeleton", "designSystemSpinningIndicator",
         "designSystemContextMenu",
-        "designSystemAlertPopup", "designSystemDialogPopup",
+        "designSystemAlertPopup", "designSystemDialogPopup", "designSystemPaymentRequestReviewPopup",
         "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemSelectableText",
         "designSystemQRImage"
     ]
@@ -453,7 +453,9 @@ TestCase {
             ["designSystemErrorAlertButton", "designSystemErrorAlert"],
             ["designSystemInputAlertButton", "designSystemInputAlert"],
             ["designSystemFeatureModalButton", "designSystemFeatureModal"],
-            ["designSystemSheetButton", "designSystemSheet"]
+            ["designSystemSheetButton", "designSystemSheet"],
+            ["designSystemPaymentRequestReviewButton", "designSystemPaymentRequestReview"],
+            ["designSystemLongPaymentRequestReviewButton", "designSystemLongPaymentRequestReview"]
         ]
         for (const [buttonName, alertName] of alerts) {
             const alert = findChild(page, alertName)
@@ -471,6 +473,16 @@ TestCase {
         verify(findChild(longAlert.contentItem, "alertMessageArea").interactive)
         longAlert.close()
         tryCompare(longAlert, "visible", false)
+
+        const longReview = findChild(page, "designSystemLongPaymentRequestReview")
+        findChild(page, "designSystemLongPaymentRequestReviewButton").clicked()
+        tryCompare(longReview, "opened", true)
+        compare(findChild(longReview, "paymentRequestReviewLabel").text, "<b>Alice</b>")
+        const message = findChild(longReview, "paymentRequestReviewMessage")
+        verify(message.lineCount > 1)
+        verify(message.contentWidth <= message.width)
+        longReview.close()
+        tryCompare(longReview, "visible", false)
     }
 
     function isFocusIndicator(item) {

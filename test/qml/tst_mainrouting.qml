@@ -329,6 +329,13 @@ TestCase {
         paymentUris = ["bitcoin:bcrt1qroutingaddress"]
         const window = createMain(true)
 
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        tryCompare(review, "opened", true)
+        compare(paymentUriHandler.hasPendingRequest, true)
+        findChild(review, "paymentRequestReviewApplyButton").clicked()
         tryCompare(paymentUriHandler, "hasPendingRequest", false)
         compare(testSendRecipient.address.address, "bcrt1qroutingaddress")
         compare(window.paymentUriDeliveryInFlight, false)
@@ -338,7 +345,7 @@ TestCase {
         testSendRecipient.address.setAddress("bcrt1qexistingaddress")
         paymentUris = ["bitcoin:bcrt1qroutingaddress"]
         const window = createMain(true)
-        // The replace confirmation holds the request.
+        // The review holds the request.
         tryCompare(window, "paymentUriDeliveryInFlight", true)
         wait(50)
         compare(window.paymentUriDeliveryInFlight, true)
@@ -348,5 +355,84 @@ TestCase {
         compare(paymentUriHandler.hasPendingRequest, true)
         compare(paymentUriHandler.pendingRequest(), "bitcoin:bcrt1qroutingaddress")
         compare(testSendRecipient.address.address, "bcrt1qexistingaddress")
+    }
+
+    function test_payment_uri_interrupted_by_leaving_send_waits_for_send() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        tryCompare(review, "opened", true)
+
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+        wait(50)
+        compare(sendPage.visible, false)
+        compare(review.opened, false)
+        compare(paymentUriHandler.hasPendingRequest, true)
+
+        wallets.openSend()
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qroutingaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_payment_uri_waits_for_the_uri_importer() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        const importer = findChild(sendPage, "sendUriImportPopup")
+        verify(review !== null)
+        verify(importer !== null)
+        tryCompare(review, "opened", true)
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+
+        wallets.openUriImporter()
+        tryCompare(importer, "opened", true)
+        wait(50)
+        compare(review.visible, false)
+
+        importer.close()
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qroutingaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_payment_uri_waits_for_the_psbt_importer() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        const psbtOpen = findChild(sendPage, "sendPsbtOpenDialog")
+        verify(review !== null)
+        verify(psbtOpen !== null)
+        tryCompare(review, "opened", true)
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+
+        wallets.openPsbtImporter()
+        tryCompare(psbtOpen, "visible", true)
+        wait(50)
+        compare(review.visible, false)
+
+        psbtOpen.close()
+        tryCompare(psbtOpen, "visible", false)
+        tryCompare(review, "opened", true)
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
     }
 }

@@ -14,7 +14,10 @@ Requires:
 """
 
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import quote
 
 from qml_driver import QmlDriverError
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
@@ -23,6 +26,25 @@ WALLET_NAME = "testwallet"
 
 # Valid on mainnet, rejected by the address decoder under regtest.
 MAINNET_ADDRESS = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+
+
+REVIEW_POPUP = "sendPaymentRequestReviewPopup"
+
+
+def wait_for_review(gui, timeout_ms=20000):
+    gui.wait_for_property(REVIEW_POPUP, "opened", True, timeout_ms=timeout_ms)
+
+
+def apply_review(gui):
+    """Accept the review. The popup can reopen at once for the next request,
+    so callers assert the effect rather than the popup closing."""
+    wait_for_review(gui)
+    gui.click("paymentRequestReviewApplyButton")
+
+
+def discard_review(gui):
+    wait_for_review(gui)
+    gui.click("paymentRequestReviewDiscardButton")
 
 
 def wait_for_wallet(gui):
@@ -39,6 +61,24 @@ def wait_for_object_gone(gui, object_name, timeout_ms):
         if time.time() > deadline:
             raise QmlDriverError(f"{object_name} still exists after {timeout_ms} ms")
         time.sleep(0.1)
+
+
+class ImageRequestRecorder(BaseHTTPRequestHandler):
+    requests = []
+
+    def do_GET(self):
+        ImageRequestRecorder.requests.append(self.path)
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def start_image_server():
+    server = HTTPServer(("127.0.0.1", 0), ImageRequestRecorder)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def run_tests():
@@ -79,6 +119,13 @@ def run_tests():
         gui = harness.driver
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        wait_for_review(gui)
+        assert first_address in str(gui.get_property("paymentRequestReviewAddress", "address"))
+        assert "0.01234567" in str(gui.get_property("paymentRequestReviewAmount", "text"))
+        assert "startup-label" in str(gui.get_property("paymentRequestReviewLabel", "text"))
+        assert "startup-note" in str(gui.get_property("paymentRequestReviewMessage", "text"))
+        assert gui.get_property(REVIEW_POPUP, "replacesValues") is False
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestStatusText", "text",
             lambda v: "command line" in str(v), timeout_ms=20000,
@@ -91,7 +138,7 @@ def run_tests():
             "sendPaymentRequestMessageTextValue", "text",
             lambda v: "startup-note" in str(v), timeout_ms=10000,
         )
-        print("Test 1 PASSED: command line URI applied to the Send form.")
+        print("Test 1 PASSED: request reviewed, then applied to the Send form.")
 
         # ----------------------------------------------------------------
         # Test 2: a URI with an uppercase scheme is accepted. Desktop
@@ -102,6 +149,7 @@ def run_tests():
         gui = harness.driver
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "upper-label" in str(v), timeout_ms=20000,
@@ -138,21 +186,20 @@ def run_tests():
         gui = harness.driver
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "first-label" in str(v), timeout_ms=20000,
         )
         gui.wait_for_property(
-            "sendPaymentUriOverwritePopup", "opened", True, timeout_ms=20000,
+            REVIEW_POPUP, "replacesValues", True, timeout_ms=20000,
         )
-        gui.click("sendPaymentUriOverwriteCancelButton")
-        gui.wait_for_property(
-            "sendPaymentUriOverwritePopup", "opened", False, timeout_ms=10000,
-        )
+        discard_review(gui)
+        gui.wait_for_property(REVIEW_POPUP, "opened", False, timeout_ms=10000)
         assert "first-label" in str(gui.get_property("sendPaymentRequestPayToValue", "text")), (
-            "Cancelling the overwrite must leave the first request in the form"
+            "Discarding the review must leave the first request in the form"
         )
-        print("Test 4 PASSED: second request delivered, gated by confirmation.")
+        print("Test 4 PASSED: second request reviewed, discarding keeps the first.")
 
         # ----------------------------------------------------------------
         # Test 5: with no wallet loaded the request is kept, not consumed,
@@ -176,6 +223,7 @@ def run_tests():
         )
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "late-label" in str(v), timeout_ms=30000,
@@ -195,6 +243,16 @@ def run_tests():
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
         gui.wait_for_property(
+            "sendPaymentRequestStatusText", "text",
+            lambda v: "bitcoin://" in str(v), timeout_ms=20000,
+        )
+        # The rejection stays visible behind the review of the next request.
+        wait_for_review(gui)
+        assert gui.get_property("sendPaymentRequestPayToValue", "text") == "", (
+            "The next request was applied before it was reviewed"
+        )
+        apply_review(gui)
+        gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "after-error-label" in str(v), timeout_ms=20000,
         )
@@ -212,20 +270,22 @@ def run_tests():
         gui = harness.driver
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        apply_review(gui)
         gui.wait_for_property(
-            "sendPaymentUriOverwritePopup", "opened", True, timeout_ms=20000,
+            REVIEW_POPUP, "replacesValues", True, timeout_ms=20000,
         )
         rpc_call(
             harness.gui_rpc_port, "unloadwallet",
             {"wallet_name": WALLET_NAME, "load_on_startup": True},
         )
         # The popup goes away with the view of the unloaded wallet.
-        wait_for_object_gone(gui, "sendPaymentUriOverwritePopup", timeout_ms=20000)
+        wait_for_object_gone(gui, REVIEW_POPUP, timeout_ms=20000)
         rpc_call(
             harness.gui_rpc_port, "loadwallet",
             {"filename": WALLET_NAME, "load_on_startup": True},
         )
         wait_for_wallet(gui)
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "after-switch-label" in str(v), timeout_ms=30000,
@@ -244,6 +304,7 @@ def run_tests():
         gui = harness.driver
         wait_for_wallet(gui)
         gui.wait_for_page("sendPage", timeout_ms=20000)
+        apply_review(gui)
         gui.wait_for_property(
             "sendPaymentRequestPayToValue", "text",
             lambda v: "queued-label" in str(v), timeout_ms=20000,
@@ -271,6 +332,41 @@ def run_tests():
             "A request for another network must not populate the form"
         )
         print("Test 9 PASSED: address from another network rejected.")
+
+        # ----------------------------------------------------------------
+        # Test 10: markup in a request is shown as typed and loads nothing.
+        # ----------------------------------------------------------------
+        image_server = start_image_server()
+        try:
+            image_url = f"http://127.0.0.1:{image_server.server_port}"
+            markup_label = f'<b>markup</b><img src="{image_url}/label.png">'
+            markup_message = f'<img src="{image_url}/message.png">'
+            harness.restart_gui(extra_args=[
+                f"bitcoin:{first_address}"
+                f"?label={quote(markup_label, safe='')}"
+                f"&message={quote(markup_message, safe='')}"
+            ])
+            wait_for_rpc(harness.gui_rpc_port)
+            gui = harness.driver
+            wait_for_wallet(gui)
+            gui.wait_for_page("sendPage", timeout_ms=20000)
+            wait_for_review(gui)
+            assert gui.get_property("paymentRequestReviewLabel", "text") == markup_label
+            assert gui.get_property("paymentRequestReviewMessage", "text") == markup_message
+            apply_review(gui)
+            gui.wait_for_property(
+                "sendPaymentRequestMessageTextValue", "text", markup_message,
+                timeout_ms=10000,
+            )
+            # Image loads are asynchronous; give a fetch time to arrive.
+            time.sleep(3)
+            assert not ImageRequestRecorder.requests, (
+                f"Markup triggered network requests: {ImageRequestRecorder.requests}"
+            )
+        finally:
+            image_server.shutdown()
+            image_server.server_close()
+        print("Test 10 PASSED: markup shown literally, no network request.")
 
         print("\n" + "=" * 50)
         print("All tests PASSED")
