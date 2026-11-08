@@ -46,7 +46,8 @@ Page {
             }
             nextSectionStacks[sectionId] = nextStack
             internal.sectionStacks = nextSectionStacks
-            nextStack.push(page, properties || {}, StackView.Immediate)
+            const stack = nextStack as PageStack
+            stack.push(page, properties || {}, StackView.Immediate)
         }
 
         if (internal.currentStack) internal.currentStack.visible = false

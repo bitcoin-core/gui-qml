@@ -35,6 +35,7 @@ find_package(Qt 6.2 MODULE REQUIRED
 find_package(QRencode MODULE REQUIRED)
 
 option(ENABLE_TEST_AUTOMATION "Enable test automation bridge for QML UI testing" OFF)
+option(ENABLE_QML_LINT "Enable strict QML static analysis (Qt 6.10 or newer)" OFF)
 
 # Do not build any executable targets from bitcoin submodule
 set(BUILD_BENCH OFF)
@@ -209,6 +210,10 @@ target_link_libraries(bitcoin-core-app
     bitcoinqt
 )
 qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+
+if(ENABLE_QML_LINT)
+  include(cmake/QmlLint.cmake)
+endif()
 
 if(ENABLE_TEST_AUTOMATION)
   get_target_property(qt_lib_type Qt6::Core TYPE)

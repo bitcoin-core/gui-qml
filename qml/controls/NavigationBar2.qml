@@ -7,11 +7,12 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 Pane {
+    id: root
     property alias leftItem: left_section.contentItem
     property alias centerItem: center_section.contentItem
     property alias rightItem: right_section.contentItem
     property var navigationStack: null
-    property bool showBackButton: navigationStack ? navigationStack.canGoBack : false
+    property bool showBackButton: root.navigationStack ? root.navigationStack.canGoBack : false
     property string backButtonObjectName: ""
     property string backButtonText: qsTr("Back")
 
@@ -25,15 +26,15 @@ Pane {
             Layout.preferredWidth: Math.floor(Math.max(left_div.implicitWidth, right_div.implicitWidth))
             contentItem: RowLayout {
                 NavButton {
-                    objectName: backButtonObjectName
-                    visible: showBackButton
+                    objectName: root.backButtonObjectName
+                    visible: root.showBackButton
                     iconSource: "image://images/caret-left"
-                    text: backButtonText
+                    text: root.backButtonText
                     onClicked: {
-                        if (navigationStack) {
-                            navigationStack.goBack()
+                        if (root.navigationStack) {
+                            root.navigationStack.goBack()
                         }
-                        backClicked()
+                        root.backClicked()
                     }
                 }
                 Section {

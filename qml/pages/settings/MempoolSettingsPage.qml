@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 
 import "../../controls"
@@ -14,8 +15,8 @@ SettingsPage {
     title: qsTr("Mempool information")
     showBackButton: false
 
-    readonly property var maxMempoolStatus: (optionsModel.coreSettingStatuses || ({})).maxmempool || ({})
-    property string mempoolSizeText: String(optionsModel.maxMempoolSizeMB)
+    readonly property var maxMempoolStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).maxmempool || ({})
+    property string mempoolSizeText: String(ApplicationModels.optionsModel.maxMempoolSizeMB)
     property string mempoolSizeError: ""
 
     function formatMegabytes(valueMb) {
@@ -26,18 +27,18 @@ SettingsPage {
 
     function validateMempoolSize(valueMb) {
         if (isNaN(valueMb)
-                || valueMb < optionsModel.minMaxMempoolSizeMB
-                || valueMb > optionsModel.maxMaxMempoolSizeMB) {
+                || valueMb < ApplicationModels.optionsModel.minMaxMempoolSizeMB
+                || valueMb > ApplicationModels.optionsModel.maxMaxMempoolSizeMB) {
             return qsTr("Choose a value between %1 MB and %2 MB.")
-                .arg(optionsModel.minMaxMempoolSizeMB)
-                .arg(optionsModel.maxMaxMempoolSizeMB)
+                .arg(ApplicationModels.optionsModel.minMaxMempoolSizeMB)
+                .arg(ApplicationModels.optionsModel.maxMaxMempoolSizeMB)
         }
         return ""
     }
 
     SettingsRestartNotice {
         objectName: "mempoolRestartNotice"
-        visible: optionsModel.mempoolSettingsDirty
+        visible: ApplicationModels.optionsModel.mempoolSettingsDirty
         Layout.fillWidth: true
     }
 
@@ -49,7 +50,7 @@ SettingsPage {
             objectName: "mempoolTransactionsRow"
             Layout.fillWidth: true
             title: qsTr("Transactions")
-            value: Number(nodeModel.mempoolTransactionCount).toLocaleString(Qt.locale(), "f", 0)
+            value: Number(ApplicationModels.nodeModel.mempoolTransactionCount).toLocaleString(Qt.locale(), "f", 0)
         }
 
         ValueRow {
@@ -57,8 +58,8 @@ SettingsPage {
             Layout.fillWidth: true
             title: qsTr("Memory used")
             value: qsTr("%1 / %2")
-                .arg(root.formatMegabytes(nodeModel.mempoolUsageMB))
-                .arg(root.formatMegabytes(nodeModel.mempoolMaxUsageMB))
+                .arg(root.formatMegabytes(ApplicationModels.nodeModel.mempoolUsageMB))
+                .arg(root.formatMegabytes(ApplicationModels.nodeModel.mempoolMaxUsageMB))
         }
 
         TextFieldRow {
@@ -66,14 +67,14 @@ SettingsPage {
             objectName: "mempoolSizeLimitRow"
             Layout.fillWidth: true
             title: qsTr("Mempool size limit (MB)")
-            enabled: optionsModel.settingsReady !== false && !optionsModel.settingsPending
+            enabled: ApplicationModels.optionsModel.settingsReady !== false && !ApplicationModels.optionsModel.settingsPending
                 && root.maxMempoolStatus.canEdit !== false
             fieldObjectName: "mempoolSizeLimitInput"
             fieldWidth: 80
             text: root.mempoolSizeText
             validator: IntValidator {
-                bottom: optionsModel.minMaxMempoolSizeMB
-                top: optionsModel.maxMaxMempoolSizeMB
+                bottom: ApplicationModels.optionsModel.minMaxMempoolSizeMB
+                top: ApplicationModels.optionsModel.maxMaxMempoolSizeMB
             }
             inputMethodHints: Qt.ImhDigitsOnly
             errorText: root.mempoolSizeError
@@ -89,14 +90,14 @@ SettingsPage {
                 const parsed = parseInt(mempoolSizeRow.text, 10)
                 root.mempoolSizeError = root.validateMempoolSize(parsed)
                 if (root.mempoolSizeError.length === 0) {
-                    optionsModel.maxMempoolSizeMB = parsed
+                    ApplicationModels.optionsModel.maxMempoolSizeMB = parsed
                     root.mempoolSizeText = String(parsed)
                 }
             }
         }
     }
 
-    Component.onCompleted: nodeModel.mempoolInfoPollingActive = visible
-    Component.onDestruction: nodeModel.mempoolInfoPollingActive = false
-    onVisibleChanged: nodeModel.mempoolInfoPollingActive = visible
+    Component.onCompleted: ApplicationModels.nodeModel.mempoolInfoPollingActive = visible
+    Component.onDestruction: ApplicationModels.nodeModel.mempoolInfoPollingActive = false
+    onVisibleChanged: ApplicationModels.nodeModel.mempoolInfoPollingActive = visible
 }

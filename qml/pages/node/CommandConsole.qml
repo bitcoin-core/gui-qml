@@ -51,10 +51,10 @@ Page {
     onTabActiveChanged: if (!tabActive) autocompletePopup.close()
 
     function _pushPalette() {
-        rpcConsoleModel.requestColor = consoleRequestColor
-        rpcConsoleModel.replyColor   = consoleReplyColor
-        rpcConsoleModel.errorColor   = Theme.color.red
-        rpcConsoleModel.keyColor     = consoleKeyColor
+        ApplicationModels.rpcConsoleModel.requestColor = consoleRequestColor
+        ApplicationModels.rpcConsoleModel.replyColor   = consoleReplyColor
+        ApplicationModels.rpcConsoleModel.errorColor   = Theme.color.red
+        ApplicationModels.rpcConsoleModel.keyColor     = consoleKeyColor
     }
     // Focus the command input when the console becomes the active view, so the
     // user can type immediately. Mirrors Core's RPCConsole, which focuses its
@@ -83,14 +83,14 @@ Page {
     Shortcut {
         enabled: root.visible
         sequence: Qt.platform.os === "osx" ? "Meta+L" : "Ctrl+L"
-        onActivated: rpcConsoleModel.clear()
+        onActivated: ApplicationModels.rpcConsoleModel.clear()
     }
 
     // Exposed for E2E output-content verification.
-    property int outputCount: rpcConsoleModel.outputModel.count
+    property int outputCount: ApplicationModels.rpcConsoleModel.outputModel.count
 
     // Exposed for E2E execution-complete detection.
-    property bool executing: rpcConsoleModel.executing
+    property bool executing: ApplicationModels.rpcConsoleModel.executing
 
     // Guard flag: true while Up/Down navigation is setting inputField.text
     // programmatically, so onTextChanged does not reset the history cursor.
@@ -139,7 +139,7 @@ Page {
             bottomMargin: 4
         }
 
-        listModel: rpcConsoleModel.outputModel
+        listModel: ApplicationModels.rpcConsoleModel.outputModel
         contentRole: "content"
         contentTextFormat: Text.RichText
         leftColumnRole: "timestamp"
@@ -190,7 +190,7 @@ Page {
         // the highlighted suggestion. Dismissal on outside taps is handled by the
         // input losing focus (see the TapHandler and inputField.onActiveFocusChanged).
         closePolicy: Popup.CloseOnEscape
-        onClosed: filteredCommands = []
+        onClosed: root.filteredCommands = []
 
         ListView {
             id: autocompleteList
@@ -198,9 +198,9 @@ Page {
             Layout.preferredWidth: autocompletePopup.width - 2 * autocompletePopup.menuPadding
             Layout.preferredHeight: Math.min(contentHeight, 216)
             clip: true
-            currentIndex: autocompleteIndex
+            currentIndex: root.autocompleteIndex
             highlightFollowsCurrentItem: true
-            model: filteredCommands
+            model: root.filteredCommands
             delegate: ContextMenuButton {
                 required property string modelData
                 required property int index
@@ -208,12 +208,12 @@ Page {
                 width: autocompleteList.width
                 text: modelData
                 autoClose: false
-                selected: index === autocompleteIndex
+                selected: index === root.autocompleteIndex
                 focusPolicy: Qt.NoFocus
-                onHoveredChanged: if (hovered) autocompleteIndex = index
+                onHoveredChanged: if (hovered) root.autocompleteIndex = index
                 // Apply the suggestion without stealing focus from the
                 // input field — per MarnixCroes PR #540 feedback.
-                onTriggered: applySuggestion(modelData)
+                onTriggered: root.applySuggestion(modelData)
             }
         }
     }
@@ -300,28 +300,28 @@ Page {
                 // popup is open; otherwise it submits the command. This mirrors the
                 // Tab behaviour and avoids submitting the raw half-typed text while a
                 // completion is highlighted.
-                Keys.onReturnPressed: root.acceptHighlightedOrSubmit(event)
-                Keys.onEnterPressed: root.acceptHighlightedOrSubmit(event)
+                Keys.onReturnPressed: (event) => root.acceptHighlightedOrSubmit(event)
+                Keys.onEnterPressed: (event) => root.acceptHighlightedOrSubmit(event)
 
                 // Up/Down: navigate autocomplete when popup is open,
                 // otherwise browse command history.
                 Keys.onUpPressed: {
-                    if (autocompletePopup.visible && filteredCommands.length > 0) {
-                        autocompleteIndex = Math.max(0, autocompleteIndex - 1)
+                    if (autocompletePopup.visible && root.filteredCommands.length > 0) {
+                        root.autocompleteIndex = Math.max(0, root.autocompleteIndex - 1)
                     } else {
                         internal.navigatingHistory = true
-                        var result = rpcConsoleModel.browseHistory(1, inputField.text)
+                        var result = ApplicationModels.rpcConsoleModel.browseHistory(1, inputField.text)
                         inputField.text = result
                         inputField.cursorPosition = result.length
                         internal.navigatingHistory = false
                     }
                 }
                 Keys.onDownPressed: {
-                    if (autocompletePopup.visible && filteredCommands.length > 0) {
-                        autocompleteIndex = Math.min(filteredCommands.length - 1, autocompleteIndex + 1)
+                    if (autocompletePopup.visible && root.filteredCommands.length > 0) {
+                        root.autocompleteIndex = Math.min(root.filteredCommands.length - 1, root.autocompleteIndex + 1)
                     } else {
                         internal.navigatingHistory = true
-                        var result = rpcConsoleModel.browseHistory(-1, inputField.text)
+                        var result = ApplicationModels.rpcConsoleModel.browseHistory(-1, inputField.text)
                         inputField.text = result
                         inputField.cursorPosition = result.length
                         internal.navigatingHistory = false
@@ -329,9 +329,9 @@ Page {
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
-                Keys.onTabPressed: {
-                    if (autocompletePopup.visible && filteredCommands.length > 0) {
-                        applySuggestion(filteredCommands[autocompleteIndex])
+                Keys.onTabPressed: (event) => {
+                    if (autocompletePopup.visible && root.filteredCommands.length > 0) {
+                        root.applySuggestion(root.filteredCommands[root.autocompleteIndex])
                         event.accepted = true
                     }
                 }
@@ -339,9 +339,9 @@ Page {
                 onTextChanged: {
                     root.commandDraft = inputField.text
                     if (!internal.navigatingHistory) {
-                        rpcConsoleModel.resetHistoryNavigation()
+                        ApplicationModels.rpcConsoleModel.resetHistoryNavigation()
                     }
-                    updateFilteredCommands()
+                    root.updateFilteredCommands()
                 }
 
                 // Auto-select existing text when the field gains focus
@@ -367,7 +367,7 @@ Page {
         // Calling this before init used to throw and abort the textChanged
         // handler, which (combined with the oversized popup) made the
         // whole console appear blank on first keystroke.
-        var cmds = rpcConsoleModel ? rpcConsoleModel.availableCommands : null
+        var cmds = ApplicationModels.rpcConsoleModel ? ApplicationModels.rpcConsoleModel.availableCommands : null
         if (!cmds || cmds.length === 0) {
             filteredCommands = []
             autocompletePopup.close()
@@ -386,7 +386,7 @@ Page {
             }
         }
         filteredCommands = matches
-        autocompleteIndex = 0
+        root.autocompleteIndex = 0
         if (matches.length > 0 && !internal.navigatingHistory) {
             autocompletePopup.open()
         } else {
@@ -422,7 +422,7 @@ Page {
             inputField.forceActiveFocus()
             return
         }
-        rpcConsoleModel.clear()
+        ApplicationModels.rpcConsoleModel.clear()
         inputField.forceActiveFocus()
     }
 
@@ -432,7 +432,7 @@ Page {
     // command, dismiss the menu first (click away or type past the matches).
     function runHighlightedOrSubmit() {
         if (autocompletePopup.visible && filteredCommands.length > 0) {
-            inputField.text = filteredCommands[autocompleteIndex]
+            inputField.text = filteredCommands[root.autocompleteIndex]
             autocompletePopup.close()
         }
         submitCommand()
@@ -449,7 +449,7 @@ Page {
         // Only clear the input if the command was accepted. submitCommand()
         // returns false when another command is still executing, so a refused
         // command stays in the field instead of silently vanishing.
-        if (rpcConsoleModel.submitCommand(cmd, root.walletName)) {
+        if (ApplicationModels.rpcConsoleModel.submitCommand(cmd, root.walletName)) {
             inputField.text = ""
             filteredCommands = []
         }

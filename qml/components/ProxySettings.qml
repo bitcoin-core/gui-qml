@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
 
@@ -11,7 +10,7 @@ import org.bitcoincore.qt 1.0
 
 ColumnLayout {
     id: root
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property var coreSettingsModel: settingsModel.coreSettings
     property string proxyLocationHeader: qsTr("Proxy location")
     readonly property var proxySetting: coreSettingsModel.entry("proxy")
@@ -58,8 +57,9 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.toggle()
-            loadedItem.toggled()
+            const control = loadedItem as OptionSwitch
+            control.toggle()
+            control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -67,10 +67,10 @@ ColumnLayout {
         id: defaultProxy
         objectName: "proxyAddressSetting"
         Layout.fillWidth: true
-        header: proxyLocationHeader
-        errorText: loadedItem ? loadedItem.validationError : ""
+        header: root.proxyLocationHeader
+        errorText: loadedItem ? (loadedItem as ProxyLocationInput).validationError : ""
         state: root.proxyEnabled && root.proxySetting.canEdit ? "FILLED" : "DISABLED"
-        showErrorText: loadedItem && !loadedItem.validInput && root.proxyEnabled
+        showErrorText: loadedItem && !(loadedItem as ProxyLocationInput).validInput && root.proxyEnabled
         infoText: root.proxySetting.infoText
         showInfoText: !showErrorText && infoText.length > 0
         actionItem: ProxyLocationInput {
@@ -101,7 +101,7 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.beginEdit()
+            (loadedItem as ProxyLocationInput).beginEdit()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -131,8 +131,9 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.toggle()
-            loadedItem.toggled()
+            const control = loadedItem as OptionSwitch
+            control.toggle()
+            control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -140,10 +141,10 @@ ColumnLayout {
         id: torProxy
         objectName: "torAddressSetting"
         Layout.fillWidth: true
-        header: proxyLocationHeader
-        errorText: loadedItem ? loadedItem.validationError : ""
+        header: root.proxyLocationHeader
+        errorText: loadedItem ? (loadedItem as ProxyLocationInput).validationError : ""
         state: root.torEnabled && root.onionSetting.canEdit ? "FILLED" : "DISABLED"
-        showErrorText: loadedItem && !loadedItem.validInput && root.torEnabled
+        showErrorText: loadedItem && !(loadedItem as ProxyLocationInput).validInput && root.torEnabled
         infoText: root.onionSetting.infoText
         showInfoText: !showErrorText && infoText.length > 0
         actionItem: ProxyLocationInput {
@@ -174,7 +175,7 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.beginEdit()
+            (loadedItem as ProxyLocationInput).beginEdit()
         }
     }
     Separator { Layout.fillWidth: true }

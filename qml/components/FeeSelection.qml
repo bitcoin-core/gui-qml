@@ -7,7 +7,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../controls"
-import "../components"
 
 ColumnLayout {
     id: root
@@ -26,9 +25,12 @@ ColumnLayout {
         ? ""
         : feeModel.get(root.selectedIndex).feeDuration
     property int selectedTarget: feeModel.get(root.selectedIndex).target
-    property string selectedEstimate: customSelected
-        ? ""
-        : (walletModel ? (walletModel.feeEstimateRevision, walletModel.estimatedFeeForTarget(selectedTarget)) : "")
+    property string selectedEstimate: {
+        // Read the revision so completed estimates reevaluate this binding.
+        const revision = root.walletModel ? root.walletModel.feeEstimateRevision : 0
+        return !root.customSelected && root.walletModel
+            ? root.walletModel.estimatedFeeForTarget(root.selectedTarget) : ""
+    }
     property bool customFeeRateValid: walletModel ? walletModel.customFeeRateValid : false
     readonly property int customFeeRateMaximumLength: 12
 
@@ -146,34 +148,40 @@ ColumnLayout {
             lineHeight: Theme.text.body.lineHeight
             lineHeightMode: Text.FixedHeight
             color: Theme.color.neutral7
-            text: root.walletModel ? (root.walletModel.feeEstimateRevision, root.walletModel.estimatedFee) : ""
+            text: {
+                const revision = root.walletModel ? root.walletModel.feeEstimateRevision : 0
+                return root.walletModel ? root.walletModel.estimatedFee : ""
+            }
         }
     }
 
-    ContextMenu {
-        id: feePopup
-        objectName: "feeSelectionPopup"
-        modal: true
-        dim: false
-        x: dropDownButton.x + dropDownButton.width - width
-        y: dropDownButton.height + 6
+    QtObject {
+        readonly property ContextMenu menu: ContextMenu {
+            id: feePopup
+            parent: root
+            objectName: "feeSelectionPopup"
+            modal: true
+            dim: false
+            x: dropDownButton.x + dropDownButton.width - width
+            y: dropDownButton.height + 6
 
-        ContextMenuPicker {
-            id: feePicker
-            objectName: "feeSelectionList"
-            model: root._feePickerModel
-            subtitleRole: "estimate"
-            objectNameRole: "objectName"
-            subtitleObjectNameRole: "estimateObjectName"
-            currentValue: root.customSelected ? -1 : root.selectedTarget
-            onActivated: function(value) {
-                if (root.walletModel) {
-                    root.walletModel.customFeeEnabled = (value === -1)
+            ContextMenuPicker {
+                id: feePicker
+                objectName: "feeSelectionList"
+                model: root._feePickerModel
+                subtitleRole: "estimate"
+                objectNameRole: "objectName"
+                subtitleObjectNameRole: "estimateObjectName"
+                currentValue: root.customSelected ? -1 : root.selectedTarget
+                onActivated: function(value) {
+                    if (root.walletModel) {
+                        root.walletModel.customFeeEnabled = (value === -1)
+                    }
+                    if (value !== -1) {
+                        root.feeChanged(value)
+                    }
+                    feePopup.close()
                 }
-                if (value !== -1) {
-                    root.feeChanged(value)
-                }
-                feePopup.close()
             }
         }
     }

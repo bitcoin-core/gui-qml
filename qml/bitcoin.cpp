@@ -20,6 +20,7 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#include <qml/applicationmodels.h>
 #include <qml/backendexecutor.h>
 #include <qml/quithandler.h>
 #include <qml/shutdowncoordinator.h>
@@ -290,6 +291,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     url_opener_instance = &url_opener;
     bitcoin_uri_model_instance = &bitcoin_uri_model;
 
+    qmlRegisterSingletonType<ApplicationModels>("org.bitcoincore.qt", 1, 0, "ApplicationModels",
+        [](QQmlEngine* qml_engine, QJSEngine*) -> QObject* { return new ApplicationModels(qml_engine); });
     qmlRegisterSingletonType<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(app_mode_instance, QQmlEngine::CppOwnership);
         return app_mode_instance;

@@ -49,8 +49,8 @@ PageStack {
     function startBackup() {
         if (!root.wallet) return
         root.resetToRoot()
-        if (root.currentItem && typeof root.currentItem.startBackup === "function") {
-            root.currentItem.startBackup()
+        if (root.currentItem && typeof (root.currentItem as SettingsPages.WalletSectionPage).startBackup === "function") {
+            (root.currentItem as SettingsPages.WalletSectionPage).startBackup()
         }
     }
 

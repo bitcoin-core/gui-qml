@@ -12,7 +12,7 @@ import "../controls"
 
 ColumnLayout {
     id: root
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property int minimumStorageRequiredGB: 0
     property string validationError: ""
     readonly property string storageAvailableText: root.settingsModel.storageAvailableText || ""

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
@@ -17,7 +18,7 @@ OnboardingView {
     property bool encryptedWallet: false
     // The wallet this page announces, not whichever wallet is selected.
     property var wallet: null
-    property bool navigationBackEnabled: false
+    navigationBackEnabled: false
     readonly property bool backupRequired: !watchOnly
     signal done()
 
@@ -34,7 +35,7 @@ OnboardingView {
     secondaryButtonObjectName: "createWalletReadyDoneButton"
     onSecondaryClicked: root.done()
 
-    Component.onCompleted: walletController.clearWalletLocationOpenError()
+    Component.onCompleted: ApplicationModels.walletController.clearWalletLocationOpenError()
 
     imageView: WalletSuccessBadge {
         objectName: "walletCreationSuccessBadge"
@@ -73,13 +74,13 @@ OnboardingView {
                     Layout.leftMargin: 4
                     buttonSize: NeutralButton.Large
                     text: qsTr("View file")
-                    onClicked: walletController.openWalletLocation(root.wallet)
+                    onClicked: ApplicationModels.walletController.openWalletLocation(root.wallet)
                 }
                 CoreText {
                     objectName: "createWalletBackupErrorText"
                     visible: text.length > 0
                     Layout.fillWidth: true
-                    text: walletController.walletLocationOpenError
+                    text: ApplicationModels.walletController.walletLocationOpenError
                     color: Theme.color.red
                     font: Theme.text.caption.font
                     wrapMode: Text.WordWrap

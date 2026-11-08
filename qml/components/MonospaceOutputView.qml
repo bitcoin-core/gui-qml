@@ -4,8 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
 import "../controls"
 
 // MonospaceOutputView — a scrollable monospace text display backed by a
@@ -125,7 +123,7 @@ Item {
             const pattern = root.searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
             const expression = new RegExp(pattern, "gi")
             for (let row = 0; row < rowRepeater.count; ++row) {
-                const item = rowRepeater.itemAt(row)
+                const item = (rowRepeater.itemAt(row) as MonospaceOutputRow)
                 if (!item || !item.contentEditor) continue
                 const editor = item.contentEditor
                 const plainText = editor.getText(0, editor.length)
@@ -162,7 +160,7 @@ Item {
                 || root.currentSearchResultIndex >= root._searchMatches.length) return
 
         const match = root._searchMatches[root.currentSearchResultIndex]
-        const item = rowRepeater.itemAt(match.row)
+        const item = (rowRepeater.itemAt(match.row) as MonospaceOutputRow)
         if (!item || !item.contentEditor) return
         const editor = item.contentEditor
         editor.select(match.start, match.end)
@@ -269,104 +267,39 @@ Item {
                 onItemAdded: root.scheduleSearchRefresh(false)
                 onItemRemoved: root.scheduleSearchRefresh(false)
 
-                delegate: RowLayout {
-                    id: rowRoot
-
-                    // `model` is the Repeater delegate's implicit context
-                    // property; marking it required pins the reference so
-                    // bracket lookup (model[roleName]) resolves reliably.
-                    required property var model
-                    required property int index
-                    readonly property string rowContent: rowRoot.model[root.contentRole] ?? ""
-                    onRowContentChanged: root.scheduleSearchRefresh(false)
-                    readonly property int rowCategory: root.categoryRole !== ""
-                                                       ? Number(rowRoot.model[root.categoryRole] ?? -1)
-                                                       : -1
-                    readonly property bool useCategoryColors: root.categoryRole !== ""
-                    readonly property color effectiveContentColor: !useCategoryColors
-                                                                  ? root.contentColor
-                                                                  : rowCategory === root.requestCategory
-                                                                    ? root.requestContentColor
-                                                                    : rowCategory === root.errorCategory
-                                                                      ? root.errorContentColor
-                                                                      : rowCategory === root.replyCategory
-                                                                        ? root.replyContentColor
-                                                                        : root.contentColor
-                    readonly property color effectiveLeftColumnColor: !useCategoryColors
-                                                                    ? root.leftColumnColor
-                                                                    : rowCategory === root.requestCategory
-                                                                      ? root.requestLeftColumnColor
-                                                                      : rowCategory === root.errorCategory
-                                                                        ? root.errorLeftColumnColor
-                                                                        : rowCategory === root.replyCategory
-                                                                          ? root.replyLeftColumnColor
-                                                                          : root.leftColumnColor
-                    property alias contentEditor: contentTextEditor
-
-                    objectName: root.objectName.length > 0 ? root.objectName + "_row_" + index : ""
+                delegate: MonospaceOutputRow {
                     width: contentColumn.width
-                    spacing: root.columnSpacing
-
-                    Accessible.role: Accessible.ListItem
-                    Accessible.name: rowContent
-
-                    // Left column (optional)
-                    Text {
-                        objectName: root.objectName.length > 0 ? root.objectName + "_left_" + rowRoot.index : ""
-                        visible: root.leftColumnRole !== ""
-                        text: root.leftColumnRole !== ""
-                              ? (rowRoot.model[root.leftColumnRole] ?? "") : ""
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
-                        lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                        color: rowRoot.effectiveLeftColumnColor
-                        Layout.minimumWidth: Math.ceil(Math.max(leftMetrics.width, implicitWidth))
-                        Layout.preferredWidth: Math.max(root.leftColumnWidth, Layout.minimumWidth)
-                        Layout.alignment: Qt.AlignTop
-                        wrapMode: Text.NoWrap
-                    }
-
-                    // Main content column: TextEdit for per-row select + copy.
-                    TextEdit {
-                        id: contentTextEditor
-                        objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
-                        text: rowRoot.rowContent
-                        readOnly: true
-                        selectByMouse: true
-                        persistentSelection: root.searchText.length > 0
-                        textFormat: root.contentTextFormat
-                        wrapMode: Text.WrapAnywhere
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        color: rowRoot.effectiveContentColor
-                        selectionColor: root.selectionColor
-                        selectedTextColor: root.selectedTextColor
-                        activeFocusOnPress: true
-
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignTop
-                    }
-
-                    // Right column (optional)
-                    Text {
-                        objectName: root.objectName.length > 0 ? root.objectName + "_right_" + rowRoot.index : ""
-                        visible: root.rightColumnRole !== ""
-                        text: root.rightColumnRole !== ""
-                              ? (rowRoot.model[root.rightColumnRole] ?? "") : ""
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
-                        lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                        color: root.rightColumnColor
-                        Layout.preferredWidth: root.rightColumnWidth > 0 ? root.rightColumnWidth : rightMetrics.width
-                        Layout.alignment: Qt.AlignTop
-                        horizontalAlignment: Text.AlignRight
-                        wrapMode: Text.NoWrap
-                    }
+                    onRefreshRequested: root.scheduleSearchRefresh(false)
+                    viewCategoryRole: root.categoryRole
+                    viewColumnSpacing: root.columnSpacing
+                    viewContentColor: root.contentColor
+                    viewContentRole: root.contentRole
+                    viewContentTextFormat: root.contentTextFormat
+                    viewErrorCategory: root.errorCategory
+                    viewErrorContentColor: root.errorContentColor
+                    viewErrorLeftColumnColor: root.errorLeftColumnColor
+                    viewFontFamily: root.fontFamily
+                    viewFontPixelSize: root.fontPixelSize
+                    viewFontStyleName: root.fontStyleName
+                    viewLeftColumnColor: root.leftColumnColor
+                    viewLeftColumnRole: root.leftColumnRole
+                    viewLeftColumnWidth: root.leftColumnWidth
+                    viewObjectName: root.objectName
+                    viewReplyCategory: root.replyCategory
+                    viewReplyContentColor: root.replyContentColor
+                    viewReplyLeftColumnColor: root.replyLeftColumnColor
+                    viewRequestCategory: root.requestCategory
+                    viewRequestContentColor: root.requestContentColor
+                    viewRequestLeftColumnColor: root.requestLeftColumnColor
+                    viewRightColumnColor: root.rightColumnColor
+                    viewRightColumnRole: root.rightColumnRole
+                    viewRightColumnWidth: root.rightColumnWidth
+                    viewSearchText: root.searchText
+                    viewSelectedTextColor: root.selectedTextColor
+                    viewSelectionColor: root.selectionColor
+                    viewTextLineHeight: root.textLineHeight
+                    measuredLeftWidth: leftMetrics.width
+                    measuredRightWidth: rightMetrics.width
                 }
             }
         }
@@ -386,4 +319,5 @@ Item {
             root.scrollToBottom()
         }
     }
+
 }

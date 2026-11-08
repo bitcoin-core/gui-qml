@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -15,11 +16,11 @@ Popup {
     property var rows: []
     readonly property int informationRowCount: informationRepeater.count
     readonly property string firstInformationValue: rows.length > 0 ? rows[0].value : ""
-    readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueLineCount : 0
-    readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
+    readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueLineCount : 0
+    readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueWrapMode : Text.NoWrap
     readonly property int contentMargin: 28
 
-    onAboutToShow: rows = nodeModel.nodeInformationRows()
+    onAboutToShow: rows = ApplicationModels.nodeModel.nodeInformationRows()
 
     modal: true
     padding: 0
@@ -76,43 +77,7 @@ Popup {
                 Repeater {
                     id: informationRepeater
                     model: root.rows
-                    delegate: ColumnLayout {
-                        readonly property int valueLineCount: informationValue.lineCount
-                        readonly property int valueWrapMode: informationValue.wrapMode
-
-                        width: informationColumn.width
-                        spacing: 0
-
-                        KeyValueRow {
-                            Layout.fillWidth: true
-                            keyWidth: 150
-                            key: CoreText {
-                                text: modelData.label
-                                color: Theme.color.neutral7
-                                font.pixelSize: 13
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                                wrap: false
-                            }
-                            value: CoreText {
-                                id: informationValue
-                                objectName: "nodeInformationValue_" + index
-                                text: modelData.value
-                                color: Theme.color.neutral9
-                                font.pixelSize: 13
-                                wrapMode: Text.WordWrap
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                            }
-                        }
-
-                        Separator {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 10
-                            Layout.bottomMargin: 10
-                            visible: index < root.rows.length - 1
-                        }
-                    }
+                    delegate: NodeInformationRow { width: informationColumn.width; rowCount: root.rows.length }
                 }
             }
         }
@@ -127,4 +92,5 @@ Popup {
             onClicked: root.close()
         }
     }
+
 }

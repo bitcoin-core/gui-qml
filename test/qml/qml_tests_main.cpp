@@ -4274,6 +4274,54 @@ private:
     QString m_last_url;
 };
 
+class MockApplicationModels : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(MockNodeModel* nodeModel READ nodeModel CONSTANT)
+    Q_PROPERTY(MockChainModel* chainModel READ chainModel CONSTANT)
+    Q_PROPERTY(MockBlockClockModel* blockClockModel READ blockClockModel CONSTANT)
+    Q_PROPERTY(MockOptionsModel* optionsModel READ optionsModel CONSTANT)
+    Q_PROPERTY(MockNetworkTrafficTower* networkTrafficTower READ networkTrafficTower CONSTANT)
+    Q_PROPERTY(MockNetworkStatusModel* networkStatusModel READ networkStatusModel CONSTANT)
+    Q_PROPERTY(MockPeerTableModel* peerTableModel READ peerTableModel CONSTANT)
+    Q_PROPERTY(MockPeerListModelProxy* peerListModelProxy READ peerListModelProxy CONSTANT)
+    Q_PROPERTY(MockBanListModel* banListModel READ banListModel CONSTANT)
+    Q_PROPERTY(MockDebugLogModel* debugLogModel READ debugLogModel CONSTANT)
+    Q_PROPERTY(QObject* rpcConsoleModel READ rpcConsoleModel CONSTANT)
+    Q_PROPERTY(MockWalletController* walletController READ walletController CONSTANT)
+    Q_PROPERTY(MockWalletListModel* walletListModel READ walletListModel CONSTANT)
+    Q_PROPERTY(MockDesktopWindowBehaviorModel* desktopWindowBehaviorModel READ desktopWindowBehaviorModel CONSTANT)
+    Q_PROPERTY(QObject* desktopTrayIconController READ desktopTrayIconController CONSTANT)
+    Q_PROPERTY(MockOptionsModel* onboardingOptionsModel READ onboardingOptionsModel CONSTANT)
+    Q_PROPERTY(bool testAutomationEnabled READ testAutomationEnabled CONSTANT)
+    Q_PROPERTY(QString startupError READ startupError CONSTANT)
+
+public:
+    explicit MockApplicationModels(QQmlEngine* engine) : QObject(engine), m_context(engine->rootContext()) {}
+
+    MockNodeModel* nodeModel() const { return m_context->contextProperty(QStringLiteral("nodeModel")).value<MockNodeModel*>(); }
+    MockChainModel* chainModel() const { return m_context->contextProperty(QStringLiteral("chainModel")).value<MockChainModel*>(); }
+    MockBlockClockModel* blockClockModel() const { return m_context->contextProperty(QStringLiteral("blockClockModel")).value<MockBlockClockModel*>(); }
+    MockOptionsModel* optionsModel() const { return m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
+    MockNetworkTrafficTower* networkTrafficTower() const { return m_context->contextProperty(QStringLiteral("networkTrafficTower")).value<MockNetworkTrafficTower*>(); }
+    MockNetworkStatusModel* networkStatusModel() const { return m_context->contextProperty(QStringLiteral("networkStatusModel")).value<MockNetworkStatusModel*>(); }
+    MockPeerTableModel* peerTableModel() const { return m_context->contextProperty(QStringLiteral("peerTableModel")).value<MockPeerTableModel*>(); }
+    MockPeerListModelProxy* peerListModelProxy() const { return m_context->contextProperty(QStringLiteral("peerListModelProxy")).value<MockPeerListModelProxy*>(); }
+    MockBanListModel* banListModel() const { return m_context->contextProperty(QStringLiteral("banListModel")).value<MockBanListModel*>(); }
+    MockDebugLogModel* debugLogModel() const { return m_context->contextProperty(QStringLiteral("debugLogModel")).value<MockDebugLogModel*>(); }
+    QObject* rpcConsoleModel() const { return m_context->contextProperty(QStringLiteral("rpcConsoleModel")).value<QObject*>(); }
+    MockWalletController* walletController() const { return m_context->contextProperty(QStringLiteral("walletController")).value<MockWalletController*>(); }
+    MockWalletListModel* walletListModel() const { return m_context->contextProperty(QStringLiteral("walletListModel")).value<MockWalletListModel*>(); }
+    MockDesktopWindowBehaviorModel* desktopWindowBehaviorModel() const { return m_context->contextProperty(QStringLiteral("desktopWindowBehaviorModel")).value<MockDesktopWindowBehaviorModel*>(); }
+    QObject* desktopTrayIconController() const { return m_context->contextProperty(QStringLiteral("desktopTrayIconController")).value<QObject*>(); }
+    MockOptionsModel* onboardingOptionsModel() const { return m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
+    bool testAutomationEnabled() const { return m_context->contextProperty(QStringLiteral("testAutomationEnabled")).toBool(); }
+    QString startupError() const { return m_context->contextProperty(QStringLiteral("message")).toString(); }
+
+private:
+    QQmlContext* m_context;
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4360,6 +4408,8 @@ public Q_SLOTS:
         second_wallet_model.setCurrentTransaction(&second_wallet_transaction);
         second_wallet_model.setCurrentPaymentRequest(&second_payment_request);
         second_wallet_model.setProperty("name", QStringLiteral("second"));
+        qmlRegisterSingletonType<MockApplicationModels>("org.bitcoincore.qt", 1, 0, "ApplicationModels",
+            [](QQmlEngine* qml_engine, QJSEngine*) -> QObject* { return new MockApplicationModels(qml_engine); });
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
         qmlRegisterSingletonInstance<MockUrlOpener>("org.bitcoincore.qt", 1, 0, "UrlOpener", &url_opener);

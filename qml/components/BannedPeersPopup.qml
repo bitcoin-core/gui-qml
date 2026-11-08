@@ -13,7 +13,7 @@ Popup {
     id: root
     objectName: "bannedPeersPopup"
 
-    property var model: banListModel
+    property var model: ApplicationModels.banListModel
     readonly property bool compact: parent ? parent.width <= SizeClass.compactWidthMax : false
     readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
     property real verticalOffset: 0
@@ -230,7 +230,7 @@ Popup {
     AlertPopup {
         id: unbanActionError
         objectName: "unbanActionErrorPopup"
-        parent: root.parent ? root.parent : root
+        parent: root.parent ? root.parent : root.contentItem
         title: qsTr("Peer action failed")
         messageObjectName: "actionErrorMessage"
 

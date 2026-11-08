@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 
 TextInput {
     id: root
@@ -30,15 +29,13 @@ TextInput {
         },
         State {
             name: "HOVER"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 textColor: root.filled ? Theme.color.orangeLight1 : Theme.color.neutral5
             }
         },
         State {
             name: "DISABLED"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 textColor: Theme.color.neutral4
             }
         }

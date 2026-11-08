@@ -4,10 +4,12 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Templates 2.15 as Templates
 import QtQuick.Layouts 1.15
 
 Page {
     id: root
+    readonly property Templates.StackView navigationStack: root.StackView.view
 
     default property alias content: contentLayout.data
 

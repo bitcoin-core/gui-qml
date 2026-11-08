@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import QtQuick 2.15 as QtQuickBase
 
@@ -12,7 +12,7 @@ import "../controls"
 ColumnLayout {
     id: root
     spacing: 4
-    readonly property var maxMempoolStatus: (optionsModel.coreSettingStatuses || ({})).maxmempool || ({})
+    readonly property var maxMempoolStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).maxmempool || ({})
 
     function formatMegabytes(valueMb) {
         const rounded = Math.round(valueMb)
@@ -26,7 +26,7 @@ ColumnLayout {
         interactive: false
         header: qsTr("Transactions")
         actionItem: CoreText {
-            text: Number(nodeModel.mempoolTransactionCount).toLocaleString(Qt.locale(), 'f', 0)
+            text: Number(ApplicationModels.nodeModel.mempoolTransactionCount).toLocaleString(Qt.locale(), 'f', 0)
             color: Theme.color.neutral9
             font.pixelSize: 18
             fontStyleName: "Regular"
@@ -45,8 +45,8 @@ ColumnLayout {
         header: qsTr("Memory used")
         actionItem: CoreText {
             text: qsTr("%1 / %2")
-                .arg(root.formatMegabytes(nodeModel.mempoolUsageMB))
-                .arg(root.formatMegabytes(nodeModel.mempoolMaxUsageMB))
+                .arg(root.formatMegabytes(ApplicationModels.nodeModel.mempoolUsageMB))
+                .arg(root.formatMegabytes(ApplicationModels.nodeModel.mempoolMaxUsageMB))
             color: Theme.color.neutral9
             font.pixelSize: 18
             fontStyleName: "Regular"
@@ -65,22 +65,22 @@ ColumnLayout {
         header: qsTr("Mempool size limit")
         state: root.maxMempoolStatus.canEdit === false ? "DISABLED" : "FILLED"
         errorText: qsTr("This is not a valid mempool size. Please choose a value between %1 and %2 MB.")
-            .arg(optionsModel.minMaxMempoolSizeMB)
-            .arg(optionsModel.maxMaxMempoolSizeMB)
+            .arg(ApplicationModels.optionsModel.minMaxMempoolSizeMB)
+            .arg(ApplicationModels.optionsModel.maxMaxMempoolSizeMB)
         showErrorText: false
         infoText: root.maxMempoolStatus.infoText || ""
         showInfoText: !showErrorText && infoText.length > 0
         actionItem: ValueInput {
             parentState: mempoolLimitSetting.visualState
-            description: optionsModel.maxMempoolSizeMB
+            description: ApplicationModels.optionsModel.maxMempoolSizeMB
             validator: QtQuickBase.IntValidator {
-                bottom: optionsModel.minMaxMempoolSizeMB
-                top: optionsModel.maxMaxMempoolSizeMB
+                bottom: ApplicationModels.optionsModel.minMaxMempoolSizeMB
+                top: ApplicationModels.optionsModel.maxMaxMempoolSizeMB
             }
             onEditingFinished: {
                 const mempoolSize = parseInt(text, 10)
-                if (acceptableInput && checkValidity(optionsModel.minMaxMempoolSizeMB, optionsModel.maxMaxMempoolSizeMB, mempoolSize)) {
-                    optionsModel.maxMempoolSizeMB = mempoolSize
+                if (acceptableInput && checkValidity(ApplicationModels.optionsModel.minMaxMempoolSizeMB, ApplicationModels.optionsModel.maxMaxMempoolSizeMB, mempoolSize)) {
+                    ApplicationModels.optionsModel.maxMempoolSizeMB = mempoolSize
                     mempoolLimitSetting.forceActiveFocus()
                     mempoolLimitSetting.showErrorText = false
                 } else {
@@ -89,8 +89,9 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.filled = true
-            loadedItem.forceActiveFocus()
+            const input = loadedItem as ValueInput
+            input.filled = true
+            input.forceActiveFocus()
         }
     }
 }

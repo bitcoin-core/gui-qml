@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
-import "../../components"
 
 SettingsPage {
     id: root
@@ -121,8 +120,8 @@ SettingsPage {
         ContextMenuToggle {
             checkable: false
             text: qsTr("Show used addresses")
-            checked: addressModel.showUsed
-            onClicked: addressModel.showUsed = !addressModel.showUsed
+            checked: root.addressModel.showUsed
+            onClicked: root.addressModel.showUsed = !root.addressModel.showUsed
         }
     }
 
@@ -230,11 +229,11 @@ SettingsPage {
         Layout.maximumWidth: 360
         Layout.alignment: Qt.AlignHCenter
         implicitHeight: 36
-        model: addressModel.categoryOptions
-        currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
+        model: root.addressModel.categoryOptions
+        currentIndex: Math.max(0, root.addressModel.categoryOptions.findIndex(option => option.value === root.addressModel.category))
         onSelected: (index, option) => {
             root.errorText = "";
-            addressModel.category = option.value;
+            root.addressModel.category = option.value;
         }
     }
 
@@ -249,12 +248,12 @@ SettingsPage {
 
     CoreText {
         Layout.fillWidth: true
-        visible: addressModel.count === 0
+        visible: root.addressModel.count === 0
         text: {
-            if (addressModel.category === AddressListModel.Change) {
+            if (root.addressModel.category === AddressListModel.Change) {
                 return qsTr("No current change addresses.");
             }
-            return addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
+            return root.addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
         }
         color: Theme.color.neutral6
         font: Theme.text.description.font
@@ -263,7 +262,7 @@ SettingsPage {
 
     FormSection {
         objectName: "addressListSection"
-        visible: addressModel.count > 0
+        visible: root.addressModel.count > 0
         Layout.fillWidth: true
 
         ListView {
@@ -273,8 +272,8 @@ SettingsPage {
             Layout.preferredHeight: Math.min(contentHeight, Math.max(76, root.height - 230))
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            reuseItems: addressModel.category === AddressListModel.Change
-            model: addressModel
+            reuseItems: root.addressModel.category === AddressListModel.Change
+            model: root.addressModel
             spacing: 0
 
             delegate: AddressRow {

@@ -30,8 +30,8 @@ Control {
         spacing: root.showDot ? 7 : 0
         Rectangle {
             visible: root.showDot
-            width: root.showDot ? 6 : 0
-            height: root.showDot ? 6 : 0
+            implicitWidth: root.showDot ? 6 : 0
+            implicitHeight: root.showDot ? 6 : 0
             radius: 3
             color: root.accentColor
         }

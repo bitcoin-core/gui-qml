@@ -29,7 +29,7 @@ Popup {
     modal: true
     dim: true
     focus: true
-    readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
+    readonly property var flow: creationLoader.item
     closePolicy: flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
@@ -56,6 +56,7 @@ Popup {
     exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 150 } }
 
     contentItem: Loader {
+        id: creationLoader
         clip: true
         active: root.visible
         sourceComponent: WalletCreationFlow {

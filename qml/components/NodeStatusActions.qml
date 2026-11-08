@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -14,7 +15,7 @@ RowLayout {
 
     IconButton {
         objectName: "nodeWarningsButton"
-        visible: nodeModel.hasWarnings
+        visible: ApplicationModels.nodeModel.hasWarnings
         iconSource: "image://images/alert-filled"
         iconColor: Theme.color.orange
         hoverColor: Theme.color.orangeLight1

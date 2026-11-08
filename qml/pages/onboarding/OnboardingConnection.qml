@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
@@ -13,7 +14,7 @@ OnboardingView {
     objectName: "onboardingConnection"
     signal back()
     signal next()
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
 
     isOnSurface: false
     backButtonInFooter: true

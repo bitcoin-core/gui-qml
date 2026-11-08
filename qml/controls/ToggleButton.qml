@@ -28,7 +28,7 @@ Button {
 
     contentItem: CoreText {
         id: buttonText
-        text: parent.text
+        text: root.text
         font.pixelSize: Theme.text.caption.pixelSize
         bold: root.textBold
         color: root.textColor

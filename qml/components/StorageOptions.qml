@@ -12,7 +12,7 @@ import "../controls"
 
 ColumnLayout {
     id: root
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property var coreSettingsModel: settingsModel.coreSettings
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0

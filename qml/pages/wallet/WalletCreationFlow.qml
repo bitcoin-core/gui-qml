@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
 
@@ -23,14 +22,15 @@ Item {
     property bool readyPending: false
     // The wallet just created or imported. The completion pages act on it,
     // even if another wallet is selected meanwhile.
-    property QtObject completedWallet: null
+    property WalletQmlModel completedWallet: null
     readonly property alias currentItem: pages.currentItem
+    readonly property OnboardingView currentOnboardingPage: pages.currentItem as OnboardingView
     readonly property alias depth: pages.depth
     readonly property alias busy: pages.busy
     readonly property alias pageStack: pages
     readonly property alias navigationBar: navigationBar
-    readonly property bool walletDiscoveryReady: walletController.initialized
-        && (!waitForWalletDiscovery || walletListModel.walletDirLoaded)
+    readonly property bool walletDiscoveryReady: ApplicationModels.walletController.initialized
+        && (!waitForWalletDiscovery || ApplicationModels.walletListModel.walletDirLoaded)
     signal finished(bool openActivity, var wallet)
 
     function showingCompletion() {
@@ -41,7 +41,7 @@ Item {
 
     function completedWalletIsOpen() {
         return root.completedWallet !== null && root.completedWallet.available !== false
-            && walletController.openWallets.indexOf(root.completedWallet) >= 0
+            && ApplicationModels.walletController.openWallets.indexOf(root.completedWallet) >= 0
     }
 
     // A completion page for a wallet that has since closed has nothing
@@ -84,7 +84,7 @@ Item {
     function importFile(path) {
         if (!path || root.importingWallet) return
         root.importingWallet = true
-        walletController.importWallet(walletController.normalizeWalletPath(path))
+        ApplicationModels.walletController.importWallet(ApplicationModels.walletController.normalizeWalletPath(path))
     }
 
     function showImportResult() {
@@ -97,8 +97,8 @@ Item {
     }
 
     Component.onCompleted: {
-        if (!walletController.initialized) nodeModel.startNodeInitializionThread()
-        walletController.refreshExternalSignerStatus()
+        if (!ApplicationModels.walletController.initialized) ApplicationModels.nodeModel.startNodeInitializionThread()
+        ApplicationModels.walletController.refreshExternalSignerStatus()
     }
 
     AppFileDialog {
@@ -126,26 +126,26 @@ Item {
     }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onWalletCreateSucceeded(wallet) {
             if (!root.creatingWallet) return
             root.creatingWallet = false
             root.completedWallet = wallet
-            if (root.currentItem && root.currentItem.clearSecrets)
-                root.currentItem.clearSecrets()
+            const form = root.currentItem as CreateWalletForm
+            if (form) form.clearSecrets()
             root.showReady()
         }
         function onWalletCreateErrorChanged() {
-            if (root.creatingWallet && walletController.walletCreateError.length > 0)
+            if (root.creatingWallet && ApplicationModels.walletController.walletCreateError.length > 0)
                 root.creatingWallet = false
         }
         function onOpenWalletsChanged() {
             root.closeIfCompletedWalletClosed()
         }
         function onWalletLoadErrorChanged() {
-            if (root.creatingWallet && walletController.walletLoadError.length > 0)
+            if (root.creatingWallet && ApplicationModels.walletController.walletLoadError.length > 0)
                 root.creatingWallet = false
-            if (root.importingWallet && walletController.walletLoadError.length > 0) {
+            if (root.importingWallet && ApplicationModels.walletController.walletLoadError.length > 0) {
                 root.importingWallet = false
                 root.pendingImportResult = "error"
                 root.showImportResult()
@@ -167,14 +167,14 @@ Item {
         isOnSurface: root.modalView
         buttonSidePadding: width >= 640 ? 24 : 16
         closeButtonSize: CloseButton.Large
-        visible: root.currentItem && root.currentItem.usesSharedNavigation === true
+        visible: root.currentOnboardingPage && root.currentOnboardingPage.usesSharedNavigation === true
         height: visible ? implicitHeight : 0
-        title: visible ? root.currentItem.title : ""
-        showBackButton: visible && root.currentItem.showBackButton
-        showCloseButton: visible && root.currentItem.showCloseButton
+        title: visible ? root.currentOnboardingPage.title : ""
+        showBackButton: visible && root.currentOnboardingPage.showBackButton
+        showCloseButton: visible && root.currentOnboardingPage.showCloseButton
         onBackClicked: root.goBack()
         onCloseClicked: {
-            if (root.currentItem) root.currentItem.closeClicked()
+            if (root.currentOnboardingPage) root.currentOnboardingPage.closeClicked()
         }
     }
 
@@ -238,10 +238,10 @@ Item {
             onWatchOnlySelected: root.push(formPage, { "watchOnly": true,
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
-                walletController.clearWalletLoadStatus()
-                walletController.refreshExternalSignerStatus()
+                ApplicationModels.walletController.clearWalletLoadStatus()
+                ApplicationModels.walletController.refreshExternalSignerStatus()
                 root.push(externalWallet, {
-                    "defaultWalletName": walletController.suggestedExternalSignerWalletName
+                    "defaultWalletName": ApplicationModels.walletController.suggestedExternalSignerWalletName
                 })
             }
             onImportSelected: root.chooseImportFile()
@@ -257,8 +257,8 @@ Item {
                 root.completedWatchOnly = watchOnly
                 root.completedEncrypted = !watchOnly && passphrase.length > 0
                 root.creatingWallet = true
-                if (watchOnly) walletController.createWatchOnlyWallet(name, xpub)
-                else walletController.createSingleSigWallet(name, passphrase)
+                if (watchOnly) ApplicationModels.walletController.createWatchOnlyWallet(name, xpub)
+                else ApplicationModels.walletController.createSingleSigWallet(name, passphrase)
             }
         }
     }

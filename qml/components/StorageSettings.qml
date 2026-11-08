@@ -3,13 +3,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
     id: root
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property var coreSettingsModel: settingsModel.coreSettings
     property bool customStorage: false
     property int customStorageAmount
@@ -52,8 +52,9 @@ ColumnLayout {
             }
         }
         onClicked: {
-          loadedItem.toggle()
-          loadedItem.toggled()
+          const control = loadedItem as OptionSwitch
+          control.toggle()
+          control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -90,8 +91,9 @@ ColumnLayout {
             }
         }
         onClicked: {
-            loadedItem.filled = true
-            loadedItem.forceActiveFocus()
+            const input = loadedItem as ValueInput
+            input.filled = true
+            input.forceActiveFocus()
         }
     }
     Separator { Layout.fillWidth: true }

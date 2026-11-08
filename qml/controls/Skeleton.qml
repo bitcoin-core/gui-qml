@@ -33,7 +33,7 @@ Rectangle {
     }
 
     ParallelAnimation  {
-        running: loading
+        running: root.loading
         loops: Animation.Infinite
         NumberAnimation {
             target: stop1

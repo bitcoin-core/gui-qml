@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import "AmountDisplayLayout.js" as AmountLayout
 
 BitcoinAmountDisplayLabelBase {
@@ -18,7 +19,7 @@ BitcoinAmountDisplayLabelBase {
         for (let i = 0; i < 10; ++i) result += i.toLocaleString(numberLocale, "f", 0)
         return result
     }
-    property int displayUnit: optionsModel.displayUnit
+    property int displayUnit: ApplicationModels.optionsModel.displayUnit
     // A layout can temporarily give an intrinsic-width label its old width
     // while a sibling changes. Parents with a known allocation can provide it.
     property real animationAvailableWidth: -1
@@ -109,7 +110,7 @@ BitcoinAmountDisplayLabelBase {
     function snapshot() {
         const cells = []
         for (let i = 0; i < columns.count; ++i) {
-            const column = columns.itemAt(i)
+            const column = (columns.itemAt(i) as BitcoinAmountColumn)
             if (!column || column.opacity < 0.001) continue
             const data = column.modelData
             const travelled = -column.offset / (direction * cellPitch)
@@ -121,7 +122,7 @@ BitcoinAmountDisplayLabelBase {
         }
         const units = []
         for (let i = 0; i < unitLabels.count; ++i) {
-            const label = unitLabels.itemAt(i)
+            const label = (unitLabels.itemAt(i) as BitcoinAmountUnitGlyph)
             if (label.opacity > 0.001) units.push({glyph: label.text,
                 x: label.x + alignmentFactor * implicitWidth, width: label.width, opacity: label.opacity})
         }
@@ -265,54 +266,30 @@ BitcoinAmountDisplayLabelBase {
         Repeater {
             id: unitLabels
             model: root.transitionUnits
-            CoreText {
-                required property var modelData
-                objectName: "amountUnit_" + modelData.glyph
-                text: modelData.glyph
-                font: root.font
-                color: root.color
-                wrap: false
-                horizontalAlignment: Text.AlignLeft
-                anchors.verticalCenter: parent.verticalCenter
-                width: modelData.width
-                x: modelData.fromX + (modelData.toX - modelData.fromX) * root.shiftProgress
-                opacity: modelData.fromOpacity + (modelData.toOpacity - modelData.fromOpacity) * root.unitProgress
-                Accessible.ignored: true
+            BitcoinAmountUnitGlyph {
+                viewColor: root.color
+                viewFont: root.font
+                viewShiftProgress: root.shiftProgress
+                viewUnitProgress: root.unitProgress
             }
         }
         Repeater {
             id: columns
             model: root.transitionCells
-            BitcoinAmountDigit {
-                id: column
-                required property var modelData
-                objectName: "amountColumn_" + modelData.key
-                font: root.font
-                color: root.color
-                numerals: root.numerals
-                glyph: modelData.glyph
-                fromDigit: modelData.fromDigit
-                steps: modelData.steps
-                direction: root.direction
-                pitch: root.cellPitch
-                bleed: root.bleed
-                mask: edgeMask
-                turn: modelData.leaving ? root.exitProgress : root.rollProgress
-                phase: root.elapsed / root.rollDuration
-                readonly property real arrival: Math.max(0, Math.min(1, (root.elapsed - modelData.delay) / root.settleDuration))
-                x: modelData.fromX + (modelData.toX - modelData.fromX) * root.shiftProgress
-                width: modelData.fromWidth + (modelData.toWidth - modelData.fromWidth) * root.shiftProgress
-                anchors.verticalCenter: parent.verticalCenter
-                offset: modelData.fromOffset * (1 - turn) - direction * steps * pitch * turn
-                opacity: modelData.leaving ? modelData.fromOpacity * (1 - root.exitProgress)
-                    : modelData.arriving ? AmountLayout.arrivalOpacity(arrival)
-                    : modelData.fromOpacity + (1 - modelData.fromOpacity) * root.shiftProgress
-                transform: Scale {
-                    origin.x: column.width / 2
-                    xScale: modelData.arriving ? 0.55 + 0.45 * arrival : 1
-                }
-                blurAmount: modelData.leaving ? root.exitProgress : modelData.arriving ? 1 - arrival
-                    : Math.min(1, steps / 4) * Math.max(0, phase < 0.15 ? phase / 0.15 : (0.62 - phase) / 0.47)
+            BitcoinAmountColumn {
+                viewBleed: root.bleed
+                viewCellPitch: root.cellPitch
+                viewColor: root.color
+                viewDirection: root.direction
+                viewElapsed: root.elapsed
+                viewExitProgress: root.exitProgress
+                viewFont: root.font
+                viewNumerals: root.numerals
+                viewRollDuration: root.rollDuration
+                viewRollProgress: root.rollProgress
+                viewSettleDuration: root.settleDuration
+                viewShiftProgress: root.shiftProgress
+                edgeMaskItem: edgeMask
             }
         }
     }
@@ -338,4 +315,6 @@ BitcoinAmountDisplayLabelBase {
         }
         NumberAnimation { target: root; property: "elapsed"; from: 0; to: root.rollDuration; duration: root.rollDuration }
     }
+
+
 }

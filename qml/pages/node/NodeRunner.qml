@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
@@ -34,7 +35,7 @@ Page {
                 }
                 IconButton {
                     objectName: "peersTabButton"
-                    iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
+                    iconSource: Utils.nodeConnectionIcon(ApplicationModels.nodeModel.numPeers)
                     iconColor: Theme.color.neutral7
                     hoverColor: Theme.color.neutral9
                     size: 34
@@ -56,7 +57,7 @@ Page {
         }
     }
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    Component.onCompleted: ApplicationModels.nodeModel.startNodeInitializionThread();
 
     BlockClock {
         parentWidth: parent.width - 40

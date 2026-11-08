@@ -21,7 +21,7 @@ Button {
         bold: root.bold
         font.pixelSize: root.textSize
         color: root.textColor
-        horizontalAlignment: rightalign ? Text.AlignRight : Text.AlignHCenter
+        horizontalAlignment: root.rightalign ? Text.AlignRight : Text.AlignHCenter
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
@@ -41,16 +41,14 @@ Button {
     states: [
         State {
             name: "PRESSED"; when: root.pressed
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 textColor: Theme.color.orangeLight2
                 bgColor: Theme.color.neutral3
             }
         },
         State {
             name: "HOVER"; when: root.hovered
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 textColor: Theme.color.orangeLight1
                 bgColor: Theme.color.neutral2
             }

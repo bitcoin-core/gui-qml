@@ -169,8 +169,8 @@ AbstractButton {
                     Layout.fillWidth: true
                     text: root.displayAmount
                     color: root.hasAmount ? Theme.color.green : Theme.color.neutral7
-                    font.family: optionsModel.moneyFont.family
-                    font.weight: optionsModel.moneyFont.weight
+                    font.family: ApplicationModels.optionsModel.moneyFont.family
+                    font.weight: ApplicationModels.optionsModel.moneyFont.weight
                     font.pixelSize: Theme.text.description.font.pixelSize
                     lineHeight: Theme.text.description.lineHeight
                     lineHeightMode: Text.FixedHeight

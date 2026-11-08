@@ -3,10 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
-import "../components"
 
 import org.bitcoincore.qt 1.0
 
@@ -62,7 +60,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps)) + "/s"
+            text: root.formatBytes(root.formatMagnitude(root.maxRateBps)) + "/s"
             color: root.unitLabelColor
             font.pixelSize: 13
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
@@ -70,7 +68,7 @@ Item {
             Layout.bottomMargin: 6
         }
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps / 10)) + "/s"
+            text: root.formatBytes(root.formatMagnitude(root.maxRateBps / 10)) + "/s"
             color: root.unitLabelColor
             font.pixelSize: 13
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom

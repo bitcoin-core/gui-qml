@@ -3,14 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
     id: root
     signal next
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property var coreSettingsModel: settingsModel.coreSettings
     property bool showRestartNotice: false
     readonly property var listenSetting: coreSettingsModel.entry("listen")
@@ -36,8 +36,9 @@ ColumnLayout {
             onToggled: root.listenSetting.value = checked
         }
         onClicked: {
-          loadedItem.toggle()
-          loadedItem.toggled()
+          const control = loadedItem as OptionSwitch
+          control.toggle()
+          control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -54,8 +55,9 @@ ColumnLayout {
             onToggled: root.natpmpSetting.value = checked
         }
         onClicked: {
-          loadedItem.toggle()
-          loadedItem.toggled()
+          const control = loadedItem as OptionSwitch
+          control.toggle()
+          control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }
@@ -72,8 +74,9 @@ ColumnLayout {
             onToggled: root.serverSetting.value = checked
         }
         onClicked: {
-          loadedItem.toggle()
-          loadedItem.toggled()
+          const control = loadedItem as OptionSwitch
+          control.toggle()
+          control.toggled()
         }
     }
     Separator { Layout.fillWidth: true }

@@ -50,7 +50,7 @@ Button {
         Icon {
             id: icon
             source: root.iconSource
-            color: iconColor
+            color: root.iconColor
             size: root.iconSize
             visible: !customContentLoader.active && root.iconSource !== ""
             anchors.centerIn: parent

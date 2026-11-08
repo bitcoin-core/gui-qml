@@ -99,8 +99,8 @@ Page {
         peerActionError.open()
     }
     function disconnectPeer() {
-        if (pendingDisconnectTarget && nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
-            peerTableModel.refresh()
+        if (pendingDisconnectTarget && ApplicationModels.nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
+            ApplicationModels.peerTableModel.refresh()
         } else {
             showActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
         }
@@ -118,16 +118,16 @@ Page {
         banConfirmation.open()
     }
     function confirmBan() {
-        if (pendingBanTarget && nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
+        if (pendingBanTarget && ApplicationModels.nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
+            ApplicationModels.peerTableModel.refresh()
+            ApplicationModels.banListModel.refresh()
         } else {
             showActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
 
     Connections {
-        target: details
+        target: root.details
         function onDisconnected() {
             const disconnectedId = root.details ? root.details.nodeId : -1
             root.peerDisconnected(disconnectedId)
@@ -172,7 +172,7 @@ Page {
                         Layout.fillWidth: true
                         spacing: 10
                         CoreText {
-                            text: details ? qsTr("Peer #%1").arg(details.nodeId) : qsTr("Peer")
+                            text: root.details ? qsTr("Peer #%1").arg(root.details.nodeId) : qsTr("Peer")
                             font: Theme.text.headline.font
                             lineHeight: Theme.text.headline.lineHeight
                             lineHeightMode: Text.FixedHeight
@@ -183,7 +183,7 @@ Page {
                     }
                     CoreText {
                         Layout.fillWidth: true
-                        text: details ? details.address : ""
+                        text: root.details ? root.details.address : ""
                         font: Theme.text.monoDescription.font
                         lineHeight: Theme.text.monoDescription.lineHeight
                         lineHeightMode: Text.FixedHeight
@@ -240,7 +240,8 @@ Page {
                     width: tableScroll.availableWidth
                     spacing: 16
 
-                    PeerTable {
+                    PeerDetailsTable {
+            compact: root.compact
                         objectName: "peerInformationTable"
                         width: parent.width
                         visible: root.sectionIndex === 0
@@ -266,7 +267,8 @@ Page {
                         }
                     }
 
-                    PeerTable {
+                    PeerDetailsTable {
+            compact: root.compact
                         objectName: "peerNetworkTrafficTable"
                         width: parent.width
                         visible: root.sectionIndex === 2
@@ -328,88 +330,7 @@ Page {
         AlertAction { text: qsTr("OK"); buttonObjectName: "actionErrorCloseButton" }
     }
 
-    component SelectablePeerText: TextInput {
-        readOnly: true
-        selectByMouse: true
-        activeFocusOnTab: true
-        clip: true
-        verticalAlignment: TextInput.AlignVCenter
-        selectionColor: Theme.color.orange
-        selectedTextColor: Theme.color.white
 
-        HoverHandler { cursorShape: Qt.IBeamCursor }
-    }
-
-    // Keep the delegate outside inline components to avoid a Qt 6.2 compiler crash.
-    component PeerTable: Loader {
-        required property var rows
-        sourceComponent: peerTableComponent
-    }
-
-    Component {
-        id: peerTableComponent
-        Rectangle {
-            id: table
-            property var rows: parent.rows
-            implicitHeight: tableColumn.implicitHeight
-            color: Theme.color.neutral1
-            radius: 12
-            border.width: 0
-            clip: true
-            // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
-            Column {
-                id: tableColumn
-                width: parent.width
-                spacing: 0
-                Repeater {
-                    // Updating values must not recreate selectable text fields.
-                    model: table.rows.length
-                    delegate: Component {
-                        ColumnLayout {
-                            id: rowDelegate
-                            required property int index
-                            readonly property var rowData: table.rows[index]
-                            width: tableColumn.width
-                            spacing: 0
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: root.compact ? 14 : 20
-                                Layout.rightMargin: root.compact ? 14 : 20
-                                Layout.minimumHeight: root.compact ? 50 : 48
-                                spacing: 16
-                                SelectablePeerText {
-                                    objectName: "peerDetailKey_" + rowDelegate.index
-                                    Layout.preferredWidth: root.compact ? 112 : 150
-                                    text: rowDelegate.rowData.label
-                                    font: Theme.text.description.font
-                                    Layout.preferredHeight: Theme.text.description.lineHeight
-                                    color: Theme.color.neutral6
-                                    horizontalAlignment: Text.AlignLeft
-                                }
-                                SelectablePeerText {
-                                    objectName: "peerDetailValue_" + rowDelegate.index
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    text: rowDelegate.rowData.value
-                                    font: rowDelegate.rowData.mono ? Theme.text.monoDescription.font : Theme.text.description.font
-                                    Layout.preferredHeight: rowDelegate.rowData.mono ? Theme.text.monoDescription.lineHeight : Theme.text.description.lineHeight
-                                    color: Theme.color.neutral8
-                                    horizontalAlignment: Text.AlignLeft
-                                }
-                            }
-                            Separator {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: root.compact ? 14 : 20
-                                Layout.rightMargin: root.compact ? 14 : 20
-                                visible: rowDelegate.index < table.rows.length - 1
-                                color: Theme.color.neutral2
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     component PeerSection: Column {
         required property string title
@@ -427,7 +348,8 @@ Page {
             color: Theme.color.neutral8
             horizontalAlignment: Text.AlignLeft
         }
-        PeerTable {
+        PeerDetailsTable {
+            compact: root.compact
             width: parent.width
             rows: parent.rows
         }

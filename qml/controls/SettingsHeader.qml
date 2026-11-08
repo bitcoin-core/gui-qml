@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 Pane {
@@ -30,8 +29,8 @@ Pane {
             active: root.showBackButton
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            width: status === Loader.Ready && item ? item.implicitWidth : 0
-            height: status === Loader.Ready && item ? item.implicitHeight : 0
+            width: status === Loader.Ready && item ? (item as Item).implicitWidth : 0
+            height: status === Loader.Ready && item ? (item as Item).implicitHeight : 0
             sourceComponent: root.backButtonText.length > 0 ? labeledBackButton : compactBackButton
         }
 

@@ -87,7 +87,7 @@ Page {
                     onTriggered: Clipboard.setText(root.txid)
                 }
                 Repeater {
-                    model: optionsModel.thirdPartyTransactionLinks(root.txid)
+                    model: ApplicationModels.optionsModel.thirdPartyTransactionLinks(root.txid)
                     delegate: ContextMenuButton {
                         required property int index
                         required property var modelData
@@ -236,7 +236,7 @@ Page {
                     visible: !!root.flow.inputs && !!root.flow.outputs
                     flow: root.flow
                     transactionId: root.txid
-                    displayUnit: optionsModel.displayUnit
+                    displayUnit: ApplicationModels.optionsModel.displayUnit
                     walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                     selectedEntryId: root.outputIndex >= 0 ? "output:" + root.outputIndex : ""
                     onPaymentRequestRequested: function(requestId) { root.openPaymentRequestDetail(requestId) }

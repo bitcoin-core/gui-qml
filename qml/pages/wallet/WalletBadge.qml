@@ -98,11 +98,11 @@ Button {
                 Layout.fillWidth: true
                 visible: !root.loading && !root.noWalletLoaded
                 amount: root.balance
-                unit: optionsModel.displayUnit === BitcoinAmount.SAT
-                    ? (root.balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel
+                unit: ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                    ? (root.balanceSatoshi === 1 ? "sat" : "sats") : ApplicationModels.optionsModel.displayUnitLabel
                 color: Theme.color.neutral8
-                font.family: optionsModel.moneyFont.family
-                font.weight: optionsModel.moneyFont.weight
+                font.family: ApplicationModels.optionsModel.moneyFont.family
+                font.weight: ApplicationModels.optionsModel.moneyFont.weight
                 font.pixelSize: 13
                 horizontalAlignment: Text.AlignLeft
                 wrap: false

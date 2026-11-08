@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -13,7 +14,7 @@ OnboardingView {
     signal next()
 
     property int assumedChainstateSize: 0
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     readonly property int reducedStorageTargetGB: 2
     readonly property int freshMinimumStorageRequiredGB: root.assumedChainstateSize + root.reducedStorageTargetGB
     readonly property int minimumStorageRequiredGB: root.settingsModel.existingProfile
@@ -28,7 +29,7 @@ OnboardingView {
     subheading: qsTr("Where do you want to store the downloaded block data? You need a minimum of %1GB of storage.").arg(root.minimumStorageRequiredGB)
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageLocationButton"
-    primaryButtonEnabled: !loadedChildView || loadedChildView.validSelection
+    primaryButtonEnabled: !root.loadedChildView || (root.loadedChildView as StorageLocations).validSelection
     onBackClicked: root.back()
     onPrimaryClicked: root.next()
 

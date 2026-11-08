@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 
 import "../../controls"
@@ -15,7 +15,7 @@ SettingsPage {
     title: qsTr("Connection")
     showBackButton: false
 
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property bool onboardingModal: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var listenSetting: coreSettingsModel.entry("listen")
@@ -87,7 +87,7 @@ SettingsPage {
             description: qsTr("Route peer and Tor connections through SOCKS5 proxies.")
             showDivider: false
             showsDisclosureIndicator: true
-            onClicked: root.StackView.view.push(proxyPage)
+            onClicked: root.navigationStack.push(proxyPage)
         }
     }
 
@@ -97,7 +97,7 @@ SettingsPage {
         ProxySettingsPage {
             settingsModel: root.settingsModel
             onboardingModal: root.onboardingModal
-            onCloseRequested: root.StackView.view.pop()
+            onCloseRequested: root.navigationStack.pop()
         }
     }
 }

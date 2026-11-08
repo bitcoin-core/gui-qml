@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "../controls"
-import "../components"
 
 import org.bitcoincore.qt 1.0
 
@@ -14,7 +13,7 @@ Button {
     property color bgColor
     property bool shorten: false
     property bool show: true
-    property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
+    property var chainModelRef: typeof chainModel !== "undefined" ? ApplicationModels.chainModel : null
     property int textSize: 15
     topPadding: 2
     bottomPadding: 2
@@ -40,15 +39,13 @@ Button {
     states: [
         State {
             name: "MAIN"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: false
             }
         },
         State {
             name: "TEST"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Testnet") : qsTr("Test Network")
                 bgColor: Theme.color.green
@@ -56,8 +53,7 @@ Button {
         },
         State {
             name: "TESTNET4"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Testnet4") : qsTr("Test Network (v4)")
                 bgColor: Theme.color.green
@@ -65,8 +61,7 @@ Button {
         },
         State {
             name: "SIGNET"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Signet") : qsTr("Signet Network")
                 bgColor: Theme.color.amber
@@ -74,8 +69,7 @@ Button {
         },
         State {
             name: "REGTEST"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Regtest") : qsTr("Regtest Mode")
                 bgColor: Theme.color.blue
