@@ -176,7 +176,7 @@ TestCase {
         review.beginApproval()
         review.destroy()
         // destroy() queues deletion. Process it before wait() can dispatch the approval timer.
-        testEventLoop.processDeferredDeletes()
+        testSetup.processDeferredDeletes()
         verify(!Qt.isQtObject(review))
         wait(50)
 
