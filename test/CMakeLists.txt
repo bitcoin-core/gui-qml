@@ -164,6 +164,7 @@ target_include_directories(bitcoinqml_qmltests
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src
+    ${PROJECT_BINARY_DIR}/bitcoin/src
 )
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
