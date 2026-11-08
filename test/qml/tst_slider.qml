@@ -19,6 +19,7 @@ TestCase {
     property var slider
 
     function init() {
+        testSetup.failOnWarnings()
         slider = createTemporaryObject(sliderComponent, this)
         verify(slider !== null)
     }

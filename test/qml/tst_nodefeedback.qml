@@ -98,6 +98,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         testWindow.width = 640
         testWindow.height = 520
         nodeModel.setWarningsForTest([])

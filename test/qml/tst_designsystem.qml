@@ -10,6 +10,10 @@ import "../../qml/pages/settings"
 import "../../qml/pages/settings/designsystem"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     id: testCase
     name: "DesignSystem"
     when: windowShown

@@ -72,6 +72,7 @@ TestCase {
     property int applyCount: 0
 
     function init() {
+        testSetup.failOnWarnings()
         cancelCount = 0
         applyCount = 0
         trigger.forceActiveFocus()

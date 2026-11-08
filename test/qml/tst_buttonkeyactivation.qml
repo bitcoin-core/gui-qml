@@ -25,6 +25,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         clicks = 0
         checkBox.checked = false
         optionSwitch.checked = false
