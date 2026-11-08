@@ -65,6 +65,11 @@ FormSection {
         // recalculating every ribbon once for each input/output card.
         nodeMeasurements = { inputs: nodeHeights(inputs), outputs: nodeHeights(outputs) }
     }
+    Timer {
+        id: measurementUpdate
+        interval: 0
+        onTriggered: root.updateNodeMeasurements()
+    }
     function nodeHeights(repeater) {
         const result = []
         for (let i = 0; i < repeater.count; ++i) {
@@ -157,8 +162,8 @@ FormSection {
                         Repeater {
                             id: inputs
                             model: root.inputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowInput_" + index
@@ -167,7 +172,7 @@ FormSection {
                                 hidesAmount: root.hidesAmounts
                                 input: true
                                 width: root.inputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 y: root.geometry.inputs[index] ? root.geometry.inputs[index].y : 0
                                 walletName: root.walletName
                                 accentColor: root.ownershipColor(entry.ownership)
@@ -177,8 +182,8 @@ FormSection {
                         Repeater {
                             id: outputs
                             model: root.outputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowOutput_" + index
@@ -186,7 +191,7 @@ FormSection {
                                 displayUnit: root.displayUnit
                                 hidesAmount: root.hidesAmounts
                                 width: root.outputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 x: root.geometry.outputX
                                 y: root.geometry.outputs[index] ? root.geometry.outputs[index].y : 0
                                 walletName: root.walletName

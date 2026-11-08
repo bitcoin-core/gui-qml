@@ -45,10 +45,17 @@ AlertPopup {
     onAboutToShow: clearPassphraseField()
     onAboutToHide: clearPassphraseField()
     onClosed: clearPassphraseField()
-    Component.onDestruction: clearPassphraseField()
 
     content: PasswordTextField {
         id: passphraseField
+        // The popup's JavaScript methods can already be gone during
+        // destruction on older Qt versions. Wipe the field itself.
+        Component.onDestruction: {
+            if (text.length > 0) {
+                text = Array(text.length + 1).join(" ")
+                text = ""
+            }
+        }
         Layout.fillWidth: true
         label: qsTr("Password")
         fieldObjectName: root.passphraseFieldObjectName
