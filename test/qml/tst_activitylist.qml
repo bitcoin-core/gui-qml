@@ -101,6 +101,7 @@ TestCase {
         Theme.motion.mode = motionMode
     }
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         Theme.paletteId = "core-dark"
         walletController.reset()
