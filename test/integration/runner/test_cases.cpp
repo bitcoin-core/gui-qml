@@ -13,6 +13,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"blockclock", {WalletMode::Disabled, WalletMode::Enabled}, CreateBlockClockTests, 2},
         {"settings", {WalletMode::Disabled, WalletMode::Enabled}, CreateSettingsTests, 2},
         {"node", {WalletMode::Disabled, WalletMode::Enabled}, CreateNodeTests, 3},
+        {"debug-log", {WalletMode::Disabled, WalletMode::Enabled}, CreateDebugLogTests, 3, DebugLogTestArguments},
         {"console", {WalletMode::Disabled, WalletMode::Enabled}, CreateConsoleTests, 3},
     };
     return modules;

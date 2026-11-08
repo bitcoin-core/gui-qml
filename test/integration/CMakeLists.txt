@@ -15,6 +15,7 @@ add_executable(bitcoinqml_integration_tests
   node_setup/test_blockclock.cpp
   node_setup/test_settings.cpp
   node_tools/test_node.cpp
+  node_tools/test_debug_log.cpp
   node_tools/test_console.cpp
 )
 target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application Qt6::QuickTest)
