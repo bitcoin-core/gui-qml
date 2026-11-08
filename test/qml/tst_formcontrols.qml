@@ -19,6 +19,7 @@ TestCase {
     property string motionMode: ""
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
     }
 

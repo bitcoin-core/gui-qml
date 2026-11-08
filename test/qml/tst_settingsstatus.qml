@@ -23,6 +23,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         optionsModel.clearCoreSettingStatusesForTest()
     }
 
