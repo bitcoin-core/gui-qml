@@ -26,6 +26,7 @@ import sys
 import tempfile
 import time
 from qml_driver import QmlDriver
+from qml_process_checks import check_gui_exit
 from qml_scenarios import (
     run_scenarios,
     scenario,
@@ -34,6 +35,7 @@ from qml_test_harness import (
     GUI_STARTUP_TIMEOUT,
     dump_qml_tree,
     find_gui_binary,
+    qml_qpa_platform,
 )
 
 
@@ -181,7 +183,7 @@ class PeerQmlTestHarness:
     def start(self):
         """Start the GUI node, connect QmlDriver, then start the peer node."""
         env = dict(os.environ)
-        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["QT_QPA_PLATFORM"] = qml_qpa_platform()
 
         gui_args = [
             self.gui_binary,
@@ -220,7 +222,7 @@ class PeerQmlTestHarness:
 
     def stop(self):
         """Terminate all processes."""
-        for proc in (self.peer2_process, self.peer_process, self.gui_process):
+        for proc in (self.peer2_process, self.peer_process):
             if proc and proc.poll() is None:
                 proc.send_signal(signal.SIGTERM)
                 try:
@@ -230,6 +232,23 @@ class PeerQmlTestHarness:
                     proc.wait()
         if self.driver:
             self.driver.close()
+            self.driver = None
+        self.stop_gui()
+
+    def stop_gui(self):
+        """Stop the GUI and reject process failures or unexpected diagnostics."""
+        process = self.gui_process
+        if process is None:
+            return
+        self.gui_process = None
+        if process.poll() is None:
+            process.send_signal(signal.SIGTERM)
+        try:
+            _, stderr = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            _, stderr = process.communicate(timeout=5)
+        check_gui_exit(process.returncode, stderr.decode("utf-8", errors="replace"), socket_path=self.socket_path)
 
     # ── RPC helpers ───────────────────────────────────────────────────────────
 
@@ -353,14 +372,14 @@ class PeerQmlTestHarness:
         if self.driver:
             self.driver.close()
             self.driver = None
-        _terminate_process(self.gui_process)
+        self.stop_gui()
 
         # Remove the stale socket file so the new GUI can bind to the same path.
         if os.path.exists(self.socket_path):
             os.remove(self.socket_path)
 
         env = dict(os.environ)
-        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["QT_QPA_PLATFORM"] = qml_qpa_platform()
         gui_args = [
             self.gui_binary,
             f"-datadir={self.gui_datadir}",
@@ -442,22 +461,23 @@ class PeerQmlTestHarness:
             f"got {sorted(p['id'] for p in self.rpc_call('getpeerinfo'))}"
         )
 
-    def gui_peer_for_process(self, peer_idx):
-        """Return the GUI-side getpeerinfo entry for a peer process via session_id."""
-        peer_connections = self.peer_rpc_call(peer_idx, "getpeerinfo")
-        if len(peer_connections) != 1:
-            raise RuntimeError(
-                f"Expected peer {peer_idx} to have exactly 1 connection, got: {peer_connections}"
-            )
-
-        session_id = peer_connections[0]["session_id"]
-        for peer in self.rpc_call("getpeerinfo"):
-            if peer.get("session_id") == session_id:
-                return peer
-
-        raise RuntimeError(
-            f"Could not match peer {peer_idx} session {session_id} to GUI peer list"
-        )
+    def gui_peer_for_process(self, peer_idx, timeout=PEER_ACTION_TIMEOUT_SECS):
+        """Wait for both nodes to report the same completed connection session."""
+        deadline = time.monotonic() + timeout
+        peer_connections = []
+        while time.monotonic() < deadline:
+            try:
+                peer_connections = self.peer_rpc_call(peer_idx, "getpeerinfo")
+                if len(peer_connections) == 1:
+                    session_id = peer_connections[0].get("session_id")
+                    if session_id:
+                        for peer in self.rpc_call("getpeerinfo"):
+                            if peer.get("session_id") == session_id:
+                                return peer
+            except (OSError, http.client.HTTPException, RuntimeError):
+                pass
+            time.sleep(0.1)
+        raise RuntimeError(f"Could not match peer {peer_idx} to the GUI after {timeout}s; connections: {peer_connections}")
 
 
 # ── Navigation helpers ────────────────────────────────────────────────────────
