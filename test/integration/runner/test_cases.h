@@ -9,6 +9,7 @@
 #include <span>
 #include <string_view>
 #include <vector>
+#include <QStringList>
 
 class BitcoinQmlApplication;
 class QObject;
@@ -18,6 +19,8 @@ struct IntegrationTestModule {
     const char* name;
     std::vector<WalletMode> wallet_modes;
     std::unique_ptr<QObject> (*create)(BitcoinQmlApplication&, WalletMode);
+    int stage;
+    QStringList (*arguments)(const QString& selector){nullptr};
 };
 
 std::span<const IntegrationTestModule> IntegrationTestModules();
