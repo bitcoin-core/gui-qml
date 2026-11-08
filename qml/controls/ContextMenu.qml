@@ -21,7 +21,7 @@ Popup {
         closing = false
         const window = contentItem ? contentItem.Window.window : null
         const item = window ? window.activeFocusItem : null
-        keyboardOpening = !!item && (item.visualFocus === true || item.keyboardActivation === true)
+        keyboardOpening = !!item && (item.visualFocus === true || item.keyboardActivation === true) // qmllint disable missing-property
     }
     onOpened: if (keyboardOpening) moveFocus("first")
     property int minMenuWidth: 240

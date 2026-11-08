@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import "../controls"
 import "../pages/wallet"
 
@@ -27,13 +26,14 @@ DialogPopup {
     padding: 0
     horizontalPadding: 0
     closesOnPressOutside: false
-    readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
+    readonly property var flow: creationLoader.item
     busy: !!flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
             || flow.currentItem.objectName === "externalWalletCreatedPage")))
 
     contentItem: Loader {
+        id: creationLoader
         clip: true
         active: root.visible
         sourceComponent: WalletCreationFlow {

@@ -58,8 +58,9 @@ Page {
             }
             nextSectionStacks[sectionId] = nextStack
             internal.sectionStacks = nextSectionStacks
-            nextStack.push(page, properties || {}, StackView.Immediate)
-            root.configureRootPage(nextStack.currentItem)
+            const stack = nextStack as PageStack
+            stack.push(page, properties || {}, StackView.Immediate)
+            root.configureRootPage(stack.currentItem)
         }
 
         if (internal.currentStack) internal.currentStack.visible = false

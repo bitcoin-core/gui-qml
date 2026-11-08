@@ -4,15 +4,16 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 import "../controls"
 
 // Shown for errors before any other window exists, so it hosts the alert in
 // its own window.
 ApplicationWindow {
     id: root
-    // The engine sets the `message` context property. AlertPopup has its own
-    // `message`, which would bind to itself.
-    readonly property string errorMessage: message
+    // AlertPopup has its own `message`, which would bind to itself, so keep the
+    // engine's startup error under another name.
+    readonly property string errorMessage: ApplicationModels.startupError
 
     visible: true
     title: qsTr("Bitcoin Core App")

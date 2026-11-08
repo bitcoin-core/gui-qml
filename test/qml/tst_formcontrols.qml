@@ -786,4 +786,5 @@ TestCase {
         compare(row.loadedBodyItem.text, "/Users/example/Bitcoin")
         verify(row.implicitHeight > row.minimumRowHeight)
     }
+
 }

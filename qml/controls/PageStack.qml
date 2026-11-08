@@ -8,7 +8,7 @@ import QtQuick.Controls 2.15
 StackView {
     id: root
     property bool vertical: false
-    readonly property bool canGoBack: depth > 1 && currentItem && currentItem.navigationBackEnabled !== false
+    readonly property bool canGoBack: depth > 1 && currentItem && currentItem.navigationBackEnabled !== false // qmllint disable missing-property
     // Under reduced motion pages crossfade in place instead of sliding.
     readonly property real slideDistance: Theme.motion.reduced || !parent ? 0 : vertical ? parent.height : parent.width
     readonly property real exitOpacity: Theme.motion.reduced ? 0 : 1

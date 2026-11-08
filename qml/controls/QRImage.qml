@@ -8,8 +8,8 @@ Image {
     id: root
 
     property string code: ""
-    property color backgroundColor: Qt.black
-    property color foregroundColor: Qt.white
+    property color backgroundColor: "black"
+    property color foregroundColor: "white"
 
     fillMode: Image.PreserveAspectFit
     smooth: false

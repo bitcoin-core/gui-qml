@@ -99,8 +99,8 @@ Page {
         peerActionError.open()
     }
     function disconnectPeer() {
-        if (pendingDisconnectTarget && nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
-            peerTableModel.refresh()
+        if (pendingDisconnectTarget && ApplicationModels.nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
+            ApplicationModels.peerTableModel.refresh()
         } else {
             showActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
         }
@@ -118,16 +118,16 @@ Page {
         banConfirmation.open()
     }
     function confirmBan() {
-        if (pendingBanTarget && nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
+        if (pendingBanTarget && ApplicationModels.nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
+            ApplicationModels.peerTableModel.refresh()
+            ApplicationModels.banListModel.refresh()
         } else {
             showActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
 
     Connections {
-        target: details
+        target: root.details
         function onDisconnected() {
             const disconnectedId = root.details ? root.details.nodeId : -1
             root.peerDisconnected(disconnectedId)
@@ -172,7 +172,7 @@ Page {
                         Layout.fillWidth: true
                         spacing: 10
                         CoreText {
-                            text: details ? qsTr("Peer #%1").arg(details.nodeId) : qsTr("Peer")
+                            text: root.details ? qsTr("Peer #%1").arg(root.details.nodeId) : qsTr("Peer")
                             textStyle: Theme.text.headline
                             color: Theme.color.neutral9
                             horizontalAlignment: Text.AlignLeft
@@ -181,7 +181,7 @@ Page {
                     }
                     CoreText {
                         Layout.fillWidth: true
-                        text: details ? details.address : ""
+                        text: root.details ? root.details.address : ""
                         textStyle: Theme.text.monoDescription
                         color: Theme.color.neutral6
                         horizontalAlignment: Text.AlignLeft
@@ -228,7 +228,8 @@ Page {
                     width: tableScroll.availableWidth
                     spacing: 16
 
-                    PeerTable {
+                    PeerDetailsTable {
+                        compact: root.compact
                         objectName: "peerInformationTable"
                         width: parent.width
                         visible: root.sectionIndex === 0
@@ -240,13 +241,15 @@ Page {
                         visible: root.sectionIndex === 1
                         spacing: 16
 
-                        PeerTable {
+                        PeerDetailsTable {
+                            compact: root.compact
                             objectName: "peerBlocksSection"
                             width: parent.width
                             title: qsTr("Blocks")
                             rows: root.blockRelayRows
                         }
-                        PeerTable {
+                        PeerDetailsTable {
+                            compact: root.compact
                             objectName: "peerAddressesSection"
                             width: parent.width
                             title: qsTr("Addresses")
@@ -254,7 +257,8 @@ Page {
                         }
                     }
 
-                    PeerTable {
+                    PeerDetailsTable {
+                        compact: root.compact
                         objectName: "peerNetworkTrafficTable"
                         width: parent.width
                         visible: root.sectionIndex === 2
@@ -316,61 +320,4 @@ Page {
         AlertAction { text: qsTr("OK"); buttonObjectName: "actionErrorCloseButton" }
     }
 
-    // Keep the delegate outside inline components to avoid a Qt 6.2 compiler crash.
-    component PeerTable: Loader {
-        property string title: ""
-        required property var rows
-        sourceComponent: peerTableComponent
-    }
-
-    Component {
-        id: peerTableComponent
-        FormSection {
-            id: table
-            property var rows: parent.rows
-            title: parent ? parent.title : "" // qmllint disable missing-property
-            // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
-            Column {
-                id: tableColumn
-                Layout.fillWidth: true
-                spacing: 0
-                Repeater {
-                    // Updating values must not recreate selectable text fields.
-                    model: table.rows.length
-                    delegate: Component {
-                        FormRow {
-                            id: rowDelegate
-                            required property int index
-                            readonly property var rowData: table.rows[index]
-                            width: tableColumn.width
-                            implicitWidth: 0
-                            showDivider: rowDelegate.index < table.rows.length - 1
-                            contentItem: RowLayout {
-                                spacing: Theme.space.l
-                                SelectableText {
-                                    objectName: "peerDetailKey_" + rowDelegate.index
-                                    Layout.preferredWidth: root.compact ? 112 : 150
-                                    Layout.alignment: Qt.AlignVCenter
-                                    activeFocusOnTab: true
-                                    text: rowDelegate.rowData.label
-                                    textStyle: Theme.text.description
-                                    color: Theme.color.neutral7
-                                }
-                                SelectableText {
-                                    objectName: "peerDetailValue_" + rowDelegate.index
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    Layout.alignment: Qt.AlignVCenter
-                                    activeFocusOnTab: true
-                                    text: rowDelegate.rowData.value
-                                    textStyle: rowDelegate.rowData.mono ? Theme.text.monoDescription : Theme.text.description
-                                    wrapMode: TextEdit.WrapAnywhere
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
