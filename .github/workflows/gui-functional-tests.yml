@@ -148,9 +148,9 @@ jobs:
           python3 test/functional/interface_qml_startup.py
           python3 test/functional/interface_qml_preinit_onboarding.py
           python3 test/functional/interface_qml_node.py
+          python3 test/functional/interface_qml_peers.py
           python3 test/functional/interface_qml_shutdown.py
           python3 test/functional/qml_test_external_signer.py
-          python3 test/functional/qml_test_peers.py
           python3 test/functional/qml_test_receive.py
           python3 test/functional/qml_test_activity_filter_export.py
           python3 test/functional/qml_test_file_dialog.py
