@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -38,16 +39,16 @@ OnboardingView {
             Layout.fillWidth: true
             title: qsTr("Wallet name")
             valueObjectName: "importWalletSuccessWalletName"
-            value: walletController.lastImportedWalletName.length > 0
-                ? walletController.lastImportedWalletName : qsTr("Unknown")
+            value: ApplicationModels.walletController.lastImportedWalletName.length > 0
+                ? ApplicationModels.walletController.lastImportedWalletName : qsTr("Unknown")
             valueWrap: true
         }
         ValueRow {
             Layout.fillWidth: true
             title: qsTr("Key scheme")
             valueObjectName: "importWalletSuccessKeyScheme"
-            value: walletController.lastImportedWalletKeyScheme.length > 0
-                ? walletController.lastImportedWalletKeyScheme : qsTr("Unknown")
+            value: ApplicationModels.walletController.lastImportedWalletKeyScheme.length > 0
+                ? ApplicationModels.walletController.lastImportedWalletKeyScheme : qsTr("Unknown")
             valueWrap: true
             showDivider: false
         }

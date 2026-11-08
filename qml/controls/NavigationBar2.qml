@@ -17,7 +17,7 @@ Pane {
     property alias centerItem: center_section.contentItem
     property alias rightItem: right_section.contentItem
     property var navigationStack: null
-    property bool showBackButton: navigationStack ? navigationStack.canGoBack : false
+    property bool showBackButton: root.navigationStack ? root.navigationStack.canGoBack : false
     property string backButtonObjectName: ""
     // Empty for an icon-only back button.
     property string backButtonText: qsTr("Back")

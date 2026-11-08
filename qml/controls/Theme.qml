@@ -1,7 +1,6 @@
 pragma Singleton
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-
 import org.bitcoincore.qt 1.0
 
 import "../themes"
@@ -29,8 +28,8 @@ Control {
     ]
     readonly property TypeSet typeSet: typeSetFor(typeSetId)
     // The Display setting's money font; the preinit window's options model has none.
-    readonly property var moneyFont: typeof optionsModel !== "undefined" && optionsModel
-        && optionsModel.moneyFont !== undefined ? optionsModel.moneyFont : null
+    readonly property var moneyFont: ApplicationModels.optionsModel !== null
+        && ApplicationModels.optionsModel.moneyFont !== undefined ? ApplicationModels.optionsModel.moneyFont : null
     readonly property TextSet text: TextSet {
         typeSet: root.typeSet
         moneyFamily: root.moneyFont ? root.moneyFont.family : root.typeSet.monoFamily

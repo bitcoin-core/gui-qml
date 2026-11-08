@@ -97,7 +97,7 @@ Popup {
     }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onWalletLoadSucceeded() {
             root.close()
         }
@@ -135,7 +135,7 @@ Popup {
                 enabled: listView.interactive
                 interactive: listView.interactive
             }
-            model: walletListModel
+            model: ApplicationModels.walletListModel
             section.property: "walletSection"
             section.criteria: ViewSection.FullString
             section.delegate: CoreText {
@@ -180,8 +180,8 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
-                        return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
-                            ? optionsModel.displayUnitLabelForAmount(balanceSatoshi) : optionsModel.displayUnitLabel)
+                        return balance + " " + (ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                            ? ApplicationModels.optionsModel.displayUnitLabelForAmount(balanceSatoshi) : ApplicationModels.optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
@@ -196,8 +196,8 @@ Popup {
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
-                checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
-                enabled: !walletController.walletLoadInProgress
+                checked: loadState === WalletListModel.Open && ApplicationModels.walletController.selectedWallet.name === name
+                enabled: !ApplicationModels.walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
                 focusPolicy: Qt.StrongFocus
                 leftPadding: 10
@@ -206,7 +206,7 @@ Popup {
                 bottomPadding: 0
                 Accessible.role: Accessible.ListItem
                 Accessible.name: delegate.displayName
-                Accessible.description: delegate.loadState === WalletListModel.Open && optionsModel.hideAmounts
+                Accessible.description: delegate.loadState === WalletListModel.Open && ApplicationModels.optionsModel.hideAmounts
                     ? qsTr("Hidden amount") : delegate.statusText
                 Accessible.selected: delegate.checked
 
@@ -315,7 +315,7 @@ Popup {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             visible: delegate.loadState !== WalletListModel.Loading
-                            enabled: visible && !walletController.walletLoadInProgress
+                            enabled: visible && !ApplicationModels.walletController.walletLoadInProgress
                             size: Theme.size.controlSmall
                             iconColor: delegate.nameColor
                             activeIconColor: Theme.color.neutral9
@@ -400,11 +400,11 @@ Popup {
                 }
 
                 onClicked: {
-                    if (walletController.walletLoadInProgress) {
+                    if (ApplicationModels.walletController.walletLoadInProgress) {
                         return
                     }
-                    walletController.setSelectedWallet(name, format)
-                    if (walletController.isWalletOpen(name)) {
+                    ApplicationModels.walletController.setSelectedWallet(name, format)
+                    if (ApplicationModels.walletController.isWalletOpen(name)) {
                         root.close()
                     }
                     // Otherwise: stay open until walletLoadSucceeded or
@@ -423,7 +423,7 @@ Popup {
             textColor: Theme.color.accentText
             hoverTextColor: Theme.color.accentText
             iconSource: "image://images/plus-filled"
-            enabled: !walletController.walletLoadInProgress
+            enabled: !ApplicationModels.walletController.walletLoadInProgress
             onTriggered: {
                 root.addWallet()
                 root.close()

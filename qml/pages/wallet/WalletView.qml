@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 
 import org.bitcoincore.qt 1.0
 
-import "../../controls"
 
 // The pages of one wallet: Activity, Send, Receive and wallet settings, each
 // with its own navigation stack. The wallet never changes for the lifetime of
@@ -175,7 +174,7 @@ Item {
     }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onOpenReceiveRequested(wallet) {
             if (wallet === root.wallet) root.requestTab(WalletView.Receive)
         }

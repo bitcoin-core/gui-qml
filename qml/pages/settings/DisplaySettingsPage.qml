@@ -3,10 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-
 import org.bitcoincore.qt 1.0
+import QtQuick.Controls 2.15
 
 import "../../controls"
 import "../../components"
@@ -92,7 +91,7 @@ SettingsPage {
                 surfaceLevel: 1
                 minimumMenuWidth: 400
                 subtitleRole: "description"
-                currentValue: optionsModel.moneyFontChoice
+                currentValue: ApplicationModels.optionsModel.moneyFontChoice
                 model: [
                     {
                         text: qsTr("Roboto Mono"),
@@ -106,7 +105,7 @@ SettingsPage {
                     }
                 ]
                 onActivated: function(value) {
-                    optionsModel.moneyFontChoice = value
+                    ApplicationModels.optionsModel.moneyFontChoice = value
                 }
             }
         }
@@ -117,8 +116,8 @@ SettingsPage {
             title: qsTr("Hide amounts")
             description: qsTr("Mask your balance and activity amounts. Shortcut: %1").arg(hideAmountsShortcut.nativeText)
             showDivider: false
-            checked: optionsModel.hideAmounts
-            onToggled: optionsModel.hideAmounts = checked
+            checked: ApplicationModels.optionsModel.hideAmounts
+            onToggled: ApplicationModels.optionsModel.hideAmounts = checked
         }
     }
 
@@ -199,7 +198,7 @@ SettingsPage {
                 minimumMenuWidth: 400
                 subtitleRole: "description"
                 objectNameRole: "objectName"
-                currentValue: optionsModel.displayUnit
+                currentValue: ApplicationModels.optionsModel.displayUnit
                 model: [
                     {
                         text: qsTr("BTC"),
@@ -227,7 +226,7 @@ SettingsPage {
                     }
                 ]
                 onActivated: function(value) {
-                    optionsModel.displayUnit = value
+                    ApplicationModels.optionsModel.displayUnit = value
                 }
             }
         }
@@ -236,15 +235,15 @@ SettingsPage {
             objectName: "displayLanguageRow"
             Layout.fillWidth: true
             title: qsTranslate("SettingsDisplay", "Language")
-            enabled: ((optionsModel.coreSettingStatuses || ({})).lang || ({})).canEdit !== false
+            enabled: ((ApplicationModels.optionsModel.coreSettingStatuses || ({})).lang || ({})).canEdit !== false
             showsDisclosureIndicator: true
             disclosureIndicatorObjectName: "displayLanguageDisclosureIndicator"
             trailingItem: CoreText {
-                text: optionsModel.languageLabel(optionsModel.language)
+                text: ApplicationModels.optionsModel.languageLabel(ApplicationModels.optionsModel.language)
                 color: Theme.color.neutral7
                 textStyle: Theme.text.description
             }
-            onClicked: root.StackView.view.push(languagePage)
+            onClicked: root.navigationStack.push(languagePage)
         }
 
         ListRow {
@@ -253,7 +252,7 @@ SettingsPage {
             title: qsTr("Third-party transaction URLs")
             showDivider: false
             showsDisclosureIndicator: true
-            onClicked: root.StackView.view.push(transactionUrlsPage)
+            onClicked: root.navigationStack.push(transactionUrlsPage)
         }
     }
 
@@ -270,7 +269,7 @@ SettingsPage {
             description: qsTr("Preview reusable controls and design tokens.")
             showDivider: false
             showsDisclosureIndicator: true
-            onClicked: root.StackView.view.push(designSystemPage)
+            onClicked: root.navigationStack.push(designSystemPage)
         }
     }
 
@@ -278,7 +277,7 @@ SettingsPage {
         id: languagePage
 
         SettingsLanguage {
-            onBack: root.StackView.view.pop()
+            onBack: root.navigationStack.pop()
         }
     }
 
@@ -287,7 +286,7 @@ SettingsPage {
 
         SettingsDesignSystem {
             objectName: "displayDesignSystemPage"
-            onBack: root.StackView.view.pop()
+            onBack: root.navigationStack.pop()
         }
     }
 
@@ -298,7 +297,7 @@ SettingsPage {
             id: transactionUrls
             title: qsTr("Transaction URLs")
             maximumContentWidth: 560
-            onBack: transactionUrls.StackView.view.pop()
+            onBack: root.navigationStack.pop()
 
             PageHeading {
                 Layout.fillWidth: true
@@ -311,9 +310,9 @@ SettingsPage {
                 label: qsTr("URLs")
                 fieldObjectName: "thirdPartyTransactionUrlsInput"
                 fieldTextStyle: Theme.text.monoDescription
-                text: optionsModel.thirdPartyTransactionUrls
+                text: ApplicationModels.optionsModel.thirdPartyTransactionUrls
                 placeholderText: "https://example.com/tx/%s"
-                onEditingFinished: optionsModel.thirdPartyTransactionUrls = text
+                onEditingFinished: ApplicationModels.optionsModel.thirdPartyTransactionUrls = text
             }
         }
     }
