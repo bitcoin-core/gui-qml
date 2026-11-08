@@ -29,6 +29,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         testWalletModel.clearFeeEstimates()
         testWalletModel.setFeeEstimate(1, "0.00000750 BTC")
         testWalletModel.setFeeEstimate(2, "0.00000500 BTC")

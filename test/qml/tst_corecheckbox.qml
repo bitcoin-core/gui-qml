@@ -8,6 +8,10 @@ import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "CoreCheckBox"
     when: windowShown
     width: 400

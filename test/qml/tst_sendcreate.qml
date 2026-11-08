@@ -28,6 +28,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
         testWalletModel.currentTransactionSweepsWallet = false

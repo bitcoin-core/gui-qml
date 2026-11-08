@@ -34,6 +34,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         walletController.reset()
         walletController.initialized = true
         walletController.isWalletLoaded = true

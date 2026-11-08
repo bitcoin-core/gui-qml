@@ -119,6 +119,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         firstCreated = 0
         firstDestroyed = 0
         pushedCreated = 0
