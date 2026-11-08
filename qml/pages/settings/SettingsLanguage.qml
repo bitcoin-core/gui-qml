@@ -41,6 +41,9 @@ SettingsPage {
         // A positioner keeps the filtered Repeater out of the Qt 6.4 layout engine.
         Column {
             Layout.fillWidth: true
+            // Qt 6.4 positioners skip zero-width rows, so a Column sized only by
+            // fillWidth stays 0x0 once its rows bind to its width.
+            Layout.preferredWidth: parent ? parent.width : 0
 
             Repeater {
                 model: root.languages
