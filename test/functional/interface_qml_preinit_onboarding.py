@@ -8,23 +8,24 @@ This test intentionally launches bitcoin-core-app without -datadir so
 RunPreInitOnboarding() is observable through the pre-init test bridge.
 """
 
-import sys
 import json
 import os
 import shutil
 import subprocess
-import time
 import tempfile
-
+import time
+from qml_scenarios import (
+    run_scenarios,
+    scenario,
+)
 from qml_test_harness import (
     QmlTestHarness,
     assert_node_shell_visible,
     assert_onboarding_wallet_creation_visible,
     assert_wallet_shell_visible,
-    complete_preinit_onboarding,
     click_onboarding_button,
+    complete_preinit_onboarding,
     dump_qml_tree,
-    parse_args,
     setup_datadir,
 )
 from qml_wallet_test_lib import (
@@ -59,6 +60,12 @@ def assert_preinit_cover_about_available(gui):
     gui.wait_for_object("onboardingCoverInfoButton", timeout_ms=10000)
     gui.click("onboardingCoverInfoButton")
     gui.wait_for_page("aboutSettingsPage", timeout_ms=10000)
+    # Keep the pre-init engine wiring check here; detailed link confirmation
+    # and reuse assertions live in the stage-two settings integration module.
+    gui.click("aboutWebsiteRow")
+    gui.wait_for_property("aboutExternalLinkPopup", "opened", True, timeout_ms=5000)
+    gui.click("externalLinkCancel")
+    gui.wait_for_property("aboutExternalLinkPopup", "visible", False, timeout_ms=5000)
     gui.click("onboardingAboutCloseButton")
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
 
@@ -482,29 +489,13 @@ def run_qml_onboarded_override_reloads_saved_settings_flow():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def run_tests():
-    args = parse_args()
-    if args.socket_path:
-        raise RuntimeError("qml_test_preinit_onboarding.py must launch the app itself")
-
-    run_wallet_enabled_flow()
-    run_wallet_disabled_flow()
-    run_existing_profile_full_onboarding_flow()
-    run_configured_datadir_preserves_config_source_flow()
-    run_existing_profile_preserves_root_wallet_discovery_flow()
-    run_existing_profile_detects_explicit_walletdir_flow()
-    run_qml_onboarded_override_reloads_saved_settings_flow()
-
-    print("\n" + "=" * 50)
-    print("All tests PASSED")
-    print("=" * 50)
-
-
 if __name__ == "__main__":
-    try:
-        run_tests()
-    except Exception as e:
-        print(f"\nFAILED: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    raise SystemExit(run_scenarios('Pre-init onboarding engine and persisted configuration boundaries', [
+        scenario("wallet-onboarding", 4, run_wallet_enabled_flow),
+        scenario("node-onboarding", 2, run_wallet_disabled_flow),
+        scenario("existing-profile-onboarding", 2, run_existing_profile_full_onboarding_flow),
+        scenario("configured-datadir-source", 2, run_configured_datadir_preserves_config_source_flow),
+        scenario("root-wallet-discovery", 4, run_existing_profile_preserves_root_wallet_discovery_flow),
+        scenario("explicit-walletdir-discovery", 4, run_existing_profile_detects_explicit_walletdir_flow),
+        scenario("onboarded-override-settings", 2, run_qml_onboarded_override_reloads_saved_settings_flow),
+    ]))
