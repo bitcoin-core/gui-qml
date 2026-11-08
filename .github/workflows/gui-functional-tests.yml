@@ -145,6 +145,7 @@ jobs:
           export BITCOIND_LEGACY="${GITHUB_WORKSPACE}/releases/v${LEGACY_BITCOIND_VERSION}/bin/bitcoind"
           export BITCOIN_QT_COMPAT="${GITHUB_WORKSPACE}/releases/v${QT_COMPAT_VERSION}/bin/bitcoin-qt"
           export BITCOIN_QT_RUNNER="xvfb-run -a"
+          python3 test/functional/interface_qml_shutdown.py
           python3 test/functional/qml_test_bridge_sanity.py
           python3 test/functional/qml_test_onboarding.py
           python3 test/functional/qml_test_preinit_onboarding.py
@@ -180,8 +181,6 @@ jobs:
           python3 test/functional/qml_test_watchonly_wallet.py
           python3 test/functional/qml_test_create_wallet_name.py
           python3 test/functional/qml_test_wallet_selector_load.py
-          python3 test/functional/qml_test_shutdown.py
-          python3 test/functional/qml_test_fatal_shutdown.py
           python3 test/functional/qml_test_console.py
           python3 test/functional/qml_test_tray.py
           python3 test/functional/qml_test_window_geometry.py

@@ -14,6 +14,10 @@ _EXPECTED_STDERR = (
     r'Failed to load font resource: ":/fonts/(?:bitcoincoresans/(?:regular|semibold)|robotomono/regular)"',
     r"(?:qt.core.qobject.connect: )?QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged\(QScreen\*\)",
     r"Running initialization in thread",
+    # Qt's offscreen platform asks for its generic default family "Sans Serif"
+    # before the app runs; Core Text on macOS has none, so Qt prints this
+    # one-off cost hint. Families the app names itself are not matched.
+    r'(?:qt\.qpa\.fonts: )?Populating font family aliases took \d+ ms\. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost\.',
 )
 
 
