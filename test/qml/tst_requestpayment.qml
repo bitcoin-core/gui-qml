@@ -88,6 +88,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         optionsModel.displayUnit = BitcoinAmount.BTC
         testPaymentRequest.clear()
         testWalletModel.lastCommitAddressType = ""

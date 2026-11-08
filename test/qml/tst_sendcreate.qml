@@ -35,6 +35,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false

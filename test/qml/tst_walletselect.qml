@@ -19,6 +19,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         walletController.reset()
         walletListModel.reset()
     }

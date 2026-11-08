@@ -48,6 +48,7 @@ TestCase {
         }, overrides || {})
     }
     function init() {
+        testSetup.failOnWarnings()
         Theme.paletteId = "core-dark"
         walletController.reset()
         walletController.initialized = true
