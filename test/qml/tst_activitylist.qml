@@ -17,9 +17,10 @@ TestCase {
     width: 1180
     height: 950
 
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
-    FontLoader { source: "qrc:/fonts/robotomono/regular" }
+    // The minimal platform cannot register application fonts; use its fallback fonts.
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/regular" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/semibold" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
 
@@ -111,8 +112,17 @@ TestCase {
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
         verify(page !== null)
-        waitForRendering(page)
+        settleActivityList(page)
         return page
+    }
+    function settleActivityList(page) {
+        const list = findChild(page, "activityListView")
+        verify(list !== null)
+        // Start pending view layout before checking incubation: an idle
+        // controller can still have delegates queued for the next frame.
+        list.forceLayout()
+        waitForRendering(page)
+        tryVerify(function() { return testSetup.incubatingObjectCount(page) === 0 })
     }
     function findRow(page, txid) {
         const list = findChild(page, "activityListView")
@@ -689,6 +699,7 @@ TestCase {
         mouseClick(findChild(types.contentItem, "activityTypeMultiple"))
         compare(proxy.typeFilters, [ActivityFilterProxyModel.Multiple])
         compare(types.opened, true)
+        settleActivityList(page)
         types.close()
         tryCompare(types, "visible", false)
 
@@ -698,7 +709,9 @@ TestCase {
         mouseClick(findChild(dates.contentItem, "activityDateThisMonth"))
         compare(proxy.dateFilter, ActivityFilterProxyModel.ThisMonth)
         tryCompare(dates, "visible", false)
+        settleActivityList(page)
         page.currentItem.clearFilters()
+        settleActivityList(page)
 
         findChild(page, "activityExportPathField").text = "/tmp/activity-list-test.csv"
         openMore(page)
@@ -710,10 +723,14 @@ TestCase {
         tryCompare(result, "visible", false)
 
         proxy.searchText = "Robert"
+        settleActivityList(page)
         page.navigateToTransaction("batch")
         tryCompare(page, "depth", 2)
+        tryCompare(page, "busy", false)
+        settleActivityList(page)
         page.wallet = testSecondWalletModel
         tryCompare(page, "depth", 1)
+        settleActivityList(page)
     }
 
     function test_filter_button_animates_and_reserves_space() {

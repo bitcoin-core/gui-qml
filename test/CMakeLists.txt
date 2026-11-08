@@ -137,6 +137,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/qrimageprovider.cpp
   ${QMLTESTS_QRC_CPP}
 )
 
@@ -154,12 +155,14 @@ target_link_libraries(bitcoinqml_qmltests
     Qt6::Quick
     Qt6::QuickTest
     Qt6::Svg
+    QRencode::QRencode
 )
 
 target_include_directories(bitcoinqml_qmltests
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src
+    ${PROJECT_BINARY_DIR}/bitcoin/src
 )
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
