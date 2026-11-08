@@ -21,6 +21,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"receive", {WalletMode::Enabled}, CreateReceiveTests, 5},
         {"activity", {WalletMode::Enabled}, CreateActivityTests, 5},
         {"send", {WalletMode::Enabled}, CreateSendTests, 6, SendTestArguments},
+        {"psbt", {WalletMode::Enabled}, CreatePsbtTests, 7, [](const QString&) { return QStringList{"-fallbackfee=0.00010000"}; }},
     };
     return modules;
 }
