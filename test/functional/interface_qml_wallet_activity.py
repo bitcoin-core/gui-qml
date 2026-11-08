@@ -12,6 +12,7 @@ from qml_smoke_lib import (
     open_wallet_settings,
     request_qr_payload,
     stop_gui_checked,
+    wait_until,
     wallet_scenario,
 )
 from qml_wallet_test_lib import (
@@ -77,7 +78,8 @@ def receive_smoke(harness, checkpoint):
     gui.set_property("requestPaymentSaveQRDialog", "selectedFile", qr_path.as_uri())
     gui.invoke("requestPaymentSaveQRDialog", "accepted")
     gui.invoke("requestPaymentSaveQRDialog", "close")
-    assert qr_path.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a"))
+    wait_until(lambda: qr_path.is_file() and qr_path.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")),
+               "the payment QR to be saved as PNG")
     checkpoint("payment QR exported")
 
     txid = rpc_call(harness.gui_rpc_port, "sendtoaddress", {
