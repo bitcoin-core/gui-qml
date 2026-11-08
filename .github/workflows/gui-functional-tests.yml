@@ -147,17 +147,13 @@ jobs:
           export BITCOIN_QT_RUNNER="xvfb-run -a"
           python3 test/functional/interface_qml_startup.py
           python3 test/functional/interface_qml_preinit_onboarding.py
+          python3 test/functional/interface_qml_node.py
           python3 test/functional/interface_qml_shutdown.py
-          python3 test/functional/qml_test_external_link_confirm.py
-          python3 test/functional/qml_test_blockclock.py
-          python3 test/functional/qml_test_blockclock_history.py
           python3 test/functional/qml_test_blocksonly_settings.py
           python3 test/functional/qml_test_external_signer.py
           python3 test/functional/qml_test_peers.py
-          python3 test/functional/qml_test_proxy.py
           python3 test/functional/qml_test_debug_log.py
           python3 test/functional/qml_test_node_runtime_dialogs.py
-          python3 test/functional/qml_test_settings_display.py
           python3 test/functional/qml_test_receive.py
           python3 test/functional/qml_test_activity_filter_export.py
           python3 test/functional/qml_test_file_dialog.py
@@ -178,5 +174,3 @@ jobs:
           python3 test/functional/qml_test_create_wallet_name.py
           python3 test/functional/qml_test_wallet_selector_load.py
           python3 test/functional/qml_test_console.py
-          python3 test/functional/qml_test_tray.py
-          python3 test/functional/qml_test_window_geometry.py
