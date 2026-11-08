@@ -67,6 +67,12 @@ private Q_SLOTS:
             QTRY_VERIFY(page->isVisible());
             QTRY_VERIFY(page->width() > 0 && page->height() > 0);
             QVERIFY(page->mapRectToScene(page->boundingRect()).intersects(m_app.window()->contentItem()->boundingRect()));
+            if (QString::fromLatin1(section) == "about") {
+                QVERIFY(qmltest::Click(m_app, "aboutDeveloperRow"));
+                QVERIFY(qmltest::WaitForVisible(m_app, "settingsDeveloper"));
+                QVERIFY(qmltest::Click(m_app, "settingsDeveloperBack"));
+                QTRY_VERIFY(page->isVisible());
+            }
             QCOMPARE(warnings.count(), 0);
         }
         QVERIFY(qmltest::ReturnToNode(m_app));
