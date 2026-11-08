@@ -36,6 +36,8 @@ std::unique_ptr<QObject> CreateSettingsTests(BitcoinQmlApplication& app, WalletM
 std::unique_ptr<QObject> CreateConsoleTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateBlocksonlyTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateWalletTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateReceiveTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateActivityTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 QStringList DebugLogTestArguments(const QString& selector);
 
 #endif // BITCOIN_QML_TEST_INTEGRATION_RUNNER_TEST_CASES_H

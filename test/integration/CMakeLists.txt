@@ -19,10 +19,12 @@ add_executable(bitcoinqml_integration_tests
   node_tools/test_console.cpp
   node_tools/test_blocksonly.cpp
   wallet_management/test_wallet.cpp
+  wallet_activity/test_activity.cpp
+  wallet_activity/test_receive.cpp
 )
 target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application Qt6::QuickTest)
 set(stage 0)
-foreach(group IN ITEMS foundation node_setup node_tools wallet_management)
+foreach(group IN ITEMS foundation node_setup node_tools wallet_management wallet_activity)
   math(EXPR stage "${stage} + 1")
   add_test(NAME bitcoinqml_integration_${group} COMMAND bitcoinqml_integration_tests
     --stage=${stage}
