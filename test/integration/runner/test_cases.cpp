@@ -17,6 +17,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"console", {WalletMode::Disabled, WalletMode::Enabled}, CreateConsoleTests, 3},
         {"blocksonly", {WalletMode::Disabled, WalletMode::Enabled}, CreateBlocksonlyTests, 3,
          [](const QString&) { return QStringList{"-blocksonly"}; }},
+        {"wallet", {WalletMode::Enabled}, CreateWalletTests, 4},
     };
     return modules;
 }
