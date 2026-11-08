@@ -10,20 +10,31 @@ add_executable(bitcoinqml_integration_tests
   runner/test_main.cpp
   runner/test_cases.cpp
   fixture/test_process.cpp
-  test_lifecycle.cpp
-  test_navigation.cpp
-  test_node.cpp
+  foundation/test_lifecycle.cpp
+  node_setup/test_navigation.cpp
+  node_tools/test_node.cpp
 )
-target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application)
-add_test(NAME bitcoinqml_integration_tests COMMAND bitcoinqml_integration_tests
-  --profile-dir=${PROJECT_BINARY_DIR}/test-profiles
-  -o ${PROJECT_BINARY_DIR}/test-reports/integration.xml,junitxml -o -,txt
-)
-# Bound the whole run in addition to each child's watchdog.
-set_tests_properties(bitcoinqml_integration_tests PROPERTIES TIMEOUT 1500)
+target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application Qt6::QuickTest)
+set(stage 0)
+foreach(group IN ITEMS foundation node_setup node_tools)
+  math(EXPR stage "${stage} + 1")
+  add_test(NAME bitcoinqml_integration_${group} COMMAND bitcoinqml_integration_tests
+    --stage=${stage}
+    --profile-dir=${PROJECT_BINARY_DIR}/test-profiles
+    -o ${PROJECT_BINARY_DIR}/test-reports/integration-${group}.xml,junitxml -o -,txt
+  )
+  set_tests_properties(bitcoinqml_integration_${group} PROPERTIES
+    TIMEOUT 1500
+    LABELS "integration;${group}"
+    ENVIRONMENT "${gui_test_environment}"
+  )
+endforeach()
 
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_integration_tests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+  # Core's Widgets library and this optional remote-message service both
+  # export DebugMessageHandler. Tests capture Qt diagnostics locally.
+  qt6_import_plugins(bitcoinqml_integration_tests EXCLUDE Qt6::QDebugMessageServiceFactoryPlugin)
   target_link_libraries(bitcoinqml_integration_tests PRIVATE Qt6::LabsPlatformplugin Qt6::qtquickdialogsplugin)
   if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
     target_link_libraries(bitcoinqml_integration_tests PRIVATE Qt6::qtqmlcoreplugin)
@@ -32,9 +43,5 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   endif()
 endif()
 
-set_tests_properties(bitcoinqml_integration_tests PROPERTIES
-  LABELS integration
-  ENVIRONMENT "${gui_test_environment}"
-)
 add_custom_target(bitcoinqml_integration
   DEPENDS bitcoinqml_integration_tests)

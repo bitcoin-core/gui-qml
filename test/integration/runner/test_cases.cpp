@@ -8,9 +8,9 @@
 std::span<const IntegrationTestModule> IntegrationTestModules()
 {
     static const IntegrationTestModule modules[]{
-        {"lifecycle", {WalletMode::Disabled, WalletMode::Enabled}, CreateLifecycleTests},
-        {"navigation", {WalletMode::Disabled, WalletMode::Enabled}, CreateNavigationTests},
-        {"node", {WalletMode::Disabled, WalletMode::Enabled}, CreateNodeTests},
+        {"lifecycle", {WalletMode::Disabled, WalletMode::Enabled}, CreateLifecycleTests, 1},
+        {"navigation", {WalletMode::Disabled, WalletMode::Enabled}, CreateNavigationTests, 2},
+        {"node", {WalletMode::Disabled, WalletMode::Enabled}, CreateNodeTests, 3},
     };
     return modules;
 }
