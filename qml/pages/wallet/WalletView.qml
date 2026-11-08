@@ -165,7 +165,14 @@ Item {
     }
 
     onActiveChanged: if (!active) root.closeOwnedPopups()
-    Component.onDestruction: root.closeOwnedPopups()
+    Component.onDestruction: {
+        root.closeOwnedPopups()
+        // StackView updates its implicit size when entries are removed. Clear
+        // them while the surrounding layouts and their other items still live.
+        activityPage.clear(StackView.Immediate)
+        sendPage.clear(StackView.Immediate)
+        settingsStack.clear(StackView.Immediate)
+    }
 
     Connections {
         target: walletController
