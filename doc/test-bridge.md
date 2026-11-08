@@ -215,44 +215,48 @@ All commands raise `QmlDriverError` on failure.
 
 ## Running tests
 
-Test scripts live in `test/functional/`. They can either launch a fresh
-headless GUI instance automatically, or attach to an already-running app.
-
-### Launch a new instance (default)
+The 11 `interface_qml_*.py` suites in `test/functional/` launch fresh GUI
+processes and report named scenarios with their feature-introduction stages.
+See [integration test ownership](integration-testing.md#functional-scenarios-by-stage)
+for the full mapping.
 
 ```bash
-python3 test/functional/qml_test_bridge_sanity.py
-python3 test/functional/qml_test_onboarding.py
+python3 test/functional/interface_qml_startup.py --list
+python3 test/functional/interface_qml_startup.py --case bridge-protocol
+python3 test/functional/interface_qml_startup.py --stage 2
+python3 test/functional/interface_qml_wallet_sending.py --stage 7
+python3 test/functional/interface_qml_shutdown.py --case 'fatal-*'
 ```
 
-The harness starts `bitcoin-core-app` with `QT_QPA_PLATFORM=offscreen`,
-`-resetguisettings`, and a temporary datadir. The process is shut down
-automatically when the test finishes.
+`--list` emits JSON without launching the GUI. `--stage` selects scenarios
+introduced in that exact stage, and may be repeated. `--case` accepts exact names
+or wildcard patterns and may also be repeated. Combining them selects their
+intersection; an invalid or empty selection fails before launching a process.
+Omitting both runs every scenario in that suite. `--save-screenshots` enables
+checkpoints for journeys that support them.
 
-### Attach to a running instance
+The harness uses the selected `QT_QPA_PLATFORM`, software rendering, temporary
+profiles and short automation socket paths. Each scenario owns its setup and
+cleanup, so it can run independently. Successful shared smoke/startup lifetimes
+check process exit status and stderr, including intermediate restarts. Dependency
+skips are reported explicitly with their scenario name and stage.
 
-Start the app with the test bridge enabled:
+For interactive inspection, start an application with the bridge enabled and
+connect using the Python driver:
 
 ```bash
 ./build/bin/bitcoin-core-app -test-automation=/tmp/test_bridge.sock
 ```
 
-Then run tests against it:
-
-```bash
-python3 test/functional/qml_test_bridge_sanity.py --socket-path /tmp/test_bridge.sock
-python3 test/functional/qml_test_onboarding.py --socket-path /tmp/test_bridge.sock
+```python
+from qml_driver import QmlDriver
+with_driver = QmlDriver("/tmp/test_bridge.sock")
+print(with_driver.list_objects())
+with_driver.close()
 ```
 
-When `--socket-path` is provided the harness connects to the existing socket
-and does **not** launch or terminate the application.
-
-### Available tests
-
-| Script | Description |
-|---|---|
-| `qml_test_bridge_sanity.py` | Bridge protocol smoke test: list_objects, get_current_page, get_property, error handling, wait_for_page timeout |
-| `qml_test_onboarding.py` | Walks through the full onboarding flow (Cover → Strengthen → Blockclock → StorageLocation → StorageAmount → Connection) |
+The functional suites own their processes. The lower-level `QmlTestHarness`
+continues to support attaching through its `socket_path` constructor argument.
 
 ## Prerequisite: `objectName` annotations
 
@@ -318,8 +322,8 @@ their buttons:
 | `CMakeLists.txt` | `ENABLE_TEST_AUTOMATION` option and conditional compilation |
 | `test/functional/qml_driver.py` | Python `QmlDriver` client |
 | `test/functional/qml_test_harness.py` | Shared test harness (launch / attach, cleanup, tree dump) |
-| `test/functional/qml_test_bridge_sanity.py` | Bridge protocol sanity test |
-| `test/functional/qml_test_onboarding.py` | Onboarding flow walk-through test |
+| `test/functional/qml_scenarios.py` | Named scenario selection and stage reporting |
+| `test/functional/interface_qml_startup.py` | Bridge protocol, onboarding and startup process scenarios |
 
 ## Security considerations
 
