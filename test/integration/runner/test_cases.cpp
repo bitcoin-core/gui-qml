@@ -20,6 +20,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"wallet", {WalletMode::Enabled}, CreateWalletTests, 4},
         {"receive", {WalletMode::Enabled}, CreateReceiveTests, 5},
         {"activity", {WalletMode::Enabled}, CreateActivityTests, 5},
+        {"send", {WalletMode::Enabled}, CreateSendTests, 6, SendTestArguments},
     };
     return modules;
 }
