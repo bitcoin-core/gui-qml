@@ -32,5 +32,6 @@ std::unique_ptr<QObject> CreateNavigationTests(BitcoinQmlApplication& app, Walle
 std::unique_ptr<QObject> CreateNodeTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateBlockClockTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateSettingsTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateConsoleTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 
 #endif // BITCOIN_QML_TEST_INTEGRATION_RUNNER_TEST_CASES_H
