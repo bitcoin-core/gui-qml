@@ -82,6 +82,7 @@ def node_smoke(harness, checkpoint):
     gui.wait_for_property("displayUnitSAT", "visible", True)
     gui.click("displayUnitSAT")
     gui.wait_for_property("displayUnitPicker", "currentValue", 3)
+    gui.wait_for_property("displayUnitPickerMenu", "visible", False)
     gui.settle()
     gui.click("displayLanguageRow")
     gui.wait_for_page("settingsLanguagePage")
