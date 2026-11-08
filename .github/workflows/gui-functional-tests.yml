@@ -152,11 +152,9 @@ jobs:
           python3 test/functional/interface_qml_wallet.py
           python3 test/functional/interface_qml_wallet_compat.py
           python3 test/functional/interface_qml_wallet_activity.py
+          python3 test/functional/interface_qml_wallet_sending.py
           python3 test/functional/interface_qml_shutdown.py
           python3 test/functional/qml_test_external_signer.py
-          python3 test/functional/qml_test_password_wallet.py
-          python3 test/functional/qml_test_send_receive.py
-          python3 test/functional/qml_test_custom_fee.py
           python3 test/functional/qml_test_psbt.py
           python3 test/functional/qml_test_wallet_rbf.py
           python3 test/functional/qml_test_uri_import.py
