@@ -25,13 +25,16 @@ import subprocess
 import sys
 import tempfile
 import time
-
+from qml_driver import QmlDriver
+from qml_scenarios import (
+    run_scenarios,
+    scenario,
+)
 from qml_test_harness import (
     GUI_STARTUP_TIMEOUT,
     dump_qml_tree,
     find_gui_binary,
 )
-from qml_driver import QmlDriver
 
 
 # ── Port allocation ───────────────────────────────────────────────────────────
@@ -127,7 +130,7 @@ class PeerQmlTestHarness:
     def __init__(self):
         self.gui_binary = find_gui_binary()
         self.bitcoind_binary = find_bitcoind()
-        self.tmpdir = tempfile.mkdtemp(prefix="qml_test_peers_")
+        self.tmpdir = tempfile.mkdtemp(prefix="interface_qml_peers_")
         self.socket_path = os.path.join(self.tmpdir, "test_bridge.sock")
         self.gui_process = None
         self.peer_process = None
@@ -734,7 +737,7 @@ def run_tests():
             "viewBannedPeersButton should still be hidden after disconnect"
         print("  Verified: viewBannedPeersButton hidden (no bans after disconnect)")
 
-        # ── Tests 2–5: Ban with each duration ────────────────────────────────
+        # ── Tests 2-5: Ban with each duration ────────────────────────────────
         for i, (duration_secs, duration_label) in enumerate(BAN_DURATIONS):
             if i > 0:
                 harness.rpc_call("clearbanned")
@@ -777,7 +780,7 @@ def run_tests():
         test_ban_persistence(harness)
         gui = harness.driver
 
-        # ── Tests 8–9: Multi-peer isolation ──────────────────────────────
+        # ── Tests 8-9: Multi-peer isolation ──────────────────────────────
         # test_ban_persistence already navigated to the peers page after
         # restarting the GUI, so no additional navigation is needed here.
         print("\nReconnecting peer for multi-peer disconnect test ...")
@@ -819,5 +822,7 @@ def run_tests():
         harness.stop()
 
 
-if __name__ == '__main__':
-    run_tests()
+if __name__ == "__main__":
+    raise SystemExit(run_scenarios('Multi-node peer management and ban persistence', [
+        scenario("peer-management-and-restart", 3, run_tests),
+    ]))
