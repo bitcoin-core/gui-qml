@@ -4,18 +4,24 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end GUI coverage for the external signer send flow."""
 
-import argparse
 import json
 import os
 import re
 import sys
 import time
 from datetime import datetime
-
 from qml_driver import QmlDriverError
 from qml_process_checks import check_gui_exit
+from qml_scenarios import (
+    Scenario,
+    run_scenarios,
+)
 from qml_test_harness import dump_qml_tree
-from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
+from qml_wallet_test_lib import (
+    WalletFlowHarness,
+    rpc_call,
+    wait_for_rpc,
+)
 
 
 EXPECTED_SIGNER_NAME = "trezor_t"
@@ -35,24 +41,11 @@ class ExternalSignerHarness(WalletFlowHarness):
             check_gui_exit(process.returncode, stderr.decode("utf-8", errors="replace"), socket_path=self.socket_path)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="External signer GUI functional test",
-        add_help=True,
-    )
-    parser.add_argument(
-        "--save-screenshots",
-        action="store_true",
-        help="Save a PNG at each GUI checkpoint under test/artifacts/",
-    )
-    return parser.parse_args()
-
-
 def make_screenshot_root():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     artifacts_root = os.path.join(repo_root, "test", "artifacts")
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    screenshot_root = os.path.join(artifacts_root, f"qml_test_external_signer-{timestamp}")
+    screenshot_root = os.path.join(artifacts_root, f"interface_qml_external_signer-{timestamp}")
     os.makedirs(screenshot_root, exist_ok=True)
     return screenshot_root
 
@@ -597,4 +590,6 @@ def run_test(args):
 
 
 if __name__ == "__main__":
-    sys.exit(run_test(parse_args()))
+    raise SystemExit(run_scenarios('External signer subprocess and restart journey', [
+        Scenario("signer-devices-and-restart", 8, run_test),
+    ]))
