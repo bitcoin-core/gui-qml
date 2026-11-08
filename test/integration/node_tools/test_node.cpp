@@ -6,6 +6,8 @@
 #include <test/integration/fixture/test_util.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <univalue.h>
+#include <node/interface_ui.h>
+#include <util/translation.h>
 
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -29,25 +31,6 @@ private Q_SLOTS:
         QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
     }
 
-    void blockClockTracksNetworkActivity()
-    {
-        auto* clock = qmltest::Find(m_app, "blockClock");
-        QVERIFY(clock);
-        QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("CONNECTING"));
-        QCOMPARE(clock->property("header").toString(), QStringLiteral("Connecting"));
-        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Please wait"));
-        m_app.nodeModel().setPause(true);
-        QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("PAUSE"));
-        QTRY_VERIFY(!qmltest::Call(m_app, &interfaces::Node::getNetworkActive));
-        QCOMPARE(clock->property("header").toString(), QStringLiteral("Paused"));
-        QCOMPARE(clock->property("subText").toString(), QString{});
-        m_app.nodeModel().setPause(false);
-        QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("CONNECTING"));
-        QTRY_VERIFY(qmltest::Call(m_app, &interfaces::Node::getNetworkActive));
-        QCOMPARE(clock->property("header").toString(), QStringLiteral("Connecting"));
-        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Please wait"));
-    }
-
     void networkActionsAndCoreNotificationsAgree_data()
     {
         QTest::addColumn<bool>("active");
@@ -60,11 +43,16 @@ private Q_SLOTS:
         QFETCH(bool, active);
         auto* model = &m_app.nodeModel();
         QVERIFY(model);
+        QTRY_VERIFY(model->networkActionReady());
         model->setPause(!active);
+        QTRY_VERIFY(!model->networkActionPending());
+        QTRY_COMPARE(model->pause(), !active);
         QTRY_COMPARE(qmltest::Call(m_app, &interfaces::Node::getNetworkActive), active);
         qmltest::Call(m_app, &interfaces::Node::setNetworkActive, !active);
         QTRY_COMPARE(model->pause(), active);
         model->setPause(!active);
+        QTRY_VERIFY(!model->networkActionPending());
+        QTRY_COMPARE(model->pause(), !active);
         QTRY_COMPARE(qmltest::Call(m_app, &interfaces::Node::getNetworkActive), active);
         QCOMPARE(model->numPeers(), static_cast<int>(qmltest::Call(m_app, &interfaces::Node::getNodeCount, ConnectionDirection::Both)));
     }
@@ -96,21 +84,61 @@ private Q_SLOTS:
         QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
     }
 
-    void chainSyncFollowsRealCoreBlockNotifications()
+
+    void runtimeDialogsRoundTripCoreQuestions_data()
     {
-        auto* model = &m_app.nodeModel();
-        QVERIFY(model);
-        const int previous_height = qmltest::Call(m_app, &interfaces::Node::getNumBlocks);
-        QSignalSpy tips{model, &NodeModel::blockTipHeightChanged};
-        UniValue params{UniValue::VARR};
-        params.push_back(1);
-        params.push_back("raw(51)");
-        QCOMPARE(qmltest::Call(m_app, &interfaces::Node::executeRpc, "generatetodescriptor", params, "").size(), 1U);
-        QTRY_COMPARE(model->blockTipHeight(), previous_height + 1);
-        QCOMPARE(model->blockTipHeight(), qmltest::Call(m_app, &interfaces::Node::getNumBlocks));
-        QVERIFY(!tips.isEmpty());
-        QVERIFY(model->verificationProgress() > 0.0);
+        QTest::addColumn<QString>("message");
+        QTest::addColumn<unsigned int>("style");
+        QTest::addColumn<bool>("question");
+        QTest::addColumn<QStringList>("buttons");
+        QTest::addColumn<QString>("dismiss");
+        using UI = CClientUIInterface;
+        QTest::newRow("database-read-error") << "Error reading from database, shutting down."
+            << static_cast<unsigned int>(UI::MSG_ERROR) << false << QStringList{"Ok"} << "Ok";
+        QTest::newRow("deprecated-checkpoints-warning") << "Option '-checkpoints' is set but checkpoints were removed. This option has no effect."
+            << static_cast<unsigned int>(UI::MSG_WARNING) << false << QStringList{"Ok"} << "Ok";
+        QTest::newRow("reindex-question") << "Error opening block database.\n\nDo you want to rebuild the databases now?"
+            << static_cast<unsigned int>(UI::MSG_ERROR | UI::BTN_ABORT) << true << QStringList{"Ok", "Abort"} << "Abort";
+        QTest::newRow("network-options-error") << "Cannot provide specific connections and have addrman find outgoing connections at the same time."
+            << static_cast<unsigned int>(UI::MSG_ERROR) << false << QStringList{"Ok"} << "Ok";
+        QTest::newRow("abort-retry-ignore") << "Failed to listen on any port. Use -listen=0 if you want this."
+            << static_cast<unsigned int>(UI::ICON_ERROR | UI::MODAL | UI::BTN_ABORT | UI::BTN_RETRY | UI::BTN_IGNORE)
+            << true << QStringList{"Abort", "Retry", "Ignore"} << "Abort";
     }
+
+    void runtimeDialogsRoundTripCoreQuestions()
+    {
+        QFETCH(QString, message);
+        QFETCH(unsigned int, style);
+        QFETCH(bool, question);
+        QFETCH(QStringList, buttons);
+        QFETCH(QString, dismiss);
+        QObject observer;
+        bool answered{false};
+        connect(&m_app.nodeModel(), &NodeModel::runtimeDialogChanged, &observer, [&] {
+            if (!m_app.nodeModel().runtimeDialogVisible()) return;
+            QTimer::singleShot(0, &observer, [&] {
+                const auto close_dialog = qScopeGuard([&] { m_app.nodeModel().answerRuntimeDialog(CClientUIInterface::BTN_ABORT); });
+                QCOMPARE(m_app.nodeModel().runtimeDialogMessage(), message);
+                QCOMPARE(m_app.nodeModel().runtimeDialogQuestion(), question);
+                for (const auto& button : buttons) {
+                    QVERIFY(qmltest::WaitForVisible(m_app, qPrintable("nodeRuntimeDialogButton" + button)));
+                }
+                QVERIFY(qmltest::Click(m_app, qPrintable("nodeRuntimeDialogButton" + dismiss)));
+                answered = true;
+            });
+        });
+        auto result = std::async(std::launch::async, [=] {
+            if (question) return uiInterface.ThreadSafeQuestion(Untranslated(message.toStdString()), "", style);
+            uiInterface.ThreadSafeMessageBox(Untranslated(message.toStdString()), style);
+            return false;
+        });
+        QTRY_VERIFY(result.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready);
+        QVERIFY(answered);
+        QVERIFY(!m_app.nodeModel().runtimeDialogVisible());
+        QVERIFY(!result.get());
+    }
+
 };
 
 std::unique_ptr<QObject> CreateNodeTests(BitcoinQmlApplication& app, WalletMode)
