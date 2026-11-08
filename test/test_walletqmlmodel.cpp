@@ -4,8 +4,10 @@
 
 #include <addresstype.h>
 #include <chainparams.h>
+#include <common/args.h>
 #include <common/messages.h>
 #include <common/signmessage.h>
+#include <init.h>
 #include <interfaces/handler.h>
 #include <interfaces/chain.h>
 #include <interfaces/wallet.h>
@@ -15,6 +17,7 @@
 #include <node/context.h>
 #include <primitives/transaction.h>
 #include <psbt.h>
+#include <qml/core_settings.h>
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/psbtqmlmodel.h>
@@ -31,14 +34,17 @@
 #include <wallet/coincontrol.h>
 #include <wallet/types.h>
 
+#include <QDir>
 #include <QFile>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QLocale>
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtTest/QtTest>
@@ -46,6 +52,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <memory>
@@ -67,6 +75,9 @@ std::unique_ptr<interfaces::Handler> MakeNoopHandler()
 constexpr auto NON_P2PKH_ADDRESS{"bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj"};
 
 constexpr auto FEE_ESTIMATE_TIMEOUT_MS{3'000};
+constexpr char RECEIVE_ADDRESS_TYPES_SETTING[]{"qml_receive_address_types"};
+constexpr char TEST_WALLET_NAME[]{"fake-wallet"};
+constexpr char OTHER_WALLET_NAME[]{"other-wallet"};
 const auto VALID_MAINNET_ADDRESS = QStringLiteral("1BoatSLRHtKNngkdXEeobR76b53LETtpyT");
 const auto VALID_MAINNET_P2SH_ADDRESS = QStringLiteral("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy");
 const auto VALID_REGTEST_ADDRESS = QStringLiteral("bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9");
@@ -150,9 +161,23 @@ void CompareFeeEstimateCalls(const std::vector<FeeEstimateCall>& actual, const s
 struct DrainWalletModel {
     void operator()(WalletQmlModel* model) const
     {
-        QSignalSpy drained{model, &WalletQmlModel::shutdownFinished};
+        QEventLoop loop;
+        QObject::connect(model, &WalletQmlModel::shutdownFinished, &loop, &QEventLoop::quit);
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        timeout.setTimerType(Qt::PreciseTimer);
+        QObject::connect(&timeout, &QTimer::timeout, &loop, [model] {
+            if (model->backendExecutor()->isDrained()) return;
+            std::fputs("Timed out after 10000 ms waiting for WalletQmlModel backend to drain\n", stderr);
+            std::fflush(stderr);
+            std::_Exit(EXIT_FAILURE);
+        });
+        timeout.start(10'000);
         model->beginShutdown();
-        if (!model->backendExecutor()->isDrained() && drained.empty()) QVERIFY(drained.wait(10000));
+        while (!model->backendExecutor()->isDrained()) {
+            loop.exec();
+        }
+        timeout.stop();
         delete model;
     }
 };
@@ -292,6 +317,7 @@ public:
     bool private_keys_disabled{false};
     bool external_signer{false};
     bool taproot_enabled{true};
+    std::string wallet_name{TEST_WALLET_NAME};
     OutputType default_address_type{OutputType::BECH32};
     CAmount balance{50'000};
     int encrypt_calls{0};
@@ -413,7 +439,7 @@ public:
         last_backup_path = path;
         return !path.empty();
     }
-    std::string getWalletName() override { return "fake-wallet"; }
+    std::string getWalletName() override { return wallet_name; }
     bool getPubKey(const CScript&, const CKeyID&, CPubKey&) override { return false; }
     SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& signature) override
     {
@@ -566,11 +592,78 @@ public:
     std::unique_ptr<interfaces::Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn) override { return MakeNoopHandler(); }
 };
 
-WalletModelHarness<FakePasswordWallet> MakePasswordWalletModel(interfaces::Node* node = nullptr)
+WalletModelHarness<FakePasswordWallet> MakePasswordWalletModel(interfaces::Node* node = nullptr, ArgsManager& args = gArgs, const std::string& wallet_name = TEST_WALLET_NAME)
 {
     auto wallet = std::make_unique<FakePasswordWallet>();
+    wallet->wallet_name = wallet_name;
     FakePasswordWallet* const wallet_view{wallet.get()};
-    return {wallet_view, std::unique_ptr<WalletQmlModel, DrainWalletModel>{new WalletQmlModel(std::move(wallet), node)}};
+    return {wallet_view, std::unique_ptr<WalletQmlModel, DrainWalletModel>{new WalletQmlModel(std::move(wallet), node, args)}};
+}
+
+void SetSegwitDestinationGenerator(FakePasswordWallet* wallet)
+{
+    wallet->get_new_destination_fn = [wallet](OutputType type, const std::string&) -> util::Result<CTxDestination> {
+        ++wallet->get_new_destination_calls;
+        wallet->new_destination_types.push_back(type);
+        return CTxDestination{WitnessV0KeyHash{}};
+    };
+}
+
+struct ReceiveAddressSettings {
+    QTemporaryDir directory;
+    ArgsManager args;
+    MockNode node;
+    QVariantMap saved_gui_settings;
+
+    ReceiveAddressSettings()
+    {
+        SetupServerArgs(args, false);
+        args.ForceSetArg("-datadir", directory.path().toStdString());
+        args.ForceSetArg("-settings", path().toStdString());
+        QSettings settings;
+        settings.beginGroup("receiveAddressTypes");
+        for (const auto& key : settings.allKeys()) {
+            saved_gui_settings.insert(key, settings.value(key));
+        }
+        settings.remove("");
+        settings.sync();
+    }
+    ~ReceiveAddressSettings()
+    {
+        QSettings settings;
+        settings.beginGroup("receiveAddressTypes");
+        settings.remove("");
+        for (auto it = saved_gui_settings.cbegin(); it != saved_gui_settings.cend(); ++it) {
+            settings.setValue(it.key(), it.value());
+        }
+        settings.sync();
+    }
+    QString path() const { return directory.filePath("settings.json"); }
+    common::SettingsValue preferences() const { return args.GetPersistentSetting(RECEIVE_ADDRESS_TYPES_SETTING); }
+    bool readSavedPreferences(common::SettingsValue& value, QString& error) const
+    {
+        QFile file(path());
+        if (!file.open(QIODevice::ReadOnly)) {
+            error = QStringLiteral("Unable to open settings file %1: %2").arg(file.fileName(), file.errorString());
+            return false;
+        }
+        UniValue settings;
+        if (!settings.read(file.readAll().toStdString())) {
+            error = QStringLiteral("Invalid JSON in settings file %1").arg(file.fileName());
+            return false;
+        }
+        value = settings[RECEIVE_ADDRESS_TYPES_SETTING];
+        error.clear();
+        return true;
+    }
+};
+
+bool WaitForWalletTasks(WalletQmlModel& model)
+{
+    bool done{false};
+    QObject receiver;
+    if (!model.backendExecutor()->submit(&receiver, [] {}, [&] { done = true; })) return false;
+    return QTest::qWaitFor([&] { return done; }, 10'000);
 }
 
 // Include the input and output metadata consumed by the activity models,
@@ -734,6 +827,12 @@ private Q_SLOTS:
     void commitPaymentRequestWithPassphraseWrongPasswordSurfacesError();
     void availableReceiveAddressTypesHideUnavailableTaproot();
     void receiveAddressTypeDefaultPersistsPerWallet();
+    void receiveAddressTypeNoSettings_data();
+    void receiveAddressTypeNoSettings();
+    void receiveAddressTypeWriteFailure();
+    void receiveAddressTypeReselectAfterReopen();
+    void receiveAddressTypeQueuedWrites_data();
+    void receiveAddressTypeQueuedWrites();
     void receivingAddressIsStableUntilRotatedOrPaid();
     void receivingAddressCreationAndRequestPersistenceAreSeparate_data();
     void receivingAddressCreationAndRequestPersistenceAreSeparate();
@@ -875,6 +974,9 @@ void WalletQmlModelTests::backupWalletForwardsPath()
 
 void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()
 {
+    MockNode node;
+    std::unique_ptr<WalletQmlModel, DrainWalletModel> empty_model{new WalletQmlModel(&node)};
+    QVERIFY(empty_model->defaultReceiveAddressType().isEmpty());
     auto [wallet, model] = MakePasswordWalletModel();
 
     QVariantList types = model->availableReceiveAddressTypes();
@@ -891,46 +993,215 @@ void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()
 
 void WalletQmlModelTests::receiveAddressTypeDefaultPersistsPerWallet()
 {
-    MockNode node;
+    ReceiveAddressSettings fixture;
     common::SettingsValue preferences{UniValue::VOBJ};
-    preferences.pushKV("other-wallet", "legacy");
-    node.SetPersistentSetting("qml_receive_address_types", preferences);
-    node.update_rw_setting_fn = [&node](const auto& key, const auto& value) {
-        node.SetPersistentSetting(key, value);
-    };
-    auto [wallet, model] = MakePasswordWalletModel(&node);
+    preferences.pushKV(OTHER_WALLET_NAME, "legacy");
+    QmlCoreSettings::SetRwSetting(fixture.args, QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING), preferences);
+    auto [wallet, model] = MakePasswordWalletModel(&fixture.node, fixture.args);
     wallet->default_address_type = OutputType::BECH32;
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32m"));
 
     model->setDefaultReceiveAddressType("p2sh-segwit");
     QCOMPARE(model->defaultReceiveAddressType(), QString("p2sh-segwit"));
-    const auto saved = node.getPersistentSetting("qml_receive_address_types");
-    QCOMPARE(saved["fake-wallet"].get_str(), std::string("p2sh-segwit"));
-    QCOMPARE(saved["other-wallet"].get_str(), std::string("legacy"));
-    auto [restored_wallet, restored_model] = MakePasswordWalletModel(&node);
+    QVERIFY(WaitForWalletTasks(*model));
+    common::SettingsValue saved;
+    QString error;
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved[TEST_WALLET_NAME].get_str(), std::string("p2sh-segwit"));
+    QCOMPARE(saved[OTHER_WALLET_NAME].get_str(), std::string("legacy"));
+    QVERIFY(fixture.args.ReadSettingsFile());
+    auto [restored_wallet, restored_model] = MakePasswordWalletModel(&fixture.node, fixture.args);
     QCOMPARE(restored_model->defaultReceiveAddressType(), QString("p2sh-segwit"));
 
     model->setDefaultReceiveAddressType("invalid");
     QCOMPARE(model->defaultReceiveAddressType(), QString("p2sh-segwit"));
     model->setDefaultReceiveAddressType("bech32m");
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32m"));
+    QVERIFY(WaitForWalletTasks(*model));
     wallet->taproot_enabled = false;
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
-    node.SetPersistentSetting("qml_receive_address_types", "malformed");
+    QmlCoreSettings::SetRwSetting(fixture.args, QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING), "malformed");
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
     model->setDefaultReceiveAddressType("legacy");
     QCOMPARE(model->defaultReceiveAddressType(), QString("legacy"));
+    QVERIFY(WaitForWalletTasks(*model));
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QVERIFY(saved.isObject());
+    QCOMPARE(saved[TEST_WALLET_NAME].get_str(), std::string("legacy"));
+}
+
+void WalletQmlModelTests::receiveAddressTypeNoSettings_data()
+{
+    QTest::addColumn<bool>("existing_file");
+    QTest::newRow("absent") << false;
+    QTest::newRow("existing") << true;
+}
+
+void WalletQmlModelTests::receiveAddressTypeNoSettings()
+{
+    QFETCH(bool, existing_file);
+    ReceiveAddressSettings fixture;
+    UniValue preferences{UniValue::VOBJ};
+    preferences.pushKV(TEST_WALLET_NAME, "legacy");
+    UniValue original_settings{UniValue::VOBJ};
+    original_settings.pushKV(RECEIVE_ADDRESS_TYPES_SETTING, preferences);
+    const QByteArray original{QByteArray::fromStdString(original_settings.write())};
+    if (existing_file) {
+        QFile file(fixture.path());
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(original), original.size());
+    }
+    fixture.args.LockSettings([](common::Settings& settings) { settings.forced_settings.erase("settings"); });
+    const char* argv[]{"receive-settings-test", "-nosettings"};
+    std::string error;
+    QVERIFY(fixture.args.ParseParameters(2, argv, error));
+    QVERIFY(!fixture.args.GetSettingsPath());
+    auto [wallet, model] = MakePasswordWalletModel(&fixture.node, fixture.args);
+    QVERIFY(model->ensureReceivingAddress(false, "bech32"));
+    QVERIFY(!model->receivingAddress()->address().isEmpty());
+    QVERIFY(WaitForWalletTasks(*model));
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+    QVERIFY(fixture.preferences().isNull());
+    QVERIFY(model->ensureReceivingAddress(true));
+    QCOMPARE(wallet->new_destination_types.back(), OutputType::BECH32);
+    QVERIFY(WaitForWalletTasks(*model));
+    QCOMPARE(QFile::exists(fixture.path()), existing_file);
+    if (existing_file) {
+        QFile file(fixture.path());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), original);
+    }
+    QVERIFY(!QFile::exists(fixture.path() + ".tmp"));
+}
+
+void WalletQmlModelTests::receiveAddressTypeWriteFailure()
+{
+    ReceiveAddressSettings fixture;
+    common::SettingsValue preferences{UniValue::VOBJ};
+    preferences.pushKV(TEST_WALLET_NAME, "bech32m");
+    preferences.pushKV(OTHER_WALLET_NAME, "legacy");
+    QmlCoreSettings::SetRwSetting(fixture.args, QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING), preferences);
+    QVERIFY(fixture.args.WriteSettingsFile());
+    QVERIFY(QDir().mkdir(fixture.path() + ".tmp"));
+    auto [wallet, model] = MakePasswordWalletModel(&fixture.node, fixture.args);
+    SetSegwitDestinationGenerator(wallet);
+    model->currentPaymentRequest()->setNoteSelf("Keep this draft");
+    QVERIFY(model->ensureReceivingAddress(false, "bech32"));
+    const auto address = model->receivingAddress()->address();
+    QVERIFY(WaitForWalletTasks(*model));
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+    QCOMPARE(fixture.preferences().write(), preferences.write());
+    common::SettingsValue saved;
+    QString error;
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved.write(), preferences.write());
+
+    QVERIFY(QDir().rmdir(fixture.path() + ".tmp"));
+    QVERIFY(model->ensureReceivingAddress());
+    QVERIFY(WaitForWalletTasks(*model));
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved.write(), preferences.write());
+    QCOMPARE(model->receivingAddress()->address(), address);
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QString("Keep this draft"));
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+
+    QVERIFY(model->ensureReceivingAddress(false, "bech32"));
+    QVERIFY(WaitForWalletTasks(*model));
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved[TEST_WALLET_NAME].get_str(), std::string("bech32"));
+    QCOMPARE(saved[OTHER_WALLET_NAME].get_str(), std::string("legacy"));
+    QCOMPARE(model->receivingAddress()->address(), address);
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QString("Keep this draft"));
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+}
+
+void WalletQmlModelTests::receiveAddressTypeReselectAfterReopen()
+{
+    ReceiveAddressSettings fixture;
+    common::SettingsValue preferences{UniValue::VOBJ};
+    preferences.pushKV(TEST_WALLET_NAME, "bech32m");
+    preferences.pushKV(OTHER_WALLET_NAME, "legacy");
+    QmlCoreSettings::SetRwSetting(fixture.args, QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING), preferences);
+    QVERIFY(fixture.args.WriteSettingsFile());
+    // Obstruct the temporary file without relying on platform-specific permissions.
+    QVERIFY(QDir().mkdir(fixture.path() + ".tmp"));
+    auto [wallet, model] = MakePasswordWalletModel(&fixture.node, fixture.args);
+    SetSegwitDestinationGenerator(wallet);
+    QVERIFY(model->ensureReceivingAddress(false, "bech32"));
+    const auto address = model->receivingAddress()->address();
+    QVERIFY(WaitForWalletTasks(*model));
+    model.reset();
+    QVERIFY(QDir().rmdir(fixture.path() + ".tmp"));
+
+    auto [restored_wallet, restored_model] = MakePasswordWalletModel(&fixture.node, fixture.args);
+    restored_wallet->get_address_result = true;
+    SetSegwitDestinationGenerator(restored_wallet);
+    QVERIFY(restored_model->ensureReceivingAddress());
+    QVERIFY(WaitForWalletTasks(*restored_model));
+    QCOMPARE(restored_model->defaultReceiveAddressType(), QString("bech32m"));
+    QCOMPARE(restored_model->receivingAddress()->address(), address);
+    QCOMPARE(restored_wallet->get_new_destination_calls, 0);
+    common::SettingsValue saved;
+    QString error;
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved.write(), preferences.write());
+
+    restored_model->currentPaymentRequest()->setNoteSelf("Keep reopened draft");
+    QVERIFY(restored_model->ensureReceivingAddress(false, "bech32"));
+    QCOMPARE(restored_model->defaultReceiveAddressType(), QString("bech32"));
+    QVERIFY(WaitForWalletTasks(*restored_model));
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved[TEST_WALLET_NAME].get_str(), std::string("bech32"));
+    QCOMPARE(saved[OTHER_WALLET_NAME].get_str(), std::string("legacy"));
+    QCOMPARE(restored_model->receivingAddress()->address(), address);
+    QCOMPARE(restored_model->currentPaymentRequest()->noteSelf(), QString("Keep reopened draft"));
+    QCOMPARE(restored_wallet->get_new_destination_calls, 0);
+
+    QVERIFY(restored_model->ensureReceivingAddress(true));
+    QCOMPARE(restored_wallet->new_destination_types.back(), OutputType::BECH32);
+    QCOMPARE(restored_wallet->get_new_destination_calls, 1);
+    QVERIFY(WaitForWalletTasks(*restored_model));
+}
+
+void WalletQmlModelTests::receiveAddressTypeQueuedWrites_data()
+{
+    QTest::addColumn<QString>("initial_type");
+    QTest::newRow("legacy") << QStringLiteral("legacy");
+    QTest::newRow("bech32m") << QStringLiteral("bech32m");
+}
+
+void WalletQmlModelTests::receiveAddressTypeQueuedWrites()
+{
+    QFETCH(QString, initial_type);
+    ReceiveAddressSettings fixture;
+    QSemaphore gate;
+    auto [wallet, model] = MakePasswordWalletModel(&fixture.node, fixture.args);
+    auto [other_wallet, other_model] = MakePasswordWalletModel(&fixture.node, fixture.args, OTHER_WALLET_NAME);
+    model->setDefaultReceiveAddressType(initial_type);
+    QVERIFY(WaitForWalletTasks(*model));
+
+    QVERIFY(model->backendExecutor()->submit(model.get(), [&] { gate.acquire(); }, [] {}));
+    const auto release = qScopeGuard([&] { gate.release(); });
+    model->setDefaultReceiveAddressType("bech32");
+    model->setDefaultReceiveAddressType("bech32m");
+    other_model->setDefaultReceiveAddressType("legacy");
+    QVERIFY(WaitForWalletTasks(*other_model));
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32m"));
+    QCOMPARE(other_model->defaultReceiveAddressType(), QString("legacy"));
+    gate.release();
+    QVERIFY(WaitForWalletTasks(*model));
+    common::SettingsValue saved;
+    QString error;
+    QVERIFY2(fixture.readSavedPreferences(saved, error), qPrintable(error));
+    QCOMPARE(saved[TEST_WALLET_NAME].get_str(), std::string("bech32m"));
+    QCOMPARE(saved[OTHER_WALLET_NAME].get_str(), std::string("legacy"));
 }
 
 void WalletQmlModelTests::receivingAddressIsStableUntilRotatedOrPaid()
 {
     QSettings settings;
     settings.remove("receiveAddressTypes/fake-wallet");
-    MockNode node;
-    node.update_rw_setting_fn = [&node](const auto& key, const auto& value) {
-        node.SetPersistentSetting(key, value);
-    };
-    auto [wallet, model] = MakePasswordWalletModel(&node);
+    auto [wallet, model] = MakePasswordWalletModel();
     QVERIFY(model->ensureReceivingAddress());
     QCOMPARE(wallet->new_destination_types.back(), OutputType::BECH32M);
     const auto address = model->receivingAddress()->address();
