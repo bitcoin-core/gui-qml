@@ -1175,6 +1175,29 @@ TestCase {
         tryCompare(reviewButton, "activeFocus", true)
     }
 
+    function test_fast_send_completion_before_popup_open_gets_done_focus() {
+        // The completion must arrive while the popup's enter transition runs.
+        Theme.motion.mode = "full"
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        const stack = popup.contentItem
+        compare(popup.opened, false)
+        verify(stack.currentItem !== null)
+        stack.currentItem.transactionSent("fast-completion")
+        tryVerify(function() { return stack.currentItem && stack.currentItem.objectName === "sendCompletePage" })
+        tryCompare(popup, "opened", true)
+        const done = findChild(stack.currentItem, "sendResultDoneButton")
+        verify(done !== null)
+        tryCompare(done, "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        tryCompare(popup, "visible", false)
+    }
+
     function test_locked_coin_confirmation_uses_identity_after_refresh() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
         const popup = findChild(page, "coinSelectionPopup")
