@@ -85,7 +85,7 @@ Page {
     Connections {
         target: root.Window.window
         function onActiveFocusItemChanged() {
-            Qt.callLater(root.ensureFocusedItemVisible)
+            if (root) Qt.callLater(root.ensureFocusedItemVisible)
         }
     }
 
@@ -116,8 +116,8 @@ Page {
         clip: true
         contentWidth: availableWidth
         contentHeight: contentFrame.height
-        onHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
-        onContentHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
+        onHeightChanged: if (root) Qt.callLater(root.ensureFocusedItemVisible)
+        onContentHeightChanged: if (root) Qt.callLater(root.ensureFocusedItemVisible)
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Item {
