@@ -179,7 +179,7 @@ SettingsPage {
                 width: Math.min(320, parent.width)
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.updating ? qsTr("Update password") : qsTr("Set password")
-                enabled: walletController.initialized
+                enabled: ApplicationModels.walletController.initialized
                     && newPassword.text !== ""
                     && confirmPassword.text !== ""
                     && newPassword.text === confirmPassword.text

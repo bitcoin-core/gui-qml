@@ -11,7 +11,7 @@ import "../controls"
 Rectangle {
     id: root
     property var entry: ({})
-    property int displayUnit: optionsModel.displayUnit
+    property int displayUnit: ApplicationModels.optionsModel.displayUnit
     property string walletName: qsTr("Your wallet")
     property color accentColor: Theme.color.txInternal
     property bool input: false
@@ -48,7 +48,7 @@ Rectangle {
     implicitHeight: Math.max(80, content.height + 24)
     height: implicitHeight
     Accessible.role: Accessible.Grouping
-    Accessible.name: title + ", " + (hidesAmount && optionsModel.hideAmounts ? qsTr("Hidden amount") : amountText)
+    Accessible.name: title + ", " + (hidesAmount && ApplicationModels.optionsModel.hideAmounts ? qsTr("Hidden amount") : amountText)
 
     ColumnLayout {
         id: content
@@ -187,7 +187,7 @@ Rectangle {
                         Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.paymentRequest; size: 16 }
                         CoreText {
                             Layout.fillWidth: true
-                            text: qsTr("Payment request #%1").arg(modelData.requestId || "")
+                            text: qsTr("Payment request #%1").arg(requestButton.modelData.requestId || "")
                             color: Theme.color.paymentRequestText
                             textStyle: Theme.text.caption
                             horizontalAlignment: Text.AlignLeft

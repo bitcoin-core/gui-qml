@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
@@ -14,7 +15,7 @@ OnboardingView {
     signal back()
     signal next()
 
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0
     property bool customStorage: false
@@ -80,7 +81,7 @@ OnboardingView {
         id: storagePopup
         objectName: "onboardingStorageSettingsPopup"
         closeButtonObjectName: "onboardingStorageSettingsCloseButton"
-        onAboutToShow: pageStack.currentItem.resetPruneTarget()
+        onAboutToShow: (pageStack.currentItem as StorageSettingsPage).resetPruneTarget()
         initialPage: StorageSettingsPage {
             settingsModel: root.settingsModel
             onboarding: true

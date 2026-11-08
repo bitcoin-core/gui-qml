@@ -78,7 +78,8 @@ TestCase {
                 "DesktopMenuActions", "DesktopNativeMenuBar"],
             "base type or part of a shown control": ["BitcoinAmountDigit", "BitcoinAmountDigitBase",
                 "BitcoinAmountDisplayLabelBase", "LabeledField", "FieldBorderRings", "SurfaceGradientBorder",
-                "TransactionFlowRibbon"],
+                "TransactionFlowRibbon", "BitcoinAmountColumn", "BitcoinAmountUnitGlyph", "MonospaceOutputRow",
+                "NodeInformationRow", "NodeWarningRow"],
             "acts for real (opens the browser)": ["ExternalPopup"],
             "feature-specific menu": ["TransactionActionsMenu", "PaymentRequestActionsMenu", "PeerActionsMenu",
                 "SendCreateOptionsPopup"],
@@ -90,7 +91,7 @@ TestCase {
                 "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
-                "NodeWarningsPopup", "OnboardingSettingsPopup"]
+                "NodeWarningsPopup", "OnboardingSettingsPopup", "SendRecipientCard"]
         }
         const exemptions = {}
         for (const reason in reasons) {

@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Templates 2.15 as Templates
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
@@ -11,6 +12,7 @@ import "../controls"
 
 Page {
     id: root
+    readonly property Templates.StackView navigationStack: root.StackView.view
 
     default property alias content: contentLayout.data
 
@@ -27,7 +29,7 @@ Page {
     readonly property alias pageHeader: settingsHeader
     readonly property alias scrollView: scrollView
     readonly property alias contentLayout: contentLayout
-    readonly property Flickable scrollArea: scrollView.contentItem
+    readonly property Flickable scrollArea: scrollView.contentItem as Flickable
 
     function ensureFocusedItemVisible() {
         const window = root.Window.window

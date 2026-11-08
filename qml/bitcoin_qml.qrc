@@ -18,6 +18,7 @@
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/SendRecipientEditor.qml</file>
+        <file>components/SendRecipientCard.qml</file>
         <file>components/CoinsList.qml</file>
         <file>components/SendCoinSelection.qml</file>
         <file>components/SendFeeSelection.qml</file>
@@ -221,6 +222,15 @@
         <file>themes/CoreTypeSet.qml</file>
         <file>themes/Palette.qml</file>
         <file>themes/TypeSet.qml</file>
+        <file>pages/wallet/WalletNavigationTab.qml</file>
+        <file>components/NodeInformationRow.qml</file>
+        <file>components/NodeWarningRow.qml</file>
+        <file>pages/wallet/CreateWalletFields.qml</file>
+        <file>pages/wallet/ExternalSignerWalletFields.qml</file>
+        <file>controls/MonospaceOutputRow.qml</file>
+        <file>controls/BitcoinAmountUnitGlyph.qml</file>
+        <file>controls/BitcoinAmountColumn.qml</file>
+        <file>pages/node/PeerDetailsTable.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="alert-filled">res/icons/alert-filled.png</file>

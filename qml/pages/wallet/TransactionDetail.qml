@@ -215,7 +215,7 @@ Page {
                     visible: !!root.flow.inputs && !!root.flow.outputs
                     flow: root.flow
                     transactionId: root.txid
-                    displayUnit: optionsModel.displayUnit
+                    displayUnit: ApplicationModels.optionsModel.displayUnit
                     hidesAmounts: true
                     walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                     selectedEntryId: root.outputIndex >= 0 ? "output:" + root.outputIndex : ""

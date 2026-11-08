@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import "../controls"
 
 // A payment request detail: shows the saved value until edited.
@@ -11,7 +12,7 @@ TextFieldRow {
     property alias label: root.title
     property bool editable: true
     property bool hidesAmount: false
-    readonly property bool amountHidden: hidesAmount && optionsModel.hideAmounts
+    readonly property bool amountHidden: hidesAmount && ApplicationModels.optionsModel.hideAmounts
     echoMode: amountHidden && !field.activeFocus ? TextInput.NoEcho : TextInput.Normal
 
     Binding {

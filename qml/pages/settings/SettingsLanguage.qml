@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -15,13 +15,13 @@ SettingsPage {
     title: qsTr("Choose language")
     backButtonObjectName: "settingsLanguageBack"
 
-    readonly property var languageStatus: (optionsModel.coreSettingStatuses || ({})).lang || ({})
+    readonly property var languageStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).lang || ({})
     readonly property var languages: {
-        const all = optionsModel.availableLanguages
+        const all = ApplicationModels.optionsModel.availableLanguages
         if (searchField.text.length === 0) return all
         const query = searchField.text.toLowerCase()
         return all.filter(function(tag) {
-            return optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
+            return ApplicationModels.optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
         })
     }
 
@@ -57,11 +57,11 @@ SettingsPage {
                     required property string modelData
                     required property int index
 
-                    readonly property bool current: delegate.modelData === optionsModel.language
+                    readonly property bool current: delegate.modelData === ApplicationModels.optionsModel.language
 
                     objectName: "language_" + delegate.modelData
                     width: parent.width
-                    title: optionsModel.languageLabel(delegate.modelData)
+                    title: ApplicationModels.optionsModel.languageLabel(delegate.modelData)
                     enabled: root.languageStatus.canEdit !== false
                     showDivider: delegate.index < root.languages.length - 1
                     Accessible.description: delegate.current ? qsTr("Selected") : ""
@@ -73,7 +73,7 @@ SettingsPage {
                     }
 
                     onClicked: {
-                        optionsModel.language = delegate.modelData
+                        ApplicationModels.optionsModel.language = delegate.modelData
                         root.back()
                     }
                 }

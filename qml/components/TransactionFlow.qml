@@ -222,10 +222,11 @@ FormSection {
                     model: [{ label: qsTr("Wallet-owned"), color: root.walletColor },
                         { label: qsTr("Not wallet-owned"), color: root.externalColor }, { label: qsTr("Fee"), color: root.feeColor }]
                     delegate: Row {
+                        id: legendEntry
                         required property var modelData
                         spacing: Theme.space.s
-                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: modelData.color }
-                        CoreText { text: modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
+                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: legendEntry.modelData.color }
+                        CoreText { text: legendEntry.modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
                     }
                 }
             }
