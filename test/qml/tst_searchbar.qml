@@ -11,6 +11,10 @@ import "../../qml/components"
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "SearchBar"
     when: windowShown
     width: 520

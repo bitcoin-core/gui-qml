@@ -32,6 +32,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         testDebugLogModel.resetForTest(0, false)
         testDebugLogModel.reset()
     }

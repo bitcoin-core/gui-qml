@@ -11,6 +11,10 @@ import "../../qml/components"
 import "../../qml/components/TransactionFlowLayout.js" as FlowLayout
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "TransactionFlow"
     when: windowShown
     visible: true

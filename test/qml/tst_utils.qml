@@ -8,6 +8,10 @@ import QtTest 1.2
 import "../../qml/controls/utils.js" as Utils
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "Utils"
 
     // Map a peer count to the matching connection-strength icon. Thresholds

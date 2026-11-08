@@ -145,6 +145,18 @@ cmake --build build --target bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bi
 ctest --test-dir build --output-on-failure -L 'unit|qml'
 ```
 
+On Qt 6.3 and newer, QML component tests fail on unexpected warnings. Each
+`init()` calls `testSetup.failOnWarnings()` because Qt Test clears its warning
+policy after each test. Engine warnings also fail the executable during QML
+loading and teardown. CTest rejects console warnings outside test functions.
+The exact headless-platform diagnostics about application fonts and `raise()`
+are allowed; QML binding and resource warnings are not.
+
+The new warning checks are disabled on Qt 6.2, which does not provide
+`QTest::failOnWarning()`. The tests still build and run. The
+`bitcoinqml_qmlwarning_tests` CTest entry verifies both version paths with
+separate clean, console, binding, startup, and teardown processes.
+
 Build and run the application and node integration tests:
 
 ```sh

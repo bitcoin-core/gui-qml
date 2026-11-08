@@ -7,6 +7,10 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "NavigationSplitView"
     when: windowShown
     width: 960

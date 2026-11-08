@@ -9,6 +9,10 @@ import "../../qml/components"
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "Tooltip"
     when: windowShown
     visible: true

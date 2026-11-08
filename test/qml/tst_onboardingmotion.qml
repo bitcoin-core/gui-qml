@@ -8,6 +8,10 @@ import "../../qml/pages/onboarding"
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "OnboardingMotion"
     when: windowShown
     width: 224

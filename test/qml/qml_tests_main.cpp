@@ -17,6 +17,7 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlError>
 #include <QQmlIncubationController>
 #include <QQueue>
 #include <QQuickImageProvider>
@@ -25,12 +26,15 @@
 #include <QSortFilterProxyModel>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTest>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -4371,11 +4375,25 @@ class QmlTestsSetup : public QObject
     Q_PROPERTY(bool supportsApplicationFonts READ supportsApplicationFonts CONSTANT)
 
 public:
+    bool hadWarnings() const { return m_had_warnings; }
     // The minimal platform cannot register application fonts. FontLoader
     // fixtures use the platform's fallback fonts there.
     bool supportsApplicationFonts() const { return QGuiApplication::platformName() != QStringLiteral("minimal"); }
 
 public Q_SLOTS:
+    void failOnWarnings()
+    {
+        // QTest::failOnWarning() was added in Qt 6.3. Keep this a no-op on Qt 6.2.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+        // The minimal plugin cannot register application fonts or raise windows.
+        // Fatal error tests call raise() to bring the error window forward.
+        // Allow only the two exact plugin messages. Other Qt warnings still fail
+        // this test, and qmlEngineAvailable() rejects all QML engine warnings.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral(
+            "^(?!This plugin does not support (?:application fonts|raise\\(\\))$).*")));
+#endif
+    }
+
     void applicationAvailable()
     {
         QCoreApplication::setOrganizationName(QStringLiteral("BitcoinCoreQmlTests"));
@@ -4411,6 +4429,17 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        // Match failOnWarnings(): Qt 6.2 skips the new component warning policy.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+        // Qt Test's per-function warning policy does not cover QML loading or
+        // engine destruction. Observe both phases so these warnings also fail.
+        connect(engine, &QQmlEngine::warnings, engine, [this](const QList<QQmlError>& warnings) {
+            for (const auto& warning : warnings) {
+                m_had_warnings = true;
+                std::cerr << "Unexpected QML warning: " << warning.toString().toStdString() << '\n';
+            }
+        });
+#endif
         engine->rootContext()->setContextProperty(QStringLiteral("testSetup"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider);
@@ -4546,8 +4575,15 @@ public Q_SLOTS:
 
 private:
     QTemporaryDir m_settings;
+    bool m_had_warnings{false};
 };
 
-QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)
+int main(int argc, char* argv[])
+{
+    QmlTestsSetup setup;
+    const int status = quick_test_main_with_setup(argc, argv, "bitcoinqml_qmltests", QUICK_TEST_SOURCE_DIR, &setup);
+    if (status != 0) return status;
+    return setup.hadWarnings() ? EXIT_FAILURE : EXIT_SUCCESS;
+}
 
 #include "qml_tests_main.moc"
