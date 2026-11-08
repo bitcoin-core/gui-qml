@@ -140,16 +140,16 @@ Enable tests with `-DBUILD_APP_TESTS=ON`. The test directories separate the kind
 Build and run the unit and QML component tests:
 
 ```sh
-cmake -B build -DBUILD_APP_TESTS=ON
-cmake --build build --target bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests -j$(nproc)
+cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_APP_TESTS=ON -DWITH_CCACHE=ON
+cmake --build build --target bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests -j12
 ctest --test-dir build --output-on-failure -L 'unit|qml'
 ```
 
 Build and run the application and node integration tests:
 
 ```sh
-cmake -B build -DBUILD_APP_TESTS=ON
-cmake --build build --target bitcoinqml_integration -j$(nproc)
+cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_APP_TESTS=ON -DWITH_CCACHE=ON
+cmake --build build --target bitcoinqml_integration -j12
 ctest --test-dir build --output-on-failure -L integration
 ```
 
@@ -159,8 +159,10 @@ The parent runs one Qt Test suite. Each test function, data row, and wallet mode
 has its own result, named `module.wallet.function[:row]`, in the combined output
 and reports. Qt Test also reports the parent's setup and cleanup results.
 The subprocess fixture starts a fresh application and regtest node for each result,
-including production startup and shutdown. The initial modules are `lifecycle`,
-`navigation`, and `node`, each run with wallets disabled and enabled.
+including production startup and shutdown. Modules are grouped into the nine
+[staging-plan stages](doc/integration-testing.md). Stages 1–3 run with wallets
+disabled and enabled; stages 4–9 require wallets. Each stage has its own CTest
+entry and `stageN` label, so stages can run independently or in parallel.
 Each process has its own temporary data directory and GUI settings, so changes to
 wallets, the chain, settings, and UI state cannot affect the next test or data row.
 The fixture uses Core's subprocess helper and returns the child's test and process
@@ -175,23 +177,26 @@ node's `debug.log`, and GUI settings, are retained and their paths are included
 in the failure. Use `--profile-dir=PATH` to choose their parent directory (the
 system temporary directory by default). The child uses its profile as its working
 directory; use absolute paths for any external test resources.
-Select modules and modes with:
+Select stages, modules, and modes with:
 
 ```sh
+ctest --test-dir build --output-on-failure -L '^stage6$'
 build/bin/bitcoinqml_integration_tests --list-modules
 build/bin/bitcoinqml_integration_tests -functions
 build/bin/bitcoinqml_integration_tests -datatags
-QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=navigation
-QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
+cmake -E env QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --stage=2
+cmake -E env QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
 ```
 
-Omitting `--module` selects all modules; omitting `--wallet` selects each module's
-supported modes. Add `--test=chainSyncFollowsRealCoreBlockNotifications` to the last
-command to select that function, or use
+Omitting `--stage` selects all stages; omitting `--module` selects every module
+in the selected stages. Omitting `--wallet` selects each module's supported modes.
+Add `--test=networkActionsAndCoreNotificationsAgree` to the last command to select
+that function, or use
 `--test=networkActionsAndCoreNotificationsAgree:disable-network` to select one
 data row. Qt Test arguments apply to the parent suite;
-`run:node.enabled.chainSyncFollowsRealCoreBlockNotifications` selects that exact
-row using Qt Test's usual filtering syntax.
+`run:node.enabled.networkActionsAndCoreNotificationsAgree:disable-network` selects
+that exact row using Qt Test's usual filtering syntax. A module that does not
+belong to the requested stage is rejected.
 
 For example, `-o reports/results.xml,junitxml -o -,txt` writes one
 `reports/results.xml` containing the selected tests and prints one text summary.
@@ -209,7 +214,7 @@ they are not streamed live. Other Qt options affect the parent only.
 CTest writes integration reports to `build/test-reports/` and keeps failed profiles
 in `build/test-profiles/`. Both test workflows upload these directories and the
 CTest logs even after failures, with a separate artifact for each matrix job.
-The `ctest.xml` report records the overall CTest results; `integration.xml` provides
+The `ctest.xml` report records the overall CTest results; `integration-stageN.xml` provides
 the individual test results, including application startup and shutdown failures.
 The process exit status remains authoritative if the parent itself is interrupted
 before finishing its report.
@@ -221,7 +226,7 @@ the remaining tests, even if the child's XML report is missing or incomplete.
 Set `QML_TEST_TIMEOUT` to a positive number of milliseconds to override this limit.
 Keep Qt Test's `QTEST_FUNCTION_TIMEOUT` (five minutes by default) higher than this
 limit so the child can time out before the parent.
-CTest additionally limits the complete integration run to 25 minutes. An outer
+CTest additionally limits each stage to 25 minutes. An outer
 timeout is still needed for hangs before the child can start its watchdog.
 
 `TestApplication` extends the production `BitcoinQmlApplication` and provides
@@ -232,11 +237,14 @@ Test cases live in separate modules and take a `BitcoinQmlApplication&`, giving
 them access to the same node, models, and QML engine as the application.
 `test/integration/runner/` contains the parent Qt Test suite, entry point, and module
 declarations. `test/integration/fixture/` owns the subprocess, application fixture,
-and shared test helpers. Test case modules live directly in `test/integration/`.
+and shared test helpers. Test case modules live in `test/integration/stageN_*/`.
 Add a new module to `test/integration/CMakeLists.txt`, declare its factory in
-`runner/test_cases.h`, and add its name, supported wallet modes, and factory to
+`runner/test_cases.h`, and add its name, supported wallet modes, factory, and stage to
 `IntegrationTestModules()` in `runner/test_cases.cpp`. Use the factory signature
 `std::unique_ptr<QObject> CreateFeatureTests(BitcoinQmlApplication&, WalletMode)`.
+Modules may also provide a callback returning extra Core startup arguments for
+the selected test row, for example fee-policy settings. Keep this callback
+independent of GUI and node state.
 The constructor must only store references and other initial state. The parent
 uses Qt metadata to discover test functions, then runs Qt's `-datatags` in a
 separate discovery process using only `QCoreApplication`. Constructors and
