@@ -25,7 +25,7 @@ TestCase {
             width: 280
             height: implicitHeight
             text: "Duplicate"
-            iconSource: Qt.resolvedUrl("../../qml/res/icons/file.png")
+            iconSource: "qrc:/icons/file"
         }
     }
 
