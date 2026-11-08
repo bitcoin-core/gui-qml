@@ -5,17 +5,37 @@
 """Test QML shutdown while load_on_startup wallets are loading."""
 
 import os
+import re
 import signal
 import subprocess
-import sys
 import time
-
-from qml_test_harness import QmlTestHarness, qsettings_sandbox_args
-from qml_process_checks import check_gui_exit, report_gui_failure
-from qml_wallet_test_lib import WalletFlowHarness, find_bitcoind, rpc_call, wait_for_rpc
+import unittest
+from pathlib import Path
+from qml_driver import QmlDriverError
+from qml_process_checks import (
+    check_gui_exit,
+    report_gui_failure,
+    unexpected_gui_stderr,
+)
+from qml_scenarios import (
+    run_scenarios,
+    scenario,
+)
+from qml_test_harness import (
+    QmlTestHarness,
+    qml_qpa_platform,
+    qsettings_sandbox_args,
+)
+from qml_wallet_test_lib import (
+    WalletFlowHarness,
+    find_bitcoind,
+    rpc_call,
+    wait_for_rpc,
+)
 
 
 STARTUP_WALLET_COUNT = 8
+STARTUP_KEYPOOL_SIZE = 100
 SHUTDOWN_TIMEOUT_SECS = 30
 
 
@@ -43,6 +63,10 @@ def stop_node(process, rpc_port):
 
 
 def create_load_on_startup_wallets(harness, prefix):
+    # Keep eight real startup loads, without deriving the default 8,000 keys
+    # per wallet. Under sanitizers that work can exceed the shutdown timeout.
+    with open(os.path.join(harness.gui_datadir, "bitcoin.conf"), "a", encoding="utf8") as conf:
+        conf.write(f"keypool={STARTUP_KEYPOOL_SIZE}\n")
     process = start_node(harness.gui_datadir)
     try:
         wait_for_rpc(harness.gui_rpc_port)
@@ -112,7 +136,7 @@ def wait_for_startup_initialization(harness, process, baseline_wallet_loads_comp
 
 def start_gui_without_driver(harness):
     env = dict(os.environ)
-    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["QT_QPA_PLATFORM"] = qml_qpa_platform()
     settings_args = qsettings_sandbox_args(env, harness.config_home)
     args = [
         harness.gui_binary,
@@ -159,7 +183,9 @@ def case_close_window_during_load_on_startup(native_quit=False):
     harness = WalletFlowHarness("qml_shutdown_close", 970)
     try:
         create_load_on_startup_wallets(harness, "shutdown_close")
+        baseline_wallet_loads_completed = read_debug_log(harness).count("Wallet completed loading")
         harness.start_gui()
+        wait_for_startup_initialization(harness, harness.gui_process, baseline_wallet_loads_completed)
 
         gui = harness.driver
         if native_quit:
@@ -196,26 +222,67 @@ def case_sigint_during_load_on_startup():
         harness.stop()
 
 
-def run_tests():
-    try:
-        case_close_preinit_onboarding()
-        print("Pre-init onboarding shutdown completed successfully.")
-
-        case_close_preinit_onboarding(native_quit=True)
-        print("Native Quit during pre-init onboarding completed successfully.")
-
-        case_close_window_during_load_on_startup()
-        print("Close during load_on_startup shutdown completed successfully.")
-
-        case_close_window_during_load_on_startup(native_quit=True)
-        print("Native Quit during load_on_startup shutdown completed successfully.")
-
-        case_sigint_during_load_on_startup()
-        print("SIGINT during load_on_startup shutdown completed successfully.")
-    except Exception as err:
-        print(f"\nFAILED: {err}", file=sys.stderr)
-        raise
-
+class FatalShutdownTests(unittest.TestCase):
+    def check_fatal_exit(self, phase, acknowledgement):
+        harness = WalletFlowHarness("qml_fatal_shutdown", 0)
+        try:
+            harness.start_gui(extra_args=["-disablewallet", f"-test-fatal-exception={phase}"])
+            gui = harness.driver
+            wait_for_rpc(harness.gui_rpc_port)
+            self.assertEqual(rpc_call(harness.gui_rpc_port, "getblockchaininfo")["chain"], "regtest")
+            if phase != "initialize":
+                gui.close_window()
+                gui.wait_for_page("shutdownPage", timeout_ms=10000)
+            gui.wait_for_property("nodeFatalErrorPopup", "opened", True, timeout_ms=10000)
+            message = {
+                "initialize": "Test fatal exception after initialization",
+                "interrupt": "Test fatal exception during interruption",
+                "shutdown": "Test fatal exception before shutdown",
+            }[phase]
+            self.assertIn(message, gui.get_text("nodeFatalErrorText"))
+            self.assertTrue(gui.get_property("nodeFatalShutdownButton", "enabled"))
+            self.assertTrue(gui.get_property("nodeFatalShutdownButton", "visible"))
+            self.assertFalse(gui.get_property("mainPageStack", "enabled"))
+            try:
+                if acknowledgement == "quit":
+                    gui.request_quit()
+                elif acknowledgement == "close":
+                    gui.close_window()
+                else:
+                    gui.click("nodeFatalShutdownButton")
+            except (QmlDriverError, ConnectionError):
+                # Immediate process exit can close the bridge before its reply.
+                pass
+            _, stderr = harness.gui_process.communicate(timeout=10)
+            stderr = stderr.decode("utf-8", errors="replace")
+            self.assertEqual(harness.gui_process.returncode, 1, stderr)
+            debug_log = (Path(harness.gui_datadir) / "regtest" / "debug.log").read_text(encoding="utf-8")
+            self.assertIn(message, debug_log)
+            self.assertIn("Runaway exception", debug_log)
+            # Remove only the expected injected exception; other diagnostics still fail.
+            stderr, count = re.subn(
+                r"\n\n\*{24}\nEXCEPTION: [^\n]+\n" + re.escape(message)
+                + r" +\n[^\n]+ in Runaway exception +\n\n",
+                "", stderr, count=1,
+            )
+            self.assertEqual(count, 1, stderr)
+            self.assertEqual(unexpected_gui_stderr(stderr, socket_path=harness.socket_path), [])
+        except BaseException:
+            report_gui_failure(harness.gui_process, f"fatal {phase}")
+            raise
+        finally:
+            harness.stop()
 
 if __name__ == "__main__":
-    run_tests()
+    raise SystemExit(run_scenarios('GUI normal, interrupted startup and fatal process exits', [
+        scenario("onboarding-close", 2, case_close_preinit_onboarding),
+        scenario("onboarding-quit", 2, case_close_preinit_onboarding, native_quit=True),
+        scenario("wallet-loading-close", 4, case_close_window_during_load_on_startup),
+        scenario("wallet-loading-quit", 4, case_close_window_during_load_on_startup, native_quit=True),
+        scenario("wallet-loading-sigint", 4, case_sigint_during_load_on_startup),
+    ] + [
+        scenario(f"fatal-{phase}-{acknowledgement}", 1,
+                 FatalShutdownTests().check_fatal_exit, phase, acknowledgement)
+        for phase in ("initialize", "interrupt", "shutdown")
+        for acknowledgement in ("button", "quit", "close")
+    ]))

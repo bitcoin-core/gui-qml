@@ -120,7 +120,7 @@ if(ENABLE_TEST_AUTOMATION AND UNIX)
 
   add_test(NAME bitcoinqml_fatal_shutdown_tests
     COMMAND ${CMAKE_COMMAND} -E env BITCOIN_CORE_APP=$<TARGET_FILE:bitcoin-core-app>
-      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_fatal_shutdown.py
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/interface_qml_shutdown.py --case "fatal-*"
   )
   set_tests_properties(bitcoinqml_fatal_shutdown_tests PROPERTIES
     TIMEOUT 180
