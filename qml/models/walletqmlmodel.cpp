@@ -2723,10 +2723,7 @@ WalletQmlModel::PsbtImportResult WalletQmlModel::importPsbtFromFile(const QStrin
     const auto unsigned_tx{psbt.GetUnsignedTx()};
     if (m_wallet && unsigned_tx) {
         const Txid psbt_txid{unsigned_tx->GetHash()};
-        interfaces::WalletTxStatus tx_status;
-        int num_blocks{0};
-        int64_t block_time{0};
-        if (m_wallet->tryGetTxStatus(psbt_txid, tx_status, num_blocks, block_time)) {
+        if (m_wallet->getTx(psbt_txid)) {
             m_imported_psbt_model->setMatchedTxid(QString::fromStdString(psbt_txid.GetHex()));
             return PsbtImportResult::TransactionAlreadyKnown;
         }
