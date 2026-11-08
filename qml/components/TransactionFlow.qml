@@ -121,12 +121,6 @@ FormSection {
                         y: 36
                         width: root.diagramWidth
                         height: root.geometry.height
-                        Shape {
-                            id: ribbons
-                            objectName: "transactionFlowRibbons"
-                            anchors.fill: parent
-                            data: root.ribbonObjects
-                        }
                         Instantiator {
                             id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
@@ -148,6 +142,15 @@ FormSection {
                             onObjectRemoved: function(index, object) {
                                 root.ribbonObjects = root.ribbonObjects.filter(function(item) { return item !== object })
                             }
+                        }
+                        // Release the Instantiator's model references before Shape
+                        // destroys the paths it owns. Reversing this declaration
+                        // order leaks the delegate contexts in Qt 6.10.2.
+                        Shape {
+                            id: ribbons
+                            objectName: "transactionFlowRibbons"
+                            anchors.fill: parent
+                            data: root.ribbonObjects
                         }
                         // Keep the cards alive when unit changes publish new
                         // snapshots, so amount labels retain their previous frame.
