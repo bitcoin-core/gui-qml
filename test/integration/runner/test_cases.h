@@ -41,6 +41,7 @@ std::unique_ptr<QObject> CreateActivityTests(BitcoinQmlApplication& app, WalletM
 std::unique_ptr<QObject> CreateSendTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreatePsbtTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateWatchOnlyTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreatePaymentImportTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 QStringList SendTestArguments(const QString& selector);
 QStringList DebugLogTestArguments(const QString& selector);
 

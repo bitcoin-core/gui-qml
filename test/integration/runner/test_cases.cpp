@@ -23,6 +23,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"send", {WalletMode::Enabled}, CreateSendTests, 6, SendTestArguments},
         {"psbt", {WalletMode::Enabled}, CreatePsbtTests, 7, [](const QString&) { return QStringList{"-fallbackfee=0.00010000"}; }},
         {"watchonly", {WalletMode::Enabled}, CreateWatchOnlyTests, 8},
+        {"payment-import", {WalletMode::Enabled}, CreatePaymentImportTests, 9},
     };
     return modules;
 }
