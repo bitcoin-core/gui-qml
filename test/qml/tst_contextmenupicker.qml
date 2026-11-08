@@ -35,7 +35,7 @@ TestCase {
                 id: _picker
                 title: "Sorting"
                 currentValue: hostLayout.selectedValue
-                selectionIconSource: Qt.resolvedUrl("../../qml/res/icons/check.png")
+                selectionIconSource: "qrc:/icons/check"
                 model: [
                     { text: "Date", value: "date" },
                     { text: "Amount", value: "amount" },
@@ -60,7 +60,7 @@ TestCase {
 
             ContextMenuPicker {
                 id: _picker
-                selectionIconSource: Qt.resolvedUrl("../../qml/res/icons/check.png")
+                selectionIconSource: "qrc:/icons/check"
                 model: ["All", "Sent", "Received"]
                 onActivated: function(value) {
                     parent.activatedValue = value
@@ -79,7 +79,7 @@ TestCase {
 
             ContextMenuPicker {
                 id: _picker
-                selectionIconSource: Qt.resolvedUrl("../../qml/res/icons/check.png")
+                selectionIconSource: "qrc:/icons/check"
                 model: [{ text: "A", value: 1 }, { text: "B", value: 2 }]
             }
         }
@@ -95,7 +95,7 @@ TestCase {
 
             ContextMenuPicker {
                 id: _picker
-                selectionIconSource: Qt.resolvedUrl("../../qml/res/icons/check.png")
+                selectionIconSource: "qrc:/icons/check"
                 subtitleRole: "subtitle"
                 model: [
                     { text: "With subtitle", value: 1, subtitle: "Details" },
