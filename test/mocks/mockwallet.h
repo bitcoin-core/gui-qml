@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_TEST_MOCKS_MOCKWALLET_H
 #define BITCOIN_QML_TEST_MOCKS_MOCKWALLET_H
 
+#include "wallet/imports.h"
 #include <interfaces/wallet.h>
 #include <outputtype.h>
 #include <test/mocks/callcounter.h>
@@ -24,14 +25,15 @@ public:
     bool encryptWallet(const SecureString&) override { return false; }
     bool isCrypted() override { return false; }
     bool lock() override { return false; }
-    bool unlock(const SecureString&) override { return false; }
+    util::Expected<void, wallet::WalletError> unlock(const SecureString&) override { return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("not implemented")}}; }
     bool isLocked() override { return false; }
-    bool changeWalletPassphrase(const SecureString&, const SecureString&) override { return false; }
+    util::Expected<void, wallet::WalletError> changeWalletPassphrase(const SecureString&, const SecureString&) override { return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("not implemented")}}; }
     void abortRescan() override {}
     bool backupWallet(const std::string&) override { return false; }
     std::string getWalletName() override { return {}; }
     util::Result<CTxDestination> getNewDestination(const OutputType, const std::string&) override { return util::Error{Untranslated("not implemented")}; }
     bool getPubKey(const CScript&, const CKeyID&, CPubKey&) override { return false; }
+    util::Expected<CExtPubKey, wallet::WalletError> addHDKey(const std::optional<CExtKey>& key) override { return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated("not implemented")}}; }
     SigningResult signMessage(const std::string&, const PKHash&, std::string&) override { return SigningResult::PRIVATE_KEY_NOT_AVAILABLE; }
     bool isSpendable(const CTxDestination&) override { return false; }
     bool setAddressBook(const CTxDestination&, const std::string&, const std::optional<wallet::AddressPurpose>&) override { return false; }
@@ -46,7 +48,7 @@ public:
     bool isLockedCoin(const COutPoint&) override { return false; }
     void listLockedCoins(std::vector<COutPoint>&) override {}
     util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>&, const wallet::CCoinControl&, bool, std::optional<unsigned int>) override { return util::Error{Untranslated("not implemented")}; }
-    void commitTransaction(CTransactionRef, interfaces::WalletValueMap, interfaces::WalletOrderForm) override {}
+    void commitTransaction(CTransactionRef, const std::vector<std::string>&) override {}
     bool transactionCanBeAbandoned(const Txid&) override { return false; }
     bool abandonTransaction(const Txid&) override { return false; }
     bool transactionCanBeBumped(const Txid&) override { return false; }
@@ -57,8 +59,9 @@ public:
     interfaces::WalletTx getWalletTx(const Txid&) override { return {}; }
     std::set<interfaces::WalletTx> getWalletTxs() override { return {}; }
     bool tryGetTxStatus(const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) override { return false; }
-    interfaces::WalletTx getWalletTxDetails(const Txid&, interfaces::WalletTxStatus&, interfaces::WalletOrderForm&, bool&, int&) override { return {}; }
+    interfaces::WalletTx getWalletTxDetails(const Txid&, interfaces::WalletTxStatus&, std::vector<std::string>&, std::vector<std::string>&, bool&, int&) override { return {}; }
     std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions&, size_t*, PartiallySignedTransaction&, bool&) override { return std::nullopt; }
+    std::vector<wallet::ImportResult> importDescriptors(std::vector<wallet::ImportDescriptorRequest>&) override { return {wallet::ImportResult{wallet::WalletErrorCode::GenericError, "not implemented", /*warnings=*/{}, /*general_error=*/true}}; }
     interfaces::WalletBalances getBalances() override { return {}; }
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
     CAmount getBalance() override { return 0; }
@@ -70,7 +73,7 @@ public:
     CoinsList listCoins() override { return {}; }
     std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>&) override { return {}; }
     CAmount getRequiredFee(unsigned int) override { return 0; }
-    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, int*, FeeReason*) override { return 0; }
+    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, std::optional<int>*, FeeReason*) override { return 0; }
     unsigned int getConfirmTarget() override { return 0; }
     bool hdEnabled() override { return false; }
     bool canGetAddresses() override { return false; }
@@ -78,7 +81,7 @@ public:
     bool taprootEnabled() override { return false; }
     bool hasExternalSigner() override { return false; }
     OutputType getDefaultAddressType() override { return OutputType::BECH32; }
-    CAmount getDefaultMaxTxFee() override { return 0; }
+    CAmount getMaxTxFee() override { return 0; }
     void remove() override {}
     std::unique_ptr<interfaces::Handler> handleUnload(UnloadFn) override { return {}; }
     std::unique_ptr<interfaces::Handler> handleShowProgress(ShowProgressFn) override { return {}; }
@@ -86,6 +89,7 @@ public:
     std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn) override { return {}; }
     std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn) override { return {}; }
     std::unique_ptr<interfaces::Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn) override { return {}; }
+    util::Result<std::string> exportWatchOnlyWallet(const fs::path&) override { return util::Error{Untranslated("not implemented")}; }
 };
 
 /**
@@ -203,7 +207,7 @@ public:
                 *result,
                 fee,
                 change_pos >= 0 ? std::optional<unsigned int>{static_cast<unsigned int>(change_pos)} : std::nullopt,
-                FeeCalculation{}};
+                FeeReason::FEE_RATE_ESTIMATOR};
         }
         return util::Error{Untranslated("no create_transaction_fn installed")};
     }
@@ -244,7 +248,7 @@ public:
         return get_required_fee_fn ? get_required_fee_fn(tx_bytes) : 0;
     }
 
-    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl& control, int*, FeeReason*) override
+    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl& control, std::optional<int>*, FeeReason*) override
     {
         return get_minimum_fee_fn ? get_minimum_fee_fn(control) : 0;
     }

@@ -54,7 +54,7 @@ PartiallySignedTransaction MakeUnsignedPsbt()
     tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     tx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
 
-    PartiallySignedTransaction psbt{tx};
+    PartiallySignedTransaction psbt{tx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, CScript{}};
     return psbt;
 }
@@ -70,7 +70,7 @@ PartiallySignedTransaction MakeCompletePsbt()
     tx.vin.emplace_back(COutPoint{previous->GetHash(), 0});
     tx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
 
-    PartiallySignedTransaction psbt{tx};
+    PartiallySignedTransaction psbt{tx, /*version=*/2};
     psbt.inputs[0].non_witness_utxo = previous;
     psbt.inputs[0].final_script_sig = CScript{} << std::vector<unsigned char>{};
     return psbt;
@@ -207,7 +207,7 @@ void PsbtQmlModelTests::savePreservesPsbtMetadata()
 void PsbtQmlModelTests::broadcastsCompletePsbt()
 {
     MockNode node;
-    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, std::string&) {
+    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, CFeeRate, std::string&) {
         return node::TransactionError::OK;
     };
 
