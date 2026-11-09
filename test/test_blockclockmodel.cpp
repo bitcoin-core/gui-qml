@@ -464,6 +464,34 @@ void BlockClockModelTests::emptyHistoryDoesNotEmitRedundantChanges()
     QCoreApplication::processEvents();
     QCoreApplication::processEvents();
     QCOMPARE(history_spy.count(), 0);
+
+    // Filtering a nonempty snapshot leaves an empty list with allocated storage.
+    // It must compare equal to the model's initially unallocated empty history.
+    const qint64 future_timestamp{UtcTime(23).toSecsSinceEpoch() + BlockClockModel::PERIOD_SECONDS};
+    ConnectBlock(*history, 1, future_timestamp);
+    QCoreApplication::processEvents();
+    QVERIFY(model.blockTimeFractions().isEmpty());
+    QCOMPARE(history_spy.count(), 0);
+
+    DisconnectBlock(*history, 1, future_timestamp);
+    QCoreApplication::processEvents();
+    QCOMPARE(history_spy.count(), 0);
+
+    const qint64 visible_timestamp{UtcTime(13).toSecsSinceEpoch()};
+    ConnectBlock(*history, 2, visible_timestamp);
+    QCoreApplication::processEvents();
+    QCOMPARE(model.blockTimeFractions(), QList<qreal>{1.0 / 12.0});
+    QCOMPARE(history_spy.count(), 1);
+
+    DisconnectBlock(*history, 2, visible_timestamp);
+    QCoreApplication::processEvents();
+    QVERIFY(model.blockTimeFractions().isEmpty());
+    QCOMPARE(history_spy.count(), 2);
+
+    ConnectBlock(*history, 3, future_timestamp);
+    QCoreApplication::processEvents();
+    QVERIFY(model.blockTimeFractions().isEmpty());
+    QCOMPARE(history_spy.count(), 2);
 }
 
 void BlockClockModelTests::timersHaveModelOwnershipAndCanBeDisabledForTests()
