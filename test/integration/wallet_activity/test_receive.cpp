@@ -115,6 +115,75 @@ private Q_SLOTS:
         QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
     }
 
+    void receivingUnlockCanBeCancelledRetriedAndRelocks()
+    {
+        auto* wallet = qmltest::CreateLockedHardenedWallet(m_app, "receive_unlock", "receiving password");
+        QVERIFY(wallet);
+        const auto info = qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name());
+        const auto cached_keys = info.find_value("keypoolsize").getInt<int>();
+        for (int i{0}; i < cached_keys; ++i) qmltest::NewAddress(m_app, wallet->name());
+        QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("keypoolsize").getInt<int>(), 0);
+        QVERIFY(wallet->receivingAddress()->address().isEmpty());
+
+        // Cancelling address creation must leave both Core and request history unchanged.
+        QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
+        auto* popup = qmltest::WaitForVisible(m_app, "receivePassphrasePopup");
+        QVERIFY(popup);
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "cancelled password"));
+        QVERIFY(qmltest::Click(m_app, "receivePassphraseCancelButton"));
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QCOMPARE(qmltest::Find(m_app, "receivePassphraseField")->property("text").toString(), QString{});
+        QVERIFY(wallet->receivingAddress()->address().isEmpty());
+        QCOMPARE(wallet->receiveRequests()->count(), 0);
+        QVERIFY(wallet->isLocked());
+        QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
+
+        // Reopening Receive retries the exhausted keypool, with a visible password error.
+        QVERIFY(qmltest::Click(m_app, "activityTabButton"));
+        QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "wrong password"));
+        QVERIFY(qmltest::Click(m_app, "receivePassphraseConfirmButton"));
+        auto* error = qmltest::WaitForVisible(m_app, "receivePassphraseError");
+        QVERIFY(error);
+        QVERIFY(error->property("text").toString().contains("incorrect"));
+        QVERIFY(popup->property("opened").toBool());
+        QCOMPARE(qmltest::Find(m_app, "receivePassphraseField")->property("text").toString(), QString{});
+        QVERIFY(wallet->receivingAddress()->address().isEmpty());
+        QVERIFY(wallet->isLocked());
+        QCOMPARE(wallet->receiveRequests()->count(), 0);
+        QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
+
+        // A correct password generates the requested address and immediately relocks.
+        QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "receiving password"));
+        QVERIFY(qmltest::Click(m_app, "receivePassphraseConfirmButton"));
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        const auto address = wallet->receivingAddress()->address();
+        QVERIFY(!address.isEmpty());
+        QTRY_VERIFY(qmltest::Find(m_app, "requestPaymentGenerateButton")->property("enabled").toBool());
+        const auto address_info = qmltest::Rpc(m_app, "getaddressinfo", qmltest::Json("[\"" + address.toStdString() + "\"]"), wallet->name());
+        QVERIFY(address_info.find_value("ismine").get_bool());
+        QCOMPARE(address_info.find_value("witness_version").getInt<int>(), 0);
+        QVERIFY(wallet->isLocked());
+        QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
+        QCOMPARE(wallet->receiveRequests()->count(), 0);
+        QVERIFY(wallet->currentPaymentRequest()->id().isEmpty());
+
+        // The next-address request must survive another unlock, without reusing this address.
+        QVERIFY(QMetaObject::invokeMethod(qmltest::Find(m_app, "requestPaymentPage"), "ensureReceivingAddress",
+                                         Q_ARG(QVariant, true), Q_ARG(QVariant, QStringLiteral("bech32"))));
+        QTRY_VERIFY(popup->property("opened").toBool());
+        QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "receiving password"));
+        QVERIFY(qmltest::Click(m_app, "receivePassphraseConfirmButton"));
+        QTRY_VERIFY(!popup->property("visible").toBool());
+        QVERIFY(!wallet->receivingAddress()->address().isEmpty());
+        QVERIFY(wallet->receivingAddress()->address() != address);
+        QVERIFY(wallet->isLocked());
+        QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
+        QCOMPARE(wallet->receiveRequests()->count(), 0);
+    }
+
     void addressDetailsCreateAndUpdateTheSamePaymentRequest()
     {
         auto* wallet = qmltest::CreateWallet(m_app);
@@ -215,6 +284,11 @@ private Q_SLOTS:
 std::unique_ptr<QObject> CreateReceiveTests(BitcoinQmlApplication& app, WalletMode)
 {
     return std::make_unique<ReceiveIntegrationTests>(app);
+}
+
+QStringList ReceiveTestArguments(const QString& selector)
+{
+    return selector == "receivingUnlockCanBeCancelledRetriedAndRelocks" ? QStringList{"-keypool=1"} : QStringList{};
 }
 
 #include <test_receive.moc>

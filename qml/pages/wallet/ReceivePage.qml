@@ -211,6 +211,11 @@ Page {
     }
     WalletPassphrasePopup {
         id: passphrasePopup
+        popupObjectName: "receivePassphrasePopup"
+        passphraseFieldObjectName: "receivePassphraseField"
+        errorTextObjectName: "receivePassphraseError"
+        cancelButtonObjectName: "receivePassphraseCancelButton"
+        confirmButtonObjectName: "receivePassphraseConfirmButton"
         parent: Overlay.overlay
         width: Math.min(420, parent ? parent.width - 32 : 420)
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.

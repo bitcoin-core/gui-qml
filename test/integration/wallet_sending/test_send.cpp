@@ -9,7 +9,6 @@
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
 #include <qt/bitcoinunits.h>
-#include <script/descriptor.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -434,27 +433,8 @@ private Q_SLOTS:
         auto* destination = qmltest::CreateWallet(m_app, "destination");
         QVERIFY(destination);
         const auto address = qmltest::NewAddress(m_app, destination->name());
-        qmltest::Rpc(m_app, "createwallet", qmltest::Json("{\"wallet_name\":\"fallback\",\"blank\":true}"));
-        auto* wallet = qmltest::WaitForWallet(m_app, "fallback");
+        auto* wallet = qmltest::CreateLockedHardenedWallet(m_app, "fallback", "fallback password");
         QVERIFY(wallet);
-        QVERIFY(wallet->encryptWallet("fallback password"));
-        qmltest::Rpc(m_app, "walletpassphrase", qmltest::Json("[\"fallback password\",60]"), wallet->name());
-        const std::string key{"tprv8ZgxMBicQKsPdYeeZbPSKd2KYLmeVKtcFA7kqCxDvDR13MQ6us8HopUR2wLcS2ZKPhLyKsqpDL2FtL73LMHcgoCL7DXsciA8eX8nbjCR2eG"};
-        UniValue descriptors{UniValue::VARR};
-        for (int branch{0}; branch < 2; ++branch) {
-            const auto descriptor = "wpkh(" + key + "/" + std::to_string(branch) + "h/*h)";
-            UniValue entry{UniValue::VOBJ};
-            entry.pushKV("desc", descriptor + "#" + GetDescriptorChecksum(descriptor));
-            entry.pushKV("timestamp", "now");
-            entry.pushKV("active", true);
-            entry.pushKV("internal", branch == 1);
-            entry.pushKV("range", qmltest::Json("[0,0]"));
-            descriptors.push_back(entry);
-        }
-        const auto imported = qmltest::Rpc(m_app, "importdescriptors", qmltest::Json("[" + descriptors.write() + "]"), wallet->name());
-        for (const auto& entry : imported.getValues()) QVERIFY(entry.find_value("success").get_bool());
-        qmltest::Rpc(m_app, "keypoolrefill", qmltest::Json("[1]"), wallet->name());
-        qmltest::Rpc(m_app, "walletlock", {}, wallet->name());
         QVERIFY(qmltest::FundWallet(m_app, *wallet));
         const auto info = qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name());
         const auto change_keys = info.find_value("keypoolsize_hd_internal").getInt<int>();
