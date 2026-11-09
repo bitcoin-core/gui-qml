@@ -148,7 +148,7 @@ bool PathExists(const fs::path& path)
 {
     if (path.empty()) return false;
     std::error_code ec;
-    return std::filesystem::exists(path, ec) && !ec;
+    return fs::exists(fs::status(path, ec)) && !ec;
 }
 
 bool DirectoryExists(const fs::path& path)
@@ -206,7 +206,7 @@ std::optional<fs::path> EffectiveWalletDirNoCreate(const ArgsManager& args)
     if (args.IsArgSet("-walletdir")) {
         const fs::path wallet_dir{args.GetPathArg("-walletdir")};
         std::error_code ec;
-        const fs::path canonical_wallet_dir{fs::canonical(wallet_dir, ec)};
+        fs::path canonical_wallet_dir{fs::canonical(wallet_dir, ec)};
         if (ec || !DirectoryExists(canonical_wallet_dir) || !wallet_dir.is_absolute()) return std::nullopt;
         return canonical_wallet_dir;
     }

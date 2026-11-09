@@ -85,7 +85,7 @@ private:
     int m_review_target_blocks{0};
     QString m_review_fee_rate;
     CAmount m_amount;
-    CAmount m_fee;
+    CAmount m_fee{0};
     BitcoinAmount* m_amount_amount;
     BitcoinAmount* m_fee_amount;
     BitcoinAmount* m_total_amount;

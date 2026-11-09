@@ -444,6 +444,7 @@ public:
     std::vector<std::string> getAddressReceiveRequests() override
     {
         std::vector<std::string> requests;
+        requests.reserve(saved_receive_requests.size());
         for (const auto& [id, blob] : saved_receive_requests) requests.push_back(blob);
         return requests;
     }
@@ -649,7 +650,7 @@ void CompleteReviewPsbt(PartiallySignedTransaction& psbt)
 
 QString WritePsbt(const PartiallySignedTransaction& psbt, const QTemporaryDir& temp_dir, const QString& name)
 {
-    const QString path{temp_dir.filePath(name)};
+    QString path{temp_dir.filePath(name)};
     if (!PsbtQmlModel::SavePsbtToFile(psbt, path).isEmpty()) {
         return {};
     }

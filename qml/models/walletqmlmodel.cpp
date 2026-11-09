@@ -2032,7 +2032,7 @@ std::set<QString> WalletQmlModel::usedAddresses() const
                 continue;
 
             const QString address{QString::fromStdString(EncodeDestination(wallet_tx.txout_address[i]))};
-            if (!address.isEmpty() && receive_addresses.count(address) > 0)
+            if (!address.isEmpty() && receive_addresses.contains(address))
                 addresses.insert(address);
         }
     }
@@ -2066,7 +2066,7 @@ std::set<QString> WalletQmlModel::changeAddresses() const
             if (tx_out.txout.nValue <= 0)
                 continue;
 
-            if (change_outpoints.count(outpoint) > 0) {
+            if (change_outpoints.contains(outpoint)) {
                 CTxDestination destination;
                 if (!ExtractDestination(tx_out.txout.scriptPubKey, destination))
                     continue;

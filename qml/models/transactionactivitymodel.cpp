@@ -325,7 +325,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
         updateLabels(wallet, record);
         if (updateStatus(wallet, record)) snapshot.retry.remove(record.activity.txid);
         else snapshot.retry.insert(record.activity.txid);
-        snapshot.records.insert(record.activity.txid, std::move(record));
+        snapshot.records.insert(record.activity.txid, record);
     };
     if (work.reload) {
         QSet<QString> present;
