@@ -7,6 +7,7 @@
 
 #include <test/integration/fixture/test_util.h>
 #include <qml/walletqmlcontroller.h>
+#include <script/descriptor.h>
 
 #include <stdexcept>
 
@@ -45,6 +46,41 @@ inline WalletQmlModel* CreateWallet(BitcoinQmlApplication& app, const QString& n
     params.pushKV("wallet_name", name.toStdString());
     Rpc(app, "createwallet", params);
     return WaitForWallet(app, name);
+}
+
+// Hardened derivation cannot replenish an exhausted keypool while locked.
+inline WalletQmlModel* CreateLockedHardenedWallet(BitcoinQmlApplication& app, const QString& name, const QString& passphrase)
+{
+    UniValue params{UniValue::VOBJ};
+    params.pushKV("wallet_name", name.toStdString());
+    params.pushKV("blank", true);
+    Rpc(app, "createwallet", params);
+    auto* wallet = WaitForWallet(app, name);
+    if (!wallet || !wallet->encryptWallet(passphrase)) return nullptr;
+    UniValue unlock{UniValue::VARR};
+    unlock.push_back(passphrase.toStdString());
+    unlock.push_back(60);
+    Rpc(app, "walletpassphrase", unlock, name);
+
+    const std::string key{"tprv8ZgxMBicQKsPdYeeZbPSKd2KYLmeVKtcFA7kqCxDvDR13MQ6us8HopUR2wLcS2ZKPhLyKsqpDL2FtL73LMHcgoCL7DXsciA8eX8nbjCR2eG"};
+    UniValue descriptors{UniValue::VARR};
+    for (int branch{0}; branch < 2; ++branch) {
+        const auto descriptor = "wpkh(" + key + "/" + std::to_string(branch) + "h/*h)";
+        UniValue entry{UniValue::VOBJ};
+        entry.pushKV("desc", descriptor + "#" + GetDescriptorChecksum(descriptor));
+        entry.pushKV("timestamp", "now");
+        entry.pushKV("active", true);
+        entry.pushKV("internal", branch == 1);
+        entry.pushKV("range", Json("[0,0]"));
+        descriptors.push_back(entry);
+    }
+    const auto imported = Rpc(app, "importdescriptors", Json("[" + descriptors.write() + "]"), name);
+    for (const auto& entry : imported.getValues()) {
+        if (!entry.find_value("success").get_bool()) throw std::runtime_error{"Descriptor import failed: " + entry.write()};
+    }
+    Rpc(app, "keypoolrefill", Json("[1]"), name);
+    Rpc(app, "walletlock", {}, name);
+    return wallet;
 }
 
 inline QString NewAddress(BitcoinQmlApplication& app, const QString& wallet, const char* type = "bech32")
