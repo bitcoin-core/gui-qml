@@ -81,6 +81,16 @@ TestCase {
         compare(testWalletModel.targetBlocks, 50)
         compare(slider.value, 6)
     }
+    function test_reselecting_custom_keeps_entered_rate() {
+        const control = createTemporaryObject(factory, this)
+        selectOption(control, 3)
+        testWalletModel.customFeeRate = "17"
+
+        selectOption(control, 3)
+        compare(testWalletModel.customFeeEnabled, true)
+        compare(testWalletModel.customFeeRate, "17")
+        compare(testWalletModel.targetBlocks, 6)
+    }
     function test_pending_estimate_does_not_show_stale_fee() {
         const control = createTemporaryObject(factory, this)
         const estimate = findChild(control, "feeSelectionEstimateLabel")
