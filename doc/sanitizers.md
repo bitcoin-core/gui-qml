@@ -16,6 +16,28 @@ With app tests enabled, these builds add
 hash succeeds while unrelated unsigned overflow, signed overflow and implicit
 truncation fail. It also verifies that unsigned overflow in a neighboring
 function and signed overflow in a function matching the rule still fail.
+On Linux builds with address or leak sanitization, an intentional leak in a
+copy of the probe named `bitcoin-core-app` must also fail. This also catches an
+accidental executable-wide app suppression.
+
+Qt 6.4.2's software renderer retains cached textures during shutdown. This was
+reproduced with a standalone Qt application, including explicit resource release
+and deferred-delete processing. Qt fixed the missing cache cleanup in
+[QTBUG-106968](https://github.com/qt/qtdeclarative/commit/f1b188df132c42da62197055725e5f7eebcc4249).
+`test/sanitizer_suppressions/lsan` matches only allocations through
+`QSGRenderContext::textureForFactory`. It does not suppress the app executable.
+
+Append that dependency rule to Core's suppression file before running tests:
+
+```sh
+export LSAN_OPTIONS
+LSAN_OPTIONS=$(python3 ci/lsan_suppressions.py --build-dir build-asan)
+python3 build-asan/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-asan --output-on-failure
+```
+
+The helper preserves Core's runtime options and writes the combined suppression
+file inside the build directory. The sanitizer probe verifies that unrelated
+application allocations still trigger LeakSanitizer with these rules active.
 
 The full sanitizer configuration remains
 `address,float-divide-by-zero,integer,undefined`. Continue using the pinned
