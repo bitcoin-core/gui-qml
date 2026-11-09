@@ -3,6 +3,9 @@
 The workflow in `.github/workflows/ci.yml` runs separate app lint, Core lint,
 clang-tidy and sanitizer jobs alongside the Qt 6.2, 6.4 and 6.10 build/test
 matrix. The Qt 6.10 build also runs [QML static analysis](qml-lint.md).
+Native analysis and sanitizer jobs run in the matching Core Ubuntu container
+images, including Clang's selected C++ standard-library headers. The job checks
+that its image still matches the pinned Core configuration.
 
 ## Repository and Core lint
 
