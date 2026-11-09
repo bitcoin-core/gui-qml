@@ -12,9 +12,13 @@ if(BUILD_APP_TESTS)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_executable(bitcoinqml_sanitizer_probe ${PROJECT_SOURCE_DIR}/test/test_sanitizer_suppressions.cpp)
   target_link_libraries(bitcoinqml_sanitizer_probe PRIVATE core_interface Qt6::Core)
+  set(sanitizer_probe_options)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND SANITIZERS MATCHES "(^|,)(address|leak)(,|$)")
+    list(APPEND sanitizer_probe_options --check-leaks)
+  endif()
   add_test(NAME bitcoinqml_sanitizer_suppression_tests
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/test_sanitizer_suppressions.py
-      $<TARGET_FILE:bitcoinqml_sanitizer_probe>
+      $<TARGET_FILE:bitcoinqml_sanitizer_probe> ${sanitizer_probe_options}
   )
   set_tests_properties(bitcoinqml_sanitizer_suppression_tests PROPERTIES LABELS unit TIMEOUT 30)
 endif()

@@ -42,7 +42,6 @@ QVariant SendRecipientsListModel::data(const QModelIndex& index, int role) const
     case AmountUnitLabelRole: return r->amount()->unitLabel();
     default: return {};
     }
-    return {};
 }
 
 QHash<int, QByteArray> SendRecipientsListModel::roleNames() const
