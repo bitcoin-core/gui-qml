@@ -55,6 +55,12 @@ jobs:
     name: '${{ matrix.name }}'
     runs-on: ${{ matrix.image }}
     timeout-minutes: 90
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_options }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -62,13 +68,24 @@ jobs:
           - name: 'Clang-tidy (Core rules)'
             mode: tidy
             image: ubuntu-26.04
+            container_image: mirror.gcr.io/ubuntu:26.04
+            container_options: ''
           - name: 'Address, leak, undefined and integer sanitizers'
             mode: asan
             image: ubuntu-24.04
+            container_image: mirror.gcr.io/ubuntu:24.04
+            container_options: '--cap-add SYS_PTRACE'
     env:
       CHECK_MODE: ${{ matrix.mode }}
+      EXPECTED_CI_IMAGE: ${{ matrix.container_image }}
+      DEBIAN_FRONTEND: noninteractive
       LC_ALL: C.UTF-8
     steps:
+      - name: Install container build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake curl git ninja-build pkg-config python3
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -77,12 +94,13 @@ jobs:
         run: |
           # shellcheck source=/dev/null
           source "bitcoin/ci/test/00_setup_env_native_${CHECK_MODE}.sh"
+          test "$CI_IMAGE_NAME_TAG" = "$EXPECTED_CI_IMAGE"
           source /etc/os-release
-          curl --fail --location https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-          echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${APT_LLVM_V} main" | sudo tee "/etc/apt/sources.list.d/llvm-${APT_LLVM_V}.list"
-          sudo apt-get update
+          curl --fail --location https://apt.llvm.org/llvm-snapshot.gpg.key > /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${APT_LLVM_V} main" > "/etc/apt/sources.list.d/llvm-${APT_LLVM_V}.list"
+          apt-get update
           read -r -a packages <<< "$PACKAGES"
-          sudo apt-get install -y "${packages[@]}" \
+          apt-get install -y "${packages[@]}" \
             ninja-build pkg-config libboost-all-dev zlib1g-dev libgl-dev \
             qt6-declarative-dev qt6-svg-dev qt6-tools-dev-tools \
             qml6-module-qt-labs-platform qml6-module-qt-labs-settings \
@@ -90,13 +108,16 @@ jobs:
             qml6-module-qtquick-shapes qml6-module-qtquick-layouts \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-models qml6-module-qtqml qml6-module-qtqml-workerscript
-          sudo update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer "/usr/bin/llvm-symbolizer-${APT_LLVM_V}" 100
+          # LLVM can install a newer GCC runtime than the base C++ compiler.
+          gcc_version=$(basename "$(dirname "$("clang++-${APT_LLVM_V}" -print-libgcc-file-name)")")
+          apt-get install -y "libstdc++-${gcc_version}-dev"
+          update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer "/usr/bin/llvm-symbolizer-${APT_LLVM_V}" 100
           if test -n "${PIP_PACKAGES:-}"; then
             read -r -a pip_packages <<< "$PIP_PACKAGES"
             python3 -m pip install "${pip_packages[@]}"
           fi
           if test "$CHECK_MODE" = tidy; then
-            sudo apt-get install -y "clang-tidy-${TIDY_LLVM_V}" qml6-module-qtquick-effects qt6-svg-plugins
+            apt-get install -y "clang-tidy-${TIDY_LLVM_V}" qml6-module-qtquick-effects qt6-svg-plugins
           fi
       - name: Configure app with Core CI options
         run: python3 ci/configure.py --mode "$CHECK_MODE" --build-dir build-check

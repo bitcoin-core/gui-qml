@@ -5,9 +5,11 @@
 """End-to-end GUI tests for the wallet selector's load flow."""
 
 import argparse
+from contextlib import contextmanager
 import os
 import re
 import signal
+import stat
 import subprocess
 import sys
 from datetime import datetime
@@ -209,7 +211,8 @@ def case_selector_loads_closed_wallet(harness, checkpoints):
     checkpoints.checkpoint("loaded wallet shows balance in selector", gui)
 
 
-def plant_readonly_wallet(harness, wallet_name):
+@contextmanager
+def readonly_wallet(harness, wallet_name):
     """Create a real wallet via a temporary bitcoind, then strip write
     permissions so the GUI's loadWallet() fails gracefully on the SQLite
     open. listWalletDir() still surfaces the directory; the load attempt
@@ -221,8 +224,15 @@ def plant_readonly_wallet(harness, wallet_name):
     precreate_closed_wallet(harness, wallet_name)
     wallet_dir = os.path.join(harness.gui_datadir, "regtest", "wallets", wallet_name)
     db_path = os.path.join(wallet_dir, "wallet.dat")
-    os.chmod(db_path, 0o444)
-    os.chmod(wallet_dir, 0o555)
+    db_mode = stat.S_IMODE(os.stat(db_path).st_mode)
+    directory_mode = stat.S_IMODE(os.stat(wallet_dir).st_mode)
+    try:
+        os.chmod(db_path, 0o444)
+        os.chmod(wallet_dir, 0o555)
+        yield
+    finally:
+        os.chmod(wallet_dir, directory_mode)
+        os.chmod(db_path, db_mode)
 
 
 def case_selector_surfaces_load_error(harness, checkpoints):
@@ -235,53 +245,53 @@ def case_selector_surfaces_load_error(harness, checkpoints):
     row_object = f"walletSelectItem_{sanitize_object_suffix(wallet_name)}"
     status_object = f"walletSelectStatus_{sanitize_object_suffix(wallet_name)}"
 
-    plant_readonly_wallet(harness, wallet_name)
-    checkpoints.checkpoint("read-only wallet planted on disk")
+    with readonly_wallet(harness, wallet_name):
+        checkpoints.checkpoint("read-only wallet planted on disk")
 
-    harness.start_gui()
-    gui = harness.driver
-    harness.finish_onboarding()
-    dismiss_create_wallet_wizard(gui)
-    wait_for_wallet_ready(harness, gui)
+        harness.start_gui()
+        gui = harness.driver
+        harness.finish_onboarding()
+        dismiss_create_wallet_wizard(gui)
+        wait_for_wallet_ready(harness, gui)
 
-    open_wallet_selector(gui)
-    gui.settle()
+        open_wallet_selector(gui)
+        gui.settle()
 
-    closed_state = gui.get_property(row_object, "loadState")
-    assert closed_state == LOAD_STATE_CLOSED, (
-        f"Expected loadState=Closed before click, got {closed_state}"
-    )
-    checkpoints.checkpoint("read-only wallet listed as Closed", gui)
+        closed_state = gui.get_property(row_object, "loadState")
+        assert closed_state == LOAD_STATE_CLOSED, (
+            f"Expected loadState=Closed before click, got {closed_state}"
+        )
+        checkpoints.checkpoint("read-only wallet listed as Closed", gui)
 
-    # Click — the load must fail, the alert popup must open, and the row
-    # must transition to LoadError. The selector stays open underneath
-    # (per design: only success/migration auto-close the selector).
-    gui.click(row_object)
-    gui.wait_for_property("walletLoadErrorPopup", "opened", True, timeout_ms=15000)
-    error_text = gui.get_text("walletLoadErrorPopupText")
-    assert error_text, "Load error popup should display a non-empty error message"
-    checkpoints.checkpoint("load error alert popup displayed", gui)
+        # Click — the load must fail, the alert popup must open, and the row
+        # must transition to LoadError. The selector stays open underneath
+        # (per design: only success/migration auto-close the selector).
+        gui.click(row_object)
+        gui.wait_for_property("walletLoadErrorPopup", "opened", True, timeout_ms=15000)
+        error_text = gui.get_text("walletLoadErrorPopupText")
+        assert error_text, "Load error popup should display a non-empty error message"
+        checkpoints.checkpoint("load error alert popup displayed", gui)
 
-    error_state = gui.get_property(row_object, "loadState")
-    assert error_state == LOAD_STATE_LOAD_ERROR, (
-        f"Expected loadState=LoadError ({LOAD_STATE_LOAD_ERROR}) after failed load, "
-        f"got {error_state}"
-    )
-    failed_status = gui.get_text(status_object)
-    assert "Failed" in failed_status or "failed" in failed_status, (
-        f"Expected status line to indicate failure, got {failed_status!r}"
-    )
+        error_state = gui.get_property(row_object, "loadState")
+        assert error_state == LOAD_STATE_LOAD_ERROR, (
+            f"Expected loadState=LoadError ({LOAD_STATE_LOAD_ERROR}) after failed load, "
+            f"got {error_state}"
+        )
+        failed_status = gui.get_text(status_object)
+        assert "Failed" in failed_status or "failed" in failed_status, (
+            f"Expected status line to indicate failure, got {failed_status!r}"
+        )
 
-    # Dismiss the popup — inline LoadError state should persist on the row
-    # (it only resets on the next user action, e.g. selecting a different
-    # wallet or starting a fresh load).
-    gui.click("walletLoadErrorPopupDismissButton")
-    gui.wait_for_property("walletLoadErrorPopup", "opened", False, timeout_ms=5000)
-    persisted_state = gui.get_property(row_object, "loadState")
-    assert persisted_state == LOAD_STATE_LOAD_ERROR, (
-        f"Expected LoadError to persist after popup dismiss, got {persisted_state}"
-    )
-    checkpoints.checkpoint("inline LoadError persists after popup dismiss", gui)
+        # Dismiss the popup — inline LoadError state should persist on the row
+        # (it only resets on the next user action, e.g. selecting a different
+        # wallet or starting a fresh load).
+        gui.click("walletLoadErrorPopupDismissButton")
+        gui.wait_for_property("walletLoadErrorPopup", "opened", False, timeout_ms=5000)
+        persisted_state = gui.get_property(row_object, "loadState")
+        assert persisted_state == LOAD_STATE_LOAD_ERROR, (
+            f"Expected LoadError to persist after popup dismiss, got {persisted_state}"
+        )
+        checkpoints.checkpoint("inline LoadError persists after popup dismiss", gui)
 
 
 def case_selector_skips_load_for_already_open_wallet(harness, checkpoints):
