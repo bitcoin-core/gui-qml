@@ -184,7 +184,7 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
     WalletQmlModel wallet_model{std::move(wallet)};
     AddressListModel* model{wallet_model.addressListModel()};
     wallet_ptr->m_txs.insert(change_tx);
-    wallet_ptr->m_coins[receive].push_back({COutPoint{txid, 1}, change_out});
+    wallet_ptr->m_coins[receive].emplace_back(COutPoint{txid, 1}, change_out);
     model->setCategory(AddressListModel::Change);
 
     QCOMPARE(model->rowCount(), 1);

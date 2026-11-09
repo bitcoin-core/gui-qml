@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <utility>
 #include <qml/test/testbridge.h>
 
 #include <QClipboard>
@@ -428,25 +429,31 @@ QObject* TestBridge::resolveCurrentLeafItem(QObject* item) const
 
 void TestBridge::collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, QSet<const QObject*>& visited, int depth) const
 {
-    if (!root) return;
-    if (visited.contains(root)) return;
-    visited.insert(root);
+    std::vector<std::pair<QObject*, int>> pending{{root, depth}};
+    while (!pending.empty()) {
+        const auto [object, object_depth]{pending.back()};
+        pending.pop_back();
+        if (!object || visited.contains(object)) continue;
+        visited.insert(object);
 
-    if (!root->objectName().isEmpty()) {
-        NamedObjectEntry named_entry;
-        named_entry.object_name = root->objectName();
-        named_entry.class_name = QString::fromLatin1(root->metaObject()->className());
-        named_entry.depth = depth;
-        results.push_back(named_entry);
-    }
-    for (QObject* child : root->children()) {
-        collectNamedObjects(child, results, visited, depth + 1);
-    }
-    // Also traverse visual children for QQuickItem-based trees.
-    auto* item = qobject_cast<QQuickItem*>(root);
-    if (item) {
-        for (QQuickItem* visual_child : item->childItems()) {
-            collectNamedObjects(visual_child, results, visited, depth + 1);
+        if (!object->objectName().isEmpty()) {
+            NamedObjectEntry named_entry;
+            named_entry.object_name = object->objectName();
+            named_entry.class_name = QString::fromLatin1(object->metaObject()->className());
+            named_entry.depth = object_depth;
+            results.push_back(named_entry);
+        }
+        // Push in reverse order to preserve the original depth-first traversal:
+        // QObject children first, followed by visual children not yet visited.
+        if (auto* item = qobject_cast<QQuickItem*>(object)) {
+            const auto visual_children{item->childItems()};
+            for (auto it{visual_children.crbegin()}; it != visual_children.crend(); ++it) {
+                pending.emplace_back(*it, object_depth + 1);
+            }
+        }
+        const auto& children{object->children()};
+        for (auto it{children.crbegin()}; it != children.crend(); ++it) {
+            pending.emplace_back(*it, object_depth + 1);
         }
     }
 }
