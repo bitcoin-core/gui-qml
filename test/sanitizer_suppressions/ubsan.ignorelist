@@ -1,0 +1,12 @@
+# Copyright (c) 2026 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+# Qt's integer hash deliberately multiplies modulo 2^64 (or 2^32).
+# Limit the exception to unsigned overflow in this one function. A compile-time
+# rule also works when reduced debug information omits inline function scopes.
+[unsigned-integer-overflow]
+# Itanium C++ ABI (Clang on Unix and MinGW).
+fun:_ZN*12QHashPrivate4hashE*
+# MSVC C++ ABI (clang-cl).
+fun:*hash@QHashPrivate@@*

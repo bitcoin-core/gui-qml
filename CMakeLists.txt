@@ -228,3 +228,5 @@ if(BUILD_APP_TESTS)
   enable_testing()
   add_subdirectory(test)
 endif()
+
+include(cmake/Sanitizers.cmake)
