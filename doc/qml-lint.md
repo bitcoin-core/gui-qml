@@ -12,6 +12,8 @@ Install the Qt declarative development tools and qmllint plugins as well as
 the application's normal build dependencies. CI runs this target in its
 Qt 6.10 job and retains the JSON reports in `build/qml-lint/*/qmllint.json`.
 The Qt 6.2 and Qt 6.4 jobs continue to build and test the application.
+The other repository, Core, clang-tidy and sanitizer jobs are described in
+[CI checks](ci-checks.md).
 
 The target checks every QML and JavaScript file shipped in the resource
 collections, using both the Qt 6.2 and Qt 6.5 compatibility aliases. It stages
