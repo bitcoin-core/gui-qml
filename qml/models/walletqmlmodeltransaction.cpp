@@ -17,7 +17,6 @@
 WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent)
     : QObject(parent),
       m_amount(recipient->totalAmountSatoshi()),
-      m_fee(0),
       m_amount_amount(new BitcoinAmount(this)),
       m_fee_amount(new BitcoinAmount(this)),
       m_total_amount(new BitcoinAmount(this)),

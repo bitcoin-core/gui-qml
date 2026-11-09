@@ -62,7 +62,7 @@ Item {
         objectName: "blockClockDial"
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
+        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width
         penWidth: dial.width / 50

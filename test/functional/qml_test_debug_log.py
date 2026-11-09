@@ -13,12 +13,11 @@ This test requires the binary to be built with -DENABLE_TEST_AUTOMATION=ON.
 
 import datetime
 import os
-import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 
+from qml_test_harness import cleanup_test_directory, create_test_directory
 from qml_test_harness import GUI_STARTUP_TIMEOUT, dump_qml_tree, find_gui_binary, setup_datadir
 from qml_driver import QmlDriver
 
@@ -38,7 +37,7 @@ class DebugLogHarness:
 
     def __init__(self, extra_args=None):
         self.gui_binary = find_gui_binary()
-        self.tmpdir = tempfile.mkdtemp(prefix="qml_test_debug_log_")
+        self.tmpdir = create_test_directory(prefix="qml_test_debug_log_")
         self.socket_path = os.path.join(self.tmpdir, "test_bridge.sock")
         self.process = None
         self.driver = None
@@ -103,7 +102,7 @@ class DebugLogHarness:
         if self.driver:
             self.driver.close()
         if self.tmpdir:
-            shutil.rmtree(self.tmpdir, ignore_errors=True)
+            cleanup_test_directory(self.tmpdir)
             self.tmpdir = None
 
 
@@ -332,7 +331,7 @@ def run_log_setting_tests():
     finally:
         harness.stop()
 
-    custom_dir = tempfile.mkdtemp(prefix="qml_test_debug_log_custom_")
+    custom_dir = create_test_directory(prefix="qml_test_debug_log_custom_")
     harness = DebugLogHarness(
         extra_args=[f"-debuglogfile={os.path.join(custom_dir, 'custom.log')}"])
     try:
@@ -342,7 +341,7 @@ def run_log_setting_tests():
         test_custom_log_path(gui)
     finally:
         harness.stop()
-        shutil.rmtree(custom_dir, ignore_errors=True)
+        cleanup_test_directory(custom_dir)
 
 
 def run_tests():

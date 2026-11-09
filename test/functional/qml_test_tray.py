@@ -23,13 +23,11 @@ This test requires:
 """
 
 import os
-import shutil
 import signal
 import subprocess
 import sys
-import tempfile
-import time
 
+from qml_test_harness import cleanup_test_directory, create_test_directory
 from qml_test_harness import (
     GUI_STARTUP_TIMEOUT,
     find_gui_binary,
@@ -39,7 +37,7 @@ from qml_test_harness import (
     qsettings_sandbox_args,
     setup_datadir,
 )
-from qml_driver import QmlDriver, QmlDriverError
+from qml_driver import QmlDriver
 
 
 def navigate_to_window_behavior(gui):
@@ -61,7 +59,7 @@ def run_tests():
         tmpdir = None
     else:
         gui_binary = find_gui_binary()
-        tmpdir = tempfile.mkdtemp(prefix="qml_test_tray_")
+        tmpdir = create_test_directory(prefix="qml_test_tray_")
         datadir = setup_datadir(tmpdir)
         socket_path = os.path.join(tmpdir, "test_bridge.sock")
 
@@ -140,7 +138,7 @@ def run_tests():
             )
             print(f"  -> {switch_name}.checked == {str(expected).lower()}  ✓")
 
-        # ── Tests 4–5: showTrayIcon toggle round-trip ─────────────────────────
+        # ── Tests 4-5: showTrayIcon toggle round-trip ─────────────────────────
         # Run the toggle tests while only one Window Behavior page instance is in
         # the StackView (before the back/re-open cycle), so objectName lookups
         # are unambiguous.
@@ -203,7 +201,7 @@ def run_tests():
                 process.kill()
                 process.wait()
         if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            cleanup_test_directory(tmpdir)
 
 
 if __name__ == "__main__":

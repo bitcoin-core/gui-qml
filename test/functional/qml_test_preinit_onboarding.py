@@ -11,11 +11,10 @@ RunPreInitOnboarding() is observable through the pre-init test bridge.
 import sys
 import json
 import os
-import shutil
 import subprocess
 import time
-import tempfile
 
+from qml_test_harness import cleanup_test_directory, create_test_directory
 from qml_test_harness import (
     QmlTestHarness,
     assert_node_shell_visible,
@@ -253,7 +252,7 @@ def run_wallet_enabled_flow():
     finally:
         harness.stop(cleanup=False)
         if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            cleanup_test_directory(tmpdir)
 
 
 def run_wallet_disabled_flow():
@@ -276,7 +275,7 @@ def run_wallet_disabled_flow():
 
 
 def run_existing_profile_full_onboarding_flow():
-    tmpdir = tempfile.mkdtemp(prefix="qml704_", dir="/tmp")
+    tmpdir = create_test_directory(prefix="qml704_", dir="/tmp")
     datadir = setup_datadir(tmpdir)
     with open(os.path.join(datadir, "bitcoin.conf"), "a", encoding="utf8") as conf:
         conf.write("prune=4096\n")
@@ -318,7 +317,7 @@ def run_existing_profile_full_onboarding_flow():
         raise
     finally:
         harness.stop(cleanup=False)
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 def run_configured_datadir_preserves_config_source_flow():
@@ -367,11 +366,11 @@ def run_configured_datadir_preserves_config_source_flow():
         raise
     finally:
         harness.stop(cleanup=False)
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 def run_existing_profile_preserves_root_wallet_discovery_flow():
-    tmpdir = tempfile.mkdtemp(prefix="qml704_wallets_", dir="/tmp")
+    tmpdir = create_test_directory(prefix="qml704_wallets_", dir="/tmp")
     wallet_name = "legacyroot"
     datadir = None
     harness = None
@@ -401,11 +400,11 @@ def run_existing_profile_preserves_root_wallet_discovery_flow():
     finally:
         if harness is not None:
             harness.stop(cleanup=False)
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 def run_existing_profile_detects_explicit_walletdir_flow():
-    tmpdir = tempfile.mkdtemp(prefix="qml704_walletdir_", dir="/tmp")
+    tmpdir = create_test_directory(prefix="qml704_walletdir_", dir="/tmp")
     wallet_name = "externalwallet"
     harness = None
     try:
@@ -432,11 +431,11 @@ def run_existing_profile_detects_explicit_walletdir_flow():
     finally:
         if harness is not None:
             harness.stop(cleanup=False)
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 def run_qml_onboarded_override_reloads_saved_settings_flow():
-    tmpdir = tempfile.mkdtemp(prefix="qml704_override_", dir="/tmp")
+    tmpdir = create_test_directory(prefix="qml704_override_", dir="/tmp")
     datadir = setup_datadir(tmpdir)
     write_settings_json(datadir, {
         "qml_onboarded": True,
@@ -479,7 +478,7 @@ def run_qml_onboarded_override_reloads_saved_settings_flow():
         raise
     finally:
         harness.stop(cleanup=False)
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 def run_tests():

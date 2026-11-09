@@ -223,7 +223,7 @@ QString PsbtQmlModel::loadFromFile(const QString& path)
 {
     CMutableTransaction empty_tx;
     PartiallySignedTransaction psbt{empty_tx, /*version=*/2};
-    const QString error{LoadPsbtFromFile(path, psbt)};
+    QString error{LoadPsbtFromFile(path, psbt)};
     if (!error.isEmpty()) {
         setError(error);
         return error;
@@ -310,7 +310,7 @@ QString PsbtQmlModel::saveToFile(const QString& path)
         refreshState(err);
         return err;
     }
-    const QString err{SavePsbtToFile(*m_psbt, path)};
+    QString err{SavePsbtToFile(*m_psbt, path)};
     if (!err.isEmpty()) {
         refreshState(err);
         return err;

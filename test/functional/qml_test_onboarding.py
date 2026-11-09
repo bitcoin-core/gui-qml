@@ -13,7 +13,7 @@ This test requires the binary to be built with -DENABLE_TEST_AUTOMATION=ON.
 import sys
 import time
 
-from qml_test_harness import QmlTestHarness, QmlDriverError, click_onboarding_button, dump_qml_tree, parse_args
+from qml_test_harness import QmlTestHarness, click_onboarding_button, dump_qml_tree, parse_args
 
 
 def run_tests():

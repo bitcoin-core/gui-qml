@@ -323,7 +323,7 @@ To prevent accidental loss, it is recommended you keep a copy of your wallet fil
     <name>CreateIntro</name>
     <message>
         <location filename="../pages/wallet/CreateIntro.qml" line="52"/>
-        <source>You are about to create 
+        <source>You are about to create&#32;
 a single-key bitcoin wallet</source>
         <translation type="unfinished"></translation>
     </message>

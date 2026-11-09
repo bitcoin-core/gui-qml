@@ -10,7 +10,6 @@ import re
 import signal
 import subprocess
 import sys
-import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "bitcoin", "test", "functional"))

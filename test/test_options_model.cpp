@@ -1419,9 +1419,9 @@ void OptionsModelTests::resetGuiSettingsClearsSettingsJson()
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("prune") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
-        QVERIFY(settings.rw_settings.count("onion") == 0);
+        QVERIFY(!settings.rw_settings.contains("prune"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
+        QVERIFY(!settings.rw_settings.contains("onion"));
     });
 }
 
@@ -1520,10 +1520,10 @@ void OptionsModelTests::resetGuiSettingsApplyClearsSelectedCustomDataDirSettings
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("listen") == 0);
-        QVERIFY(settings.rw_settings.count("natpmp") == 0);
-        QVERIFY(settings.rw_settings.count("server") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
+        QVERIFY(!settings.rw_settings.contains("listen"));
+        QVERIFY(!settings.rw_settings.contains("natpmp"));
+        QVERIFY(!settings.rw_settings.contains("server"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
     });
 }
 
@@ -1648,8 +1648,8 @@ void OptionsModelTests::resetGuiSettingsExplicitDatadirClearsThatDatadirSettings
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("server") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
+        QVERIFY(!settings.rw_settings.contains("server"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
     });
 }
 
@@ -2314,8 +2314,8 @@ void OptionsModelTests::onboardingApplyWithoutTouchedSettingsOnlyAddsQmlOnboarde
     bool has_listen_override{true};
     bool has_prune_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
-        has_prune_override = settings.rw_settings.count("prune") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
+        has_prune_override = settings.rw_settings.contains("prune");
     });
     QVERIFY(!has_listen_override);
     QVERIFY(!has_prune_override);
@@ -2626,7 +2626,7 @@ void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QVariantMap status = QmlCoreSettings::CoreSettingStatus(args, QStringLiteral("listen"));
@@ -2636,7 +2636,7 @@ void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("listen"), common::SettingsValue{false}));
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 
@@ -2651,7 +2651,7 @@ void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("maxmempool"), common::SettingsValue{DEFAULT_MAX_MEMPOOL_SIZE_MB}));
     bool has_mempool_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_mempool_override = settings.rw_settings.count("maxmempool") > 0;
+        has_mempool_override = settings.rw_settings.contains("maxmempool");
     });
     QVERIFY(!has_mempool_override);
 }
@@ -2673,7 +2673,7 @@ void OptionsModelTests::parameterInteractionOverridesPersistExplicitValues()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(listen_args, QStringLiteral("listen"), common::SettingsValue{false}));
     bool has_listen_override{true};
     listen_args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 
@@ -2766,7 +2766,7 @@ void OptionsModelTests::coreSettingsSessionCommandLineSettingDoesNotWrite()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["listen"].push_back(common::SettingsValue{true});
+        settings.command_line_options["listen"].emplace_back(true);
     });
 
     QmlCoreSettings::Values values;
@@ -2780,7 +2780,7 @@ void OptionsModelTests::coreSettingsSessionCommandLineSettingDoesNotWrite()
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -2790,7 +2790,7 @@ void OptionsModelTests::coreSettingsSessionDoesNotCopyUntouchedConfig()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QmlCoreSettings::Session session{
@@ -2801,7 +2801,7 @@ void OptionsModelTests::coreSettingsSessionDoesNotCopyUntouchedConfig()
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -2811,7 +2811,7 @@ void OptionsModelTests::coreSettingsSessionWritesTouchedConfigOverride()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QmlCoreSettings::Session session{
@@ -2845,7 +2845,7 @@ void OptionsModelTests::coreSettingsSessionRevertingToDefaultDeletesOverride()
 
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -2866,7 +2866,7 @@ void OptionsModelTests::coreSettingsSessionPruneDisabledPreservesPreviousValue()
     bool has_prune_override{true};
     args.LockSettings([&](common::Settings& settings) {
         prune_prev = settings.rw_settings.at("prune-prev");
-        has_prune_override = settings.rw_settings.count("prune") > 0;
+        has_prune_override = settings.rw_settings.contains("prune");
     });
     QVERIFY(prune_prev.isStr());
     QCOMPARE(QString::fromStdString(prune_prev.get_str()), QString::number(QmlCoreSettings::PruneGBToMiB(10)));
@@ -2892,7 +2892,7 @@ void OptionsModelTests::coreSettingsSessionPruneEnabledClearsPreviousValue()
     bool has_prune_prev{true};
     args.LockSettings([&](common::Settings& settings) {
         prune_setting = settings.rw_settings.at("prune");
-        has_prune_prev = settings.rw_settings.count("prune-prev") > 0;
+        has_prune_prev = settings.rw_settings.contains("prune-prev");
     });
     QVERIFY(prune_setting.isStr());
     QCOMPARE(QString::fromStdString(prune_setting.get_str()), QString::number(QmlCoreSettings::PruneGBToMiB(10)));
@@ -2915,7 +2915,7 @@ void OptionsModelTests::coreSettingsSessionProxyDisabledPreservesPreviousValue()
     bool has_proxy_override{true};
     args.LockSettings([&](common::Settings& settings) {
         proxy_prev = settings.rw_settings.at("proxy-prev");
-        has_proxy_override = settings.rw_settings.count("proxy") > 0;
+        has_proxy_override = settings.rw_settings.contains("proxy");
     });
     QCOMPARE(QString::fromStdString(proxy_prev.get_str()), QStringLiteral("10.0.0.2:9050"));
     QVERIFY(!has_proxy_override);
@@ -2987,7 +2987,7 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
         });
 
         MockNode node;
@@ -3010,7 +3010,7 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
             settings.rw_settings["listen"] = common::SettingsValue{false};
         });
 
@@ -3032,9 +3032,9 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
             settings.rw_settings["listen"] = common::SettingsValue{false};
-            settings.command_line_options["listen"].push_back(common::SettingsValue{true});
+            settings.command_line_options["listen"].emplace_back(true);
         });
 
         MockNode node;
@@ -3086,8 +3086,8 @@ void OptionsModelTests::commandLineOverriddenSettingDoesNotWrite()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["listen"].push_back(common::SettingsValue{false});
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+        settings.command_line_options["listen"].emplace_back(false);
+        settings.ro_config[""]["listen"].emplace_back(true);
     });
 
     MockNode node;
@@ -3117,13 +3117,13 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
         settings.rw_settings["server"] = common::SettingsValue{false};
-        settings.command_line_options["server"].push_back(common::SettingsValue{true});
+        settings.command_line_options["server"].emplace_back(true);
         settings.rw_settings["prune"] = MakeInt(0);
         settings.command_line_options["prune"].push_back(MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
         settings.rw_settings["proxy"] = common::SettingsValue{false};
-        settings.command_line_options["proxy"].push_back(common::SettingsValue{std::string{"10.0.0.1:9050"}});
+        settings.command_line_options["proxy"].emplace_back(std::string{"10.0.0.1:9050"});
         settings.rw_settings["onion"] = common::SettingsValue{false};
-        settings.command_line_options["onion"].push_back(common::SettingsValue{std::string{"127.0.0.1:9150"}});
+        settings.command_line_options["onion"].emplace_back(std::string{"127.0.0.1:9150"});
         settings.rw_settings["dbcache"] = MakeInt(300);
         settings.command_line_options["dbcache"].push_back(MakeInt(600));
         settings.rw_settings["par"] = MakeInt(1);
@@ -3131,7 +3131,7 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
         settings.rw_settings["maxmempool"] = MakeInt(300);
         settings.command_line_options["maxmempool"].push_back(MakeInt(500));
         settings.rw_settings["signer"] = common::SettingsValue{std::string{"saved-signer"}};
-        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"cli-signer"}});
+        settings.command_line_options["signer"].emplace_back(std::string{"cli-signer"});
     });
 
     MockNode node;
@@ -3223,7 +3223,7 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
 
     bool has_listen_override{true};
     proxy_args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 
@@ -3260,11 +3260,11 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
         settings.rw_settings["server"] = common::SettingsValue{false};
-        settings.command_line_options["server"].push_back(common::SettingsValue{true});
+        settings.command_line_options["server"].emplace_back(true);
         settings.rw_settings["prune"] = MakeInt(0);
         settings.command_line_options["prune"].push_back(MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
         settings.rw_settings["proxy"] = common::SettingsValue{std::string{"127.0.0.1:9050"}};
-        settings.command_line_options["proxy"].push_back(common::SettingsValue{std::string{"10.0.0.1:9050"}});
+        settings.command_line_options["proxy"].emplace_back(std::string{"10.0.0.1:9050"});
         settings.rw_settings["dbcache"] = MakeInt(300);
         settings.command_line_options["dbcache"].push_back(MakeInt(600));
         settings.rw_settings["par"] = MakeInt(1);
@@ -3272,7 +3272,7 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
         settings.rw_settings["maxmempool"] = MakeInt(300);
         settings.command_line_options["maxmempool"].push_back(MakeInt(500));
         settings.rw_settings["signer"] = common::SettingsValue{std::string{"saved-signer"}};
-        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"cli-signer"}});
+        settings.command_line_options["signer"].emplace_back(std::string{"cli-signer"});
     });
 
     MockNode node;
@@ -3319,7 +3319,7 @@ void OptionsModelTests::revertingToConfigValueDeletesRwOverride()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+        settings.ro_config[""]["listen"].emplace_back(true);
         settings.rw_settings["listen"] = common::SettingsValue{false};
     });
 
@@ -3381,7 +3381,7 @@ void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["lang"].push_back(common::SettingsValue{std::string{"fr"}});
+        settings.command_line_options["lang"].emplace_back(std::string{"fr"});
     });
 
     MockNode node;
@@ -3458,9 +3458,9 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
         proxy = core_settings.rw_settings.at("proxy");
         onion_prev = core_settings.rw_settings.at("onion-prev");
         language = core_settings.rw_settings.at("lang");
-        has_natpmp = core_settings.rw_settings.count("natpmp") > 0;
-        has_onion = core_settings.rw_settings.count("onion") > 0;
-        has_prune_prev = core_settings.rw_settings.count("prune-prev") > 0;
+        has_natpmp = core_settings.rw_settings.contains("natpmp");
+        has_onion = core_settings.rw_settings.contains("onion");
+        has_prune_prev = core_settings.rw_settings.contains("prune-prev");
     });
 
     QVERIFY(dbcache.isStr());
@@ -3584,7 +3584,7 @@ void OptionsModelTests::legacyQtSettingsBitcoinConfBlocksMigration()
 
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& core_settings) {
-        has_listen_override = core_settings.rw_settings.count("listen") > 0;
+        has_listen_override = core_settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("fListen")));
@@ -3621,7 +3621,7 @@ void OptionsModelTests::onboardingApplyMigratesLegacySettingsBeforeTouchedOverri
     bool has_listen_override{true};
     common::SettingsValue server;
     args.LockSettings([&](common::Settings& core_settings) {
-        has_listen_override = core_settings.rw_settings.count("listen") > 0;
+        has_listen_override = core_settings.rw_settings.contains("listen");
         server = core_settings.rw_settings.at("server");
     });
     QVERIFY(!has_listen_override);
@@ -3694,7 +3694,7 @@ void OptionsModelTests::onboardingApplyDoesNotCopyUntouchedConfig()
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -3773,9 +3773,9 @@ void OptionsModelTests::onboardingApplyWritesTouchedParameterInteractionOverride
         if (const auto* value = common::FindKey(settings.rw_settings, "listen")) {
             listen_override = *value;
         }
-        has_forced_listen = settings.forced_settings.count("listen") > 0;
-        has_forced_natpmp = settings.forced_settings.count("natpmp") > 0;
-        has_forced_discover = settings.forced_settings.count("discover") > 0;
+        has_forced_listen = settings.forced_settings.contains("listen");
+        has_forced_natpmp = settings.forced_settings.contains("natpmp");
+        has_forced_discover = settings.forced_settings.contains("discover");
     });
 
     QVERIFY(listen_override.isBool());

@@ -734,7 +734,7 @@ def run_tests():
             "viewBannedPeersButton should still be hidden after disconnect"
         print("  Verified: viewBannedPeersButton hidden (no bans after disconnect)")
 
-        # ── Tests 2–5: Ban with each duration ────────────────────────────────
+        # ── Tests 2-5: Ban with each duration ────────────────────────────────
         for i, (duration_secs, duration_label) in enumerate(BAN_DURATIONS):
             if i > 0:
                 harness.rpc_call("clearbanned")
@@ -777,7 +777,7 @@ def run_tests():
         test_ban_persistence(harness)
         gui = harness.driver
 
-        # ── Tests 8–9: Multi-peer isolation ──────────────────────────────
+        # ── Tests 8-9: Multi-peer isolation ──────────────────────────────
         # test_ban_persistence already navigated to the peers page after
         # restarting the GUI, so no additional navigation is needed here.
         print("\nReconnecting peer for multi-peer disconnect test ...")

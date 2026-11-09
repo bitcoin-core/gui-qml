@@ -6,11 +6,11 @@
 
 import json
 import os
-import shutil
 import sys
 import tempfile
 import time
 
+from qml_test_harness import cleanup_test_directory, create_test_directory
 from qml_process_checks import check_gui_exit
 from qml_test_harness import (
     QmlTestHarness,
@@ -231,7 +231,7 @@ def run_tests():
     run_window_behavior_reset(hide_tray_icon=False)
     run_window_behavior_reset(hide_tray_icon=True)
 
-    tmpdir = tempfile.mkdtemp(prefix="qml_resetguisettings_")
+    tmpdir = create_test_directory(prefix="qml_resetguisettings_")
     custom_datadir = os.path.join(tmpdir, "custom-data-dir")
     os.makedirs(custom_datadir, exist_ok=True)
     try:
@@ -241,7 +241,7 @@ def run_tests():
         print("All tests PASSED")
         print("=" * 50)
     finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        cleanup_test_directory(tmpdir)
 
 
 if __name__ == "__main__":
