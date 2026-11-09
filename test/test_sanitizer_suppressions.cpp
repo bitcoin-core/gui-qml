@@ -29,6 +29,13 @@ void Truncation()
     volatile std::uint32_t result = value;
     (void)result;
 }
+
+[[gnu::noinline]] void ApplicationLeak()
+{
+    auto* value = new int{42};
+    // Keep the allocation observable without keeping it reachable by LSan.
+    asm volatile("" : : "r"(value) : "memory");
+}
 } // namespace
 
 namespace QHashPrivate {
@@ -66,6 +73,8 @@ int main(int argc, char** argv)
         QHashPrivate::hashNeighbor();
     } else if (std::strcmp(argv[1], "hash-signed") == 0) {
         QHashPrivate::hash();
+    } else if (std::strcmp(argv[1], "leak") == 0) {
+        ApplicationLeak();
     } else {
         return 2;
     }

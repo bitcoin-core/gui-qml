@@ -96,7 +96,7 @@ jobs:
             python3 -m pip install "${pip_packages[@]}"
           fi
           if test "$CHECK_MODE" = tidy; then
-            sudo apt-get install -y "clang-tidy-${TIDY_LLVM_V}" qml6-module-qtquick-effects
+            sudo apt-get install -y "clang-tidy-${TIDY_LLVM_V}" qml6-module-qtquick-effects qt6-svg-plugins
           fi
       - name: Configure app with Core CI options
         run: python3 ci/configure.py --mode "$CHECK_MODE" --build-dir build-check
@@ -108,20 +108,19 @@ jobs:
       - name: Run sanitizer tests and real GUI lifecycle
         if: matrix.mode == 'asan'
         env:
-          ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
           QT_QUICK_BACKEND: software
           QML_DISABLE_DISK_CACHE: '1'
         run: |
-          export LSAN_OPTIONS="suppressions=$PWD/bitcoin/test/sanitizer_suppressions/lsan:print_suppressions=0"
-          export UBSAN_OPTIONS="suppressions=$PWD/bitcoin/test/sanitizer_suppressions/ubsan:print_stacktrace=1:halt_on_error=1:report_error_type=1"
           export BITCOIN_CORE_APP="$PWD/build-check/bin/bitcoin-core-app"
           export BITCOIND="$PWD/build-check/bin/bitcoind"
+          export LSAN_OPTIONS
+          LSAN_OPTIONS=$(python3 ci/lsan_suppressions.py --build-dir build-check)
           ulimit -s 512
           export XDG_RUNTIME_DIR
           XDG_RUNTIME_DIR=$(mktemp -d /tmp/qml-ci-XXXXXX)
           trap 'rm -rf -- "$XDG_RUNTIME_DIR"' EXIT
-          ctest --test-dir build-check --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
-          python3 test/functional/qml_test_shutdown.py
+          python3 build-check/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-check --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
+          python3 build-check/bitcoin/test/with_sanitizer_env.py python3 test/functional/qml_test_shutdown.py
       - name: Upload diagnostics
         uses: actions/upload-artifact@v7
         if: always()
@@ -161,7 +160,7 @@ jobs:
           - job_name: 'Ubuntu 26.04, Qt 6.10'
             image: ubuntu-26.04
             qml_lint_packages: 'qt6-declarative-dev-tools qt6-qmllint-plugins'
-            svg_package: 'qt6-svg-dev'
+            svg_package: 'qt6-svg-dev qt6-svg-plugins'
             effects_package: 'qml6-module-qtquick-effects'
             cmake_env: 'cmake -E env CXXFLAGS="-Wno-error=trailing-whitespace" --'
             cmake_options: '-DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DENABLE_QML_LINT=ON'

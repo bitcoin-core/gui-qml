@@ -1,0 +1,4 @@
+# Qt's software render context retains its texture cache on shutdown in Qt 6.4.2.
+# Independently reproduced; fixed upstream by QTBUG-106968:
+# https://github.com/qt/qtdeclarative/commit/f1b188df132c42da62197055725e5f7eebcc4249
+leak:QSGRenderContext::textureForFactory
