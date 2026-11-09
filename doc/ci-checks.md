@@ -49,7 +49,9 @@ python3 ci/clang_tidy.py --build-dir build-tidy --jobs 2
 ```
 
 The configuration reads the compiler version, options and developer feature
-settings from the pinned Core CI files. The checker builds and tests the
+settings from the pinned Core CI files. Core's compiler warnings, including
+`-Wunreachable-code-aggressive` when supported, are treated as errors.
+The checker builds and tests the
 matching Bitcoin tidy plugin, then checks all configured app compilation units
 and app headers using `bitcoin/src/.clang-tidy`. Generated code and Core's own
 compilation units are excluded from this app pass. An empty selection fails.
@@ -69,6 +71,9 @@ enabled. The workflow runs CTest and the real `qml_test_shutdown.py` lifecycle
 test with Core's 512 KiB stack limit, the original timeout, and stderr/exit-status
 assertions.
 
-Use Core's runtime options and suppression files, as shown in the workflow.
+The workflow uses Core's generated `bitcoin/test/with_sanitizer_env.py` wrapper
+in the build directory for its runtime options and suppression files.
+`ci/lsan_suppressions.py` appends the independently reproduced Qt software
+texture-cache exception while retaining Core's options and rules.
 [Sanitizer exceptions](sanitizers.md) documents the narrowly scoped Qt hash
 exception. The workflow uploads CTest and clang-tidy diagnostics even on failure.
