@@ -324,9 +324,9 @@ Para evitar pérdidas accidentales, se recomienda guardar una copia en un lugar 
     <name>CreateIntro</name>
     <message>
         <location filename="../pages/wallet/CreateIntro.qml" line="52"/>
-        <source>You are about to create 
+        <source>You are about to create&#32;
 a single-key bitcoin wallet</source>
-        <translation type="unfinished">Estás a punto de crear 
+        <translation type="unfinished">Estás a punto de crear&#32;
 una cartera Bitcoin de clave única</translation>
     </message>
     <message>

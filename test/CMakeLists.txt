@@ -13,6 +13,10 @@ add_test(NAME bitcoinqml_process_checks
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/test_qml_process_checks.py
 )
 
+add_test(NAME bitcoinqml_test_directory_checks
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/test_qml_test_directories.py
+)
+
 add_executable(bitcoinqml_bootstrap_tests
   test_bootstrap.cpp
   ../qml/backendexecutor.cpp
@@ -193,7 +197,7 @@ set_tests_properties(bitcoinqml_qmlwarning_tests PROPERTIES TIMEOUT 120 LABELS q
   ENVIRONMENT "QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
 
 set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
-set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests
+set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests bitcoinqml_test_directory_checks
   bitcoinqml_process_checks PROPERTIES LABELS unit)
 set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests PROPERTIES

@@ -892,7 +892,7 @@ QString WalletQmlController::walletImportErrorDescription() const
 
 QString WalletQmlController::walletImportErrorHelpText() const
 {
-    const QString error = m_wallet_load_error.trimmed();
+    QString error = m_wallet_load_error.trimmed();
     if (error.isEmpty()) {
         return {};
     }
@@ -915,8 +915,8 @@ QString WalletQmlController::inferWalletLoadTarget(const QString& normalized_pat
     const QDir wallet_dir(wallet_dir_path);
 
     auto walletTargetFromDir = [&wallet_dir, &wallet_dir_path](const QString& dir_path) {
-        const QString clean_dir_path = QDir::cleanPath(dir_path);
-        const QString relative_path = wallet_dir.relativeFilePath(clean_dir_path);
+        QString clean_dir_path = QDir::cleanPath(dir_path);
+        QString relative_path = wallet_dir.relativeFilePath(clean_dir_path);
         // Wallet loader accepts wallet names relative to -walletdir. Use those
         // when possible so nested wallets resolve to "subdir/name". For the
         // top-level wallet directory, keep the absolute path so it remains a
@@ -938,7 +938,7 @@ QString WalletQmlController::inferWalletLoadTarget(const QString& normalized_pat
         return {};
     }
 
-    const QString file_name = selected_path.fileName();
+    QString file_name = selected_path.fileName();
     const QString parent_dir_path = QDir::cleanPath(selected_path.dir().absolutePath());
 
     if (file_name.compare("wallet.dat", Qt::CaseInsensitive) == 0) {
@@ -993,7 +993,7 @@ QString WalletQmlController::resolveManagedWalletReference(const QString& path, 
         return {};
     }
 
-    const QString load_target = inferWalletLoadTarget(normalized_path);
+    QString load_target = inferWalletLoadTarget(normalized_path);
     if (load_target.isEmpty()) {
         return {};
     }

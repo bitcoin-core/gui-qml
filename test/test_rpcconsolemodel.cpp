@@ -65,6 +65,16 @@ public:
     }
 };
 
+class StructuredReplyNode : public RpcTestStubNode
+{
+public:
+    explicit StructuredReplyNode(UniValue reply) : m_reply(std::move(reply)) {}
+    UniValue executeRpc(const std::string&, const UniValue&, const std::string&) override { return m_reply; }
+
+private:
+    UniValue m_reply;
+};
+
 // RpcTestStubNode that provides a known command list for autocomplete tests.
 class CommandListNode : public RpcTestStubNode
 {
@@ -176,6 +186,8 @@ private Q_SLOTS:
     void clearRemovesOutput();
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
+    void jsonReplyPreservesNestedFormatting_data();
+    void jsonReplyPreservesNestedFormatting();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -446,6 +458,46 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     // The old regex-based formatter incorrectly treated this as a key.
     QVERIFY2(!html.contains(QStringLiteral("\"see section\"</span>")),
              qPrintable("String value was mis-coloured as a key in:\n" + html));
+}
+
+void RpcConsoleModelTests::jsonReplyPreservesNestedFormatting_data()
+{
+    QTest::addColumn<QString>("json");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("empty-object") << QStringLiteral("{}") << QStringLiteral("{}");
+    QTest::newRow("empty-array") << QStringLiteral("[]") << QStringLiteral("[]");
+    const QString indent{QStringLiteral("&nbsp;&nbsp;")};
+    const QString key{QStringLiteral("<span style='color:#123456'>\"")};
+    QTest::newRow("mixed-containers") << QStringLiteral(R"({"a":[1,{"b":[]}],"z":{}})")
+        << "{<br>" + indent + key + "a\"</span>: [<br>" + indent.repeated(2) + "1,<br>" +
+           indent.repeated(2) + "{<br>" + indent.repeated(3) + key + "b\"</span>: []<br>" +
+           indent.repeated(2) + "}<br>" + indent + "],<br>" + indent + key + "z\"</span>: {}<br>}";
+    QTest::newRow("scalar-values") << QStringLiteral(R"([null,true,false,12,"<>&"])")
+        << "[<br>" + indent + "null,<br>" + indent + "true,<br>" + indent + "false,<br>" +
+           indent + "12,<br>" + indent + "\"&lt;&gt;&amp;\"<br>]";
+    constexpr int depth{64};
+    QString expected;
+    for (int level{0}; level < depth; ++level) expected += "[<br>" + indent.repeated(level + 1);
+    expected += "null";
+    for (int level{depth - 1}; level >= 0; --level) expected += "<br>" + indent.repeated(level) + "]";
+    QTest::newRow("deep-array") << QString(depth, '[') + "null" + QString(depth, ']') << expected;
+}
+
+void RpcConsoleModelTests::jsonReplyPreservesNestedFormatting()
+{
+    QFETCH(QString, json);
+    QFETCH(QString, expected);
+    UniValue reply;
+    QVERIFY(reply.read(json.toStdString()));
+    StructuredReplyNode mock{std::move(reply)};
+    RpcConsoleModel model{mock};
+    QVERIFY(model.setProperty("keyColor", QColor{"#123456"}));
+    submitAndSettle(model, "getsomething");
+    auto* out{model.outputModel()};
+    QCOMPARE(out->rowCount(), 2);
+    const int content_role{roleForName(out, "content")};
+    QVERIFY(content_role != -1);
+    QCOMPARE(out->data(out->index(1, 0), content_role).toString(), expected);
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()

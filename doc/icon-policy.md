@@ -35,4 +35,4 @@ If an icon is not being used, it should be removed.
 
 ## Attribution
 Icon additions must include appropriate attribution to the author, license information, and any comments relevant to the icon documented under the
-[contrib/debian/copyright](../../../contrib/debian/copyright) file.
+[contrib/debian/copyright](../bitcoin/contrib/debian/copyright) file.

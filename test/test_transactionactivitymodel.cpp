@@ -147,7 +147,7 @@ public:
     bool tryGetTxStatus(const Txid& id, interfaces::WalletTxStatus& status, int& height, int64_t& time) override
     {
         ++status_reads;
-        if (busy || !statuses.count(id)) return false;
+        if (busy || !statuses.contains(id)) return false;
         status = statuses.at(id);
         height = 100;
         time = 1'789'200'000;
@@ -163,7 +163,7 @@ public:
     {
         blockingRead();
         ++label_reads;
-        if (!labels.count(EncodeDestination(address))) return false;
+        if (!labels.contains(EncodeDestination(address))) return false;
         if (label) *label = labels.at(EncodeDestination(address));
         if (purpose) *purpose = purposes[EncodeDestination(address)];
         return true;
