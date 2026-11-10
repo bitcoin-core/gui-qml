@@ -91,7 +91,7 @@ TestCase {
                 "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
-                "NodeWarningsPopup", "OnboardingSettingsPopup", "WatchOnlyExportModal"]
+                "NodeWarningsPopup", "OnboardingSettingsPopup"]
         }
         const exemptions = {}
         for (const reason in reasons) {

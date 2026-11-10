@@ -32,6 +32,7 @@
 #include <test/mocks/mockwallet.h>
 #include <tinyformat.h>
 #include <txmempool.h>
+#include <univalue.h>
 #include <util/strencodings.h>
 #include <wallet/coincontrol.h>
 #include <wallet/types.h>
@@ -854,12 +855,12 @@ private Q_SLOTS:
     void bumpTransactionWithWrongPassphraseDoesNotSign();
     void displayNameDefaultsToWalletName();
     void detailPropertiesReflectWalletCapabilities();
-    void watchOnlyExportsJoinReceiveAndChange();
-    void watchOnlyExportsUseMainnetSlip132Prefixes();
-    void watchOnlyExportsSkipMultiKeyDescriptors();
-    void watchOnlyExportsIncludeUsedInactiveDescriptors();
-    void canExportWatchOnlyFollowsActiveDescriptors();
-    void saveWatchOnlyExportWritesFile();
+    void descriptorExportsJoinReceiveAndChange();
+    void descriptorExportsUseMainnetSlip132Prefixes();
+    void descriptorExportsSkipMultiKeyDescriptors();
+    void descriptorExportsIncludeUsedInactiveDescriptors();
+    void canShowDescriptorsFollowsActiveDescriptors();
+    void descriptorImportJsonListsEveryPublicDescriptor();
     void encryptWalletUpdatesSecurityState();
     void changeWalletPassphraseForwardsPasswords();
     void backupWalletForwardsPath();
@@ -913,7 +914,7 @@ void WalletQmlModelTests::detailPropertiesReflectWalletCapabilities()
     QVERIFY(model->canManagePassphrase());
 }
 
-void WalletQmlModelTests::watchOnlyExportsJoinReceiveAndChange()
+void WalletQmlModelTests::descriptorExportsJoinReceiveAndChange()
 {
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
     node::NodeContext node_context;
@@ -937,7 +938,7 @@ void WalletQmlModelTests::watchOnlyExportsJoinReceiveAndChange()
     LoadActiveDescriptor(raw_wallet, legacy_change, OutputType::LEGACY, true);
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
-    const QVariantList exports = model->watchOnlyExports();
+    const QVariantList exports = model->descriptorExports();
     QCOMPARE(exports.size(), 4);
     QCOMPARE(exports.at(0).toMap().value("id").toString(), QString("bech32m"));
 
@@ -999,12 +1000,12 @@ void WalletQmlModelTests::watchOnlyExportsJoinReceiveAndChange()
     LoadActiveDescriptor(branch_wallet, swapped + "/1/*)", OutputType::BECH32);
     LoadActiveDescriptor(branch_wallet, swapped + "/0/*)", OutputType::BECH32, true);
     auto [branch_view, branch_model] = MakeWalletModel(nullptr, &branch_wallet);
-    const QVariantMap swapped_export{ExportFor(branch_model->watchOnlyExports(), "bech32")};
+    const QVariantMap swapped_export{ExportFor(branch_model->descriptorExports(), "bech32")};
     QCOMPARE(swapped_export.value("descriptorParts").toMap().value("path").toString(), QString("/<1;0>/*"));
     QVERIFY(swapped_export.value("extendedKey").toString().isEmpty());
 }
 
-void WalletQmlModelTests::watchOnlyExportsUseMainnetSlip132Prefixes()
+void WalletQmlModelTests::descriptorExportsUseMainnetSlip132Prefixes()
 {
     ChainSelectionGuard chain_guard{ChainType::MAIN};
     node::NodeContext node_context;
@@ -1020,18 +1021,18 @@ void WalletQmlModelTests::watchOnlyExportsUseMainnetSlip132Prefixes()
     LoadActiveDescriptor(raw_wallet, "pkh(" + OriginDescriptor(master, 44) + "/0/*)", OutputType::LEGACY);
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
-    const QVariantList exports = model->watchOnlyExports();
+    const QVariantList exports = model->descriptorExports();
     QVERIFY(ExportFor(exports, "bech32m").value("extendedKey").toString().startsWith("xpub"));
     QVERIFY(ExportFor(exports, "bech32").value("extendedKey").toString().startsWith("zpub"));
     QVERIFY(ExportFor(exports, "p2sh-segwit").value("extendedKey").toString().startsWith("ypub"));
     QVERIFY(ExportFor(exports, "legacy").value("extendedKey").toString().startsWith("xpub"));
 }
 
-void WalletQmlModelTests::watchOnlyExportsSkipMultiKeyDescriptors()
+void WalletQmlModelTests::descriptorExportsSkipMultiKeyDescriptors()
 {
     {
         auto [wallet, model] = MakeWalletModel();
-        QVERIFY(model->watchOnlyExports().isEmpty());
+        QVERIFY(model->descriptorExports().isEmpty());
     }
 
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
@@ -1048,10 +1049,10 @@ void WalletQmlModelTests::watchOnlyExportsSkipMultiKeyDescriptors()
     LoadActiveDescriptor(raw_wallet, "tr(" + first + "/0/*,pk(" + second + "/0/*))", OutputType::BECH32M);
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
-    QVERIFY(model->watchOnlyExports().isEmpty());
+    QVERIFY(model->descriptorExports().isEmpty());
 }
 
-void WalletQmlModelTests::watchOnlyExportsIncludeUsedInactiveDescriptors()
+void WalletQmlModelTests::descriptorExportsIncludeUsedInactiveDescriptors()
 {
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
     node::NodeContext node_context;
@@ -1077,8 +1078,8 @@ void WalletQmlModelTests::watchOnlyExportsIncludeUsedInactiveDescriptors()
     LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(new_master, 84) + "/1/*)", OutputType::BECH32, true);
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
-    QCOMPARE(model->watchOnlyExports().size(), 1);
-    const QVariantList inactive = model->inactiveWatchOnlyExports();
+    QCOMPARE(model->descriptorExports().size(), 1);
+    const QVariantList inactive = model->inactiveDescriptorExports();
     QCOMPARE(inactive.size(), 2);
 
     const std::string joined{old_segwit + "/<0;1>/*)"};
@@ -1096,7 +1097,58 @@ void WalletQmlModelTests::watchOnlyExportsIncludeUsedInactiveDescriptors()
     QVERIFY(legacy.value("descriptor").toString().startsWith(QString::fromStdString(old_legacy) + "#"));
 }
 
-void WalletQmlModelTests::canExportWatchOnlyFollowsActiveDescriptors()
+void WalletQmlModelTests::descriptorImportJsonListsEveryPublicDescriptor()
+{
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "descriptor-import-json-test", nullptr};
+    QVERIFY(raw_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS));
+
+    CExtKey old_master;
+    old_master.SetSeed(std::array<std::byte, 32>{});
+    CExtKey new_master;
+    std::array<std::byte, 32> new_seed;
+    new_seed.fill(std::byte{1});
+    new_master.SetSeed(new_seed);
+    const std::string old_receive{"wpkh(" + OriginDescriptor(old_master, 84) + "/0/*)"};
+    LoadDescriptor(raw_wallet, old_receive, {}, /*next_index=*/2);
+    const std::string new_receive{"wpkh(" + OriginDescriptor(new_master, 84) + "/0/*)"};
+    const std::string new_change{"wpkh(" + OriginDescriptor(new_master, 84) + "/1/*)"};
+    LoadActiveDescriptor(raw_wallet, new_receive, OutputType::BECH32);
+    LoadActiveDescriptor(raw_wallet, new_change, OutputType::BECH32, /*internal=*/true);
+
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    UniValue parsed;
+    QVERIFY(parsed.read(model->descriptorImportJson().toStdString()));
+    QVERIFY(parsed.isArray());
+    QCOMPARE(parsed.size(), size_t{3});
+
+    std::map<std::string, UniValue> by_descriptor;
+    for (const UniValue& item : parsed.getValues()) {
+        const std::string desc{item["desc"].get_str()};
+        QVERIFY(desc.find("prv") == std::string::npos);
+        const auto checksum{desc.rfind('#')};
+        QVERIFY(checksum != std::string::npos);
+        by_descriptor.emplace(desc.substr(0, checksum), item);
+    }
+    std::vector<std::string> order;
+    for (const UniValue& item : parsed.getValues()) order.push_back(item["desc"].get_str());
+    QVERIFY(std::ranges::is_sorted(order));
+
+    const UniValue& old_item{by_descriptor.at(old_receive)};
+    QCOMPARE(old_item["active"].get_bool(), false);
+    QVERIFY(old_item["internal"].isNull());
+    QCOMPARE(old_item["next_index"].getInt<int>(), 2);
+    QCOMPARE(old_item["timestamp"].getInt<int64_t>(), int64_t{0});
+    QVERIFY(old_item["range"].isArray());
+
+    QCOMPARE(by_descriptor.at(new_receive)["active"].get_bool(), true);
+    QCOMPARE(by_descriptor.at(new_receive)["internal"].get_bool(), false);
+    QCOMPARE(by_descriptor.at(new_change)["internal"].get_bool(), true);
+}
+
+void WalletQmlModelTests::canShowDescriptorsFollowsActiveDescriptors()
 {
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
     node::NodeContext node_context;
@@ -1105,29 +1157,14 @@ void WalletQmlModelTests::canExportWatchOnlyFollowsActiveDescriptors()
     QVERIFY(raw_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
-    QVERIFY(!model->canExportWatchOnly());
-    QSignalSpy changed{model.get(), &WalletQmlModel::watchOnlyExportsChanged};
+    QVERIFY(!model->canShowDescriptors());
+    QSignalSpy changed{model.get(), &WalletQmlModel::descriptorExportsChanged};
 
     CExtKey master;
     master.SetSeed(std::array<std::byte, 32>{});
     LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(master, 84) + "/0/*)", OutputType::BECH32);
     QTRY_VERIFY(changed.count() > 0);
-    QVERIFY(model->canExportWatchOnly());
-}
-
-void WalletQmlModelTests::saveWatchOnlyExportWritesFile()
-{
-    auto [wallet, model] = MakeWalletModel();
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-
-    const QString path{dir.filePath("export.txt")};
-    QCOMPARE(model->saveWatchOnlyExport(QUrl::fromLocalFile(path).toString(), "tr(a)\nwpkh(b)"), QString{});
-    QFile file{path};
-    QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(file.readAll(), QByteArray{"tr(a)\nwpkh(b)\n"});
-
-    QVERIFY(!model->saveWatchOnlyExport(dir.filePath("missing/export.txt"), "tr(a)").isEmpty());
+    QVERIFY(model->canShowDescriptors());
 }
 
 void WalletQmlModelTests::encryptWalletUpdatesSecurityState()
