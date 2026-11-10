@@ -17,6 +17,7 @@
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
+#include <common/args.h>
 #include <consensus/amount.h>
 #include <interfaces/handler.h>
 #include <interfaces/wallet.h>
@@ -133,7 +134,7 @@ private:
     Q_PROPERTY(PsbtQmlModel* importedPsbt READ importedPsbt CONSTANT)
 
 public:
-    WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node = nullptr, QObject* parent = nullptr);
+    WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node = nullptr, ArgsManager& args = gArgs, QObject* parent = nullptr);
     WalletQmlModel(interfaces::Node* node, QObject* parent = nullptr);
     WalletQmlModel(QObject *parent = nullptr);
     ~WalletQmlModel();
@@ -370,6 +371,8 @@ private:
     bool m_stopping{false};
     std::shared_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
+    ArgsManager* m_args{nullptr};
+    QString m_receive_address_type;
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
     BumpTransactionModel* m_bump_transaction_model{nullptr};

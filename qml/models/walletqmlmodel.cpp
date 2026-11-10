@@ -5,7 +5,9 @@
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/backendexecutor.h>
+#include <qml/core_settings.h>
 
+#include <common/args.h>
 #include <common/messages.h>
 #include <qml/bitcoinamount.h>
 #include <qml/models/addresslistmodel.h>
@@ -42,6 +44,7 @@
 #include <script/solver.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
+#include <util/log.h>
 #include <util/result.h>
 #include <util/rbf.h>
 #include <util/threadnames.h>
@@ -64,6 +67,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <exception>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -79,6 +83,7 @@ constexpr int FEE_ESTIMATE_DEBOUNCE_MS{250};
 constexpr unsigned int FEE_RATE_BASIS_VBYTES{1000};
 constexpr std::array<unsigned int, 3> STANDARD_FEE_TARGETS{2, DEFAULT_STANDARD_FEE_TARGET, 10};
 constexpr std::array<unsigned int, 7> CUSTOM_FEE_TARGETS{2, 3, 4, 6, 10, 25, 50};
+constexpr char RECEIVE_ADDRESS_TYPES_SETTING[]{"qml_receive_address_types"};
 const QRegularExpression CUSTOM_FEE_RATE_PATTERN{QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")};
 
 struct ReceiveRequestPaymentScan {
@@ -580,10 +585,8 @@ QString OutputTypeDescription(OutputType type)
 
 } // namespace
 
-WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node, QObject *parent)
-    : QObject(parent)
-    , m_wallet(std::move(wallet))
-    , m_node(node)
+WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node, ArgsManager& args, QObject* parent)
+    : QObject(parent), m_wallet(std::move(wallet)), m_node(node), m_args(&args)
 {
     m_receive_requests = new ReceiveRequestHistoryModel(this);
     m_receive_payment_poll_timer.setInterval(1000);
@@ -1122,9 +1125,14 @@ QVariantList WalletQmlModel::availableReceiveAddressTypes() const
 QString WalletQmlModel::defaultReceiveAddressType() const
 {
     const QVariantList available_types = availableReceiveAddressTypes();
+    for (const QVariant& item : available_types) {
+        if (item.toMap().value(QStringLiteral("id")).toString() == m_receive_address_type) {
+            return m_receive_address_type;
+        }
+    }
     QString saved_type;
-    if (m_node) {
-        const auto preferences = m_node->getPersistentSetting("qml_receive_address_types");
+    if (m_node && m_args) {
+        const auto preferences = m_args->GetPersistentSetting(RECEIVE_ADDRESS_TYPES_SETTING);
         const auto& value = preferences[name().toStdString()];
         if (value.isStr()) saved_type = QString::fromStdString(value.get_str());
     }
@@ -1143,16 +1151,36 @@ QString WalletQmlModel::defaultReceiveAddressType() const
 
 void WalletQmlModel::setDefaultReceiveAddressType(const QString& address_type)
 {
+    if (m_stopping) return;
     for (const QVariant& item : availableReceiveAddressTypes()) {
         const QVariantMap type{item.toMap()};
-        if (type.value(QStringLiteral("id")).toString() == address_type) {
-            if (!m_node) return;
-            auto preferences = m_node->getPersistentSetting("qml_receive_address_types");
-            if (!preferences.isObject()) preferences = common::SettingsValue{UniValue::VOBJ};
-            preferences.pushKV(name().toStdString(), address_type.toStdString());
-            m_node->updateRwSetting("qml_receive_address_types", preferences);
-            return;
-        }
+        if (type.value(QStringLiteral("id")).toString() != address_type) continue;
+        m_receive_address_type = address_type;
+        // Without a node, keep the preference for this session only.
+        if (!m_node || !m_args) return;
+        const bool submitted = m_backend_executor->submit(this, [args = m_args, wallet_name = name().toStdString(), address_type] {
+                QString error;
+                try {
+                    if (!args->GetSettingsPath()) return;
+                    QmlCoreSettings::PersistSettings(*args, {QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING)}, [&] {
+                        auto preferences = args->GetPersistentSetting(RECEIVE_ADDRESS_TYPES_SETTING);
+                        if (!preferences.isObject()) preferences = common::SettingsValue{UniValue::VOBJ};
+                        preferences.pushKV(wallet_name, address_type.toStdString());
+                        QmlCoreSettings::SetRwSetting(*args, QString::fromLatin1(RECEIVE_ADDRESS_TYPES_SETTING), preferences);
+                        return true;
+                    }, &error);
+                } catch (const std::exception& exception) {
+                    error = QStringLiteral("unexpected exception: %1").arg(QString::fromUtf8(exception.what()));
+                } catch (...) {
+                    error = QStringLiteral("unknown exception");
+                }
+                if (!error.isEmpty()) {
+                    LogWarning("Failed to save preferred receive address type '%s' for wallet '%s': %s",
+                               address_type.toStdString(), wallet_name, error.toStdString());
+                } }, [] {});
+        if (!submitted) LogWarning("Failed to save preferred receive address type '%s' for wallet '%s': backend executor is stopping",
+                                   address_type.toStdString(), name().toStdString());
+        return;
     }
 }
 
@@ -1237,7 +1265,12 @@ bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_ty
     if (!receiving->address().isEmpty()) {
         for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
         const bool same_type = address_type.isEmpty() || OutputTypeIdFromDestination(receiving->destination()) == type;
-        if (!next && !receiving->paymentReceived() && same_type) return true;
+        if (!next && !receiving->paymentReceived() && same_type) {
+            if (!address_type.isEmpty()) {
+                setDefaultReceiveAddressType(type);
+            }
+            return true;
+        }
     }
     const auto parsed = ParseOutputType(type.toStdString());
     if (!parsed) return false;

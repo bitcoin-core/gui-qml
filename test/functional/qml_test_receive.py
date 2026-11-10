@@ -22,9 +22,11 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 from urllib.parse import urlparse
 
 from qml_driver import QmlDriver, QmlDriverError
+from qml_process_checks import report_gui_failure
 from qml_test_harness import GUI_STARTUP_TIMEOUT, dump_qml_tree, qsettings_sandbox_args
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
@@ -47,6 +49,78 @@ def wait_until(predicate, timeout=20, interval=0.1, description="condition"):
     if last_error:
         raise AssertionError(f"Timed out waiting for {description}: {last_error}")
     raise AssertionError(f"Timed out waiting for {description}")
+
+
+def _wait_for_saved_address_type(harness, wallet_name, address_type):
+    def saved():
+        with open(harness.gui_settings_path, encoding="utf-8") as settings_file:
+            settings = json.load(settings_file)
+        return settings.get("qml_receive_address_types", {}).get(wallet_name) == address_type
+
+    wait_until(saved, description=f"saved {address_type} preference for {wallet_name}")
+
+
+def _report_failure(harness, case, error, process=None):
+    print(f"\nFAILED [{case}]: {error}", file=sys.stderr)
+    traceback.print_exc()
+    gui = harness.driver
+    if gui is not None:
+        try:
+            gui.save_screenshot(os.path.join(harness.tmpdir, "receive-failure.png"))
+        except Exception as diagnostic_error:  # noqa: BLE001 - keep the original failure
+            print(f"Unable to capture screenshot: {diagnostic_error}", file=sys.stderr)
+        try:
+            dump_qml_tree(gui)
+        except Exception as diagnostic_error:  # noqa: BLE001 - keep the original failure
+            print(f"Unable to capture QML tree: {diagnostic_error}", file=sys.stderr)
+    current_process = harness.gui_process
+    report_gui_failure(current_process if current_process is not None else process, case)
+
+
+def run_nosettings_tests():
+    harness = WalletFlowHarness("qml_receive_nosettings", port_offset=71)
+    process = None
+    try:
+        harness.start_gui(extra_args=["-nosettings"])
+        wait_for_rpc(harness.gui_rpc_port)
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": WALLET_NAME})
+        gui = harness.driver
+        _select_wallet(gui, WALLET_NAME)
+        _open_receive(gui)
+        address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
+        assert address.startswith("bcrt1p"), address
+        gui.click("receiveAddressSettingsButton")
+        gui.wait_for_property("receiveAddressTypeMenu", "opened", True)
+        gui.click("receiveAddressType_bech32")
+        gui.wait_for_property("receiveAddressTypeMenu", "visible", False)
+        address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
+        assert address.startswith("bcrt1q"), address
+        _open_activity(gui)
+        _open_receive(gui)
+        assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == address
+        gui.click("requestPaymentGenerateButton")
+        gui.wait_for_property("paymentRequestModal", "opened", True)
+        gui.click("paymentRequestModalClose")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+        _open_receive(gui)
+        wait_until(
+            lambda: gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") not in ("", address),
+            description="next receiving address",
+        )
+        next_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
+        assert next_address != address and next_address.startswith("bcrt1q"), next_address
+        process = harness.gui_process
+        harness.stop_gui()
+        assert process.returncode == 0, process.returncode
+        assert not os.path.exists(harness.gui_settings_path)
+        assert not os.path.exists(harness.gui_settings_path + ".tmp")
+        print("[qml_receive_nosettings] PASSED")
+        return 0
+    except Exception as err:  # noqa: BLE001 - preserve failure context
+        _report_failure(harness, "qml_receive_nosettings", err, process=process)
+        return 1
+    finally:
+        harness.stop()
 
 
 def _stop_gui(harness):
@@ -222,6 +296,7 @@ def _request_qr_payload(gui):
 
 def run_test():
     harness = WalletFlowHarness("qml_receive_requests", port_offset=70)
+    process = None
     try:
         print("[qml_receive_requests] starting")
         gui = _import_wallets(harness)
@@ -244,9 +319,7 @@ def run_test():
         gui.wait_for_property("requestPaymentGenerateButton", "enabled", True)
         ready_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert ready_address.startswith("bcrt1p")
-        with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
-            settings = json.load(settings_file)
-        assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32m"
+        _wait_for_saved_address_type(harness, WALLET_NAME, "bech32m")
         gui.click("receiveAddressSettingsButton")
         gui.wait_for_property("receiveAddressTypeMenu", "opened", True)
         gui.wait_for_property("receiveAddressTypePicker", "currentValue", "bech32m")
@@ -261,9 +334,7 @@ def run_test():
         gui.wait_for_property("receiveAddressTypePicker", "currentValue", "bech32")
         ready_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert ready_address.startswith("bcrt1q")
-        with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
-            settings = json.load(settings_file)
-        assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32"
+        _wait_for_saved_address_type(harness, WALLET_NAME, "bech32")
         assert gui.get_property("requestPaymentGenerateButton", "enabled")
         assert gui.get_property("requestHistoryCount", "count") == 0
         for field, value in (("amount", "0.0001"), ("message", "Clear me"), ("note", "Private draft")):
@@ -434,6 +505,7 @@ def run_test():
         gui.wait_for_page("activityDetailsPage")
 
         # Reopening after restart retains the receipt lock and edited note.
+        process = harness.gui_process
         _stop_gui(harness)
         _relaunch_gui(harness)
         gui = harness.driver
@@ -535,29 +607,14 @@ def run_test():
         print("[qml_receive_requests] PASSED")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context
-        print(f"\nFAILED [qml_receive_requests]: {err}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        gui = harness.driver
-        if gui is not None:
-            try:
-                gui.save_screenshot(os.path.join(harness.tmpdir, "receive-failure.png"))
-                dump_qml_tree(gui)
-            except (OSError, QmlDriverError):
-                # The GUI may have crashed; still report its process output.
-                pass
-        proc = harness.gui_process
-        _stop_gui(harness)
-        gui_output = harness.process_output(proc)
-        if proc is not None:
-            print(f"GUI process exit code: {proc.returncode}", file=sys.stderr)
-        if gui_output:
-            print("\n--- GUI process output ---", file=sys.stderr)
-            print(gui_output, file=sys.stderr)
+        _report_failure(harness, "qml_receive_requests", err, process=process)
         return 1
     finally:
         harness.stop()
 
 
 if __name__ == "__main__":
-    sys.exit(run_test())
+    exit_code = run_nosettings_tests()
+    if exit_code == 0:
+        exit_code = run_test()
+    sys.exit(exit_code)
