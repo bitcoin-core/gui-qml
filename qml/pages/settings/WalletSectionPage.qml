@@ -21,13 +21,14 @@ SettingsPage {
     readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
-    readonly property bool canExportWatchOnly: root.walletLoaded && !!root.wallet && root.wallet.canExportWatchOnly
+    readonly property bool canShowDescriptors: root.walletLoaded && !!root.wallet && root.wallet.canShowDescriptors
 
     signal selectWalletRequested()
     signal passwordRequested()
     signal signVerifyMessageRequested()
     signal addressesRequested()
     signal coinsRequested()
+    signal descriptorsRequested()
 
     function backupFileName() {
         const walletName = root.wallet && root.wallet.name.length > 0
@@ -85,11 +86,6 @@ SettingsPage {
             else root.errorText = ""
         }
         onRejected: targetWallet = null
-    }
-
-    WatchOnlyExportModal {
-        id: watchOnlyExportModal
-        wallet: root.wallet
     }
 
     TextField {
@@ -176,6 +172,18 @@ SettingsPage {
         }
 
         ListRow {
+            objectName: "walletDescriptorsRow"
+            visible: root.canShowDescriptors
+            Layout.fillWidth: true
+            //: Shows the wallet's public output descriptors and extended public keys.
+            title: qsTr("Descriptors")
+            //: Under the Descriptors row, so people looking for their xpub find it here.
+            description: qsTr("Public descriptors and extended keys (xpub) for watch-only wallets.")
+            showsDisclosureIndicator: true
+            onClicked: root.descriptorsRequested()
+        }
+
+        ListRow {
             objectName: "walletCoinsRow"
             Layout.fillWidth: true
             //: Opens the wallet's unspent coin browser.
@@ -199,16 +207,6 @@ SettingsPage {
             title: qsTr("Back up wallet")
             showsDisclosureIndicator: true
             onClicked: root.startBackup()
-        }
-
-        ListRow {
-            objectName: "walletExportWatchOnlyRow"
-            visible: root.canExportWatchOnly
-            Layout.fillWidth: true
-            //: Shows the wallet's public descriptors and keys for setting up a watch-only copy elsewhere.
-            title: qsTr("Export watch-only wallet")
-            showsDisclosureIndicator: true
-            onClicked: watchOnlyExportModal.openForWallet()
         }
 
         ListRow {

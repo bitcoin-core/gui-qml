@@ -50,6 +50,7 @@
 #include <util/threadnames.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
+#include <wallet/export.h>
 #include <wallet/fees.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/spend.h>
@@ -59,7 +60,6 @@
 #include <QDateTime>
 #include <QMetaObject>
 #include <QRegularExpression>
-#include <QSaveFile>
 #include <QScopedValueRollback>
 #include <QSettings>
 #include <QVariantList>
@@ -604,7 +604,7 @@ WatchOnlyDescriptor MakeWatchOnlyDescriptor(const SingleKeyDescriptor& receive, 
     return {.text = text, .parts = parts};
 }
 
-constexpr std::array WATCH_ONLY_EXPORT_TYPES{OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY};
+constexpr std::array DESCRIPTOR_EXPORT_TYPES{OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY};
 
 std::optional<OutputType> SingleKeyOutputType(const QString& script)
 {
@@ -1305,19 +1305,19 @@ QString WalletQmlModel::receiveAddressTypeLabel(const QString& address_type) con
     return {};
 }
 
-bool WalletQmlModel::canExportWatchOnly() const
+bool WalletQmlModel::canShowDescriptors() const
 {
-    return !watchOnlyExports().isEmpty();
+    return !descriptorExports().isEmpty();
 }
 
-QVariantList WalletQmlModel::watchOnlyExports() const
+QVariantList WalletQmlModel::descriptorExports() const
 {
     const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
     if (!raw_wallet) return {};
 
     QVariantList exports;
     LOCK(raw_wallet->cs_wallet);
-    for (const OutputType type : WATCH_ONLY_EXPORT_TYPES) {
+    for (const OutputType type : DESCRIPTOR_EXPORT_TYPES) {
         const auto receive = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false));
         if (!receive) continue;
         const auto change = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true));
@@ -1343,7 +1343,7 @@ QVariantList WalletQmlModel::watchOnlyExports() const
     return exports;
 }
 
-QVariantList WalletQmlModel::inactiveWatchOnlyExports() const
+QVariantList WalletQmlModel::inactiveDescriptorExports() const
 {
     const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
     if (!raw_wallet) return {};
@@ -1365,7 +1365,7 @@ QVariantList WalletQmlModel::inactiveWatchOnlyExports() const
         found.push_back({*descriptor, *type, desc_man.GetWalletDescriptor().GetNext() > 0});
     }
     std::ranges::sort(found, {}, [](const Inactive& item) {
-        return std::tuple{std::ranges::find(WATCH_ONLY_EXPORT_TYPES, item.type) - WATCH_ONLY_EXPORT_TYPES.begin(),
+        return std::tuple{std::ranges::find(DESCRIPTOR_EXPORT_TYPES, item.type) - DESCRIPTOR_EXPORT_TYPES.begin(),
                           item.descriptor.origin, item.descriptor.xpub, item.descriptor.branch};
     });
 
@@ -1398,14 +1398,35 @@ QVariantList WalletQmlModel::inactiveWatchOnlyExports() const
     return exports;
 }
 
-QString WalletQmlModel::saveWatchOnlyExport(const QString& path, const QString& contents) const
+// Every descriptor in the same form as listdescriptors, ready for importdescriptors.
+QString WalletQmlModel::descriptorImportJson() const
 {
-    QSaveFile file(PsbtQmlModel::LocalFilePath(path));
-    const QByteArray data{(contents + QLatin1Char('\n')).toUtf8()};
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-        return tr("Could not save the export: %1").arg(file.errorString());
+    const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
+    if (!raw_wallet) return {};
+
+    LOCK(raw_wallet->cs_wallet);
+    auto exported{wallet::ExportDescriptors(*raw_wallet, /*export_private=*/false)};
+    if (!exported) return {};
+    std::ranges::sort(*exported, {}, &wallet::WalletDescInfo::descriptor);
+
+    UniValue descriptors{UniValue::VARR};
+    for (const wallet::WalletDescInfo& info : *exported) {
+        UniValue item{UniValue::VOBJ};
+        item.pushKV("desc", info.descriptor);
+        // The import rescans from here, so "now" would miss older transactions.
+        item.pushKV("timestamp", info.creation_time);
+        item.pushKV("active", info.active);
+        if (info.internal) item.pushKV("internal", *info.internal);
+        if (info.range) {
+            UniValue range{UniValue::VARR};
+            range.push_back(info.range->first);
+            range.push_back(info.range->second - 1);
+            item.pushKV("range", std::move(range));
+            item.pushKV("next_index", info.next_index);
+        }
+        descriptors.push_back(std::move(item));
     }
-    return {};
+    return QString::fromStdString(descriptors.write(2));
 }
 
 void WalletQmlModel::removeWallet()
@@ -3482,7 +3503,7 @@ void WalletQmlModel::subscribeToWalletSignals()
     // Core signals this when the active descriptors change.
     m_handler_can_get_addresses_changed = m_wallet->handleCanGetAddressesChanged([guard, bridge] {
         QMetaObject::invokeMethod(bridge.get(), [guard] {
-            if (guard && !guard->m_stopping) Q_EMIT guard->watchOnlyExportsChanged();
+            if (guard && !guard->m_stopping) Q_EMIT guard->descriptorExportsChanged();
         }, Qt::QueuedConnection);
     });
     m_handler_unload = handleUnload([guard, bridge, unload_requested = m_unload_requested] {

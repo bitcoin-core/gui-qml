@@ -1199,7 +1199,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString privateKeysStatus MEMBER m_private_keys_status NOTIFY walletInfoChanged)
     Q_PROPERTY(QString externalSignerStatus MEMBER m_external_signer_status NOTIFY walletInfoChanged)
     Q_PROPERTY(bool canManagePassphrase MEMBER m_can_manage_passphrase NOTIFY walletInfoChanged)
-    Q_PROPERTY(bool canExportWatchOnly READ canExportWatchOnly CONSTANT)
+    Q_PROPERTY(bool canShowDescriptors READ canShowDescriptors NOTIFY descriptorExportsChanged)
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(int backupWalletCalls READ backupWalletCalls NOTIFY backupWalletCallsChanged)
@@ -1325,9 +1325,15 @@ public:
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
-    Q_INVOKABLE QVariantList watchOnlyExports() const { return {}; }
-    Q_INVOKABLE QVariantList inactiveWatchOnlyExports() const { return {}; }
-    bool canExportWatchOnly() const { return false; }
+    Q_INVOKABLE QVariantList descriptorExports() const { return m_descriptor_exports; }
+    Q_INVOKABLE QVariantList inactiveDescriptorExports() const { return m_inactive_descriptor_exports; }
+    Q_INVOKABLE void setDescriptorExportsForTest(const QVariantList& exports, const QVariantList& inactive)
+    {
+        m_descriptor_exports = exports;
+        m_inactive_descriptor_exports = inactive;
+        Q_EMIT descriptorExportsChanged();
+    }
+    bool canShowDescriptors() const { return !m_descriptor_exports.isEmpty(); }
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }
@@ -1619,6 +1625,9 @@ public:
     }
     Q_INVOKABLE void resetWalletSettingsTestState()
     {
+        m_descriptor_exports.clear();
+        m_inactive_descriptor_exports.clear();
+        Q_EMIT descriptorExportsChanged();
         m_last_backup_path.clear();
         m_backup_wallet_calls = 0;
         m_key_scheme = QStringLiteral("Descriptor");
@@ -1697,6 +1706,7 @@ Q_SIGNALS:
     void walletInfoChanged();
     void settingsErrorChanged();
     void backupWalletCallsChanged();
+    void descriptorExportsChanged();
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
     void displayUnitChanged();
@@ -1735,6 +1745,8 @@ private:
     QString m_external_signer_status{QStringLiteral("Not used")};
     bool m_can_manage_passphrase{true};
     QString m_settings_error;
+    QVariantList m_descriptor_exports;
+    QVariantList m_inactive_descriptor_exports;
     QString m_last_backup_path;
     int m_backup_wallet_calls{0};
     QString m_transaction_error;

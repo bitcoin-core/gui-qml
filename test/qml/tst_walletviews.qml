@@ -197,6 +197,77 @@ TestCase {
         compare(backup.visible, false)
     }
 
+    function openWalletSettings(page, view) {
+        page.openSettingsRoute("wallet")
+        tryVerify(function() { return page.walletSettingsHost !== null })
+        tryCompare(view.settingsStack, "parent", page.walletSettingsHost)
+    }
+
+    function descriptorExport(id, label) {
+        return {
+            id: id,
+            label: label,
+            description: "",
+            scriptName: "wpkh",
+            xpub: "tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L",
+            descriptor: "wpkh(tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L/<0;1>/*)#hv6zap77",
+            descriptorParts: {},
+            extendedKey: "",
+            fingerprint: "621f5481",
+            derivationPath: "m/84h/1h/0h",
+            receiveChain: "0",
+            changeChain: "1",
+        }
+    }
+
+    function test_descriptors_row_pushes_list_then_detail() {
+        testWalletModel.resetWalletSettingsTestState()
+        testWalletModel.setDescriptorExportsForTest([descriptorExport("bech32m", "Taproot"), descriptorExport("bech32", "SegWit")], [])
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        openWalletSettings(page, first)
+        const stack = first.settingsStack
+        const row = findChild(stack, "walletDescriptorsRow")
+        tryCompare(row, "visible", true)
+        compare(row.description, "Public descriptors and extended keys (xpub) for watch-only wallets.")
+
+        row.clicked()
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.objectName, "walletDescriptorsPage")
+        stack.currentItem.descriptorRequested("bech32")
+        tryCompare(stack, "depth", 3)
+        compare(stack.currentItem.objectName, "walletDescriptorDetailPage")
+        compare(stack.currentItem.title, "SegWit")
+
+        stack.currentItem.back()
+        tryCompare(stack, "depth", 2)
+        stack.currentItem.back()
+        tryCompare(stack, "depth", 1)
+        testWalletModel.resetWalletSettingsTestState()
+    }
+
+    function test_descriptors_row_skips_list_for_one_descriptor() {
+        testWalletModel.resetWalletSettingsTestState()
+        testWalletModel.setDescriptorExportsForTest([descriptorExport("bech32", "SegWit")], [])
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        openWalletSettings(page, first)
+        const stack = first.settingsStack
+        findChild(stack, "walletDescriptorsRow").clicked()
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.objectName, "walletDescriptorDetailPage")
+        compare(stack.currentItem.payload, descriptorExport("bech32", "SegWit").descriptor)
+
+        // Previous keys are only shown in the list.
+        stack.resetToRoot()
+        testWalletModel.setDescriptorExportsForTest([descriptorExport("bech32", "SegWit")], [descriptorExport("bech32", "SegWit")])
+        findChild(stack, "walletDescriptorsRow").clicked()
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.objectName, "walletDescriptorsPage")
+        stack.resetToRoot()
+        testWalletModel.resetWalletSettingsTestState()
+    }
+
     function test_settings_stack_follows_active_wallet() {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)
