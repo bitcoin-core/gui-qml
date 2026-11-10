@@ -5,6 +5,7 @@
 """End-to-end GUI tests for wallet settings flows."""
 
 import argparse
+import json
 import os
 import re
 import signal
@@ -270,13 +271,42 @@ def case_backup_uses_automation_path(harness, checkpoints):
     open_wallet_settings(gui)
     checkpoints.checkpoint("wallet settings opened", gui)
 
-    gui.set_text("walletSettingsBackupPathField", backup_dir)
+    gui.set_text("walletSettingsBackupPathField", backup_path)
     gui.click("walletBackupRow")
+    gui.wait_for_property("backupWalletPopup", "opened", True, timeout_ms=5000)
+    assert gui.get_property("backupDestinationPath", "text") == backup_path
+    gui.click("backupSaveButton")
     wait_for_file(backup_path)
+    gui.wait_for_property("walletSettingsResultText", "text", f"Backup saved to {backup_path}", timeout_ms=10000)
     assert gui.get_property("walletSettingsPage", "errorText") == "", (
         "Backup should not surface an error"
     )
+    with open(backup_path, "rb") as backup_file:
+        backup = backup_file.read()
     checkpoints.checkpoint("wallet backup created", gui)
+
+    # A watch-only copy aimed at the backup must not replace it unasked.
+    gui.set_text("walletSettingsBackupPathField", backup_path)
+    gui.click("walletBackupRow")
+    gui.wait_for_property("backupWalletPopup", "opened", True, timeout_ms=5000)
+    gui.click("backupTypeWatchOnly")
+    gui.click("backupSaveButton")
+    gui.wait_for_property("backupReplaceAlert", "opened", True, timeout_ms=5000)
+    assert gui.get_property("backupReplaceAlert", "title") == "Replace wallet file?"
+    keep_both_name = gui.get_property("backupReplaceKeepBothName", "text")
+    assert re.fullmatch(rf"{wallet_name}-\d{{4}}-\d{{2}}-\d{{2}}-\d{{4}}\.bak", keep_both_name), keep_both_name
+    gui.click("backupReplaceKeepBoth")
+    keep_both_path = os.path.join(backup_dir, keep_both_name)
+    gui.wait_for_property(
+        "walletSettingsResultText",
+        "text",
+        f"Watch-only copy saved to {keep_both_path}",
+        timeout_ms=20000,
+    )
+    wait_for_file(keep_both_path)
+    with open(backup_path, "rb") as backup_file:
+        assert backup_file.read() == backup, "The full backup was changed"
+    checkpoints.checkpoint("existing backup kept beside the watch-only copy", gui)
 
 
 def case_sign_verify_message(harness, checkpoints):
@@ -503,6 +533,75 @@ def case_descriptor_imports_one_address_type(harness, checkpoints):
     checkpoints.checkpoint("descriptor imported as watch-only", gui)
 
 
+def case_watch_only_copy_restores_on_core(harness, checkpoints):
+    wallet_name = "settings_watch_only_copy_wallet"
+    watch_name = "settings_watch_only_copy_restored"
+    export_path = os.path.join(harness.tmpdir, f"{wallet_name}-watchonly.dat")
+
+    old_address = prepare_wallet_funded_before_encryption(harness, wallet_name, WALLET_PASSWORD)
+    checkpoints.checkpoint("wallet funded and then encrypted")
+
+    harness.start_gui()
+    gui = harness.driver
+    checkpoints.checkpoint("GUI launched", gui)
+    harness.finish_onboarding()
+    dismiss_create_wallet_wizard(gui)
+    load_wallet(gui, harness, wallet_name)
+    checkpoints.checkpoint("encrypted wallet loaded", gui)
+
+    open_wallet_settings(gui)
+    gui.wait_for_property("walletDescriptorsRow", "visible", True, timeout_ms=5000)
+    gui.click("walletDescriptorsRow")
+    gui.wait_for_property("walletDescriptorsPage", "visible", True, timeout_ms=5000)
+    assert gui.get_property("descriptorsType_inactive0", "visible") is True
+    gui.click("descriptorsCopyAll")
+    gui.wait_for_property("descriptorsCopyAll", "text", "Copied", timeout_ms=5000)
+    # The same text the button copies.
+    import_json = gui.invoke_property_object("walletDescriptorsPage", "wallet", "descriptorImportJson")
+    gui.click("walletDescriptorsBackButton")
+    gui.wait_for_property("walletBackupRow", "visible", True, timeout_ms=5000)
+    checkpoints.checkpoint("descriptors list shows the previous keys", gui)
+
+    gui.set_text("walletSettingsBackupPathField", export_path)
+    gui.click("walletBackupRow")
+    gui.wait_for_property("backupWalletPopup", "opened", True, timeout_ms=5000)
+    gui.click("backupTypeWatchOnly")
+    gui.click("backupSaveButton")
+    gui.wait_for_property(
+        "walletSettingsResultText",
+        "text",
+        lambda text: text.startswith("Watch-only copy saved to"),
+        timeout_ms=20000,
+    )
+    wait_for_file(export_path)
+    checkpoints.checkpoint("watch-only copy saved while the wallet is locked", gui)
+
+    # Restoring the file loads it and selects it in the GUI, so this runs last.
+    rpc_call(harness.gui_rpc_port, "restorewallet", [watch_name, export_path])
+    info = rpc_call(harness.gui_rpc_port, "getwalletinfo", [], wallet=watch_name)
+    assert info["private_keys_enabled"] is False, info
+    assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [old_address], wallet=watch_name)["ismine"] is True
+    original = rpc_call(harness.gui_rpc_port, "getbalances", [], wallet=wallet_name)["mine"]
+    watched = rpc_call(harness.gui_rpc_port, "getbalances", [], wallet=watch_name)["mine"]
+    assert original["immature"] > 0, original
+    assert original == watched, f"{original} != {watched}"
+    original_txs = rpc_call(harness.gui_rpc_port, "listtransactions", ["*", 1000], wallet=wallet_name)
+    watched_txs = rpc_call(harness.gui_rpc_port, "listtransactions", ["*", 1000], wallet=watch_name)
+    assert len(original_txs) == len(watched_txs), (len(original_txs), len(watched_txs))
+    checkpoints.checkpoint("restored copy matches the wallet without private keys", gui)
+
+    imported_name = "settings_watch_only_copy_imported"
+    rpc_call(harness.gui_rpc_port, "createwallet", [imported_name, True, True])
+    results = rpc_call(harness.gui_rpc_port, "importdescriptors", [json.loads(import_json)], wallet=imported_name)
+    assert all(result["success"] for result in results), results
+    imported = rpc_call(harness.gui_rpc_port, "getbalances", [], wallet=imported_name)["mine"]
+    assert original == imported, f"{original} != {imported}"
+    assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [old_address], wallet=imported_name)["ismine"] is True
+    imported_txs = rpc_call(harness.gui_rpc_port, "listtransactions", ["*", 1000], wallet=imported_name)
+    assert len(original_txs) == len(imported_txs), (len(original_txs), len(imported_txs))
+    checkpoints.checkpoint("copied descriptors import into a wallet without private keys", gui)
+
+
 def run_test(args):
     screenshot_root = None
     if args.save_screenshots:
@@ -517,6 +616,7 @@ def run_test(args):
         ("qml_wallet_settings_password_context_change", 440, case_password_page_closes_when_selected_wallet_changes),
         ("qml_wallet_settings_password_failure_preserves_current", 450, case_wrong_current_password_preserves_current_field),
         ("qml_wallet_settings_descriptor_import", 460, case_descriptor_imports_one_address_type),
+        ("qml_wallet_settings_watch_only_copy", 470, case_watch_only_copy_restores_on_core),
     ]
 
     exit_code = 0

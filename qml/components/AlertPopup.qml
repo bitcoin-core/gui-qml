@@ -16,6 +16,7 @@ Popup {
     property string message: ""
     property string messageObjectName: "alertMessage"
     property real verticalOffset: 0
+    property Component detail: null
     default property alias actions: actionStore.data
 
     property var visibleActions: [defaultAction]
@@ -165,6 +166,17 @@ Popup {
             lineHeightMode: Text.FixedHeight
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
+        }
+
+        Loader {
+            objectName: "alertDetail"
+            active: root.detail !== null
+            visible: active
+            Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+            Layout.bottomMargin: 20
+            sourceComponent: root.detail
         }
 
         // The action buttons live in a Flow positioner, not a RowLayout, on

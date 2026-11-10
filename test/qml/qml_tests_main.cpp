@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QEvent>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
@@ -532,6 +533,7 @@ class MockFileDialog : public QObject
     Q_PROPERTY(QUrl selectedFile MEMBER m_selected_file NOTIFY selectedFileChanged)
     Q_PROPERTY(bool visible MEMBER m_visible NOTIFY visibleChanged)
     Q_PROPERTY(int openCalls MEMBER m_open_calls NOTIFY openCallsChanged)
+    Q_PROPERTY(bool confirmOverwrite MEMBER m_confirm_overwrite NOTIFY confirmOverwriteChanged)
 
 public:
     enum FileMode { OpenFile, SaveFile, Directory };
@@ -546,6 +548,7 @@ public:
     QUrl m_selected_file;
     bool m_visible{false};
     int m_open_calls{0};
+    bool m_confirm_overwrite{true};
 
     Q_INVOKABLE void open()
     {
@@ -572,6 +575,7 @@ public:
     }
 
 Q_SIGNALS:
+    void confirmOverwriteChanged();
     void titleChanged();
     void fileModeChanged();
     void defaultSuffixChanged();
@@ -1203,6 +1207,13 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(int backupWalletCalls READ backupWalletCalls NOTIFY backupWalletCallsChanged)
+    Q_PROPERTY(bool lastBackupReplace MEMBER m_last_backup_replace NOTIFY backupWalletCallsChanged)
+    Q_PROPERTY(QString backupTestError MEMBER m_backup_test_error NOTIFY backupWalletCallsChanged)
+    Q_PROPERTY(bool lastWatchOnlyExportReplace MEMBER m_last_watch_only_export_replace NOTIFY watchOnlyWalletExportPendingChanged)
+    Q_PROPERTY(bool canExportWatchOnlyWallet READ canExportWatchOnlyWallet NOTIFY walletInfoChanged)
+    Q_PROPERTY(bool watchOnlyWalletExportPending READ watchOnlyWalletExportPending NOTIFY watchOnlyWalletExportPendingChanged)
+    Q_PROPERTY(QString lastWatchOnlyExportPath READ lastWatchOnlyExportPath NOTIFY watchOnlyWalletExportPendingChanged)
+    Q_PROPERTY(int watchOnlyExportCalls READ watchOnlyExportCalls NOTIFY watchOnlyWalletExportPendingChanged)
     Q_PROPERTY(QString transactionError MEMBER m_transaction_error NOTIFY transactionErrorChanged)
     Q_PROPERTY(bool transactionNeedsUnlock MEMBER m_transaction_needs_unlock NOTIFY transactionNeedsUnlockChanged)
     Q_PROPERTY(QString lastCommitAddressType MEMBER m_last_commit_address_type NOTIFY lastCommitAddressTypeChanged)
@@ -1388,6 +1399,10 @@ public:
     bool sendAmountExhaustsBalance() const { return m_send_amount_exhausts_balance; }
     QString lastBackupPath() const { return m_last_backup_path; }
     int backupWalletCalls() const { return m_backup_wallet_calls; }
+    bool canExportWatchOnlyWallet() const { return m_can_export_watch_only; }
+    bool watchOnlyWalletExportPending() const { return m_watch_only_export_pending; }
+    QString lastWatchOnlyExportPath() const { return m_last_watch_only_export_path; }
+    int watchOnlyExportCalls() const { return m_watch_only_export_calls; }
     Q_INVOKABLE QString estimatedFeeForTarget(const int target) const
     {
         QString estimate = m_fee_estimates.value(target);
@@ -1615,13 +1630,37 @@ public:
         m_settings_error.clear();
         Q_EMIT settingsErrorChanged();
     }
-    Q_INVOKABLE bool backupWallet(const QString& path)
+    Q_INVOKABLE bool backupWallet(const QString& path, bool replace = false)
     {
         m_last_backup_path = path;
+        m_last_backup_replace = replace;
         ++m_backup_wallet_calls;
         clearSettingsError();
         Q_EMIT backupWalletCallsChanged();
+        if (m_backup_test_error.isEmpty()) return true;
+        m_settings_error = m_backup_test_error;
+        Q_EMIT settingsErrorChanged();
+        return false;
+    }
+    Q_INVOKABLE bool exportWatchOnlyWallet(const QString& path, bool replace = false)
+    {
+        if (m_watch_only_export_pending || !m_can_export_watch_only) return false;
+        m_last_watch_only_export_path = path;
+        m_last_watch_only_export_replace = replace;
+        ++m_watch_only_export_calls;
+        m_watch_only_export_pending = true;
+        Q_EMIT watchOnlyWalletExportPendingChanged();
         return true;
+    }
+    Q_INVOKABLE void finishWatchOnlyWalletExport(const QString& error)
+    {
+        m_watch_only_export_pending = false;
+        Q_EMIT watchOnlyWalletExportPendingChanged();
+        if (error.isEmpty()) {
+            Q_EMIT watchOnlyWalletExported(m_last_watch_only_export_path);
+        } else {
+            Q_EMIT watchOnlyWalletExportFailed(error);
+        }
     }
     Q_INVOKABLE void resetWalletSettingsTestState()
     {
@@ -1629,7 +1668,15 @@ public:
         m_inactive_descriptor_exports.clear();
         Q_EMIT descriptorExportsChanged();
         m_last_backup_path.clear();
+        m_last_backup_replace = false;
+        m_backup_test_error.clear();
         m_backup_wallet_calls = 0;
+        m_last_watch_only_export_replace = false;
+        m_can_export_watch_only = true;
+        m_watch_only_export_pending = false;
+        m_last_watch_only_export_path.clear();
+        m_watch_only_export_calls = 0;
+        Q_EMIT watchOnlyWalletExportPendingChanged();
         m_key_scheme = QStringLiteral("Descriptor");
         m_private_keys_status = QStringLiteral("Enabled");
         m_external_signer_status = QStringLiteral("Not used");
@@ -1644,6 +1691,7 @@ public:
         m_private_keys_status = QStringLiteral("Disabled");
         m_external_signer_status = QStringLiteral("Enabled");
         m_can_manage_passphrase = false;
+        m_can_export_watch_only = false;
         Q_EMIT walletInfoChanged();
     }
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id)
@@ -1707,6 +1755,9 @@ Q_SIGNALS:
     void settingsErrorChanged();
     void backupWalletCallsChanged();
     void descriptorExportsChanged();
+    void watchOnlyWalletExportPendingChanged();
+    void watchOnlyWalletExported(const QString& path);
+    void watchOnlyWalletExportFailed(const QString& error);
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
     void displayUnitChanged();
@@ -1748,7 +1799,14 @@ private:
     QVariantList m_descriptor_exports;
     QVariantList m_inactive_descriptor_exports;
     QString m_last_backup_path;
+    bool m_last_backup_replace{false};
+    QString m_backup_test_error;
+    bool m_last_watch_only_export_replace{false};
     int m_backup_wallet_calls{0};
+    bool m_can_export_watch_only{true};
+    bool m_watch_only_export_pending{false};
+    QString m_last_watch_only_export_path;
+    int m_watch_only_export_calls{0};
     QString m_transaction_error;
     bool m_transaction_needs_unlock{false};
     int m_fee_estimate_revision{1};
@@ -1885,9 +1943,33 @@ public:
     Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
     Q_INVOKABLE QUrl homeFileUrl(const QString& file_name = {}) const
     {
+        if (file_name.startsWith(QLatin1Char('/'))) return QUrl::fromLocalFile(file_name);
         return QUrl::fromLocalFile(file_name.isEmpty() ? homePath() : homePath() + QLatin1Char('/') + file_name);
     }
-    Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
+    Q_INVOKABLE QString normalizeWalletPath(const QString& path) const
+    {
+        const QUrl url{path};
+        return url.isLocalFile() ? url.toLocalFile() : path;
+    }
+    Q_INVOKABLE QString defaultWalletFilePath(QObject*, bool watch_only, const QString& folder = {}) const
+    {
+        return (folder.isEmpty() ? homePath() : folder)
+            + (watch_only ? QStringLiteral("/wallet-watchonly-2026-01-02.dat") : QStringLiteral("/wallet-2026-01-02.bak"));
+    }
+    Q_INVOKABLE QVariantMap walletFileDestination(QObject*, const QString& path, bool) const
+    {
+        if (m_test_destinations.contains(path)) return m_test_destinations.value(path).toMap();
+        const QFileInfo info{path};
+        return {{QStringLiteral("status"), QStringLiteral("available")}, {QStringLiteral("path"), path},
+                {QStringLiteral("folder"), info.path()}, {QStringLiteral("fileName"), info.fileName()},
+                {QStringLiteral("error"), QString{}}};
+    }
+    Q_INVOKABLE void setTestWalletFileDestination(const QString& path, const QVariantMap& destination)
+    {
+        m_test_destinations.insert(path, destination);
+    }
+    Q_INVOKABLE void clearTestWalletFileDestinations() { m_test_destinations.clear(); }
+    QVariantMap m_test_destinations;
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
     Q_PROPERTY(int externalSignerRefreshCalls MEMBER m_external_signer_refresh_calls NOTIFY externalSignerStatusChanged)

@@ -142,7 +142,8 @@ Rectangle {
             lineHeight: 21
             horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.WordWrap
+            // Breaks inside a word only when it is too long for a line, such as a path.
+            wrapMode: Text.Wrap
         }
 
         Button {

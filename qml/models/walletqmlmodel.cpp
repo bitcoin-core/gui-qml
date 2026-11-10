@@ -8,6 +8,7 @@
 
 #include <common/messages.h>
 #include <qml/bitcoinamount.h>
+#include <qml/datadir.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/paymentrequest.h>
 #include <qml/models/psbtqmlmodel.h>
@@ -667,6 +668,36 @@ QString LocalizedString(const bilingual_str& value)
     return QString::fromStdString(value.translated.empty() ? value.original : value.translated);
 }
 
+// An existing file is only replaced once the new one is written next to it,
+// so a failed write never loses it.
+QString WriteWalletFile(const fs::path& destination, bool replace, const std::function<QString(const fs::path&)>& write)
+{
+    std::error_code error;
+    if (!std::filesystem::exists(destination, error)) return write(destination);
+    if (!replace) {
+        //: %1 is the path of a file that is kept as it is.
+        return QObject::tr("A file already exists at %1.").arg(QString::fromStdString(fs::PathToString(destination)));
+    }
+
+    fs::path partial{fs::PathFromString(fs::PathToString(destination) + ".partial")};
+    for (int suffix{1}; std::filesystem::exists(partial, error); ++suffix) {
+        partial = fs::PathFromString(fs::PathToString(destination) + strprintf(".partial%d", suffix));
+    }
+    const QString write_error{write(partial)};
+    if (!write_error.isEmpty()) {
+        std::error_code ignored;
+        fs::remove(partial, ignored);
+        return write_error;
+    }
+    fs::rename(partial, destination, error);
+    if (error) {
+        std::error_code ignored;
+        fs::remove(partial, ignored);
+        return QObject::tr("The existing file could not be replaced: %1").arg(QString::fromStdString(error.message()));
+    }
+    return {};
+}
+
 QString OutputTypeId(OutputType type)
 {
     return QString::fromStdString(FormatOutputType(type));
@@ -1201,7 +1232,7 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
     return true;
 }
 
-bool WalletQmlModel::backupWallet(const QString& path)
+bool WalletQmlModel::backupWallet(const QString& path, bool replace)
 {
     clearSettingsError();
     if (!m_wallet) {
@@ -1217,8 +1248,11 @@ bool WalletQmlModel::backupWallet(const QString& path)
         return false;
     }
 
-    if (!m_wallet->backupWallet(path.toStdString())) {
-        setSettingsError(tr("The wallet could not be backed up."));
+    const QString error{WriteWalletFile(QmlDataDir::QStringToPath(PsbtQmlModel::LocalFilePath(path)), replace, [this](const fs::path& destination) {
+        return m_wallet->backupWallet(fs::PathToString(destination)) ? QString{} : tr("The wallet could not be backed up.");
+    })};
+    if (!error.isEmpty()) {
+        setSettingsError(error);
         return false;
     }
 
@@ -1427,6 +1461,42 @@ QString WalletQmlModel::descriptorImportJson() const
         descriptors.push_back(std::move(item));
     }
     return QString::fromStdString(descriptors.write(2));
+}
+
+bool WalletQmlModel::canExportWatchOnlyWallet() const
+{
+    // Like Bitcoin Core's GUI: a wallet without private keys is already watch-only.
+    return m_wallet && !m_wallet->privateKeysDisabled();
+}
+
+bool WalletQmlModel::exportWatchOnlyWallet(const QString& path, bool replace)
+{
+    const QString local_path{PsbtQmlModel::LocalFilePath(path)};
+    if (m_watch_only_wallet_export_pending || !available() || !canExportWatchOnlyWallet() || local_path.trimmed().isEmpty()) {
+        return false;
+    }
+
+    m_watch_only_wallet_export_pending = true;
+    Q_EMIT watchOnlyWalletExportPendingChanged();
+    const auto finish = [this, local_path](const QString& error) {
+        m_watch_only_wallet_export_pending = false;
+        Q_EMIT watchOnlyWalletExportPendingChanged();
+        if (error.isEmpty()) {
+            Q_EMIT watchOnlyWalletExported(local_path);
+        } else {
+            Q_EMIT watchOnlyWalletExportFailed(error);
+        }
+    };
+    // The export copies every transaction while holding the wallet lock.
+    m_backend_executor->submit(this, [wallet = m_wallet, destination = QmlDataDir::QStringToPath(local_path), replace] {
+        return WriteWalletFile(destination, replace, [&](const fs::path& file) {
+            const auto result = wallet->exportWatchOnlyWallet(file);
+            return result ? QString{} : LocalizedString(util::ErrorString(result));
+        });
+    }, finish, [finish](std::exception_ptr) {
+        finish(tr("The watch-only wallet could not be exported."));
+    });
+    return true;
 }
 
 void WalletQmlModel::removeWallet()

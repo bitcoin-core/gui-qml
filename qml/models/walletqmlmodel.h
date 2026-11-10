@@ -125,6 +125,8 @@ private:
     Q_PROPERTY(QString externalSignerStatus READ externalSignerStatus CONSTANT)
     Q_PROPERTY(bool canManagePassphrase READ canManagePassphrase CONSTANT)
     Q_PROPERTY(bool canShowDescriptors READ canShowDescriptors NOTIFY descriptorExportsChanged)
+    Q_PROPERTY(bool canExportWatchOnlyWallet READ canExportWatchOnlyWallet CONSTANT)
+    Q_PROPERTY(bool watchOnlyWalletExportPending READ watchOnlyWalletExportPending NOTIFY watchOnlyWalletExportPendingChanged)
     Q_PROPERTY(QString transactionError READ transactionError NOTIFY transactionErrorChanged)
     Q_PROPERTY(bool transactionNeedsUnlock READ transactionNeedsUnlock NOTIFY transactionNeedsUnlockChanged)
     Q_PROPERTY(bool currentTransactionCanSend READ currentTransactionCanSend NOTIFY currentTransactionChanged)
@@ -205,13 +207,14 @@ public:
     Q_INVOKABLE bool setCurrentPaymentRequestAddress(QString address);
     Q_INVOKABLE bool encryptWallet(const QString& passphrase);
     Q_INVOKABLE bool changeWalletPassphrase(const QString& old_passphrase, const QString& new_passphrase);
-    Q_INVOKABLE bool backupWallet(const QString& path);
+    Q_INVOKABLE bool backupWallet(const QString& path, bool replace = false);
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE void setDefaultReceiveAddressType(const QString& address_type);
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& address_type) const;
     Q_INVOKABLE QVariantList descriptorExports() const;
     Q_INVOKABLE QVariantList inactiveDescriptorExports() const;
     Q_INVOKABLE QString descriptorImportJson() const;
+    Q_INVOKABLE bool exportWatchOnlyWallet(const QString& path, bool replace = false);
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);
     Q_INVOKABLE void discardCurrentTransaction();
@@ -287,6 +290,8 @@ public:
     QString externalSignerStatus() const;
     bool canManagePassphrase() const;
     bool canShowDescriptors() const;
+    bool canExportWatchOnlyWallet() const;
+    bool watchOnlyWalletExportPending() const { return m_watch_only_wallet_export_pending; }
     QString transactionError() const { return m_transaction_error; }
     bool transactionNeedsUnlock() const { return m_transaction_needs_unlock; }
     bool currentTransactionCanSend() const { return m_current_transaction && m_current_transaction_can_send; }
@@ -318,6 +323,9 @@ Q_SIGNALS:
     void displayUnitChanged(int unit);
     void securityStateChanged();
     void descriptorExportsChanged();
+    void watchOnlyWalletExportPendingChanged();
+    void watchOnlyWalletExported(const QString& path);
+    void watchOnlyWalletExportFailed(const QString& error);
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
     void availableChanged();
@@ -426,6 +434,7 @@ private:
     QString m_transaction_error;
     bool m_transaction_needs_unlock{false};
     QString m_settings_error;
+    bool m_watch_only_wallet_export_pending{false};
     QString m_display_name;
     std::unique_ptr<interfaces::Handler> m_handler_status_changed;
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;

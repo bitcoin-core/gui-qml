@@ -21,6 +21,7 @@
         <file>components/DescriptorText.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
+        <file>components/BackupWalletPopup.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/SendSection.qml</file>
         <file>components/SendRecipientEditor.qml</file>
