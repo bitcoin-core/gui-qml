@@ -24,6 +24,7 @@
 #include <QMutex>
 #include <QSemaphore>
 #include <QSignalSpy>
+#include <QTextDocument>
 #include <QtTest/QtTest>
 
 #include <atomic>
@@ -63,6 +64,20 @@ public:
         obj.pushKV("key3", "value3");
         return obj;
     }
+};
+
+// RpcTestStubNode that returns a preset reply.
+class FixedReplyNode : public RpcTestStubNode
+{
+public:
+    explicit FixedReplyNode(UniValue reply) : m_reply{std::move(reply)} {}
+    UniValue executeRpc(const std::string&, const UniValue&, const std::string&) override
+    {
+        return m_reply;
+    }
+
+private:
+    UniValue m_reply;
 };
 
 // RpcTestStubNode that provides a known command list for autocomplete tests.
@@ -150,6 +165,16 @@ static void submitAndSettle(RpcConsoleModel& model, const QString& command)
     QTRY_VERIFY(!model.executing());
 }
 
+/** Concatenate @p role over rows [first, rowCount): a reply spans many rows. */
+static QString joinRows(QAbstractItemModel* model, int role, int first)
+{
+    QStringList parts;
+    for (int row = first; row < model->rowCount(); ++row) {
+        parts << model->data(model->index(row, 0), role).toString();
+    }
+    return parts.join(QLatin1Char('\n'));
+}
+
 static int roleForName(QAbstractItemModel* model, const QByteArray& name)
 {
     const auto roles = model->roleNames();
@@ -176,6 +201,9 @@ private Q_SLOTS:
     void clearRemovesOutput();
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
+    void renderedTextMatchesPlainContent();
+    void rowsOfOneReplyShareAnEntry();
+    void commandRowsCarryTheRunnableCommand();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -393,17 +421,18 @@ void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
     model.submitCommand("getblockcount");
     QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
 
-    // Process events until the worker thread's CMD_REPLY row is inserted
+    // Process events until the worker thread's CMD_REPLY rows are inserted
     // (or until the 5-second safety timeout expires).
     QVERIFY(spy.wait(5000));
-    QCOMPARE(out->rowCount(), 2);
+    // The reply is a 50,000-'x' line plus the truncation notice on its own line.
+    QCOMPARE(out->rowCount(), 3);
 
     // Look up the content role dynamically — the model's roleNames map
     // "content" to the ContentRole integer.
     int content_role = roleForName(out, "content");
     QVERIFY(content_role != -1);
 
-    const QString reply_html = out->data(out->index(1, 0), content_role).toString();
+    const QString reply_html = joinRows(out, content_role, 1);
 
     // Formatted reply must be well below the raw 100,000-character input.
     QVERIFY2(reply_html.size() < 100'000,
@@ -411,6 +440,12 @@ void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
     // The truncation notice must appear in the output.
     QVERIFY2(reply_html.contains("truncated"),
              "Expected truncation notice in output");
+
+    // Only the first row of a block is stamped.
+    const int timestamp_role = roleForName(out, "timestamp");
+    QVERIFY(timestamp_role != -1);
+    QCOMPARE(out->data(out->index(1, 0), timestamp_role).toString().size(), 8);
+    QVERIFY(out->data(out->index(2, 0), timestamp_role).toString().isEmpty());
 }
 
 void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
@@ -425,12 +460,13 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     model.submitCommand("getsomething");
     QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
     QVERIFY(spy.wait(5000));
-    QCOMPARE(out->rowCount(), 2);
+    // One row per line: `{`, three key lines, `}`, after the request row.
+    QCOMPARE(out->rowCount(), 6);
 
     int content_role = roleForName(out, "content");
     QVERIFY(content_role != -1);
 
-    const QString html = out->data(out->index(1, 0), content_role).toString();
+    const QString html = joinRows(out, content_role, 1);
 
     // Real keys are wrapped in a key-colour span that closes immediately
     // after the quoted key — the structural formatter produces literally
@@ -446,6 +482,107 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     // The old regex-based formatter incorrectly treated this as a key.
     QVERIFY2(!html.contains(QStringLiteral("\"see section\"</span>")),
              qPrintable("String value was mis-coloured as a key in:\n" + html));
+}
+
+// Search offsets and copied text come from plainContent, so it must be exactly
+// what the rich text renders to, whitespace runs included.
+void RpcConsoleModelTests::renderedTextMatchesPlainContent()
+{
+    UniValue arr(UniValue::VARR);
+    arr.push_back("  two  spaces  ");
+    arr.push_back("tab\there");
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("needle", "two  spaces needle");
+    obj.pushKV("key  with  spaces", "value");
+    obj.pushKV("escaped", "<b>&amp;</b> \"quoted\"");
+    obj.pushKV("breaks", "line\nbreak\r\nend");
+    obj.pushKV("nbsp", "a\xc2\xa0 b");
+    obj.pushKV("edges", " lead trail ");
+    obj.pushKV("array", arr);
+
+    const std::vector<UniValue> replies{
+        obj,
+        UniValue{"col1    col2\n    indented  text\t\ttabs \nlast"},
+    };
+    for (const UniValue& reply : replies) {
+        FixedReplyNode mock{reply};
+        RpcConsoleModel model{mock};
+        auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
+        QVERIFY(out != nullptr);
+        submitAndSettle(model, "getsomething  with   spaces");
+        QVERIFY(out->rowCount() > 2);
+
+        const int content_role = roleForName(out, "content");
+        const int plain_role = roleForName(out, "plainContent");
+        QVERIFY(content_role != -1);
+        QVERIFY(plain_role != -1);
+        QTextDocument doc;
+        for (int row = 0; row < out->rowCount(); ++row) {
+            const QModelIndex index = out->index(row, 0);
+            const QString html = out->data(index, content_role).toString();
+            doc.setHtml(html);
+            QVERIFY2(doc.toPlainText() == out->data(index, plain_role).toString(),
+                     qPrintable(QString("row %1 renders as '%2' from '%3'")
+                                    .arg(row).arg(doc.toPlainText(), html)));
+        }
+    }
+
+    FixedReplyNode mock{obj};
+    RpcConsoleModel model{mock};
+    submitAndSettle(model, "getsomething");
+    auto* out = model.outputModel();
+    QVERIFY(joinRows(out, roleForName(out, "plainContent"), 1)
+                .contains(QStringLiteral("\"two  spaces needle\"")));
+}
+
+void RpcConsoleModelTests::rowsOfOneReplyShareAnEntry()
+{
+    JsonReplyNode mock;
+    RpcConsoleModel model{mock};
+    auto* out = model.outputModel();
+    const int entry_role = roleForName(out, "entry");
+    QVERIFY(entry_role != -1);
+    const auto entry = [&](int row) { return out->data(out->index(row, 0), entry_role).toInt(); };
+
+    submitAndSettle(model, "getsomething");
+    submitAndSettle(model, "getsomething");
+    // Per command: the request row, then `{`, three key lines and `}`.
+    QCOMPARE(out->rowCount(), 12);
+    for (int row = 2; row < 6; ++row) QCOMPARE(entry(row), entry(1));
+    QVERIFY(entry(1) != entry(0));
+    QVERIFY(entry(6) != entry(1));
+    QVERIFY(entry(7) != entry(6));
+    QCOMPARE(entry(11), entry(7));
+}
+
+void RpcConsoleModelTests::commandRowsCarryTheRunnableCommand()
+{
+    RpcTestStubNode mock;
+    RpcConsoleModel model{mock};
+    auto* out = model.outputModel();
+    const int command_role = roleForName(out, "command");
+    const int redacted_role = roleForName(out, "redacted");
+    const int content_role = roleForName(out, "plainContent");
+    QVERIFY(command_role != -1);
+    QVERIFY(redacted_role != -1);
+    const auto value = [&](int row, int role) { return out->data(out->index(row, 0), role); };
+
+    QVERIFY(model.submitCommand("getblockcount", "w1"));
+    QTRY_VERIFY(!model.executing());
+    // The wallet notice, the echoed command, then the reply.
+    QCOMPARE(out->rowCount(), 3);
+    QCOMPARE(value(0, command_role).toString(), QString{});
+    QCOMPARE(value(1, command_role).toString(), QStringLiteral("getblockcount"));
+    QCOMPARE(value(1, redacted_role).toBool(), false);
+    QCOMPARE(value(2, command_role).toString(), QString{});
+
+    QVERIFY(model.submitCommand("walletpassphrase hunter2 60", "w1"));
+    QTRY_VERIFY(!model.executing());
+    const int echo = 3;
+    QVERIFY(!value(echo, content_role).toString().contains("hunter2"));
+    QVERIFY(!value(echo, command_role).toString().contains("hunter2"));
+    QVERIFY(value(echo, command_role).toString().startsWith("walletpassphrase"));
+    QCOMPARE(value(echo, redacted_role).toBool(), true);
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()

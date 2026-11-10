@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
+import "../../qml/components"
 import "../../qml/pages"
 import "../../qml/pages/wallet"
 
@@ -254,6 +255,39 @@ TestCase {
 
         menuActions.undo.trigger()
         compare(noteInput.text, editedText)
+    }
+
+    Component {
+        id: outputViewComponent
+        MonospaceOutputView {
+            anchors.fill: parent
+            listModel: ListModel {
+                ListElement { content: "alpha beta" }
+                ListElement { content: "gamma" }
+            }
+        }
+    }
+
+    function test_edit_menu_copies_the_output_view_selection() {
+        const window = createMain(true)
+        const menuActions = findChild(window, "desktopMenuActions")
+        verify(menuActions !== null)
+        window.show()
+        const output = createTemporaryObject(outputViewComponent, window.contentItem)
+        verify(output !== null)
+        tryCompare(output, "count", 2)
+        output.forceActiveFocus()
+        tryCompare(output, "activeFocus", true)
+        compare(menuActions.copy.enabled, false)
+
+        output.selectRange(0, 6, 1, 5)
+        tryCompare(menuActions.copy, "enabled", true)
+        Clipboard.currentText = ""
+        menuActions.copy.trigger()
+        compare(Clipboard.currentText, "beta\ngamma")
+
+        output.clearSelection()
+        tryCompare(menuActions.copy, "enabled", false)
     }
 
     function test_preinit_onboarding_shows_node_while_wallet_scan_pending() {
