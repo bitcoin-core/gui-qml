@@ -39,6 +39,7 @@
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
+#include <QDir>
 #include <QFile>
 #include <QElapsedTimer>
 #include <QLocale>
@@ -861,6 +862,10 @@ private Q_SLOTS:
     void descriptorExportsIncludeUsedInactiveDescriptors();
     void canShowDescriptorsFollowsActiveDescriptors();
     void descriptorImportJsonListsEveryPublicDescriptor();
+    void exportWatchOnlyWalletWritesFile();
+    void exportWatchOnlyWalletReplacesFileOnlyAfterSuccess();
+    void exportWatchOnlyWalletNeedsPrivateKeys();
+    void backupWalletKeepsExistingFileUnlessReplacing();
     void encryptWalletUpdatesSecurityState();
     void changeWalletPassphraseForwardsPasswords();
     void backupWalletForwardsPath();
@@ -1165,6 +1170,128 @@ void WalletQmlModelTests::canShowDescriptorsFollowsActiveDescriptors()
     LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(master, 84) + "/0/*)", OutputType::BECH32);
     QTRY_VERIFY(changed.count() > 0);
     QVERIFY(model->canShowDescriptors());
+}
+
+namespace {
+QByteArray ReadFile(const QString& path)
+{
+    QFile file{path};
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+}
+
+void WriteFile(const QString& path, const QByteArray& contents)
+{
+    QFile file{path};
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(contents), contents.size());
+}
+} // namespace
+
+void WalletQmlModelTests::exportWatchOnlyWalletWritesFile()
+{
+    auto [wallet, model] = MakeWalletModel();
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path{dir.filePath("watch-only.dat")};
+    std::vector<std::string> destinations;
+    wallet->export_watch_only_wallet_fn = [&](const fs::path& destination) -> util::Result<std::string> {
+        destinations.push_back(fs::PathToString(destination));
+        WriteFile(QString::fromStdString(fs::PathToString(destination)), "export");
+        return fs::PathToString(destination);
+    };
+
+    QVERIFY(model->canExportWatchOnlyWallet());
+    QSignalSpy exported{model.get(), &WalletQmlModel::watchOnlyWalletExported};
+    QVERIFY(model->exportWatchOnlyWallet(QUrl::fromLocalFile(path).toString()));
+    QVERIFY(model->watchOnlyWalletExportPending());
+    QVERIFY(!model->exportWatchOnlyWallet(QUrl::fromLocalFile(path).toString()));
+
+    QTRY_COMPARE(exported.count(), 1);
+    QCOMPARE(exported.at(0).at(0).toString(), path);
+    QVERIFY(!model->watchOnlyWalletExportPending());
+    QCOMPARE(destinations, std::vector<std::string>{path.toStdString()});
+    QCOMPARE(ReadFile(path), QByteArray{"export"});
+}
+
+void WalletQmlModelTests::exportWatchOnlyWalletReplacesFileOnlyAfterSuccess()
+{
+    auto [wallet, model] = MakeWalletModel();
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path{dir.filePath("watch-only.dat")};
+    WriteFile(path, "old");
+    std::vector<std::string> destinations;
+    bool fail{true};
+    wallet->export_watch_only_wallet_fn = [&](const fs::path& destination) -> util::Result<std::string> {
+        destinations.push_back(fs::PathToString(destination));
+        if (fail) return util::Error{Untranslated("Wallet has no descriptors to export")};
+        WriteFile(QString::fromStdString(fs::PathToString(destination)), "new");
+        return fs::PathToString(destination);
+    };
+
+    QSignalSpy failed{model.get(), &WalletQmlModel::watchOnlyWalletExportFailed};
+    QVERIFY(model->exportWatchOnlyWallet(path));
+    QTRY_COMPARE(failed.count(), 1);
+    QVERIFY(failed.at(0).at(0).toString().startsWith("A file already exists at"));
+    QVERIFY(destinations.empty());
+
+    QVERIFY(model->exportWatchOnlyWallet(path, /*replace=*/true));
+    QTRY_COMPARE(failed.count(), 2);
+    QCOMPARE(failed.at(1).at(0).toString(), QString{"Wallet has no descriptors to export"});
+    QCOMPARE(ReadFile(path), QByteArray{"old"});
+
+    fail = false;
+    QSignalSpy exported{model.get(), &WalletQmlModel::watchOnlyWalletExported};
+    QVERIFY(model->exportWatchOnlyWallet(path, /*replace=*/true));
+    QTRY_COMPARE(exported.count(), 1);
+    QCOMPARE(ReadFile(path), QByteArray{"new"});
+
+    // Both replacing runs wrote next to the existing file.
+    QCOMPARE(destinations.size(), size_t{2});
+    for (const auto& destination : destinations) QVERIFY(destination != path.toStdString());
+    QCOMPARE(QDir{dir.path()}.entryList(QDir::Files), QStringList{"watch-only.dat"});
+}
+
+void WalletQmlModelTests::backupWalletKeepsExistingFileUnlessReplacing()
+{
+    auto [wallet, model] = MakeWalletModel();
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path{dir.filePath("wallet.bak")};
+    WriteFile(path, "old");
+    bool fail{false};
+    wallet->backup_wallet_fn = [&](const std::string& destination) {
+        if (fail) return false;
+        WriteFile(QString::fromStdString(destination), "new");
+        return true;
+    };
+
+    QVERIFY(!model->backupWallet(path));
+    QVERIFY(model->settingsError().startsWith("A file already exists at"));
+    QCOMPARE(ReadFile(path), QByteArray{"old"});
+
+    fail = true;
+    QVERIFY(!model->backupWallet(path, /*replace=*/true));
+    QCOMPARE(model->settingsError(), QString{"The wallet could not be backed up."});
+    QCOMPARE(ReadFile(path), QByteArray{"old"});
+
+    fail = false;
+    QVERIFY(model->backupWallet(QUrl::fromLocalFile(path).toString(), /*replace=*/true));
+    QCOMPARE(ReadFile(path), QByteArray{"new"});
+    QCOMPARE(QDir{dir.path()}.entryList(QDir::Files), QStringList{"wallet.bak"});
+
+    const QString fresh{dir.filePath("fresh.bak")};
+    QVERIFY(model->backupWallet(fresh));
+    QCOMPARE(ReadFile(fresh), QByteArray{"new"});
+}
+
+void WalletQmlModelTests::exportWatchOnlyWalletNeedsPrivateKeys()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->private_keys_disabled = true;
+    QVERIFY(!model->canExportWatchOnlyWallet());
+    QVERIFY(!model->exportWatchOnlyWallet(QDir::temp().filePath("watch-only.dat")));
+    QVERIFY(!model->watchOnlyWalletExportPending());
 }
 
 void WalletQmlModelTests::encryptWalletUpdatesSecurityState()

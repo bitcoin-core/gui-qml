@@ -70,6 +70,13 @@ void QmlFileDialog::setSelectedFile(const QUrl& file)
     Q_EMIT selectedFileChanged();
 }
 
+void QmlFileDialog::setConfirmOverwrite(bool confirm)
+{
+    if (m_confirm_overwrite == confirm) return;
+    m_confirm_overwrite = confirm;
+    Q_EMIT confirmOverwriteChanged();
+}
+
 bool QmlFileDialog::isVisible() const
 {
     return m_dialog && m_dialog->isVisible();
@@ -95,6 +102,7 @@ void QmlFileDialog::open()
     dlg->setWindowTitle(m_title);
     dlg->setNameFilters(m_name_filters);
     dlg->setDefaultSuffix(m_default_suffix);
+    dlg->setOption(QFileDialog::DontConfirmOverwrite, !m_confirm_overwrite);
 
     switch (m_file_mode) {
     case OpenFile:

@@ -31,6 +31,7 @@ class QmlFileDialogTests : public QObject
 
 private Q_SLOTS:
     void saveModeAsksToSaveNotToOpen();
+    void overwriteConfirmationCanBeTurnedOff();
     void openModeRequiresAnExistingFile();
     void directoryModeShowsDirectoriesOnly();
     void onlyDirectoryModeShowsHiddenEntries();
@@ -53,6 +54,22 @@ void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
     // the dialog builds its widgets, which an offscreen platform never does.
     QCOMPARE(dialog->acceptMode(), QFileDialog::AcceptSave);
     QCOMPARE(dialog->fileMode(), QFileDialog::AnyFile);
+    chooser.close();
+}
+
+void QmlFileDialogTests::overwriteConfirmationCanBeTurnedOff()
+{
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.open();
+    QFileDialog* dialog = VisibleFileDialog();
+    QVERIFY(dialog);
+    QVERIFY(!dialog->testOption(QFileDialog::DontConfirmOverwrite));
+    chooser.close();
+
+    chooser.setConfirmOverwrite(false);
+    chooser.open();
+    QVERIFY(dialog->testOption(QFileDialog::DontConfirmOverwrite));
     chooser.close();
 }
 
