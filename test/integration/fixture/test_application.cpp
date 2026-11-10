@@ -12,6 +12,9 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlError>
@@ -21,10 +24,12 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QUrl>
 
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -108,6 +113,16 @@ bool TestApplication::waitForWallets()
 
 void TestApplication::qmlEngineCreated(QQmlApplicationEngine& engine)
 {
+    // Check the engine production built, not the helpers: a blocked request has
+    // already failed when get() returns. 192.0.2.1 is TEST-NET-1, so an engine
+    // that is not blocked never reaches a real host.
+    const std::unique_ptr<QNetworkReply> reply{
+        engine.networkAccessManager()->get(QNetworkRequest{QUrl{QStringLiteral("http://192.0.2.1/")}})};
+    if (!reply->isFinished() || reply->error() != QNetworkReply::ContentAccessDenied) {
+        m_status = EXIT_FAILURE;
+        std::cerr << "QML engine allows network access\n";
+        reply->abort();
+    }
     // Observe the engine directly: production logging and Qt Test both replace
     // the global message handler during a run. Keep observing through teardown.
     QObject::connect(&engine, &QQmlEngine::warnings, &engine, [this](const QList<QQmlError>& warnings) {
