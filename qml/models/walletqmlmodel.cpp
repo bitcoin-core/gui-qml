@@ -227,16 +227,20 @@ void ApplyPreviewChangeDestination(wallet::CCoinControl& coin_control, const Out
     }
 }
 
-void ApplyRegtestStaticFeeOverride(wallet::CCoinControl& coin_control)
+void ApplyRegtestStaticFeeOverride(interfaces::Wallet& wallet, wallet::CCoinControl& coin_control)
 {
     if (Params().GetChainType() != ChainType::REGTEST) {
         return;
     }
 
     // Regtest commonly runs without fee estimation, so use a fixed static fee
-    // rate instead of target-based estimation.
+    // rate instead of target-based estimation, raised to what the wallet accepts.
+    CFeeRate fee_rate{wallet::DEFAULT_TRANSACTION_MINFEE};
+    if (const auto* raw_wallet = wallet.wallet()) {
+        fee_rate = std::max(fee_rate, wallet::GetRequiredFeeRate(*raw_wallet));
+    }
     coin_control.m_confirm_target.reset();
-    coin_control.m_feerate = CFeeRate{wallet::DEFAULT_TRANSACTION_MINFEE};
+    coin_control.m_feerate = fee_rate;
 }
 
 // Use the same available input set for automatic sendall and sweep detection.
@@ -413,12 +417,12 @@ std::optional<SendFeePreview> TryPreviewFee(interfaces::Wallet& wallet,
         result->tx && !result->change_pos && TransactionSweepsAvailableFunds(wallet, *result->tx, coin_control)};
 }
 
-wallet::CCoinControl NetworkTargetCoinControl(const wallet::CCoinControl& base_coin_control, const unsigned int target)
+wallet::CCoinControl NetworkTargetCoinControl(interfaces::Wallet& wallet, const wallet::CCoinControl& base_coin_control, const unsigned int target)
 {
     wallet::CCoinControl coin_control{base_coin_control};
     coin_control.m_feerate.reset();
     coin_control.m_confirm_target = target;
-    ApplyRegtestStaticFeeOverride(coin_control);
+    ApplyRegtestStaticFeeOverride(wallet, coin_control);
     return coin_control;
 }
 
@@ -817,7 +821,7 @@ void WalletQmlModel::setCustomFeeTarget(unsigned int target)
     wallet::CCoinControl control{m_coin_control};
     control.m_feerate.reset();
     control.m_confirm_target = target;
-    ApplyRegtestStaticFeeOverride(control);
+    ApplyRegtestStaticFeeOverride(*m_wallet, control);
     const CAmount rate = control.m_feerate ? control.m_feerate->GetFeePerK()
         : m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, nullptr);
     setCustomFeeEnabled(true);
@@ -2171,7 +2175,7 @@ void WalletQmlModel::requestFeeEstimatesNow()
         std::optional<SendFeePreview> custom_estimate;
 
         for (const unsigned int target : STANDARD_FEE_TARGETS) {
-            const wallet::CCoinControl target_coin_control{NetworkTargetCoinControl(base_coin_control, target)};
+            const wallet::CCoinControl target_coin_control{NetworkTargetCoinControl(*wallet, base_coin_control, target)};
             if (NetworkFeeEstimateUnavailable(*wallet, target_coin_control)) {
                 unavailable_targets.insert(target);
                 continue;
@@ -2366,7 +2370,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         if (!coin_control.m_confirm_target.has_value()) {
             coin_control.m_confirm_target = DEFAULT_STANDARD_FEE_TARGET;
         }
-        ApplyRegtestStaticFeeOverride(coin_control);
+        ApplyRegtestStaticFeeOverride(*m_wallet, coin_control);
     }
 
     CAmount balance = m_wallet->getAvailableBalance(coin_control);

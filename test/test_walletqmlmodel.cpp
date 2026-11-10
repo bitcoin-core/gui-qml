@@ -699,6 +699,7 @@ private Q_SLOTS:
     void scheduleFeeEstimates_reportsUnavailableNetworkEstimates();
     void setFeeTargetBlocks_refreshesAnUnavailableTarget();
     void scheduleFeeEstimates_usesStaticRegtestFeeOverride();
+    void regtestFeeOverrideRespectsWalletMinimum();
     void customFeeRateValid_data();
     void customFeeRateValid();
     void customFeeRateRespectsRelayMinimum_data();
@@ -1262,6 +1263,37 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesStaticRegtestFeeOverride()
                                                   {0, false, false, CAmount{wallet::DEFAULT_TRANSACTION_MINFEE}, 1},
                                                   {0, false, false, CAmount{wallet::DEFAULT_TRANSACTION_MINFEE}, 1},
                                               });
+}
+
+void WalletQmlModelTests::regtestFeeOverrideRespectsWalletMinimum()
+{
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "regtest-minimum-test", nullptr};
+    raw_wallet.m_min_fee = CFeeRate{2000};
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    SetValidRecipient(*model, VALID_REGTEST_ADDRESS);
+
+    ThreadSafeCallLog<std::optional<CAmount>> rates;
+    wallet->create_transaction_fn = [&](const std::vector<wallet::CRecipient>&, const wallet::CCoinControl& coin_control,
+                                        bool, int& change_pos, CAmount& fee) -> util::Result<CTransactionRef> {
+        rates.Append(coin_control.m_feerate ? std::optional<CAmount>{coin_control.m_feerate->GetFeePerK()} : std::nullopt);
+        change_pos = -1;
+        fee = 500;
+        return MakeTransactionRef(CMutableTransaction{});
+    };
+
+    model->scheduleFeeEstimates();
+    QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
+    QVERIFY(!model->feeEstimationUnavailable());
+    QVERIFY(model->prepareTransaction());
+
+    const auto snapshot = rates.Snapshot();
+    QCOMPARE(snapshot.size(), size_t{4});
+    for (const auto& rate : snapshot) {
+        QCOMPARE(rate, std::optional<CAmount>{2000});
+    }
 }
 
 void WalletQmlModelTests::customFeeRateValid_data()
