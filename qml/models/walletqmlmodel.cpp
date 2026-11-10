@@ -1202,6 +1202,13 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         }
     }
 
+    // An address that has received a payment is not offered for a new
+    // request. Refuse it here too: the Receive page would otherwise
+    // replace it with a fresh address without telling the user.
+    if (usedAddresses().count(QString::fromStdString(EncodeDestination(destination))) > 0) {
+        return false;
+    }
+
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
     m_current_payment_request->setNoteSelf(getAddressLabel(address));
@@ -1234,10 +1241,19 @@ bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_ty
         if (IsValidDestination(destination) && m_wallet->getAddress(destination, nullptr, &purpose)
             && purpose == wallet::AddressPurpose::RECEIVE) receiving->setDestination(destination);
     }
+    // A draft started from Addresses (setCurrentPaymentRequestAddress)
+    // carries the address picked there until it is saved.
+    auto* draft = m_current_payment_request;
+    const bool draft_uses_receiving = draft && draft->id().isEmpty()
+        && !receiving->address().isEmpty() && draft->address() == receiving->address();
     if (!receiving->address().isEmpty()) {
         for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
         const bool same_type = address_type.isEmpty() || OutputTypeIdFromDestination(receiving->destination()) == type;
         if (!next && !receiving->paymentReceived() && same_type) return true;
+        // Keep the picked address after it receives a payment instead of
+        // quietly moving the draft to one the user did not choose. Moving
+        // it to a new address takes an explicit request (next).
+        if (!next && address_type.isEmpty() && draft_uses_receiving) return true;
     }
     const auto parsed = ParseOutputType(type.toStdString());
     if (!parsed) return false;
@@ -1246,6 +1262,7 @@ bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_ty
         receiving->setNeedsUnlock(m_wallet->isCrypted() && m_wallet->isLocked());
         return false;
     }
+    if (draft_uses_receiving) draft->setDestination(CNoDestination{});
     receiving->clear();
     receiving->setDestination(*destination);
     settings.setValue(key, receiving->address());

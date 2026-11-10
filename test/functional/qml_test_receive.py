@@ -220,6 +220,18 @@ def _request_qr_payload(gui):
     return gui.get_property("requestPaymentQRImage", "code")
 
 
+def _assert_qr_sharing_unavailable(gui):
+    """The QR code encodes the saved request, so unapplied public edits hide it."""
+    assert not gui.get_property("paymentRequestModal", "card.sharing")
+    assert not gui.get_property("requestPaymentQRImage", "visible")
+    gui.click("paymentRequestMoreButton")
+    gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+    for name in ("requestPaymentCopyQRMenuButton", "requestPaymentSaveQRMenuButton"):
+        assert not gui.get_property(name, "enabled"), name
+    gui.invoke("paymentRequestMoreMenu", "close")
+    gui.wait_for_property("paymentRequestMoreMenu", "visible", False)
+
+
 def run_test():
     harness = WalletFlowHarness("qml_receive_requests", port_offset=70)
     try:
@@ -314,20 +326,53 @@ def run_test():
         assert gui.get_property("paymentRequestModal", "opened")
 
         # Inline public edits preserve the address and rebuild the BIP21 payload.
-        for field in ("amount", "label", "message", "note"):
+        # Until they are applied the QR code cannot be shared, since it would
+        # differ from the form. The private note is never part of the payload.
+        _edit_field(gui, "note", "")
+        assert _request_qr_payload(gui) == original
+        for field in ("amount", "label", "message"):
             _edit_field(gui, field, "")
+            _assert_qr_sharing_unavailable(gui)
         assert gui.get_property("requestPaymentUpdateButton", "enabled")
         assert not gui.get_property("requestPaymentError", "visible")
-        assert _request_qr_payload(gui) == original
         gui.click("requestPaymentUpdateButton")
         gui.wait_for_property("requestPaymentCopyButton", "visible", True)
         assert _request_qr_payload(gui) == "bitcoin:" + address
         _edit_field(gui, "message", "pizza")
+        _assert_qr_sharing_unavailable(gui)
         _edit_field(gui, "note", "Private lunch note")
         _edit_field(gui, "amount", "0.0002")
         _edit_field(gui, "label", "Coffee & cake")
-        assert _request_qr_payload(gui) == "bitcoin:" + address
+        _assert_qr_sharing_unavailable(gui)
         gui.click("requestPaymentUpdateButton")
+        gui.wait_for_property("requestPaymentCopyButton", "visible", True)
+        applied = _request_qr_payload(gui)
+        assert _address_from_bip21(applied) == address
+        assert "amount=0.00020000" in applied and "message=pizza" in applied
+        assert "label=Coffee%20%26%20cake" in applied and "Private" not in applied
+        # Saving works again as soon as sharing returns, and the image now
+        # encodes the applied request instead of the original one.
+        applied_qr_path = os.path.join(harness.tmpdir, "request-qr-applied.png")
+        gui.click("paymentRequestMoreButton")
+        gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+        gui.click("requestPaymentSaveQRMenuButton")
+        gui.wait_for_property("requestPaymentSaveQRDialog", "visible", True)
+        gui.set_property("requestPaymentSaveQRDialog", "selectedFile", "file://" + applied_qr_path)
+        gui.invoke("requestPaymentSaveQRDialog", "accepted")
+        gui.invoke("requestPaymentSaveQRDialog", "close")
+        wait_until(lambda: os.path.exists(applied_qr_path), description="saved applied QR image")
+        assert gui.get_property("requestPaymentError", "text") == ""
+        with open(qr_path, "rb") as image:
+            original_png = image.read()
+        with open(applied_qr_path, "rb") as image:
+            applied_png = image.read()
+        assert applied_png[:8] == b"\x89PNG\r\n\x1a\n"
+        assert applied_png != original_png
+        # A changed field hides the QR code until the form matches it again.
+        _edit_field(gui, "message", "pasta")
+        _assert_qr_sharing_unavailable(gui)
+        _edit_field(gui, "message", "pizza")
+        assert _request_qr_payload(gui) == applied
         gui.wait_for_property("requestPaymentCopyButton", "visible", True)
         assert gui.get_property("paymentRequestModal", "opened")
         gui.click("requestPaymentCopyButton")

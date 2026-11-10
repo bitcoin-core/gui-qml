@@ -182,6 +182,13 @@ Page {
                     clipboard: root.clipboard
                     enabled: walletController.initialized
                     onRetryAddressRequested: root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                    onNewAddressRequested: root.ensureReceivingAddress(true, "")
+                    onPickedAddressCancelled: {
+                        root.request.clear()
+                        card.resetFields()
+                        root.ensureReceivingAddress(false, "")
+                        root.addressHistoryRequested()
+                    }
                     onCreated: function(requestId) {
                         root.presentedRequest = root.request
                         root.paymentRequestCreated()

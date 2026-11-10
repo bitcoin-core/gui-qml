@@ -161,6 +161,120 @@ def edit_existing_request_from_address_details(gui, expected_address):
     gui.wait_for_property("addressListPage", "visible", True, timeout_ms=10000)
 
 
+def details_follow_payment_to_open_address(harness, gui):
+    """Open details stay current when their address receives a payment.
+
+    The payment hides the address from the unused list behind the popup, so
+    the popup must show the funds and stop offering a new request for it.
+    """
+    address = rpc_call(harness.gui_rpc_port, "getnewaddress", ["paid while open"], wallet=WALLET_NAME)
+    deadline = time.time() + 10
+    row = None
+    while row is None:
+        assert time.time() < deadline, f"Expected {address!r} in address list"
+        for index in range(gui.get_property("addressListView", "count")):
+            if gui.get_list_item_property("addressListView", index, "address") == address:
+                row = index
+                break
+        else:
+            time.sleep(0.1)
+    gui.click_list_item("addressListView", row, "addressRowDetailsButton")
+    gui.wait_for_property("addressDetailsPopup", "opened", True, timeout_ms=5000)
+    gui.wait_for_property("addressDetails", "address", address, timeout_ms=5000)
+    gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
+    assert not gui.get_property("addressDetails", "used")
+    assert not gui.get_property("addressDetails", "hasAmount")
+
+    rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.002], wallet=WALLET_NAME)
+    mining_address = rpc_call(harness.gui_rpc_port, "getnewaddress", ["mining rewards"], wallet=WALLET_NAME)
+    rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining_address])
+    gui.wait_for_property("addressDetails", "used", True, timeout_ms=30000)
+    gui.wait_for_property("addressDetails", "amount", "\u20bf 0.002", timeout_ms=30000)
+    assert gui.get_property("addressDetails", "hasAmount")
+    assert gui.get_property("addressDetails", "address") == address
+    assert not gui.get_property("addressDetailsCreatePaymentRequestButton", "visible")
+    assert gui.get_property("addressDetailsPopup", "opened")
+    gui.invoke("addressDetailsPopup", "close")
+    gui.wait_for_property("addressDetailsPopup", "visible", False, timeout_ms=5000)
+
+
+def start_request_for_new_address(harness, gui, label):
+    """Open Address details for a fresh address and start a request for it."""
+    address = rpc_call(harness.gui_rpc_port, "getnewaddress", [label], wallet=WALLET_NAME)
+    deadline = time.time() + 10
+    row = None
+    while row is None:
+        assert time.time() < deadline, f"Expected {address!r} in address list"
+        for index in range(gui.get_property("addressListView", "count")):
+            if gui.get_list_item_property("addressListView", index, "address") == address:
+                row = index
+                break
+        else:
+            time.sleep(0.1)
+    gui.click_list_item("addressListView", row, "addressRowDetailsButton")
+    gui.wait_for_property("addressDetailsPopup", "opened", True, timeout_ms=5000)
+    gui.wait_for_property("addressDetails", "address", address, timeout_ms=5000)
+    gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
+    gui.click("addressDetailsCreatePaymentRequestButton")
+    gui.settle()
+    gui.wait_for_property("requestPaymentNoteRow", "value", label)
+    assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == address
+    _edit_field(gui, "amount", "0.001")
+    _edit_field(gui, "message", "Coffee")
+    return address
+
+
+def pay_picked_address_mid_request(harness, gui, address):
+    """Pay the picked address and confirm the draft keeps it and asks what to do."""
+    before = gui.get_property("requestHistoryCount", "count")
+    rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.001], wallet=WALLET_NAME)
+    mining_address = rpc_call(harness.gui_rpc_port, "getnewaddress", ["mining rewards"], wallet=WALLET_NAME)
+    rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining_address])
+    gui.wait_for_property("requestPaymentPickedAddressPaid", "visible", True, timeout_ms=30000)
+    gui.settle()
+    assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == address
+    assert gui.get_property("requestPaymentPage", "wallet.currentPaymentRequest.address") == address
+    assert not gui.get_property("requestPaymentGenerateButton", "visible")
+    assert gui.get_property("requestHistoryCount", "count") == before
+    return before
+
+
+def paid_picked_address_cancel_returns_to_addresses(harness, gui):
+    """Cancel drops the draft and returns to the address list without saving."""
+    address = start_request_for_new_address(harness, gui, "paid mid-request, cancelled")
+    before = pay_picked_address_mid_request(harness, gui, address)
+    gui.click("requestPaymentPickedAddressPaidDismissButton")
+    gui.wait_for_property("addressListPage", "visible", True, timeout_ms=10000)
+    assert gui.get_property("requestHistoryCount", "count") == before
+    assert gui.get_property("requestPaymentPage", "wallet.currentPaymentRequest.address") == ""
+    assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") not in ("", address)
+
+
+def paid_picked_address_moves_only_on_request(harness, gui):
+    """A payment during composition never moves the request without asking.
+
+    The draft keeps the address picked in Address details. Create stays off
+    until the user asks for a new address, which keeps the typed details.
+    """
+    address = start_request_for_new_address(harness, gui, "paid mid-request")
+    before = pay_picked_address_mid_request(harness, gui, address)
+    gui.click("requestPaymentPickedAddressPaidPrimaryButton")
+    gui.wait_for_property(
+        "requestPaymentPage", "wallet.receivingAddress.address", lambda value: value not in ("", address)
+    )
+    fresh = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
+    gui.wait_for_property("requestPaymentPickedAddressPaid", "visible", False)
+    assert gui.get_property("requestPaymentMessageInput", "text") == "Coffee"
+    gui.wait_for_property("requestPaymentGenerateButton", "visible", True)
+    gui.wait_for_property("requestPaymentGenerateButton", "enabled", True)
+    gui.click("requestPaymentGenerateButton")
+    gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
+    gui.wait_for_property("paymentRequestModal", "opened", True)
+    assert gui.get_property("requestPaymentAddressText", "address") == fresh
+    gui.click("paymentRequestModalClose")
+    gui.wait_for_property("paymentRequestModal", "visible", False)
+
+
 def run_test():
     harness = WalletFlowHarness("qml_addresses", port_offset=70)
     try:
@@ -173,6 +287,9 @@ def run_test():
         create_payment_request_from_first_unused_address(gui, new_address)
         commit_payment_request(gui)
         edit_existing_request_from_address_details(gui, new_address)
+        details_follow_payment_to_open_address(harness, gui)
+        paid_picked_address_cancel_returns_to_addresses(harness, gui)
+        paid_picked_address_moves_only_on_request(harness, gui)
         print("Address list receive integration flow passed.")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve GUI context on failures
