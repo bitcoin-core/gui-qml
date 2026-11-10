@@ -732,6 +732,7 @@ private Q_SLOTS:
     void requestDetailEditsPreserveReceiveDraft();
     void setCurrentPaymentRequestAddressEditsExistingRequest();
     void setCurrentPaymentRequestAddressRejectsUsedAddress();
+    void paidPickedAddressStaysWithItsDraft();
     void usePaymentRequestAsTemplatePreservesAddressType();
     void commitPaymentRequestOnLockedWalletSignalsNeedsUnlock();
     void commitPaymentRequestWithPassphraseUnlocksRetriesAndRelocks();
@@ -2320,6 +2321,54 @@ void WalletQmlModelTests::setCurrentPaymentRequestAddressRejectsUsedAddress()
     QVERIFY(!model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS));
     QVERIFY(model->currentPaymentRequest()->address().isEmpty());
     QCOMPARE(model->receivingAddress()->address(), receiving_address);
+}
+
+void WalletQmlModelTests::paidPickedAddressStaysWithItsDraft()
+{
+    QSettings settings;
+    settings.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    const CTxDestination picked{DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())};
+    const CTxDestination fresh{WitnessV0KeyHash{}};
+    const QString fresh_address{QString::fromStdString(EncodeDestination(fresh))};
+    wallet->wallet_addresses.emplace_back(picked, true, wallet::AddressPurpose::RECEIVE, "picked");
+    wallet->get_address_result = true;
+    wallet->get_new_destination_fn = [&](OutputType, const std::string&) -> util::Result<CTxDestination> {
+        ++wallet->get_new_destination_calls;
+        return fresh;
+    };
+    QVERIFY(model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS));
+    auto* draft = model->currentPaymentRequest();
+    draft->setMessage(QStringLiteral("Lunch"));
+
+    // The picked address is paid while the request is being filled in.
+    CMutableTransaction tx;
+    tx.vout.emplace_back(100'000, GetScriptForDestination(picked));
+    const interfaces::WalletTx payment{MakeIncomingPayment(tx, {true})};
+    wallet->setWalletTxsFn([payment] { return std::set<interfaces::WalletTx>{payment}; });
+
+    // Refreshing Receive keeps the draft on the picked address, and the
+    // paid address still cannot be saved as a new request.
+    QVERIFY(model->ensureReceivingAddress());
+    QVERIFY(model->receivingAddress()->paymentReceived());
+    QCOMPARE(model->receivingAddress()->address(), VALID_MAINNET_ADDRESS);
+    QCOMPARE(draft->address(), VALID_MAINNET_ADDRESS);
+    QCOMPARE(wallet->get_new_destination_calls, 0);
+    QVERIFY(!model->commitReceivingPaymentRequest());
+    QCOMPARE(model->receiveRequests()->count(), 0);
+    QCOMPARE(wallet->set_address_receive_request_calls, 0);
+
+    // Only an explicit request for a new address moves the draft there.
+    QVERIFY(model->ensureReceivingAddress(true));
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+    QCOMPARE(model->receivingAddress()->address(), fresh_address);
+    QVERIFY(draft->address().isEmpty());
+    QCOMPARE(draft->message(), QStringLiteral("Lunch"));
+    QVERIFY(model->commitReceivingPaymentRequest());
+    QCOMPARE(draft->address(), fresh_address);
+    QCOMPARE(draft->message(), QStringLiteral("Lunch"));
+    QCOMPARE(model->receiveRequests()->count(), 1);
+    settings.remove("receiveAddressTypes/fake-wallet");
 }
 
 void WalletQmlModelTests::setCurrentPaymentRequestAddressUsesAddressListLabel()

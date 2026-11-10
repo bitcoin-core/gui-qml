@@ -933,6 +933,65 @@ TestCase {
         compare(card.request.noteSelf, "Keep this draft")
     }
 
+    function markPickedAddressPaid(page) {
+        const card = page.draftCard
+        const picked = testWalletModel.receivingAddress.address
+        // Addresses starts the draft with the address picked there.
+        testPaymentRequest.address = picked
+        editField(card, "requestPaymentMessageInput", "Lunch")
+        verify(!card.pickedAddressPaid)
+        testWalletModel.receivingAddress.paymentReceived = true
+        // Let the page react to the payment before checking it kept the address.
+        wait(50)
+        compare(testWalletModel.receivingAddress.address, picked)
+        compare(testPaymentRequest.address, picked)
+        verify(card.pickedAddressPaid)
+        return picked
+    }
+
+    function test_paid_picked_address_waits_for_a_new_address() {
+        const page = createPage()
+        const card = page.draftCard
+        const picked = markPickedAddressPaid(page)
+        const banner = findChild(card, "requestPaymentPickedAddressPaid")
+        verify(banner.message.length > 0)
+        compare(banner.primaryButtonText, "New address")
+        compare(banner.dismissButtonText, "Cancel")
+        verify(!findChild(card, "requestPaymentGenerateButton").enabled)
+        card.createRequest()
+        compare(testPaymentRequest.id, "")
+        compare(testPaymentRequest.address, picked)
+
+        banner.primaryClicked()
+        const fresh = testWalletModel.receivingAddress.address
+        verify(fresh !== "" && fresh !== picked)
+        compare(testPaymentRequest.address, "")
+        verify(!card.pickedAddressPaid)
+        compare(findChild(card, "requestPaymentMessageInput").text, "Lunch")
+        verify(findChild(card, "requestPaymentGenerateButton").enabled)
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        compare(testPaymentRequest.address, fresh)
+        compare(testPaymentRequest.message, "Lunch")
+    }
+
+    function test_paid_picked_address_cancel_discards_the_draft() {
+        const page = createPage()
+        const card = page.draftCard
+        const picked = markPickedAddressPaid(page)
+        const spy = createTemporaryQmlObject("import QtTest 1.2; SignalSpy { signalName: \"addressHistoryRequested\" }", this)
+        spy.target = page
+        findChild(card, "requestPaymentPickedAddressPaid").dismissClicked()
+        compare(spy.count, 1)
+        compare(testPaymentRequest.id, "")
+        compare(testPaymentRequest.address, "")
+        compare(testPaymentRequest.message, "")
+        compare(findChild(card, "requestPaymentMessageInput").text, "")
+        verify(testWalletModel.receivingAddress.address !== picked)
+        verify(!testWalletModel.receivingAddress.paymentReceived)
+        verify(!card.pickedAddressPaid)
+    }
+
     function test_amount_input_rejects_invalid_characters_and_preserves_precision() {
         const card = createRequest(createPage())
         optionsModel.displayUnit = BitcoinAmount.BTC

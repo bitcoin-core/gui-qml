@@ -43,10 +43,18 @@ Pane {
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
     readonly property bool hasPublicFields: showAmount || showMessage || showRecipientName
+    // A draft started from Addresses keeps the address picked there. If that
+    // address is paid before the request is created, the user chooses what
+    // happens next instead of the draft moving to another address.
+    readonly property bool pickedAddressPaid: !modalView && !!request && !saved && request.address !== ""
+        && !!wallet && !!wallet.receivingAddress && wallet.receivingAddress.paymentReceived
+        && request.address === wallet.receivingAddress.address
     onShowAmountChanged: if (!showAmount) clearPublicField("amount", amountInput)
     onShowMessageChanged: if (!showMessage) clearPublicField("message", messageInput)
     onShowRecipientNameChanged: if (!showRecipientName) clearPublicField("label", labelInput)
     signal retryAddressRequested()
+    signal newAddressRequested()
+    signal pickedAddressCancelled()
     signal requestAgain(string requestId)
     signal created(string requestId)
     signal closeRequested()
@@ -700,8 +708,28 @@ Pane {
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }
+        InfoBanner {
+            objectName: "requestPaymentPickedAddressPaid"
+            visible: root.pickedAddressPaid
+            Layout.fillWidth: true
+            backgroundColor: Theme.color.neutral1
+            radius: 16
+            contentMargin: 20
+            bannerLayout: InfoBanner.Layout.Vertical
+            messageFontPixelSize: Theme.text.description.font.pixelSize
+            messageLineHeight: Theme.text.description.lineHeight
+            //: Shown in Receive when the address picked in Addresses received a payment before the payment request was created.
+            message: qsTr("This address received a payment, so it can't be used for a new payment request. You can create this request with a new address instead.")
+            messageObjectName: "requestPaymentPickedAddressPaidText"
+            //: Button that keeps the payment request details and moves them to a new receiving address.
+            primaryButtonText: qsTr("New address")
+            //: Button that discards the payment request draft and returns to the address list.
+            dismissButtonText: qsTr("Cancel")
+            onPrimaryClicked: root.newAddressRequested()
+            onDismissClicked: root.pickedAddressCancelled()
+        }
         TextButton {
-            visible: !root.modalView && !!root.wallet && !!root.wallet.receivingAddress
+            visible: !root.modalView && !root.pickedAddressPaid && !!root.wallet && !!root.wallet.receivingAddress
                 && (root.wallet.receivingAddress.address === "" || root.wallet.receivingAddress.paymentReceived)
             Layout.alignment: Qt.AlignHCenter
             //: Retry generating the receiving address after a failure.
@@ -710,7 +738,8 @@ Pane {
         }
         ContinueButton {
             objectName: "requestPaymentGenerateButton"
-            visible: !root.saved
+            // The paid-address notice carries the next step instead.
+            visible: !root.saved && !root.pickedAddressPaid
             Layout.topMargin: root.modalView ? 0 : 16
             enabled: !!root.wallet && !!root.wallet.receivingAddress
                 && root.wallet.receivingAddress.address !== "" && !root.wallet.receivingAddress.paymentReceived

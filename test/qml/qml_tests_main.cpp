@@ -1300,7 +1300,17 @@ public:
     {
         if (!m_ensure_receiving_address_result) return false;
         const QString selected = type.isEmpty() ? m_default_receive_address_type : type;
+        // Like the wallet model, a paid address picked in Addresses stays on
+        // its draft until a new address is requested explicitly.
+        auto* draft = qobject_cast<MockPaymentRequest*>(m_current_payment_request);
+        const bool draft_uses_receiving = draft && draft->m_id.isEmpty()
+            && !m_receiving_address.m_address.isEmpty() && draft->m_address == m_receiving_address.m_address;
+        if (!next && type.isEmpty() && draft_uses_receiving && m_receiving_address.m_payment_received) return true;
         if (next || m_receiving_address.m_address.isEmpty() || m_receiving_address.m_payment_received || selected != m_receiving_address.m_address_type) {
+            if (draft_uses_receiving) {
+                draft->m_address.clear();
+                Q_EMIT draft->addressChanged();
+            }
             m_receiving_address.clear();
             m_receiving_address.m_address = QStringLiteral("bcrt1qreceivingaddress%1").arg(++m_receiving_sequence);
             m_receiving_address.m_address_type = selected;
