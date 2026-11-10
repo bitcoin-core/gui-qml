@@ -17,11 +17,27 @@ Popup {
     readonly property bool compact: parent ? parent.width <= SizeClass.compactWidthMax : false
     readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
     property real verticalOffset: 0
+    property bool awaitingUnban: false
 
     function unbanPeer(row) {
+        if (root.model.actionPending) return
+        awaitingUnban = true
         if (!root.model.unbanAt(row)) {
-            unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+            awaitingUnban = false
+            unbanActionError.message = root.model.actionError || qsTr("Could not unban peer. The ban list may have changed.")
             unbanActionError.open()
+        }
+    }
+    onAboutToHide: awaitingUnban = false
+    Connections {
+        target: root.model
+        function onUnbanFinished(success, error) {
+            if (!root.awaitingUnban) return
+            root.awaitingUnban = false
+            if (!success && root.visible) {
+                unbanActionError.message = error
+                unbanActionError.open()
+            }
         }
     }
 
@@ -132,6 +148,15 @@ Popup {
             wrapMode: Text.WordWrap
         }
 
+        CoreText {
+            objectName: "banListStatus"
+            Layout.fillWidth: true
+            visible: root.model.actionPending || root.model.refreshError.length > 0
+            text: root.model.refreshError || qsTr("Updating banned peers…")
+            color: Theme.color.neutral6
+            font: Theme.text.description.font
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(360, Math.max(72, bannedPeersList.contentHeight))
@@ -211,6 +236,7 @@ Popup {
                             bold: false
                             horizontalPadding: 18
                             text: qsTr("Unban")
+                            enabled: !root.model.actionPending
                             onClicked: root.unbanPeer(bannedPeerRow.index)
                         }
                     }

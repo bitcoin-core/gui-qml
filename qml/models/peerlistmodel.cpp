@@ -5,6 +5,7 @@
 #include <qml/models/peerlistmodel.h>
 
 #include <interfaces/node.h>
+#include <qml/backendexecutor.h>
 #include <qml/peerstatsutil.h>
 
 #include <QList>
@@ -19,8 +20,9 @@ constexpr auto MODEL_UPDATE_DELAY{std::chrono::milliseconds{250}};
 }
 
 PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready)
-    : QAbstractListModel(parent), m_node(node), m_backend_ready(backend_ready)
+    : QAbstractListModel(parent), m_node(node), m_executor(std::make_shared<BackendExecutor>()), m_backend_ready(backend_ready)
 {
+    connect(m_executor.get(), &BackendExecutor::drained, this, &PeerListModel::drained);
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &PeerListModel::refresh);
     m_timer->setInterval(MODEL_UPDATE_DELAY);
@@ -28,19 +30,28 @@ PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent, bool backe
     refresh();
 }
 
-PeerListModel::~PeerListModel() = default;
+PeerListModel::~PeerListModel()
+{
+    beginShutdown();
+}
 
 void PeerListModel::startAutoRefresh()
 {
-    if (m_stopping) return;
+    if (m_stopping || m_auto_refresh_requested) return;
     m_auto_refresh_requested = true;
-    if (m_backend_ready) m_timer->start();
+    ++m_generation;
+    if (m_backend_ready) {
+        refresh();
+        m_timer->start();
+    }
 }
 
 void PeerListModel::stopAutoRefresh()
 {
     m_auto_refresh_requested = false;
     m_timer->stop();
+    ++m_generation;
+    m_refresh_requested = false;
 }
 
 void PeerListModel::backendInitialized()
@@ -53,8 +64,17 @@ void PeerListModel::backendInitialized()
 
 void PeerListModel::beginShutdown()
 {
+    if (m_stopping) return;
     m_stopping = true;
     stopAutoRefresh();
+    m_refresh_running = false;
+    Q_EMIT refreshStateChanged();
+    m_executor->shutdown();
+}
+
+bool PeerListModel::isDrained() const
+{
+    return m_executor->isDrained();
 }
 
 int PeerListModel::rowCount(const QModelIndex& parent) const
@@ -125,16 +145,56 @@ Qt::ItemFlags PeerListModel::flags(const QModelIndex& index) const
 void PeerListModel::refresh()
 {
     if (m_stopping || !m_backend_ready) return;
-    interfaces::Node::NodesStats nodes_stats;
-    if (!m_node.getNodesStats(nodes_stats)) return;
-
-    decltype(m_peers_data) new_peers_data;
-    new_peers_data.reserve(nodes_stats.size());
-    for (const auto& node_stats : nodes_stats) {
-        const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
-        new_peers_data.append(stats);
+    if (m_refresh_running) {
+        m_refresh_requested = true;
+        return;
     }
+    m_refresh_running = true;
+    m_refresh_requested = false;
+    m_refresh_error.clear();
+    Q_EMIT refreshStateChanged();
+    const auto generation = m_generation;
+    const bool accepted = m_executor->submit(this, [node = &m_node] {
+        interfaces::Node::NodesStats stats;
+        QList<CNodeCombinedStats> peers;
+        const bool success = node->getNodesStats(stats);
+        if (success) {
+            peers.reserve(stats.size());
+            for (auto& entry : stats) {
+                peers.append({std::move(std::get<0>(entry)), std::move(std::get<2>(entry)), std::get<1>(entry)});
+            }
+        }
+        return std::make_pair(success, std::move(peers));
+    }, [this, generation](auto result) {
+        finishRefresh(generation, std::move(result.second), result.first ? QString{} : tr("Unable to refresh peers."));
+    }, [this, generation](std::exception_ptr) {
+        finishRefresh(generation, {}, tr("Unable to refresh peers."));
+    });
+    if (!accepted) {
+        m_refresh_running = false;
+        m_refresh_requested = false;
+        m_refresh_error = tr("The node is shutting down.");
+        Q_EMIT refreshStateChanged();
+    }
+}
 
+void PeerListModel::finishRefresh(quint64 generation, QList<CNodeCombinedStats> peers, const QString& error)
+{
+    m_refresh_running = false;
+    if (m_stopping) return;
+    if (generation == m_generation) {
+        m_refresh_error = error;
+        if (error.isEmpty()) {
+            m_ready = true;
+            applySnapshot(std::move(peers));
+        }
+    }
+    if (m_refresh_requested) refresh();
+    else Q_EMIT refreshStateChanged();
+}
+
+void PeerListModel::applySnapshot(QList<CNodeCombinedStats> new_peers_data)
+{
     const bool count_changed = m_peers_data.size() != new_peers_data.size();
     bool order_changed{false};
     if (!count_changed) {
