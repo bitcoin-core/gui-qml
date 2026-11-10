@@ -300,6 +300,24 @@ TestCase {
         compare(modal.importErrorEntry, false)
     }
 
+    function test_import_retry_shows_progress_instead_of_the_error() {
+        walletController.walletImportError = "Data is not in recognized format."
+        walletController.walletLoadError = "Data is not in recognized format."
+        const modal = createTemporaryObject(modalComponent, this)
+        modal.openForImportError()
+        tryVerify(function() { return modal.flow !== null && findChild(modal.flow, "walletImportErrorPage") !== null })
+        const flow = modal.flow
+
+        walletController.holdImport = true
+        findChild(flow, "importWalletPathField").text = "/tmp/slow-wallet.bak"
+        findChild(flow, "importWalletChooseAnotherFileButton").clicked()
+        compare(walletController.importWalletCalls, 1)
+        tryCompare(flow, "busy", false)
+        compare(flow.currentItem.objectName, "walletCreationTypePage")
+        compare(flow.currentItem.importingWallet, true)
+        verify(flow.currentItem.subheading.indexOf("Importing your wallet file") === 0)
+    }
+
     function test_import_retry_waits_while_a_wallet_loads() {
         walletController.walletImportError = "Data is not in recognized format."
         walletController.walletLoadError = "Data is not in recognized format."

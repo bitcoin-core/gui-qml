@@ -90,6 +90,10 @@ Item {
         if (!path || root.importingWallet || root.walletWorkerBusy) return
         root.importingWallet = true
         walletController.importWallet(walletController.normalizeWalletPath(path))
+        if (root.importingWallet && root.currentItem
+                && root.currentItem.objectName === "walletImportErrorPage") {
+            pages.pop(StackView.Immediate)
+        }
     }
 
     function showImportResult() {
