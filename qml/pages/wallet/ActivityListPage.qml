@@ -93,6 +93,11 @@ Page {
         return value
     }
 
+    function defaultExportFileUrl() {
+        const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
+        return "file://" + walletController.homePath() + "/activity-" + stamp + ".csv"
+    }
+
     function exportActivity(path) {
         const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
         exportSucceeded = ok
@@ -166,8 +171,13 @@ Page {
     AppFileDialog {
         id: exportDialog
         objectName: "activityExportDialog"
+        //: Title of the file save dialog opened by the Export CSV entry in the Activity page's overflow menu.
+        //: The dialog writes the list of transactions currently shown in Activity to a CSV file.
+        title: qsTr("Export activity to CSV")
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
+        currentFolder: "file://" + walletController.homePath()
+        currentFile: root.defaultExportFileUrl()
         nameFilters: [qsTr("Comma separated file (*.csv)")]
         onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
     }
@@ -236,11 +246,15 @@ Page {
         }
 
         RowLayout {
+            objectName: "activityToolbarRow"
             Layout.fillWidth: true
             Layout.leftMargin: root.activitySideInset
             Layout.rightMargin: root.activitySideInset
             Layout.bottomMargin: 12
             spacing: 12
+            // Let this row's hover tooltips draw over the filter row and the
+            // list, which follow it and would otherwise paint on top.
+            z: 2
             SearchBar {
                 id: searchField
                 objectName: "activitySearchBar"
@@ -258,12 +272,19 @@ Page {
                 objectName: "activityMoreButton"
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
+
+                HoverTooltip {
+                    objectName: "activityMoreButtonTooltip"
+                    text: moreButton.Accessible.name
+                }
             }
         }
 
         Flow {
             id: filters
             objectName: "activityFilters"
+            // Same reason as the toolbar row above, for the list below.
+            z: 1
             Layout.fillWidth: true
             Layout.leftMargin: root.activitySideInset
             Layout.rightMargin: root.activitySideInset
@@ -300,6 +321,11 @@ Page {
                     iconSize: 20
                     text: count === 1 ? qsTr("1 active filter") : qsTr("%1 active filters").arg(count)
                     onClicked: clearFiltersMenu.opened ? clearFiltersMenu.close() : clearFiltersMenu.open()
+
+                    HoverTooltip {
+                        objectName: "activityActiveFiltersButtonTooltip"
+                        text: activeFiltersButton.Accessible.name
+                    }
                 }
             }
             DropdownButton {
@@ -587,7 +613,10 @@ Page {
                     const path = automationExportPathField.text
                     automationExportPathField.text = ""
                     root.exportActivity(path)
-                } else exportDialog.open()
+                } else {
+                    exportDialog.currentFile = root.defaultExportFileUrl()
+                    exportDialog.open()
+                }
             }
         }
     }

@@ -20,6 +20,9 @@ Button {
     property int iconSize: size
     property alias iconSource: icon.source
 
+    property alias tooltipText: tooltip.text
+    property alias tooltipBelow: tooltip.below
+
     hoverEnabled: AppMode.isDesktop
     height: root.size
     width: root.size
@@ -27,6 +30,12 @@ Button {
 
     HoverHandler {
         cursorShape: Qt.PointingHandCursor
+    }
+
+    HoverTooltip {
+        id: tooltip
+        objectName: root.objectName.length > 0 ? root.objectName + "Tooltip" : ""
+        target: root
     }
 
     background: Rectangle {
