@@ -579,7 +579,13 @@ PageStack {
                 && note.length > 0
                 && root.recipient.label.length > 0
                 && root.recipient.label !== note
+            // An earlier request's label and message are replaced, or cleared when omitted.
+            const requestLabelConflict = root.recipient.paymentRequestLabel.length > 0
+                && root.recipient.paymentRequestLabel !== (result.hasLabel ? result.label : "")
+            const requestMessageConflict = root.recipient.message.length > 0
+                && root.recipient.message !== (result.hasMessage ? result.uriMessage : "")
             return addressConflict || amountConflict || noteConflict
+                || requestLabelConflict || requestMessageConflict
         }
 
         function clearPendingPaymentUriPaste() {

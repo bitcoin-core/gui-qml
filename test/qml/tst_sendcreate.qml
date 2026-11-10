@@ -315,6 +315,27 @@ TestCase {
         compare(page.canAcceptPaymentRequest(), false)
     }
 
+    function test_review_warns_before_replacing_an_earlier_request() {
+        testSendRecipient.applyPaymentRequest("bcrt1qreviewaddress", "Alice", "Pay me")
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        const cases = [
+            ["bitcoin:bcrt1qreviewaddress?label=Alice&message=Pay%20me", false],
+            ["bitcoin:bcrt1qreviewaddress?label=Bob&message=Pay%20me", true],
+            ["bitcoin:bcrt1qreviewaddress?label=Alice&message=Other", true],
+            ["bitcoin:bcrt1qreviewaddress?label=Alice", true],
+        ]
+        for (const [uri, replaces] of cases) {
+            page.applyPaymentRequest(uri, "command line")
+            tryCompare(review, "opened", true)
+            compare(review.replacesValues, replaces, uri)
+            findChild(review, "paymentRequestReviewDiscardButton").clicked()
+            tryCompare(review, "opened", false)
+        }
+    }
+
     function test_available_balance_keeps_caption_static() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
