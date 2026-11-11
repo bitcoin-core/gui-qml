@@ -920,6 +920,17 @@ bool PrepareSettingsDirectory(const PendingApply& pending, QString* error)
 {
     if (error) error->clear();
     if (pending.resolved_settings_path.isEmpty()) return true;
+    // Match InitConfig's first-use wallet layout before a custom settings
+    // parent creates the base or network directory on its behalf.
+    const QString network_suffix = pending.resolved_chain == QStringLiteral("main") ? QString{}
+        : pending.resolved_chain == QStringLiteral("test") ? QStringLiteral("testnet3") : pending.resolved_chain;
+    const QString network_dir = QDir(pending.resolved_data_dir).filePath(network_suffix);
+    for (const QString& directory : {pending.resolved_data_dir, network_dir}) {
+        if (!QFileInfo::exists(directory) && !QDir().mkpath(QDir(directory).filePath(QStringLiteral("wallets")))) {
+            if (error) *error = QObject::tr("Settings directory %1 could not be created.").arg(directory);
+            return false;
+        }
+    }
     const QString parent{QFileInfo(pending.resolved_settings_path).absolutePath()};
     if (QDir().mkpath(parent)) return true;
     if (error) {
@@ -1002,9 +1013,15 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
             const QString configured_data_dir{QmlDataDir::NormalizeLocalPath(
                 QString::fromStdString(fs::PathToString(preview_args.GetPathArg("-datadir"))))};
             if (!explicit_datadir && !configured_data_dir.isEmpty() &&
-                (!QFileInfo(configured_data_dir).isDir() ||
+                (QFileInfo(configured_data_dir).isDir() &&
                  !QmlDataDir::ValidateCustomDataDir(configured_data_dir).isEmpty())) {
                 SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, configured_data_dir, false);
+                status.ok = true;
+                status.should_show_onboarding = true;
+                return status;
+            }
+            if (profile_read.settings_file_unreadable && force_data_dir_chooser) {
+                SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, ActiveDataDirString(preview_args), explicit_datadir);
                 status.ok = true;
                 status.should_show_onboarding = true;
                 return status;
@@ -1033,6 +1050,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         preview_args.GetBoolArg("-resetguisettings", false) ||
         force_data_dir_chooser ||
         !QFileInfo(status.active_data_dir).isDir() ||
+        (!explicit_datadir && !QmlDataDir::ValidateCustomDataDir(status.active_data_dir).isEmpty()) ||
         (!explicit_datadir && ReadResolvedGuiReset(preview_args))
     };
     status.settings_enabled = profile_read.settings_enabled;
@@ -1123,8 +1141,23 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         if (!ReadConfigForNewDataDir(preview_args, selected_data_dir, &result.error)) return result;
         config_file_path_available = preview_args.GetPathArg("-conf").is_absolute();
         SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
+        // Absolute settings paths can already exist even when the selected
+        // data directory does not. Include their precedence in the preview.
+        const QString settings_path = SettingsPathForNewDataDir(preview_args, selected_data_dir);
+        if (!settings_path.isEmpty()) {
+            std::map<std::string, common::SettingsValue> values;
+            std::vector<std::string> errors;
+            if (!common::ReadSettings(QmlDataDir::QStringToPath(settings_path), values, errors) &&
+                !preview_args.GetBoolArg("-resetguisettings", false)) {
+                result.error = errors.empty() ? QObject::tr("Settings file could not be read.") : QString::fromStdString(errors.front());
+                return result;
+            }
+            preview_args.LockSettings([&](common::Settings& settings) { settings.rw_settings = std::move(values); });
+        }
         result.effective_reset = preview_args.GetBoolArg("-resetguisettings", false);
-        if (!result.effective_reset) {
+        if (result.effective_reset) {
+            preview_args.LockSettings([](common::Settings& settings) { settings.rw_settings.clear(); });
+        } else {
             const QmlLegacySettings::MigrationResult migration_result{
                 QmlLegacySettings::MigrateCoreSettings(preview_args, QmlLegacySettings::MigrationMode::Preview)
             };
@@ -1304,6 +1337,16 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
         }
     } else if (reset_gui_settings && !bootstrap_is_active) {
         bootstrap_gui_settings_values.insert(QStringLiteral("fReset"), true);
+    }
+
+    if (reset_gui_settings && !pending) {
+        const auto saved_data_dir = QmlDataDir::ReadGuiDataDirWithSource();
+        if (saved_data_dir.source == QmlDataDir::GuiDataDirSource::LegacySettings) {
+            auto& settings_values = bootstrap_is_active ? active_gui_settings_values : bootstrap_gui_settings_values;
+            if (!settings_values.contains(QString::fromUtf8(SettingsKeys::DATA_DIR))) {
+                settings_values.insert(QString::fromUtf8(SettingsKeys::DATA_DIR), saved_data_dir.path);
+            }
+        }
     }
 
     const bool active_gui_settings_changed{active_gui_settings_values != original_active_gui_settings};

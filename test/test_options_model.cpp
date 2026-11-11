@@ -103,6 +103,7 @@ private Q_SLOTS:
     void guiDataDirChooserShowsForUnwritableConfiguredDir();
     void guiDataDirChooserShowsForUnreadableConfiguredDir();
     void unreadableConfigDoesNotEscapeStartupResolution();
+    void configRedirectedUnreadableDataDirShowsChooser_data();
     void configRedirectedUnreadableDataDirShowsChooser();
     void invalidExplicitDataDirReturnsErrorWithoutReadingProfile();
     void validRelativeExplicitDataDirResolvesAgainstWorkingDirectory();
@@ -152,6 +153,9 @@ private Q_SLOTS:
     void onboardingApplyCreatesNewCustomDataDir();
     void newDataDirPreviewReadsAbsoluteConfig_data();
     void newDataDirPreviewReadsAbsoluteConfig();
+    void newDataDirPreviewReadsExternalSettings();
+    void missingConfiguredDirectoryIsStartupError();
+    void malformedSettingsHonorsChooser();
     void onboardingCreatesNestedSettingsDirectory_data();
     void onboardingCreatesNestedSettingsDirectory();
     void onboardingApplyPreservesExistingNetworkWalletDiscovery();
@@ -1884,6 +1888,9 @@ void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
     SavedGuiDataDirSettings saved_settings;
     QTemporaryDir data_dir;
     QVERIFY(data_dir.isValid());
+    SavedNamedSettings legacy_settings{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt")};
+    legacy_settings.settings().setValue(SettingsKeys::DATA_DIR, data_dir.path());
+    legacy_settings.settings().sync();
     QVERIFY(QDir(data_dir.path()).mkpath(QStringLiteral("regtest")));
 
     const QByteArray malformed_settings{"{not valid json"};
@@ -1937,6 +1944,8 @@ void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
     QFile backup_file{QString::fromStdString(fs::PathToString(backup_path))};
     QVERIFY(backup_file.open(QIODevice::ReadOnly));
     QCOMPARE(backup_file.readAll(), malformed_settings);
+    QCOMPARE(QSettings().value(SettingsKeys::DATA_DIR).toString(), data_dir.path());
+    QVERIFY(!legacy_settings.settings().contains(SettingsKeys::DATA_DIR));
 }
 
 void OptionsModelTests::resetLegacyCleanupRollsBackOnWriteFailure()
@@ -5273,11 +5282,19 @@ void OptionsModelTests::onboardingApplyClearsResetFlagInBootstrapAndActiveStores
         QStringLiteral("keep"));
 }
 
+void OptionsModelTests::configRedirectedUnreadableDataDirShowsChooser_data()
+{
+    QTest::addColumn<bool>("writable");
+    QTest::newRow("unsearchable") << true;
+    QTest::newRow("readable-unwritable") << false;
+}
+
 void OptionsModelTests::configRedirectedUnreadableDataDirShowsChooser()
 {
 #ifdef Q_OS_WIN
     QSKIP("This test relies on POSIX directory permissions.");
 #else
+    QFETCH(bool, writable);
     SavedGuiDataDirSettings saved_settings;
     QSettings settings;
     settings.remove(SettingsKeys::DATA_DIR);
@@ -5291,12 +5308,17 @@ void OptionsModelTests::configRedirectedUnreadableDataDirShowsChooser()
     QVERIFY(config.write("regtest=1\ndatadir=" + data_dir.toUtf8() + "\n") > 0);
     config.close();
 
+    QVERIFY(QDir(data_dir).mkpath("regtest"));
+    QFile core_settings{QDir(data_dir).filePath("regtest/settings.json")};
+    QVERIFY(core_settings.open(QIODevice::WriteOnly));
+    QVERIFY(core_settings.write(R"({"qml_onboarded": true})") > 0);
+    core_settings.close();
     const auto permissions{QFile::permissions(data_dir)};
     [[maybe_unused]] const auto restore_permissions{qScopeGuard([&] {
         QFile::setPermissions(data_dir, permissions);
     })};
-    QVERIFY(QFile::setPermissions(data_dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
-    if (QFileInfo(data_dir).isExecutable()) QSKIP("Cannot make the configured data directory inaccessible.");
+    QVERIFY(QFile::setPermissions(data_dir, QFileDevice::ReadOwner | (writable ? QFileDevice::WriteOwner : QFileDevice::ExeOwner)));
+    if (writable ? QFileInfo(data_dir).isExecutable() : QFileInfo(data_dir).isWritable()) QSKIP("Cannot restrict the configured data directory.");
 
     const auto status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(
         {"bitcoinqml", "-conf=" + config.fileName().toStdString()}, false)};
@@ -5447,6 +5469,56 @@ void OptionsModelTests::newDataDirPreviewReadsAbsoluteConfig()
     QCOMPARE(args.GetBoolArg("-server", false), !no_include);
 }
 
+void OptionsModelTests::newDataDirPreviewReadsExternalSettings()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile settings{directory.filePath("external.json")};
+    QVERIFY(settings.open(QIODevice::WriteOnly));
+    QVERIFY(settings.write(R"({"resetguisettings": true, "prune": 9999})") > 0);
+    settings.close();
+    const std::vector<std::string> argv{"bitcoinqml", "-regtest", "-settings=" + settings.fileName().toStdString()};
+    const auto preview = QmlOnboardingSettings::Preview(argv, false, directory.filePath("new-data"));
+    QVERIFY2(preview.ok, qPrintable(preview.error));
+    QVERIFY(preview.effective_reset);
+    QVERIFY(!preview.values.prune);
+    QVERIFY(!QFileInfo::exists(directory.filePath("new-data")));
+}
+
+void OptionsModelTests::missingConfiguredDirectoryIsStartupError()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir directory;
+    QFile config{directory.filePath("bitcoin.conf")};
+    QVERIFY(config.open(QIODevice::WriteOnly));
+    QVERIFY(config.write("datadir=" + directory.filePath("missing").toUtf8() + "\n") > 0);
+    config.close();
+    const auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+        {"bitcoinqml", "-conf=" + config.fileName().toStdString()}, false);
+    QVERIFY(!status.ok);
+    QVERIFY(status.error.contains("does not exist"));
+}
+
+void OptionsModelTests::malformedSettingsHonorsChooser()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir directory;
+    QVERIFY(QDir(directory.path()).mkpath("regtest"));
+    QSettings gui;
+    gui.setValue(SettingsKeys::DATA_DIR, directory.path());
+    QFile settings{directory.filePath("regtest/settings.json")};
+    QVERIFY(settings.open(QIODevice::WriteOnly));
+    QVERIFY(settings.write("{malformed") > 0);
+    settings.close();
+    const auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+        {"bitcoinqml", "-regtest", "-choosedatadir"}, false);
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QVERIFY(status.should_show_onboarding);
+    QVERIFY(settings.open(QIODevice::ReadOnly));
+    QCOMPARE(settings.readAll(), QByteArray{"{malformed"});
+}
+
 void OptionsModelTests::onboardingCreatesNestedSettingsDirectory_data()
 {
     QTest::addColumn<bool>("absolute");
@@ -5479,6 +5551,7 @@ void OptionsModelTests::onboardingCreatesNestedSettingsDirectory()
     QVERIFY2(QmlOnboardingSettings::PrepareSettingsDirectory(pending, &error), qPrintable(error));
     InitializeAndFinalizeSettings(args, QmlOnboardingSettings::CurrentGuiSettingsStore(), &pending);
     QVERIFY(QFileInfo::exists(expected));
+    QVERIFY(QFileInfo(directory.filePath("regtest/wallets")).isDir());
     QCOMPARE(SettingToBool(args.GetPersistentSetting("qml_onboarded")), std::optional{true});
 }
 

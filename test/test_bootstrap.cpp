@@ -8,10 +8,12 @@
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QMessageBox>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSemaphore>
 #include <QSignalSpy>
+#include <QStyleFactory>
 #include <QTimer>
 #include <QtTest/QtTest>
 
@@ -29,11 +31,27 @@ class BootstrapBeforeExecTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
-    void initTestCase() { qApp->setQuitOnLastWindowClosed(false); }
+    void initTestCase()
+    {
+        QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+        qApp->setQuitOnLastWindowClosed(false);
+    }
     void dismissedStartupDialogAllowsFinalDrain_data();
     void dismissedStartupDialogAllowsFinalDrain();
     void repeatedNativeQuitAllowsOnboardingExitAndFinalDrain();
+    void nativeQuitRejectsSettingsRecoveryDialog();
 };
+
+void BootstrapBeforeExecTests::nativeQuitRejectsSettingsRecoveryDialog()
+{
+    QmlQuitHandler quit_handler;
+    QMessageBox dialog{QMessageBox::Critical, "Settings", "Unreadable settings", QMessageBox::Reset | QMessageBox::Abort};
+    QTimer::singleShot(0, this, SendApplicationQuitEvent);
+    QCOMPARE(ExecStartupDialog(dialog, quit_handler), int(QDialog::Rejected));
+    QVERIFY(quit_handler.isQuitRequested());
+    // A subsequent prompt must not enter another event loop after quitting.
+    QCOMPARE(ExecStartupDialog(dialog, quit_handler), int(QDialog::Rejected));
+}
 
 void BootstrapBeforeExecTests::dismissedStartupDialogAllowsFinalDrain_data()
 {

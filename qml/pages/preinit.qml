@@ -24,6 +24,7 @@ ApplicationWindow {
 
     OnboardingWizard {
         anchors.fill: parent
+        anchors.bottomMargin: previewError.visible ? previewError.height + 40 : 0
         preInit: true
         settingsModel: optionsModel
         assumedBlockchainSize: optionsModel.assumedBlockchainSize
@@ -37,6 +38,7 @@ ApplicationWindow {
     }
 
     CoreText {
+        id: previewError
         objectName: "preInitPreviewErrorText"
         anchors.left: parent.left
         anchors.right: parent.right

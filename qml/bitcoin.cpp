@@ -353,7 +353,8 @@ bool ErrorSettingsRead(
     const bilingual_str& error,
     const std::vector<std::string>& details,
     std::optional<QmlOnboardingSettings::SettingsFileBackup>& settings_file_backup,
-    QString& settings_file_backup_error)
+    QString& settings_file_backup_error,
+    QmlQuitHandler& quit_handler)
 {
     const auto capture_backup = [&] {
         QmlOnboardingSettings::SettingsFileBackup backup;
@@ -381,13 +382,13 @@ bool ErrorSettingsRead(
     message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
     message_box.setTextFormat(Qt::PlainText);
     message_box.setDefaultButton(QMessageBox::Reset);
-    switch (message_box.exec()) {
+    switch (ExecStartupDialog(message_box, quit_handler)) {
     case QMessageBox::Reset:
         return !capture_backup();
     case QMessageBox::Abort:
         return true;
     default:
-        assert(false);
+        return true;
     }
 }
 
@@ -414,17 +415,6 @@ struct PreInitOnboardingContext {
     }
 };
 
-bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_listen_ipc)
-{
-    const QmlOnboardingSettings::OnboardingStartupStatus status{
-        QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc)
-    };
-    if (status.settings_file_unreadable) {
-        return false;
-    }
-    return !status.ok || status.should_show_onboarding;
-}
-
 PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc, QmlQuitHandler& quit_handler,
     const std::function<void(QQmlApplicationEngine&)>& engine_created,
     const std::function<void(QQmlApplicationEngine&)>& window_created)
@@ -435,7 +425,12 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     if (!QmlDataDir::ValidateExplicitDataDir(gArgs).isEmpty()) {
         return PreInitOnboardingStatus::NOT_SHOWN;
     }
-    const bool show_onboarding = ShouldShowPreInitOnboarding(argv, can_listen_ipc);
+    const auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc);
+    if (!status.ok && !status.settings_file_unreadable) {
+        InitError(Untranslated(status.error.toStdString()));
+        return PreInitOnboardingStatus::FAILED;
+    }
+    const bool show_onboarding = status.ok && status.should_show_onboarding;
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
     if (!show_onboarding) {
         QmlDataDir::ApplyGuiDataDirSetting(gArgs);
@@ -612,7 +607,12 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     ApplyTestSettingsDir();
 #endif
 
-    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
+    try {
+        setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
+    } catch (const std::exception& e) {
+        InitError(Untranslated(e.what()));
+        return EXIT_FAILURE;
+    }
     const QmlOnboardingSettings::GuiSettingsStore bootstrap_gui_settings{
         QmlOnboardingSettings::CurrentGuiSettingsStore()
     };
@@ -669,7 +669,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         QString settings_file_backup_error;
         const auto read_error = [&](const bilingual_str& message, const std::vector<std::string>& details) {
             bool abort{true};
-            const auto show_error = [&] { abort = ErrorSettingsRead(message, details, settings_file_backup, settings_file_backup_error); };
+            const auto show_error = [&] { abort = ErrorSettingsRead(message, details, settings_file_backup, settings_file_backup_error, quit_handler); };
             if (QThread::currentThread() == app.thread()) show_error();
             else QMetaObject::invokeMethod(&app, show_error, Qt::BlockingQueuedConnection);
             return abort;
@@ -684,6 +684,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         };
         if (QThread::currentThread() == app.thread()) setup_settings();
         else QMetaObject::invokeMethod(&app, setup_settings, Qt::BlockingQueuedConnection);
+        // Hold the locks through startup, rather than probing and leaving a
+        // race before committing wizard choices to another node's profile.
+        // Core accepts locks already held by this process in baseInitialize.
+        if (!AppInitLockDirectories()) return false;
         QString finalize_settings_error;
         if (!QmlOnboardingSettings::FinalizeStartupSettings(
                 gArgs, bootstrap_gui_settings, pending, nullptr, &finalize_settings_error,
