@@ -26,6 +26,8 @@ struct ViewOnlyImport {
     size_t descriptor_count{0};
     //! A plain xpub without a key origin path does not say its script type.
     bool needs_address_type{false};
+    //! Zero-based line of the text that failed, or -1.
+    int error_line{-1};
 };
 
 //! Reads an extended public key, descriptors one per line, or the JSON
@@ -35,8 +37,8 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
 
 //! The parse result for the form: status (empty, invalid, valid), error,
 //! kind, descriptorCount, addressTypes, needsBirthDate, createdTime
-//! (seconds, or -1 when no descriptor has one), needsAddressType and
-//! addressTypeOptions ({id, label}).
+//! (seconds, or -1 when no descriptor has one), needsAddressType,
+//! addressTypeOptions ({id, label}) and errorLine.
 QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type = {});
 
 #endif // BITCOIN_QML_VIEWONLYIMPORT_H

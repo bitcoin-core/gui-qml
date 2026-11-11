@@ -195,7 +195,9 @@ ViewOnlyImport ParseLines(const QStringList& lines)
         const DescriptorCheck check{CheckDescriptor(line.toStdString())};
         if (!check.error.isEmpty()) {
             //: %1 is a line number, %2 explains what is wrong with that line.
-            return Failed(Kind::Descriptors, filled == 1 ? check.error : QObject::tr("Line %1: %2").arg(i + 1).arg(check.error));
+            ViewOnlyImport failed{Failed(Kind::Descriptors, filled == 1 ? check.error : QObject::tr("Line %1: %2").arg(i + 1).arg(check.error))};
+            failed.error_line = int(i);
+            return failed;
         }
         ImportDescriptorRequest request;
         request.descriptor = check.descriptor;
@@ -353,7 +355,7 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
     if (trimmed.startsWith(QLatin1Char('[')) || trimmed.startsWith(QLatin1Char('{'))) {
         return ParseJson(trimmed.toStdString());
     }
-    return ParseLines(trimmed.split(QLatin1Char('\n')));
+    return ParseLines(text.split(QLatin1Char('\n')));
 }
 
 QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type)
@@ -372,6 +374,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     if (!parsed.error.isEmpty()) {
         result.insert(QStringLiteral("status"), QStringLiteral("invalid"));
         result.insert(QStringLiteral("error"), parsed.error);
+        result.insert(QStringLiteral("errorLine"), parsed.error_line);
         return result;
     }
 

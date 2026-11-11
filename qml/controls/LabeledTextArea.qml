@@ -15,6 +15,7 @@ LabeledField {
     property alias inputObjectName: input.objectName
     property alias readOnly: input.readOnly
     readonly property alias inputActiveFocus: input.activeFocus
+    readonly property alias textDocument: input.textDocument
     property var textStyle: Theme.text.description
     property bool interceptPaste: false
     property string paymentUriRestoreText: ""

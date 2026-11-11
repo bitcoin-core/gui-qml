@@ -177,8 +177,10 @@ void ViewOnlyImportTests::onlySingleKeyDescriptorsAreAccepted()
     }
     QVERIFY(ParseViewOnlyImport(Desc("sh(wpkh", "0/*") + ")").error.isEmpty());
 
-    const QString error{ParseViewOnlyImport(Desc("wpkh", "0/*") + "\n" + rejected[0]).error};
-    QVERIFY2(error.startsWith("Line 2: "), qPrintable(error));
+    const ViewOnlyImport second{ParseViewOnlyImport("\n\n" + Desc("wpkh", "0/*") + "\n" + rejected[0])};
+    QVERIFY2(second.error.startsWith("Line 4: "), qPrintable(second.error));
+    QCOMPARE(second.error_line, 3);
+    QCOMPARE(DescribeViewOnlyImport("\n\n" + Desc("wpkh", "0/*") + "\n" + rejected[0]).value("errorLine").toInt(), 3);
     QCOMPARE(ParseViewOnlyImport(QStringLiteral("not-a-key")).error, QStringLiteral("Enter descriptors, or an extended public key (xpub)."));
 }
 

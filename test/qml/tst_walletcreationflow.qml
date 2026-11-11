@@ -107,6 +107,9 @@ TestCase {
         xpub.text = "line\nline\nline\nline\nline\nline"
         tryVerify(function() { return xpubEntry.height > initialHeight })
         name.text = "Watch wallet"
+        const highlighter = findChild(form, "watchOnlyImportHighlighter")
+        verify(highlighter.textDocument !== null)
+        compare(highlighter.errorLine, -1)
         xpub.text = "invalid"
         compare(form.canCreate, false)
         compare(xpubEntry.errorText, "Enter descriptors, or an extended public key (xpub).")
