@@ -73,6 +73,8 @@
 #include <variant>
 #include <vector>
 
+using QmlUtil::OutputTypeLabel;
+
 namespace {
 constexpr unsigned int DEFAULT_STANDARD_FEE_TARGET{6};
 constexpr int FEE_ESTIMATE_DEBOUNCE_MS{250};
@@ -541,23 +543,6 @@ QString OutputTypeIdFromDestination(const CTxDestination& destination)
     if (std::get_if<ScriptHash>(&destination)) return OutputTypeId(OutputType::P2SH_SEGWIT);
     if (std::get_if<WitnessV0KeyHash>(&destination) || std::get_if<WitnessV0ScriptHash>(&destination)) return OutputTypeId(OutputType::BECH32);
     if (std::get_if<WitnessV1Taproot>(&destination)) return OutputTypeId(OutputType::BECH32M);
-    return {};
-}
-
-QString OutputTypeLabel(OutputType type)
-{
-    switch (type) {
-    case OutputType::BECH32M:
-        return QObject::tr("Bech32m (Taproot)");
-    case OutputType::BECH32:
-        return QObject::tr("Bech32 (SegWit)");
-    case OutputType::P2SH_SEGWIT:
-        return QObject::tr("Base58 (P2SH-SegWit)");
-    case OutputType::LEGACY:
-        return QObject::tr("Base58 (Legacy)");
-    case OutputType::UNKNOWN:
-        return {};
-    }
     return {};
 }
 

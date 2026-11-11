@@ -5,6 +5,7 @@
 #include <qml/util.h>
 
 #include <logging.h>
+#include <outputtype.h>
 #include <support/cleanse.h>
 
 #include <cassert>
@@ -12,6 +13,7 @@
 #include <string>
 
 #include <QByteArray>
+#include <QObject>
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QPluginLoader>
@@ -91,6 +93,23 @@ void ClearSecureString(SecureString& value)
     }
     memory_cleanse(value.data(), value.size());
     value.clear();
+}
+
+QString OutputTypeLabel(OutputType type)
+{
+    switch (type) {
+    case OutputType::BECH32M:
+        return QObject::tr("Bech32m (Taproot)");
+    case OutputType::BECH32:
+        return QObject::tr("Bech32 (SegWit)");
+    case OutputType::P2SH_SEGWIT:
+        return QObject::tr("Base58 (P2SH-SegWit)");
+    case OutputType::LEGACY:
+        return QObject::tr("Base58 (Legacy)");
+    case OutputType::UNKNOWN:
+        return {};
+    }
+    return {};
 }
 
 } // namespace QmlUtil
