@@ -21,6 +21,7 @@
 #include <QObject>
 #include <QThread>
 #include <QSet>
+#include <QVariantMap>
 
 struct WalletLoadNotifications;
 
@@ -62,13 +63,16 @@ public:
     Q_INVOKABLE bool setWalletDisplayName(const QString& path, const QString& display_name);
     Q_INVOKABLE void createSingleSigWallet(const QString &name, const QString &passphrase);
     Q_INVOKABLE bool createExternalSignerWallet(const QString& name);
-    Q_INVOKABLE void createWatchOnlyWallet(const QString &name, const QString &xpub);
+    //! birth_time is when undated descriptors were created, in seconds, or -1 if unknown.
+    //! address_type ("bech32", ...) is for a key that does not say its own.
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time = -1,
+                                           const QString& address_type = {});
     Q_INVOKABLE void importWallet(const QString& path);
     Q_INVOKABLE void clearWalletCreateStatus();
     Q_INVOKABLE void clearWalletLoadStatus();
     Q_INVOKABLE void migrateWallet(const QString& path, const QString& passphrase = QString());
     Q_INVOKABLE void clearWalletMigrationStatus();
-    Q_INVOKABLE bool validateXpub(const QString& xpub) const;
+    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text, const QString& address_type = {}) const;
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const;
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE QString homePath() const;
@@ -160,12 +164,15 @@ private:
     void retireWallet(WalletQmlModel* wallet_model, bool remove);
     void checkShutdownFinished();
     using WalletSetupFn = std::function<QString(interfaces::Wallet& wallet)>;
+    //! Runs on the worker before the wallet is created. An error stops creation.
+    using WalletCheckFn = std::function<QString()>;
     void createWalletAsync(const QString& name,
                            SecureString passphrase,
                            uint64_t wallet_creation_flags,
                            WalletLoadAction load_action,
                            bool report_create_error,
-                           WalletSetupFn setup_wallet = {});
+                           WalletSetupFn setup_wallet = {},
+                           WalletCheckFn check_before_create = {});
     void startWalletImport(const QString& path);
     void startWalletLoad(const QString& path, const QString& wallet_format = QString());
     void startWalletMigration(const QString& path, SecureString passphrase);

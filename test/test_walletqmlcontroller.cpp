@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
+#include <common/args.h>
 #include <common/settings.h>
 #include <interfaces/handler.h>
 #include <interfaces/wallet.h>
@@ -13,8 +14,11 @@
 #include <scheduler.h>
 #include <test/mocks/mocknode.h>
 #include <util/translation.h>
+#include <wallet/context.h>
+#include <wallet/db.h>
 #include <wallet/imports.h>
 #include <wallet/types.h>
+#include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
 #include <QDir>
@@ -113,6 +117,7 @@ public:
     };
     std::vector<std::pair<std::string, std::string>> wallet_dir_entries;
     LoadWalletFn captured_load_wallet_fn;
+    wallet::WalletContext* wallet_context{nullptr};
 
     void registerRpcs() override {}
     bool verify() override { return true; }
@@ -166,6 +171,7 @@ public:
         captured_load_wallet_fn = std::move(fn);
         return MakeNoopHandler();
     }
+    wallet::WalletContext* context() override { return wallet_context; }
 };
 
 class FakeWallet : public interfaces::Wallet
@@ -179,6 +185,9 @@ public:
         void setUnload(interfaces::Wallet::UnloadFn fn) { std::lock_guard lock(mutex); unload_fn = std::move(fn); }
         bool hasUnload() { std::lock_guard lock(mutex); return bool(unload_fn); }
         void notifyUnload() { interfaces::Wallet::UnloadFn fn; { std::lock_guard lock(mutex); fn = unload_fn; } if (fn) fn(); }
+        std::atomic<bool> import_succeeds{false};
+        std::vector<wallet::ImportDescriptorRequest> imported;
+        std::function<void()> on_import;
     };
 
     explicit FakeWallet(std::string wallet_name, State* state)
@@ -244,7 +253,14 @@ public:
     {
         return std::nullopt;
     }
-    std::vector<wallet::ImportResult> importDescriptors(std::vector<wallet::ImportDescriptorRequest>&) override { return {wallet::ImportResult{wallet::WalletErrorCode::GenericError, "not implemented", /*warnings=*/{}, /*general_error=*/true}}; }
+    std::vector<wallet::ImportResult> importDescriptors(std::vector<wallet::ImportDescriptorRequest>& requests) override
+    {
+        if (!m_state || !m_state->import_succeeds) return {wallet::ImportResult{wallet::WalletErrorCode::GenericError, "not implemented", /*warnings=*/{}, /*general_error=*/true}};
+        if (m_state->on_import) m_state->on_import();
+        std::lock_guard lock(m_state->mutex);
+        m_state->imported = requests;
+        return std::vector<wallet::ImportResult>(requests.size());
+    }
     interfaces::WalletBalances getBalances() override { return {}; }
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
     CAmount getBalance() override { return m_state ? m_state->balance.load() : 0; }
@@ -293,12 +309,32 @@ private:
     State* m_state;
 };
 
+// Backed by a wallet with a database on disk, loaded in a wallet context.
+class ContextWallet : public FakeWallet
+{
+public:
+    ContextWallet(wallet::WalletContext& context, std::shared_ptr<wallet::CWallet> wallet, State* state)
+        : FakeWallet(wallet->GetName(), state), m_context(context), m_wallet(std::move(wallet)) {}
+    // RemoveWallet without a chain.
+    void remove() override
+    {
+        FakeWallet::remove();
+        LOCK(m_context.wallets_mutex);
+        std::erase(m_context.wallets, m_wallet);
+    }
+
+private:
+    wallet::WalletContext& m_context;
+    std::shared_ptr<wallet::CWallet> m_wallet;
+};
+
 void ConfigureExpectedControllerInitialization(MockNode& node, FakeWalletLoader& loader)
 {
     node.wallet_loader_fn = [&loader]() -> interfaces::WalletLoader& { return loader; };
     node.get_persistent_setting_fn = [](const std::string&) { return common::SettingsValue{}; };
     node.force_setting_fn = [](const std::string&, const common::SettingsValue&) {};
     node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
+    node.shutdown_requested_fn = [] { return false; };
     node.ExpectAtLeast(node.calls.walletLoader, 2);
     node.ExpectAtLeast(node.calls.getPersistentSetting, 1);
     node.get_dust_relay_fee_fn = [] { return CFeeRate{3000}; };
@@ -322,12 +358,13 @@ private Q_SLOTS:
     void shutdownWaitsForNotificationRetirement();
     void walletCommandCompletionDuringShutdown_data();
     void walletCommandCompletionDuringShutdown();
-    void validateXpubAcceptsValidKey();
-    void validateXpubRejectsGarbage();
-    void validateXpubRejectsEmpty();
-    void validateXpubTrimsWhitespace();
+    void describeViewOnlyImportReportsInput();
     void createWatchOnlyInvalidXpubSetsError();
+    void createWatchOnlyNeedsBirthTimeForUndatedInput();
+    void createWatchOnlyImportsFromBirthTime();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
+    void createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport();
+    void createWatchOnlyDeletesTheFilesOfAFailedImport();
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
@@ -601,36 +638,18 @@ void WalletQmlControllerTests::walletCommandCompletionDuringShutdown()
     QVERIFY(controller.walletMigrationError().isEmpty());
 }
 
-void WalletQmlControllerTests::validateXpubAcceptsValidKey()
+void WalletQmlControllerTests::describeViewOnlyImportReportsInput()
 {
     MockNode node;
     DrainingWalletController controller(node);
 
-    QVERIFY(controller.validateXpub(VALID_XPUB));
-}
-
-void WalletQmlControllerTests::validateXpubRejectsGarbage()
-{
-    MockNode node;
-    DrainingWalletController controller(node);
-
-    QVERIFY(!controller.validateXpub("not-an-xpub"));
-}
-
-void WalletQmlControllerTests::validateXpubRejectsEmpty()
-{
-    MockNode node;
-    DrainingWalletController controller(node);
-
-    QVERIFY(!controller.validateXpub(""));
-}
-
-void WalletQmlControllerTests::validateXpubTrimsWhitespace()
-{
-    MockNode node;
-    DrainingWalletController controller(node);
-
-    QVERIFY(controller.validateXpub("  " + VALID_XPUB + "  "));
+    const QVariantMap key{controller.describeViewOnlyImport("  " + VALID_XPUB + "  ")};
+    QCOMPARE(key.value("status").toString(), QString{"valid"});
+    QCOMPARE(key.value("kind").toString(), QString{"extendedKey"});
+    QVERIFY(key.value("needsBirthDate").toBool());
+    QVERIFY(key.value("needsAddressType").toBool());
+    QCOMPARE(controller.describeViewOnlyImport("").value("status").toString(), QString{"empty"});
+    QCOMPARE(controller.describeViewOnlyImport("not-an-xpub").value("status").toString(), QString{"invalid"});
 }
 
 void WalletQmlControllerTests::createWatchOnlyInvalidXpubSetsError()
@@ -644,11 +663,66 @@ void WalletQmlControllerTests::createWatchOnlyInvalidXpubSetsError()
     controller.initialize();
 
     QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
-    controller.createWatchOnlyWallet("test_wallet", "garbage");
+    controller.createWatchOnlyWallet("test_wallet", "garbage", 0);
 
-    QCOMPARE(controller.walletLoadError(), QString{"Invalid extended public key."});
+    QCOMPARE(controller.walletLoadError(), QString{"Enter descriptors, or an extended public key (xpub)."});
     QVERIFY(!controller.isWalletLoaded());
     QCOMPARE(error_spy.count(), 1);
+}
+
+void WalletQmlControllerTests::createWatchOnlyNeedsBirthTimeForUndatedInput()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB);
+    QCOMPARE(controller.walletLoadError(), QString{"Choose the address type of this key."});
+
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, -1, "bech32");
+    QCOMPARE(controller.walletLoadError(), QString{"Choose when this wallet was created."});
+    QCOMPARE(loader.create_wallet_calls, 0);
+    QVERIFY(!controller.walletLoadInProgress());
+}
+
+void WalletQmlControllerTests::createWatchOnlyImportsFromBirthTime()
+{
+    FakeWallet::State wallet_state;
+    wallet_state.import_succeeds = true;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+
+    uint64_t create_flags{0};
+    loader.create_wallet_fn = [&](const std::string& name,
+                                  const SecureString&,
+                                  uint64_t flags,
+                                  std::vector<bilingual_str>&) {
+        create_flags = flags;
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>(name, &wallet_state)};
+    };
+
+    QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 1'700'000'000, "bech32");
+
+    QTRY_COMPARE_WITH_TIMEOUT(create_spy.count(), 1, 5000);
+    QVERIFY(create_flags & wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    std::lock_guard lock(wallet_state.mutex);
+    QCOMPARE(wallet_state.imported.size(), size_t{1});
+    const wallet::ImportDescriptorRequest& request{wallet_state.imported.front()};
+    QVERIFY(QString::fromStdString(request.descriptor).startsWith("wpkh(" + VALID_XPUB + "/<0;1>/*)#"));
+    QCOMPARE(request.timestamp, std::optional<int64_t>{1'700'000'000});
+    QVERIFY(request.active);
+    QVERIFY(!request.internal.has_value());
 }
 
 void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails()
@@ -679,10 +753,10 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
     QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
     QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
 
-    // FakeWallet::wallet() returns nullptr, so descriptor import adds zero
-    // ScriptPubKeyMans and the controller must reject the half-created wallet,
-    // call remove() on it, and surface a load error without registering a model.
-    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB);
+    // FakeWallet's import fails by default, so the controller must reject the
+    // half-created wallet, call remove() on it, and surface a load error
+    // without registering a model.
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
     QVERIFY(!controller.walletLoadError().isEmpty());
@@ -690,6 +764,91 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
     QCOMPARE(create_spy.count(), 0);
     QVERIFY(!controller.isWalletLoaded());
     QVERIFY(!controller.walletLoadInProgress());
+}
+
+void WalletQmlControllerTests::createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport()
+{
+    FakeWallet::State wallet_state;
+    wallet_state.import_succeeds = true;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+
+    std::atomic_bool shutdown{false};
+    node.shutdown_requested_fn = [&] { return shutdown.load(); };
+    loader.create_wallet_fn = [&](const std::string& name,
+                                  const SecureString&,
+                                  uint64_t,
+                                  std::vector<bilingual_str>&) {
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>(name, &wallet_state)};
+    };
+    // The rescan returns without an error when shutdown interrupts it.
+    wallet_state.on_import = [&] { shutdown = true; };
+
+    QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
+    QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
+
+    QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
+    QVERIFY(controller.walletLoadError().contains("interrupted"));
+    QCOMPARE(wallet_state.remove_calls.load(), 1);
+    QCOMPARE(create_spy.count(), 0);
+    QVERIFY(!controller.isWalletLoaded());
+}
+
+void WalletQmlControllerTests::createWatchOnlyDeletesTheFilesOfAFailedImport()
+{
+    QTemporaryDir wallet_dir;
+    QVERIFY(wallet_dir.isValid());
+    ArgsManager args;
+    wallet::WalletContext context;
+    context.args = &args;
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_context = &context;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+
+    const QString path{wallet_dir.filePath("watch_wallet")};
+    loader.create_wallet_fn = [&](const std::string& name,
+                                  const SecureString&,
+                                  uint64_t flags,
+                                  std::vector<bilingual_str>& warnings) -> util::Result<std::unique_ptr<interfaces::Wallet>> {
+        wallet::DatabaseOptions options;
+        options.require_create = true;
+        wallet::DatabaseStatus status;
+        bilingual_str error;
+        auto database{wallet::MakeDatabase(fs::PathFromString(path.toStdString()), options, status, error)};
+        if (!database) return util::Error{error};
+        auto created{wallet::CWallet::CreateNew(context, name, std::move(database), flags, /*born_encrypted=*/false, error, warnings)};
+        if (!created) return util::Error{error};
+        wallet::AddWallet(context, created);
+        return std::unique_ptr<interfaces::Wallet>{std::make_unique<ContextWallet>(context, created, &wallet_state)};
+    };
+
+    QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
+    QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
+    QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
+    QVERIFY(!controller.walletLoadError().isEmpty());
+    QCOMPARE(wallet_state.remove_calls.load(), 1);
+    QVERIFY(!QFileInfo::exists(path));
+    QVERIFY(wallet::GetWallets(context).empty());
+
+    // The name and its directory are free again.
+    wallet_state.import_succeeds = true;
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
+    QTRY_COMPARE_WITH_TIMEOUT(create_spy.count(), 1, 5000);
+    QVERIFY(QFileInfo::exists(path));
 }
 
 void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()
@@ -1083,7 +1242,7 @@ void WalletQmlControllerTests::watchOnlyCreateBeforeInitializationSetsLoadError(
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     DrainingWalletController controller(node);
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QCOMPARE(controller.walletLoadError(), QString{NOT_INITIALIZED_ERROR});
     QVERIFY(!controller.walletLoadInProgress());
@@ -1116,7 +1275,7 @@ void WalletQmlControllerTests::watchOnlyCreateWhileWalletLoadInProgressIsIgnored
     QVERIFY(create_started.tryAcquire(1, 5000));
     QVERIFY(controller.walletLoadInProgress());
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QCOMPARE(loader.create_wallet_calls, 1);
     QVERIFY(controller.walletLoadInProgress());
@@ -1150,7 +1309,7 @@ void WalletQmlControllerTests::watchOnlyCreateFailureAfterCreateDoesNotPublishWa
     QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
     QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
     QCOMPARE(create_spy.count(), 0);
