@@ -118,6 +118,7 @@ void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool(c
             return std::pair{false, error};
         }
         pending.resolved_chain = request.resolved_chain;
+        pending.resolved_network_dir = request.resolved_network_dir;
         pending.resolved_settings_path = request.resolved_settings_path;
         pending.target_complete = true;
         return std::pair{prepare_node(pending), QString{}};
@@ -472,6 +473,7 @@ void OnboardingOptionsModel::applyPreview(const QmlOnboardingSettings::PreviewRe
     const bool old_existing_profile = m_profile.existing_profile;
     m_resolved_data_dir = preview.resolved_data_dir.isEmpty() ? m_data_dir : preview.resolved_data_dir;
     m_resolved_chain = preview.resolved_chain;
+    m_resolved_network_dir = preview.resolved_network_dir;
     m_resolved_settings_path = preview.resolved_settings_path;
     m_effective_reset = preview.effective_reset;
     m_assumed_blockchain_size = preview.assumed_blockchain_size;
@@ -507,6 +509,7 @@ bool OnboardingOptionsModel::prepareApplyToArgs(ArgsManager& args, QmlOnboarding
         error)};
     if (prepared) {
         pending.resolved_chain = m_resolved_chain;
+        pending.resolved_network_dir = m_resolved_network_dir;
         pending.resolved_settings_path = m_resolved_settings_path;
         pending.target_complete = true;
     }
@@ -515,5 +518,5 @@ bool OnboardingOptionsModel::prepareApplyToArgs(ArgsManager& args, QmlOnboarding
 
 QmlOnboardingSettings::ApplyRequest OnboardingOptionsModel::applyRequest() const
 {
-    return {{m_data_dir, m_data_dir_source}, m_resolved_data_dir, m_resolved_chain, m_resolved_settings_path, m_effective_reset, m_core_settings.touchedSettings(), coreValues()};
+    return {{m_data_dir, m_data_dir_source}, m_resolved_data_dir, m_resolved_chain, m_resolved_network_dir, m_resolved_settings_path, m_effective_reset, m_core_settings.touchedSettings(), coreValues()};
 }

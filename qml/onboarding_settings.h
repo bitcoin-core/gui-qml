@@ -38,6 +38,8 @@ struct ApplyRequest {
     DataDirSelection data_dir;
     QString resolved_data_dir;
     QString resolved_chain;
+    //! Core's network directory name, e.g. "regtest" or "signet_<hash>".
+    QString resolved_network_dir;
     QString resolved_settings_path;
     bool effective_reset{false};
     QSet<QString> touched_settings;
@@ -61,6 +63,8 @@ struct PendingApply {
     DataDirSelection data_dir;
     QString resolved_data_dir;
     QString resolved_chain;
+    //! Core's network directory name, e.g. "regtest" or "signet_<hash>".
+    QString resolved_network_dir;
     QString resolved_settings_path;
     QSet<QString> touched_settings;
     QmlCoreSettings::Values values;
@@ -92,6 +96,8 @@ struct PreviewResult {
     bool config_redirected_data_dir{false};
     bool effective_reset{false};
     QString resolved_chain;
+    //! Core's network directory name, e.g. "regtest" or "signet_<hash>".
+    QString resolved_network_dir;
     QString resolved_settings_path;
     QmlCoreSettings::Values values;
     QVariantMap core_setting_statuses;

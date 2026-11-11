@@ -190,6 +190,7 @@ private:
     QString m_data_dir;
     QString m_resolved_data_dir;
     QString m_resolved_chain;
+    QString m_resolved_network_dir;
     QString m_resolved_settings_path;
     bool m_effective_reset{false};
     QmlOnboardingSettings::DataDirSource m_data_dir_source{QmlOnboardingSettings::DataDirSource::Default};
