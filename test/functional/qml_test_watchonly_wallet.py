@@ -4,13 +4,14 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end GUI tests for watch-only wallet creation flow."""
 
+import json
 import os
 import re
 import sys
 
 from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
-from qml_wallet_test_lib import WalletFlowHarness, rpc_call
+from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
 
 def open_create_wallet_page(gui):
@@ -64,6 +65,9 @@ def case_watchonly_creation_flow(harness, test_xpub):
     gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", "watchonly_test")
     gui.set_text("watchOnlyXpubInput", test_xpub)
+    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+    assert gui.get_property("createWalletFormCreateButton", "enabled") is False
+    gui.click("watchOnlyBirth_month")
     gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
     gui.click("createWalletFormCreateButton")
     gui.wait_for_page("walletCreationReadyPage", timeout_ms=15000)
@@ -82,6 +86,82 @@ def case_watchonly_creation_flow(harness, test_xpub):
     print("  RPC confirms wallet is watch-only (private_keys_enabled=false)")
 
     print("  Watch-only creation flow PASSED")
+
+
+def fund_hot_wallet(harness):
+    """Fund a wallet on the GUI node with Taproot and SegWit payments, before any view-only import."""
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    harness.driver.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    taproot = rpc_call(port, "getnewaddress", ["", "bech32m"], wallet="hot")
+    segwit = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "generatetoaddress", [101, taproot])
+    rpc_call(port, "sendtoaddress", [segwit, 5], wallet="hot")
+    rpc_call(port, "generatetoaddress", [1, taproot])
+    return taproot, segwit
+
+
+def create_view_only(gui, name, import_text, birth_choice=None):
+    open_type_selector(gui)
+    gui.click("walletTypeViewOnly")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
+    gui.set_text("createWalletNameInput", name)
+    gui.set_text("watchOnlyXpubInput", import_text)
+    if birth_choice:
+        gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+        gui.click(f"watchOnlyBirth_{birth_choice}")
+    else:
+        assert gui.get_property("watchOnlyBirthDate", "visible") is False
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=30000)
+    gui.click("createWalletReadyDoneButton")
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=15000)
+
+
+def case_listdescriptors_json_restores_history(harness):
+    """listdescriptors output keeps the creation times, so the rescan finds payments made before the import."""
+    harness.start_gui()
+    gui = harness.driver
+    fund_hot_wallet(harness)
+    listed = rpc_call(harness.gui_rpc_port, "listdescriptors", wallet="hot")
+
+    create_view_only(gui, "watch_json", json.dumps(listed))
+    port = harness.gui_rpc_port
+    assert rpc_call(port, "getwalletinfo", wallet="watch_json")["private_keys_enabled"] is False
+    original = rpc_call(port, "getbalances", wallet="hot")["mine"]
+    watched = rpc_call(port, "getbalances", wallet="watch_json")["mine"]
+    assert original["trusted"] > 0 and original["immature"] > 0, original
+    assert original == watched, f"{original} != {watched}"
+    # Descriptors carry no address book, so a payment to an own address lists as change.
+    # Compare coins and known transactions instead of listed entries.
+    def coins(wallet):
+        return sorted((utxo["txid"], utxo["vout"], utxo["amount"]) for utxo in rpc_call(port, "listunspent", [0], wallet=wallet))
+    assert coins("hot") == coins("watch_json"), (coins("hot"), coins("watch_json"))
+    for tx in rpc_call(port, "listtransactions", ["*", 1000], wallet="hot"):
+        rpc_call(port, "gettransaction", [tx["txid"]], wallet="watch_json")
+    for method, params in (("getnewaddress", ["", "bech32m"]), ("getrawchangeaddress", ["bech32"])):
+        assert rpc_call(port, method, params, wallet="hot") == rpc_call(port, method, params, wallet="watch_json"), method
+    print("  listdescriptors JSON restored balance, history and next addresses")
+
+
+def case_descriptor_lines_keep_their_address_type(harness):
+    """Taproot descriptors pasted as lines watch Taproot addresses, scanned from the chosen date."""
+    harness.start_gui()
+    gui = harness.driver
+    taproot, segwit = fund_hot_wallet(harness)
+    listed = rpc_call(harness.gui_rpc_port, "listdescriptors", wallet="hot")["descriptors"]
+    lines = [item["desc"] for item in listed if item["active"] and item["desc"].startswith("tr(")]
+    assert len(lines) == 2, lines
+
+    create_view_only(gui, "watch_taproot", "\n".join(lines), birth_choice="unknown")
+    port = harness.gui_rpc_port
+    assert rpc_call(port, "getaddressinfo", [taproot], wallet="watch_taproot")["ismine"] is True
+    assert rpc_call(port, "getaddressinfo", [segwit], wallet="watch_taproot")["ismine"] is False
+    received = [rpc_call(port, "getreceivedbyaddress", [taproot, 0, True], wallet=wallet) for wallet in ("hot", "watch_taproot")]
+    assert received[0] > 0 and received[0] == received[1], received
+    print("  Taproot lines watch Taproot addresses, history found")
 
 
 def case_type_selector_regular_flow(harness):
@@ -168,6 +248,18 @@ def run_tests():
         "watchonly_creation_flow",
         port_offset=80,
         case_body=lambda h: case_watchonly_creation_flow(h, test_xpub),
+    )
+
+    failures += run_case(
+        "listdescriptors_json",
+        port_offset=120,
+        case_body=case_listdescriptors_json_restores_history,
+    )
+
+    failures += run_case(
+        "descriptor_lines",
+        port_offset=130,
+        case_body=case_descriptor_lines_keep_their_address_type,
     )
 
     failures += run_case(

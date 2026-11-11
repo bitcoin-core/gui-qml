@@ -109,10 +109,21 @@ TestCase {
         name.text = "Watch wallet"
         xpub.text = "invalid"
         compare(form.canCreate, false)
+        compare(xpubEntry.errorText, "Enter descriptors, or an extended public key (xpub).")
         xpub.text = validXpub
+        compare(xpubEntry.errorText, "")
+        verify(xpubEntry.supportingText.indexOf("Bech32 (SegWit)") >= 0)
+        const birthDate = findChild(form, "watchOnlyBirthDate")
+        verify(birthDate.visible)
+        compare(form.canCreate, false)
+        findChild(form, "watchOnlyBirth_year").clicked()
         compare(form.canCreate, true)
 
+        const before = Math.floor(Date.now() / 1000)
         findChild(form, "createWalletFormCreateButton").clicked()
+        compare(walletController.lastWatchOnlyImport(), validXpub)
+        const birthTime = walletController.lastWatchOnlyBirthTime()
+        verify(birthTime <= before - 366 * 86400 + 1 && birthTime >= before - 366 * 86400 - 5)
         tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
         const ready = findChild(flow, "walletCreationReadyPage")
         compare(ready.backupRequired, false)
@@ -125,6 +136,25 @@ TestCase {
         flow.finished.connect(function(openActivity) { finished = openActivity })
         findChild(ready, "createWalletReadyDoneButton").clicked()
         compare(finished, true)
+    }
+
+    function test_watch_only_descriptor_json_keeps_its_dates() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Imported"
+        const json = '{"wallet_name": "hot", "descriptors": []}'
+        findChild(form, "watchOnlyXpubInput").text = json
+        const entry = findChild(form, "createWalletXpubEntry")
+        verify(entry.supportingText.indexOf("4 descriptors") === 0)
+        verify(entry.supportingText.indexOf("Created ") > 0)
+        compare(findChild(form, "watchOnlyBirthDate").visible, false)
+        compare(form.canCreate, true)
+
+        findChild(form, "createWalletFormCreateButton").clicked()
+        compare(walletController.lastWatchOnlyImport(), json)
+        compare(walletController.lastWatchOnlyBirthTime(), -1)
     }
 
     function test_external_signer_uses_onboarding_form_and_ready_page() {

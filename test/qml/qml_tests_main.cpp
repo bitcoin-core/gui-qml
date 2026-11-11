@@ -1839,6 +1839,8 @@ public:
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
     QString m_wallet_load_error;
+    QString m_last_watch_only_import;
+    double m_last_watch_only_birth_time{-1};
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
     bool m_wallet_migration_in_progress{false};
@@ -1904,11 +1906,15 @@ public:
         Q_EMIT walletMigrationInProgressChanged();
         Q_EMIT walletMigrationErrorChanged();
     }
-    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& /*xpub*/)
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& import_text, double birth_time = -1)
     {
         clearWalletLoadStatus();
+        m_last_watch_only_import = import_text;
+        m_last_watch_only_birth_time = birth_time;
         Q_EMIT walletCreateSucceeded(reportedWallet());
     }
+    Q_INVOKABLE QString lastWatchOnlyImport() const { return m_last_watch_only_import; }
+    Q_INVOKABLE double lastWatchOnlyBirthTime() const { return m_last_watch_only_birth_time; }
     Q_INVOKABLE void createSingleSigWallet(const QString&, const QString&)
     {
         clearWalletCreateStatus();
@@ -2030,10 +2036,28 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         if (wallet) Q_EMIT openReceiveRequested(wallet);
     }
-    Q_INVOKABLE bool validateXpub(const QString& xpub)
+    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text) const
     {
-        QString t = xpub.trimmed();
-        return t.length() >= 100 && (t.startsWith("xpub") || t.startsWith("tpub"));
+        const QString text{import_text.trimmed()};
+        QVariantMap result;
+        if (text.isEmpty()) {
+            result.insert("status", "empty");
+            return result;
+        }
+        const bool key{text.length() >= 100 && (text.startsWith("xpub") || text.startsWith("tpub"))};
+        const bool json{text.startsWith('[') || text.startsWith('{')};
+        if (!key && !json && !text.contains('(')) {
+            result.insert("status", "invalid");
+            result.insert("error", "Enter descriptors, or an extended public key (xpub).");
+            return result;
+        }
+        result.insert("status", "valid");
+        result.insert("kind", key ? "extendedKey" : json ? "descriptorJson" : "descriptors");
+        result.insert("descriptorCount", json ? 4 : 2);
+        result.insert("addressTypes", json ? QStringList{"Bech32 (SegWit)", "Bech32m (Taproot)"} : QStringList{"Bech32 (SegWit)"});
+        result.insert("needsBirthDate", !json);
+        result.insert("createdTime", json ? 1700000000LL : -1LL);
+        return result;
     }
     Q_INVOKABLE void setOpenWalletLocationResult(const bool result, const QString& error = QString())
     {

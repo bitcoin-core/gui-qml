@@ -18,20 +18,53 @@ OnboardingView {
     property bool modalView: false
     property bool creating: false
     property string nameError: ""
-    readonly property bool validXpub: loadedChildView
-        && loadedChildView.xpubText.trim().length >= 100
-        && walletController.validateXpub(loadedChildView.xpubText.trim())
+    readonly property var importInfo: watchOnly && loadedChildView
+        ? walletController.describeViewOnlyImport(loadedChildView.importText) : ({ "status": "empty" })
+    readonly property bool needsBirthDate: importInfo.status === "valid" && importInfo.needsBirthDate === true
+    readonly property bool importReady: importInfo.status === "valid"
+        && (!needsBirthDate || loadedChildView.birthChoice.length > 0)
     readonly property bool passwordsMatch: loadedChildView
         && loadedChildView.passwordText.length > 0
         && loadedChildView.passwordText === loadedChildView.confirmText
     readonly property bool canCreate: loadedChildView && walletController.initialized && !creating
         && !walletController.walletLoadInProgress && loadedChildView.walletName.trim().length > 0
-        && (watchOnly ? validXpub : loadedChildView.encryptWallet
+        && (watchOnly ? importReady : loadedChildView.encryptWallet
             ? passwordsMatch && loadedChildView.passwordLossAcknowledged
             : loadedChildView.unencryptedWalletAcknowledged)
 
     signal cancel()
-    signal createRequested(string name, string xpub, string passphrase)
+    // birthTime is in seconds, or -1 when the input has its own dates.
+    signal createRequested(string name, string importText, string passphrase, real birthTime)
+
+    function birthTime() {
+        if (!needsBirthDate) return -1
+        const now = Math.floor(Date.now() / 1000)
+        const day = 24 * 60 * 60
+        switch (loadedChildView.birthChoice) {
+        case "month": return now - 31 * day
+        case "year": return now - 366 * day
+        default: return 0
+        }
+    }
+
+    function importSummary() {
+        if (importInfo.status !== "valid") return qsTr("Only public information is imported. Private keys stay with your signer.")
+        const types = importInfo.addressTypes.join(", ")
+        if (importInfo.kind === "extendedKey") {
+            //: %1 is an address type, such as "Bech32 (SegWit)".
+            return qsTr("Extended key. Imported as %1 receive and change addresses.").arg(types)
+        }
+        let summary = importInfo.descriptorCount === 1
+            //: %1 is an address type, such as "Bech32 (SegWit)".
+            ? qsTr("1 descriptor: %1.").arg(types)
+            //: %1 is a number of descriptors, %2 lists address types, such as "Bech32 (SegWit), Bech32m (Taproot)".
+            : qsTr("%1 descriptors: %2.").arg(importInfo.descriptorCount).arg(types)
+        if (importInfo.createdTime >= 0) {
+            //: %1 is the date the oldest pasted descriptor was created.
+            summary += " " + qsTr("Created %1.").arg(new Date(importInfo.createdTime * 1000).toLocaleDateString(Qt.locale(), "d MMM yyyy"))
+        }
+        return summary
+    }
 
     function submit() {
         if (!canCreate) return
@@ -40,8 +73,9 @@ OnboardingView {
             nameError = availabilityError
             return
         }
-        createRequested(loadedChildView.walletName.trim(), loadedChildView.xpubText.trim(),
-            watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText)
+        createRequested(loadedChildView.walletName.trim(), watchOnly ? loadedChildView.importText.trim() : "",
+            watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText,
+            watchOnly ? birthTime() : -1)
     }
 
     function clearSecrets() {
@@ -58,7 +92,7 @@ OnboardingView {
         ? (navigationStack.canGoBack !== undefined
             ? navigationStack.canGoBack : navigationStack.depth > 1) : false
     showCloseButton: modalView && !creating
-    primaryButtonText: creating ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creating ? (watchOnly ? qsTr("Importing…") : qsTr("Creating…")) : qsTr("Create wallet")
     primaryButtonObjectName: "createWalletFormCreateButton"
     primaryButtonEnabled: canCreate
     onCloseClicked: root.cancel()
@@ -77,7 +111,8 @@ OnboardingView {
     childView: ColumnLayout {
         id: fields
         property alias walletName: nameEntry.text
-        property alias xpubText: xpubEntry.text
+        property alias importText: xpubEntry.text
+        property string birthChoice: ""
         property alias encryptWallet: encryptCheck.checked
         property alias passwordText: passwordEntry.text
         property alias confirmText: confirmEntry.text
@@ -189,17 +224,64 @@ OnboardingView {
             objectName: "createWalletXpubEntry"
             visible: root.watchOnly
             Layout.fillWidth: true
-            label: qsTr("Extended public key (xpub)")
+            label: qsTr("Descriptors or extended public key")
             inputObjectName: "watchOnlyXpubInput"
-            placeholderText: qsTr("Enter your key…")
-            supportingText: qsTr("Only public information is imported. Private keys stay with your signer.")
+            textStyle: Theme.text.monoDescription
+            maximumInputHeight: 200
+            //: "listdescriptors" is a Bitcoin Core command and is not translated.
+            placeholderText: qsTr("Paste descriptors one per line, the output of listdescriptors, or an xpub…")
+            supportingText: root.importSummary()
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
             fieldBackgroundColor: Theme.color.surface2
-            errorText: text.trim().length > 0 && !root.validXpub
-                ? qsTr("Enter a valid extended public key (xpub)") : ""
+            errorText: root.importInfo.status === "invalid" ? root.importInfo.error : ""
             onTextEdited: walletController.clearWalletLoadStatus()
+        }
+
+        FormSection {
+            objectName: "watchOnlyBirthDate"
+            visible: root.watchOnly && root.needsBirthDate
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            showBackground: false
+            title: qsTr("When was this wallet created?")
+            rowSpacing: 10
+
+            ButtonGroup { id: birthGroup }
+
+            Repeater {
+                model: [
+                    { "choice": "month", "text": qsTr("In the last month"),
+                      "description": qsTr("Fastest. Finds transactions from the last 31 days.") },
+                    { "choice": "year", "text": qsTr("In the last year"),
+                      "description": qsTr("Finds transactions from the last 12 months.") },
+                    { "choice": "unknown", "text": qsTr("Earlier, or not sure"),
+                      "description": qsTr("Searches the whole blockchain. This can take hours.") }
+                ]
+                OptionButton {
+                    required property var modelData
+                    objectName: "watchOnlyBirth_" + modelData.choice
+                    Layout.fillWidth: true
+                    ButtonGroup.group: birthGroup
+                    surfaceSelectionStyle: true
+                    text: modelData.text
+                    description: modelData.description
+                    selected: fields.birthChoice === modelData.choice
+                    onClicked: fields.birthChoice = modelData.choice
+                }
+            }
+        }
+
+        CoreText {
+            objectName: "watchOnlyScanNote"
+            visible: root.watchOnly && root.creating
+            Layout.fillWidth: true
+            text: qsTr("Looking for this wallet's transactions. This can take a while.")
+            color: Theme.color.neutral7
+            textStyle: Theme.text.caption
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignLeft
         }
 
         CoreText {
