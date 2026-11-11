@@ -1841,6 +1841,7 @@ public:
     QString m_wallet_load_error;
     QString m_last_watch_only_import;
     double m_last_watch_only_birth_time{-1};
+    QString m_last_watch_only_address_type;
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
     bool m_wallet_migration_in_progress{false};
@@ -1906,15 +1907,18 @@ public:
         Q_EMIT walletMigrationInProgressChanged();
         Q_EMIT walletMigrationErrorChanged();
     }
-    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& import_text, double birth_time = -1)
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& import_text, double birth_time = -1,
+                                           const QString& address_type = {})
     {
         clearWalletLoadStatus();
         m_last_watch_only_import = import_text;
         m_last_watch_only_birth_time = birth_time;
+        m_last_watch_only_address_type = address_type;
         Q_EMIT walletCreateSucceeded(reportedWallet());
     }
     Q_INVOKABLE QString lastWatchOnlyImport() const { return m_last_watch_only_import; }
     Q_INVOKABLE double lastWatchOnlyBirthTime() const { return m_last_watch_only_birth_time; }
+    Q_INVOKABLE QString lastWatchOnlyAddressType() const { return m_last_watch_only_address_type; }
     Q_INVOKABLE void createSingleSigWallet(const QString&, const QString&)
     {
         clearWalletCreateStatus();
@@ -2036,7 +2040,7 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         if (wallet) Q_EMIT openReceiveRequested(wallet);
     }
-    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text) const
+    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text, const QString& address_type = {}) const
     {
         const QString text{import_text.trimmed()};
         QVariantMap result;
@@ -2057,6 +2061,14 @@ public:
         result.insert("addressTypes", json ? QStringList{"Bech32 (SegWit)", "Bech32m (Taproot)"} : QStringList{"Bech32 (SegWit)"});
         result.insert("needsBirthDate", !json);
         result.insert("createdTime", json ? 1700000000LL : -1LL);
+        result.insert("needsAddressType", key);
+        if (key) {
+            const QVariantMap taproot{{"id", "bech32m"}, {"label", "Bech32m (Taproot)"}};
+            const QVariantMap segwit{{"id", "bech32"}, {"label", "Bech32 (SegWit)"}};
+            result.insert("addressTypeOptions", QVariantList{segwit, taproot});
+            result.insert("addressTypes", address_type == "bech32m" ? QStringList{"Bech32m (Taproot)"}
+                                          : address_type == "bech32" ? QStringList{"Bech32 (SegWit)"} : QStringList{});
+        }
         return result;
     }
     Q_INVOKABLE void setOpenWalletLocationResult(const bool result, const QString& error = QString())

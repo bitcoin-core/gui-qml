@@ -64,13 +64,15 @@ public:
     Q_INVOKABLE void createSingleSigWallet(const QString &name, const QString &passphrase);
     Q_INVOKABLE bool createExternalSignerWallet(const QString& name);
     //! birth_time is when undated descriptors were created, in seconds, or -1 if unknown.
-    Q_INVOKABLE void createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time = -1);
+    //! address_type ("bech32", ...) is for a key that does not say its own.
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time = -1,
+                                           const QString& address_type = {});
     Q_INVOKABLE void importWallet(const QString& path);
     Q_INVOKABLE void clearWalletCreateStatus();
     Q_INVOKABLE void clearWalletLoadStatus();
     Q_INVOKABLE void migrateWallet(const QString& path, const QString& passphrase = QString());
     Q_INVOKABLE void clearWalletMigrationStatus();
-    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text) const;
+    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text, const QString& address_type = {}) const;
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const;
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE QString homePath() const;

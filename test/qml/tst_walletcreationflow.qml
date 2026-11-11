@@ -112,16 +112,23 @@ TestCase {
         compare(xpubEntry.errorText, "Enter descriptors, or an extended public key (xpub).")
         xpub.text = validXpub
         compare(xpubEntry.errorText, "")
-        verify(xpubEntry.supportingText.indexOf("Bech32 (SegWit)") >= 0)
+        compare(xpubEntry.supportingText, "Extended key. Choose its address type below.")
+        verify(findChild(form, "watchOnlyAddressType").visible)
         const birthDate = findChild(form, "watchOnlyBirthDate")
         verify(birthDate.visible)
-        compare(form.canCreate, false)
         findChild(form, "watchOnlyBirth_year").clicked()
+        compare(form.canCreate, false)
+        const taproot = findChild(form, "watchOnlyAddressType_bech32m")
+        taproot.clicked()
+        compare(findChild(form, "watchOnlyAddressType_bech32m"), taproot)
+        verify(taproot.checked)
+        verify(xpubEntry.supportingText.indexOf("Bech32m (Taproot)") >= 0)
         compare(form.canCreate, true)
 
         const before = Math.floor(Date.now() / 1000)
         findChild(form, "createWalletFormCreateButton").clicked()
         compare(walletController.lastWatchOnlyImport(), validXpub)
+        compare(walletController.lastWatchOnlyAddressType(), "bech32m")
         const birthTime = walletController.lastWatchOnlyBirthTime()
         verify(birthTime <= before - 366 * 86400 + 1 && birthTime >= before - 366 * 86400 - 5)
         tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
@@ -155,6 +162,8 @@ TestCase {
         findChild(form, "createWalletFormCreateButton").clicked()
         compare(walletController.lastWatchOnlyImport(), json)
         compare(walletController.lastWatchOnlyBirthTime(), -1)
+        compare(walletController.lastWatchOnlyAddressType(), "")
+        compare(findChild(form, "watchOnlyAddressType").visible, false)
     }
 
     function test_external_signer_uses_onboarding_form_and_ready_page() {

@@ -617,6 +617,7 @@ void WalletQmlControllerTests::describeViewOnlyImportReportsInput()
     QCOMPARE(key.value("status").toString(), QString{"valid"});
     QCOMPARE(key.value("kind").toString(), QString{"extendedKey"});
     QVERIFY(key.value("needsBirthDate").toBool());
+    QVERIFY(key.value("needsAddressType").toBool());
     QCOMPARE(controller.describeViewOnlyImport("").value("status").toString(), QString{"empty"});
     QCOMPARE(controller.describeViewOnlyImport("not-an-xpub").value("status").toString(), QString{"invalid"});
 }
@@ -650,7 +651,9 @@ void WalletQmlControllerTests::createWatchOnlyNeedsBirthTimeForUndatedInput()
     controller.initialize();
 
     controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB);
+    QCOMPARE(controller.walletLoadError(), QString{"Choose the address type of this key."});
 
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, -1, "bech32");
     QCOMPARE(controller.walletLoadError(), QString{"Choose when this wallet was created."});
     QCOMPARE(loader.create_wallet_calls, 0);
     QVERIFY(!controller.walletLoadInProgress());
@@ -679,7 +682,7 @@ void WalletQmlControllerTests::createWatchOnlyImportsFromBirthTime()
     };
 
     QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
-    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 1'700'000'000);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 1'700'000'000, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(create_spy.count(), 1, 5000);
     QVERIFY(create_flags & wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
@@ -723,7 +726,7 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
     // FakeWallet's import fails by default, so the controller must reject the
     // half-created wallet, call remove() on it, and surface a load error
     // without registering a model.
-    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
     QVERIFY(!controller.walletLoadError().isEmpty());
@@ -1124,7 +1127,7 @@ void WalletQmlControllerTests::watchOnlyCreateBeforeInitializationSetsLoadError(
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     DrainingWalletController controller(node);
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QCOMPARE(controller.walletLoadError(), QString{NOT_INITIALIZED_ERROR});
     QVERIFY(!controller.walletLoadInProgress());
@@ -1157,7 +1160,7 @@ void WalletQmlControllerTests::watchOnlyCreateWhileWalletLoadInProgressIsIgnored
     QVERIFY(create_started.tryAcquire(1, 5000));
     QVERIFY(controller.walletLoadInProgress());
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QCOMPARE(loader.create_wallet_calls, 1);
     QVERIFY(controller.walletLoadInProgress());
@@ -1191,7 +1194,7 @@ void WalletQmlControllerTests::watchOnlyCreateFailureAfterCreateDoesNotPublishWa
     QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
     QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
 
-    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0);
+    controller.createWatchOnlyWallet("watch_only", VALID_XPUB, 0, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
     QCOMPARE(create_spy.count(), 0);

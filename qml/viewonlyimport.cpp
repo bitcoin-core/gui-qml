@@ -4,6 +4,8 @@
 
 #include <qml/viewonlyimport.h>
 
+#include <base58.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <pubkey.h>
 #include <qml/util.h>
@@ -16,8 +18,10 @@
 #include <QObject>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QVariantList>
 
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <optional>
 #include <set>
@@ -208,34 +212,154 @@ ViewOnlyImport ParseLines(const QStringList& lines)
     return result;
 }
 
-} // namespace
+using KeyVersion = std::array<unsigned char, 4>;
 
-ViewOnlyImport ParseViewOnlyImport(const QString& text)
+struct KnownKeyVersion {
+    KeyVersion version;
+    //! Testnet, signet and regtest share these.
+    bool test;
+    bool is_private;
+    bool multisig;
+    std::optional<OutputType> type;
+};
+
+// BIP32 and SLIP-132 versions. The prefix of a ypub or zpub names its script type.
+const std::array KNOWN_KEY_VERSIONS{
+    KnownKeyVersion{{0x04, 0x88, 0xb2, 0x1e}, false, false, false, std::nullopt},             // xpub
+    KnownKeyVersion{{0x04, 0x9d, 0x7c, 0xb2}, false, false, false, OutputType::P2SH_SEGWIT},  // ypub
+    KnownKeyVersion{{0x04, 0xb2, 0x47, 0x46}, false, false, false, OutputType::BECH32},       // zpub
+    KnownKeyVersion{{0x02, 0x95, 0xb4, 0x3f}, false, false, true, std::nullopt},              // Ypub
+    KnownKeyVersion{{0x02, 0xaa, 0x7e, 0xd3}, false, false, true, std::nullopt},              // Zpub
+    KnownKeyVersion{{0x04, 0x35, 0x87, 0xcf}, true, false, false, std::nullopt},              // tpub
+    KnownKeyVersion{{0x04, 0x4a, 0x52, 0x62}, true, false, false, OutputType::P2SH_SEGWIT},   // upub
+    KnownKeyVersion{{0x04, 0x5f, 0x1c, 0xf6}, true, false, false, OutputType::BECH32},        // vpub
+    KnownKeyVersion{{0x02, 0x42, 0x89, 0xef}, true, false, true, std::nullopt},               // Upub
+    KnownKeyVersion{{0x02, 0x57, 0x54, 0x83}, true, false, true, std::nullopt},               // Vpub
+    KnownKeyVersion{{0x04, 0x88, 0xad, 0xe4}, false, true, false, std::nullopt},              // xprv
+    KnownKeyVersion{{0x04, 0x9d, 0x78, 0x78}, false, true, false, std::nullopt},              // yprv
+    KnownKeyVersion{{0x04, 0xb2, 0x43, 0x0c}, false, true, false, std::nullopt},              // zprv
+    KnownKeyVersion{{0x02, 0x95, 0xb0, 0x05}, false, true, true, std::nullopt},               // Yprv
+    KnownKeyVersion{{0x02, 0xaa, 0x7a, 0x99}, false, true, true, std::nullopt},               // Zprv
+    KnownKeyVersion{{0x04, 0x35, 0x83, 0x94}, true, true, false, std::nullopt},               // tprv
+    KnownKeyVersion{{0x04, 0x4a, 0x4e, 0x28}, true, true, false, std::nullopt},               // uprv
+    KnownKeyVersion{{0x04, 0x5f, 0x18, 0xbc}, true, true, false, std::nullopt},               // vprv
+    KnownKeyVersion{{0x02, 0x42, 0x85, 0xb5}, true, true, true, std::nullopt},                // Uprv
+    KnownKeyVersion{{0x02, 0x57, 0x50, 0x48}, true, true, true, std::nullopt},                // Vprv
+};
+
+// [fingerprint/path]key, the key origin form wallets export.
+const QRegularExpression KEY_ORIGIN{QStringLiteral(R"(^\[([0-9a-fA-F]{8})((?:/[0-9]+['hH]?)*)\]([1-9A-HJ-NP-Za-km-z]+)$)")};
+const QRegularExpression ORIGIN_PURPOSE{QStringLiteral(R"(^/(44|49|84|86)['hH])")};
+
+struct ExtendedKey {
+    bool recognized{false};
+    QString error;
+    //! The key with this network's xpub or tpub version.
+    std::string key;
+    std::optional<OutputType> type;
+};
+
+ExtendedKey ReadExtendedKey(const std::string& text)
+{
+    std::vector<unsigned char> data;
+    if (!DecodeBase58Check(text, data, BIP32_EXTKEY_WITH_VERSION_SIZE) || data.size() != BIP32_EXTKEY_WITH_VERSION_SIZE) return {};
+    const auto known{std::ranges::find_if(KNOWN_KEY_VERSIONS, [&](const KnownKeyVersion& known) {
+        return std::equal(known.version.begin(), known.version.end(), data.begin());
+    })};
+    if (known == KNOWN_KEY_VERSIONS.end()) return {};
+
+    ExtendedKey result;
+    result.recognized = true;
+    if (known->is_private) {
+        result.error = QObject::tr("This is a private key. Enter the extended public key instead.");
+        return result;
+    }
+    if (known->multisig) {
+        result.error = QObject::tr("This key is from a multisig wallet. Only single-key wallets can be imported.");
+        return result;
+    }
+    const std::vector<unsigned char>& prefix{Params().Base58Prefix(CChainParams::EXT_PUBLIC_KEY)};
+    const KeyVersion& mainnet{KNOWN_KEY_VERSIONS.front().version};
+    if (known->test == std::equal(mainnet.begin(), mainnet.end(), prefix.begin(), prefix.end())) {
+        result.error = QObject::tr("This key is for a different network.");
+        return result;
+    }
+    std::copy(prefix.begin(), prefix.end(), data.begin());
+    result.key = EncodeBase58Check(data);
+    if (!DecodeExtPubKey(result.key).pubkey.IsValid()) {
+        result.error = QObject::tr("This extended public key is not valid.");
+        return result;
+    }
+    result.type = known->type;
+    return result;
+}
+
+std::optional<OutputType> PurposeType(const QString& path)
+{
+    const QRegularExpressionMatch match{ORIGIN_PURPOSE.match(path)};
+    if (!match.hasMatch()) return std::nullopt;
+    switch (match.captured(1).toInt()) {
+    case 44: return OutputType::LEGACY;
+    case 49: return OutputType::P2SH_SEGWIT;
+    case 84: return OutputType::BECH32;
+    case 86: return OutputType::BECH32M;
+    }
+    return std::nullopt;
+}
+
+QString WrapKey(OutputType type, const QString& key)
+{
+    switch (type) {
+    case OutputType::LEGACY: return QStringLiteral("pkh(%1)").arg(key);
+    case OutputType::P2SH_SEGWIT: return QStringLiteral("sh(wpkh(%1))").arg(key);
+    case OutputType::BECH32: return QStringLiteral("wpkh(%1)").arg(key);
+    case OutputType::BECH32M: return QStringLiteral("tr(%1)").arg(key);
+    case OutputType::UNKNOWN: break;
+    }
+    return {};
+}
+
+ViewOnlyImport ParseExtendedKey(const ExtendedKey& key, const QString& origin, const QString& path, const QString& address_type)
 {
     using Kind = ViewOnlyImport::Kind;
+    if (!key.error.isEmpty()) return Failed(Kind::ExtendedKey, key.error);
+    // The key's prefix wins, then a BIP44, 49, 84 or 86 path.
+    std::optional<OutputType> type{key.type ? key.type : PurposeType(path)};
+    const bool needs_address_type{!type};
+    if (!type && !address_type.isEmpty()) {
+        type = ParseOutputType(address_type.toStdString());
+        if (!type || *type == OutputType::UNKNOWN) return Failed(Kind::ExtendedKey, QObject::tr("Choose a valid address type."));
+    }
+    ViewOnlyImport result;
+    if (type) result = ParseLines({WrapKey(*type, origin + QString::fromStdString(key.key) + QStringLiteral("/<0;1>/*"))});
+    result.kind = Kind::ExtendedKey;
+    result.needs_address_type = needs_address_type;
+    return result;
+}
+
+} // namespace
+
+ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_type)
+{
     const QString trimmed{text.trimmed()};
     if (trimmed.isEmpty()) return {};
+
+    const QRegularExpressionMatch origin{KEY_ORIGIN.match(trimmed)};
+    const QString key_text{origin.hasMatch() ? origin.captured(3) : trimmed};
+    if (const ExtendedKey key{ReadExtendedKey(key_text.toStdString())}; key.recognized) {
+        const QString origin_text{origin.hasMatch() ? QStringLiteral("[%1%2]").arg(origin.captured(1), origin.captured(2)) : QString{}};
+        return ParseExtendedKey(key, origin_text, origin.captured(2), address_type);
+    }
     if (trimmed.startsWith(QLatin1Char('[')) || trimmed.startsWith(QLatin1Char('{'))) {
         return ParseJson(trimmed.toStdString());
-    }
-
-    const std::string key{trimmed.toStdString()};
-    if (DecodeExtKey(key).key.IsValid()) {
-        return Failed(Kind::ExtendedKey, QObject::tr("This is a private key. Enter the extended public key instead."));
-    }
-    if (DecodeExtPubKey(key).pubkey.IsValid()) {
-        // A bare key has no script type. Keep the native SegWit default.
-        ViewOnlyImport result{ParseLines({QStringLiteral("wpkh(%1/<0;1>/*)").arg(trimmed)})};
-        result.kind = Kind::ExtendedKey;
-        return result;
     }
     return ParseLines(trimmed.split(QLatin1Char('\n')));
 }
 
-QVariantMap DescribeViewOnlyImport(const QString& text)
+QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type)
 {
     using Kind = ViewOnlyImport::Kind;
-    const ViewOnlyImport parsed{ParseViewOnlyImport(text)};
+    const ViewOnlyImport parsed{ParseViewOnlyImport(text, address_type)};
     QVariantMap result;
     if (parsed.kind == Kind::Empty) {
         result.insert(QStringLiteral("status"), QStringLiteral("empty"));
@@ -263,7 +387,17 @@ QVariantMap DescribeViewOnlyImport(const QString& text)
     result.insert(QStringLiteral("status"), QStringLiteral("valid"));
     result.insert(QStringLiteral("descriptorCount"), qulonglong(parsed.descriptor_count));
     result.insert(QStringLiteral("addressTypes"), address_types);
-    result.insert(QStringLiteral("needsBirthDate"), !parsed.undated.empty());
+    // A key waiting for its address type has no date either.
+    result.insert(QStringLiteral("needsBirthDate"), !parsed.undated.empty() || (parsed.needs_address_type && parsed.requests.empty()));
     result.insert(QStringLiteral("createdTime"), qlonglong(created.value_or(-1)));
+    result.insert(QStringLiteral("needsAddressType"), parsed.needs_address_type);
+    if (parsed.needs_address_type) {
+        QVariantList options;
+        for (const OutputType type : {OutputType::BECH32, OutputType::BECH32M, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+            options.append(QVariantMap{{QStringLiteral("id"), QString::fromStdString(FormatOutputType(type))},
+                                       {QStringLiteral("label"), QmlUtil::OutputTypeLabel(type)}});
+        }
+        result.insert(QStringLiteral("addressTypeOptions"), options);
+    }
     return result;
 }

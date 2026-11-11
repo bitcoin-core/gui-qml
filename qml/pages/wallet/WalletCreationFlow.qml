@@ -255,11 +255,11 @@ Item {
         CreateWalletForm {
             creating: root.creatingWallet || root.readyPending
             onCancel: root.finished(false, null)
-            onCreateRequested: function(name, importText, passphrase, birthTime) {
+            onCreateRequested: function(name, importText, passphrase, birthTime, addressType) {
                 root.completedWatchOnly = watchOnly
                 root.completedEncrypted = !watchOnly && passphrase.length > 0
                 root.creatingWallet = true
-                if (watchOnly) walletController.createWatchOnlyWallet(name, importText, birthTime)
+                if (watchOnly) walletController.createWatchOnlyWallet(name, importText, birthTime, addressType)
                 else walletController.createSingleSigWallet(name, passphrase)
             }
         }

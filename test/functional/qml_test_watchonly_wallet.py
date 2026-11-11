@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end GUI tests for watch-only wallet creation flow."""
 
+import hashlib
 import json
 import os
 import re
@@ -65,9 +66,10 @@ def case_watchonly_creation_flow(harness, test_xpub):
     gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", "watchonly_test")
     gui.set_text("watchOnlyXpubInput", test_xpub)
-    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
-    assert gui.get_property("createWalletFormCreateButton", "enabled") is False
+    gui.wait_for_property("watchOnlyAddressType", "visible", True, timeout_ms=5000)
     gui.click("watchOnlyBirth_month")
+    assert gui.get_property("createWalletFormCreateButton", "enabled") is False
+    gui.click("watchOnlyAddressType_bech32")
     gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
     gui.click("createWalletFormCreateButton")
     gui.wait_for_page("walletCreationReadyPage", timeout_ms=15000)
@@ -102,12 +104,31 @@ def fund_hot_wallet(harness):
     return taproot, segwit
 
 
+BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def with_key_version(key, version):
+    """Re-encode an extended key with another version, such as a tpub as a vpub."""
+    number = 0
+    for char in key:
+        number = number * 58 + BASE58.index(char)
+    payload = bytes.fromhex(version) + number.to_bytes(82, "big")[4:78]
+    data = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    number = int.from_bytes(data, "big")
+    encoded = ""
+    while number:
+        number, rest = divmod(number, 58)
+        encoded = BASE58[rest] + encoded
+    return encoded
+
+
 def create_view_only(gui, name, import_text, birth_choice=None):
     open_type_selector(gui)
     gui.click("walletTypeViewOnly")
     gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", name)
     gui.set_text("watchOnlyXpubInput", import_text)
+    assert gui.get_property("watchOnlyAddressType", "visible") is False
     if birth_choice:
         gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
         gui.click(f"watchOnlyBirth_{birth_choice}")
@@ -162,6 +183,32 @@ def case_descriptor_lines_keep_their_address_type(harness):
     received = [rpc_call(port, "getreceivedbyaddress", [taproot, 0, True], wallet=wallet) for wallet in ("hot", "watch_taproot")]
     assert received[0] > 0 and received[0] == received[1], received
     print("  Taproot lines watch Taproot addresses, history found")
+
+
+def case_keys_keep_their_address_type(harness):
+    """A Taproot account key with its origin, and a vpub, watch the addresses their wallet used."""
+    harness.start_gui()
+    gui = harness.driver
+    taproot, segwit = fund_hot_wallet(harness)
+    port = harness.gui_rpc_port
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+
+    def account_key(script):
+        desc = next(item["desc"] for item in listed if item["active"] and not item["internal"] and item["desc"].startswith(script))
+        return re.search(r"(\[[0-9a-f]{8}[^\]]*\])(tpub[A-Za-z0-9]+)", desc).groups()
+
+    origin, key = account_key("tr(")
+    create_view_only(gui, "watch_taproot_key", origin + key, birth_choice="unknown")
+    assert rpc_call(port, "getaddressinfo", [taproot], wallet="watch_taproot_key")["ismine"] is True
+    received = [rpc_call(port, "getreceivedbyaddress", [taproot, 0, True], wallet=wallet) for wallet in ("hot", "watch_taproot_key")]
+    assert received[0] > 0 and received[0] == received[1], received
+    print("  Taproot account key with its origin watches Taproot addresses")
+
+    vpub = with_key_version(account_key("wpkh(")[1], "045f1cf6")
+    create_view_only(gui, "watch_vpub", vpub, birth_choice="unknown")
+    assert rpc_call(port, "getaddressinfo", [segwit], wallet="watch_vpub")["ismine"] is True
+    assert rpc_call(port, "getreceivedbyaddress", [segwit], wallet="watch_vpub") == 5
+    print("  vpub watches SegWit addresses and finds the earlier payment")
 
 
 def case_type_selector_regular_flow(harness):
@@ -260,6 +307,12 @@ def run_tests():
         "descriptor_lines",
         port_offset=130,
         case_body=case_descriptor_lines_keep_their_address_type,
+    )
+
+    failures += run_case(
+        "extended_keys",
+        port_offset=140,
+        case_body=case_keys_keep_their_address_type,
     )
 
     failures += run_case(

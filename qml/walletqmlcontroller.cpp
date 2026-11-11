@@ -641,7 +641,8 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
     return true;
 }
 
-void WalletQmlController::createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time)
+void WalletQmlController::createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time,
+                                                const QString& address_type)
 {
     if (m_wallet_load_in_progress) {
         return;
@@ -653,13 +654,17 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
         return;
     }
 
-    ViewOnlyImport input{ParseViewOnlyImport(import_text)};
+    ViewOnlyImport input{ParseViewOnlyImport(import_text, address_type)};
     if (input.kind == ViewOnlyImport::Kind::Empty) {
         setWalletLoadError(tr("Enter descriptors, or an extended public key (xpub)."));
         return;
     }
     if (!input.error.isEmpty()) {
         setWalletLoadError(input.error);
+        return;
+    }
+    if (input.requests.empty()) {
+        setWalletLoadError(tr("Choose the address type of this key."));
         return;
     }
     if (!input.undated.empty()) {
@@ -732,9 +737,9 @@ void WalletQmlController::clearWalletMigrationStatus()
     setWalletMigrationError(QString());
 }
 
-QVariantMap WalletQmlController::describeViewOnlyImport(const QString& import_text) const
+QVariantMap WalletQmlController::describeViewOnlyImport(const QString& import_text, const QString& address_type) const
 {
-    return DescribeViewOnlyImport(import_text);
+    return DescribeViewOnlyImport(import_text, address_type);
 }
 
 void WalletQmlController::requestOpenWalletSettings(WalletQmlModel* wallet)

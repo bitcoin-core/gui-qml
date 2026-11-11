@@ -16,6 +16,13 @@ namespace {
 // BIP32 test vector 1.
 const QString XPUB{"xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"};
 const QString XPRV{"xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"};
+// The same key with SLIP-132 versions.
+const QString YPUB{"ypub6QqdH2c5z7967BioGSfAWFHM1EHzHPBZK7wrND3ZpEWFtzmCqvsD1bgpaE6pSAPkiSKhkuWPCJV6mZTSNMd2tK8xYTcJ48585pZecmSUzWp"};
+const QString ZPUB{"zpub6jftahH18ngZxUuv6oSniLNrBCSSE1B4EEU59bwTCEt8x6aS6b2mdfLxbS4QS53g85SWWP6wexqeer516433gYpZQoJie2tcMYdJ1SYYYAL"};
+const QString MULTISIG_ZPUB{"Zpub6vZyhw1ShkEwP45J3TumYQietzUhSMreYW7k4sCza1iYaH9LrzR3inCtQ91szWGaMYWVNy74YBE9n1gmPHBzq2wEFGR83SMcFGuAbGkfiwg"};
+const QString TPUB{"tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp"};
+const QString VPUB{"vpub5SLqN2bLY4WeZJ9SmNJHsyzqVKreTXD4ZnPC22MugDNcjhKX5xNX9QiQWcE4SSRzVWyHWUihpKRT7hckDGNzVc69wSX2JPcfGeNiT5c2XZy"};
+const QString ZPRV{"zprvAWgYBBk7JR8GjzqSzmunMCS7dAbwpYTCs1YUMDXqduMA5JFHZ3iX5s2UkAR6vBdcCYYa1S5o1fVLrKsrnpCQ4WpUd6aVUWP1bS2Yy5DoaKv"};
 const QString PUBKEY{"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"};
 
 QString WithChecksum(const QString& descriptor)
@@ -37,7 +44,9 @@ class ViewOnlyImportTests : public QObject
 private Q_SLOTS:
     void initTestCase();
     void blankTextIsEmpty();
-    void extendedKeyBecomesNativeSegwit();
+    void plainKeyAsksForItsAddressType();
+    void slip132KeysCarryTheirScriptType();
+    void keyOriginKeepsFingerprintAndPath();
     void privateKeysAreRejected();
     void descriptorLinesTakeTheChainFromThePath();
     void onlySingleKeyDescriptorsAreAccepted();
@@ -60,24 +69,72 @@ void ViewOnlyImportTests::blankTextIsEmpty()
     QCOMPARE(DescribeViewOnlyImport({}).value("status").toString(), QStringLiteral("empty"));
 }
 
-void ViewOnlyImportTests::extendedKeyBecomesNativeSegwit()
+void ViewOnlyImportTests::plainKeyAsksForItsAddressType()
 {
-    const ViewOnlyImport result{ParseViewOnlyImport(" " + XPUB + "\n")};
-    QCOMPARE(result.kind, ViewOnlyImport::Kind::ExtendedKey);
-    QVERIFY(result.error.isEmpty());
-    QCOMPARE(result.requests.size(), size_t{1});
-    QCOMPARE(QString::fromStdString(result.requests[0].descriptor), WithChecksum(Desc("wpkh", "<0;1>/*")));
-    QVERIFY(result.requests[0].active);
-    QVERIFY(!result.requests[0].internal.has_value());
-    QCOMPARE(result.undated, std::vector<size_t>{0});
+    const ViewOnlyImport waiting{ParseViewOnlyImport(" " + XPUB + "\n")};
+    QCOMPARE(waiting.kind, ViewOnlyImport::Kind::ExtendedKey);
+    QVERIFY(waiting.error.isEmpty());
+    QVERIFY(waiting.needs_address_type);
+    QVERIFY(waiting.requests.empty());
 
-    const QVariantMap description{DescribeViewOnlyImport(XPUB)};
+    QVariantMap description{DescribeViewOnlyImport(XPUB)};
     QCOMPARE(description.value("status").toString(), QStringLiteral("valid"));
-    QCOMPARE(description.value("kind").toString(), QStringLiteral("extendedKey"));
-    QCOMPARE(description.value("descriptorCount").toInt(), 2);
-    QCOMPARE(description.value("addressTypes").toStringList(), QStringList{QStringLiteral("Bech32 (SegWit)")});
+    QVERIFY(description.value("needsAddressType").toBool());
     QVERIFY(description.value("needsBirthDate").toBool());
-    QCOMPARE(description.value("createdTime").toLongLong(), -1);
+    QStringList ids;
+    for (const QVariant& option : description.value("addressTypeOptions").toList()) ids.append(option.toMap().value("id").toString());
+    QCOMPARE(ids, (QStringList{"bech32", "bech32m", "p2sh-segwit", "legacy"}));
+
+    const ViewOnlyImport taproot{ParseViewOnlyImport(XPUB, QStringLiteral("bech32m"))};
+    QVERIFY(taproot.error.isEmpty());
+    QCOMPARE(taproot.requests.size(), size_t{1});
+    QCOMPARE(QString::fromStdString(taproot.requests[0].descriptor), WithChecksum(Desc("tr", "<0;1>/*")));
+    QVERIFY(taproot.requests[0].active);
+    QVERIFY(!taproot.requests[0].internal.has_value());
+    QCOMPARE(taproot.undated, std::vector<size_t>{0});
+
+    description = DescribeViewOnlyImport(XPUB, QStringLiteral("bech32m"));
+    QVERIFY(description.value("needsAddressType").toBool());
+    QCOMPARE(description.value("descriptorCount").toInt(), 2);
+    QCOMPARE(description.value("addressTypes").toStringList(), QStringList{QStringLiteral("Bech32m (Taproot)")});
+    QVERIFY(!ParseViewOnlyImport(XPUB, QStringLiteral("p2wsh")).error.isEmpty());
+}
+
+void ViewOnlyImportTests::slip132KeysCarryTheirScriptType()
+{
+    const ViewOnlyImport zpub{ParseViewOnlyImport(ZPUB)};
+    QVERIFY(!zpub.needs_address_type);
+    QCOMPARE(QString::fromStdString(zpub.requests[0].descriptor), WithChecksum(Desc("wpkh", "<0;1>/*")));
+    const ViewOnlyImport ypub{ParseViewOnlyImport(YPUB, QStringLiteral("bech32m"))};
+    QCOMPARE(QString::fromStdString(ypub.requests[0].descriptor), WithChecksum(Desc("sh(wpkh", "<0;1>/*") + ")"));
+
+    QVERIFY(ParseViewOnlyImport(MULTISIG_ZPUB).error.contains("multisig"));
+    QVERIFY(ParseViewOnlyImport(ZPRV).error.contains("private key"));
+    QVERIFY(ParseViewOnlyImport(VPUB).error.contains("different network"));
+    QVERIFY(ParseViewOnlyImport(TPUB).error.contains("different network"));
+
+    SelectParams(ChainType::REGTEST);
+    const ViewOnlyImport vpub{ParseViewOnlyImport(VPUB)};
+    SelectParams(ChainType::MAIN);
+    QVERIFY(vpub.error.isEmpty());
+    QCOMPARE(QString::fromStdString(vpub.requests[0].descriptor),
+             QStringLiteral("wpkh(%1/<0;1>/*)#").arg(TPUB) + QString::fromStdString(GetDescriptorChecksum(QStringLiteral("wpkh(%1/<0;1>/*)").arg(TPUB).toStdString())));
+}
+
+void ViewOnlyImportTests::keyOriginKeepsFingerprintAndPath()
+{
+    const ViewOnlyImport taproot{ParseViewOnlyImport("[d34db33f/86h/0h/0h]" + XPUB)};
+    QVERIFY(taproot.error.isEmpty());
+    QVERIFY(!taproot.needs_address_type);
+    QCOMPARE(QString::fromStdString(taproot.requests[0].descriptor),
+             WithChecksum(QStringLiteral("tr([d34db33f/86h/0h/0h]%1/<0;1>/*)").arg(XPUB)));
+
+    // The prefix wins over the path.
+    const ViewOnlyImport zpub{ParseViewOnlyImport("[d34db33f/44'/0'/0']" + ZPUB)};
+    QCOMPARE(QString::fromStdString(zpub.requests[0].descriptor),
+             WithChecksum(QStringLiteral("wpkh([d34db33f/44'/0'/0']%1/<0;1>/*)").arg(XPUB)));
+
+    QVERIFY(ParseViewOnlyImport("[d34db33f/0h]" + XPUB).needs_address_type);
 }
 
 void ViewOnlyImportTests::privateKeysAreRejected()

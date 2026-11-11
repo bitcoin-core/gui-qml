@@ -24,15 +24,19 @@ struct ViewOnlyImport {
     std::vector<size_t> undated;
     std::vector<OutputType> output_types;
     size_t descriptor_count{0};
+    //! A plain xpub without a key origin path does not say its script type.
+    bool needs_address_type{false};
 };
 
 //! Reads an extended public key, descriptors one per line, or the JSON
-//! that listdescriptors prints and importdescriptors takes.
-ViewOnlyImport ParseViewOnlyImport(const QString& text);
+//! that listdescriptors prints and importdescriptors takes. address_type
+//! ("bech32", ...) is used for a key that does not say its own.
+ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_type = {});
 
 //! The parse result for the form: status (empty, invalid, valid), error,
-//! kind, descriptorCount, addressTypes, needsBirthDate and createdTime
-//! (seconds, or -1 when no descriptor has one).
-QVariantMap DescribeViewOnlyImport(const QString& text);
+//! kind, descriptorCount, addressTypes, needsBirthDate, createdTime
+//! (seconds, or -1 when no descriptor has one), needsAddressType and
+//! addressTypeOptions ({id, label}).
+QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type = {});
 
 #endif // BITCOIN_QML_VIEWONLYIMPORT_H

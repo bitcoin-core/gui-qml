@@ -18,10 +18,15 @@ OnboardingView {
     property bool modalView: false
     property bool creating: false
     property string nameError: ""
-    readonly property var importInfo: watchOnly && loadedChildView
+    // Without the chosen type, so the type options stay put while choosing.
+    readonly property var keyInfo: watchOnly && loadedChildView
         ? walletController.describeViewOnlyImport(loadedChildView.importText) : ({ "status": "empty" })
+    readonly property bool needsAddressType: keyInfo.status === "valid" && keyInfo.needsAddressType === true
+    readonly property var importInfo: needsAddressType && loadedChildView.addressTypeChoice.length > 0
+        ? walletController.describeViewOnlyImport(loadedChildView.importText, loadedChildView.addressTypeChoice) : keyInfo
     readonly property bool needsBirthDate: importInfo.status === "valid" && importInfo.needsBirthDate === true
     readonly property bool importReady: importInfo.status === "valid"
+        && (!needsAddressType || loadedChildView.addressTypeChoice.length > 0)
         && (!needsBirthDate || loadedChildView.birthChoice.length > 0)
     readonly property bool passwordsMatch: loadedChildView
         && loadedChildView.passwordText.length > 0
@@ -34,7 +39,7 @@ OnboardingView {
 
     signal cancel()
     // birthTime is in seconds, or -1 when the input has its own dates.
-    signal createRequested(string name, string importText, string passphrase, real birthTime)
+    signal createRequested(string name, string importText, string passphrase, real birthTime, string addressType)
 
     function birthTime() {
         if (!needsBirthDate) return -1
@@ -50,6 +55,9 @@ OnboardingView {
     function importSummary() {
         if (importInfo.status !== "valid") return qsTr("Only public information is imported. Private keys stay with your signer.")
         const types = importInfo.addressTypes.join(", ")
+        if (importInfo.kind === "extendedKey" && importInfo.addressTypes.length === 0) {
+            return qsTr("Extended key. Choose its address type below.")
+        }
         if (importInfo.kind === "extendedKey") {
             //: %1 is an address type, such as "Bech32 (SegWit)".
             return qsTr("Extended key. Imported as %1 receive and change addresses.").arg(types)
@@ -75,7 +83,8 @@ OnboardingView {
         }
         createRequested(loadedChildView.walletName.trim(), watchOnly ? loadedChildView.importText.trim() : "",
             watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText,
-            watchOnly ? birthTime() : -1)
+            watchOnly ? birthTime() : -1,
+            watchOnly && needsAddressType ? loadedChildView.addressTypeChoice : "")
     }
 
     function clearSecrets() {
@@ -112,6 +121,7 @@ OnboardingView {
         id: fields
         property alias walletName: nameEntry.text
         property alias importText: xpubEntry.text
+        property string addressTypeChoice: ""
         property string birthChoice: ""
         property alias encryptWallet: encryptCheck.checked
         property alias passwordText: passwordEntry.text
@@ -237,6 +247,40 @@ OnboardingView {
             fieldBackgroundColor: Theme.color.surface2
             errorText: root.importInfo.status === "invalid" ? root.importInfo.error : ""
             onTextEdited: walletController.clearWalletLoadStatus()
+        }
+
+        FormSection {
+            objectName: "watchOnlyAddressType"
+            visible: root.watchOnly && root.needsAddressType
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            showBackground: false
+            title: qsTr("Which addresses does this key use?")
+            description: qsTr("An xpub does not say. Check the wallet it came from.")
+            rowSpacing: 10
+
+            ButtonGroup { id: addressTypeGroup }
+
+            Repeater {
+                model: root.needsAddressType ? root.keyInfo.addressTypeOptions : []
+                OptionButton {
+                    required property var modelData
+                    readonly property var descriptions: ({
+                        "bech32": qsTr("Native SegWit, BIP84. Often exported as a zpub."),
+                        "bech32m": qsTr("Taproot, BIP86."),
+                        "p2sh-segwit": qsTr("Nested SegWit, BIP49. Often exported as a ypub."),
+                        "legacy": qsTr("Legacy, BIP44.")
+                    })
+                    objectName: "watchOnlyAddressType_" + modelData.id
+                    Layout.fillWidth: true
+                    ButtonGroup.group: addressTypeGroup
+                    surfaceSelectionStyle: true
+                    text: modelData.label
+                    description: descriptions[modelData.id] || ""
+                    selected: fields.addressTypeChoice === modelData.id
+                    onClicked: fields.addressTypeChoice = modelData.id
+                }
+            }
         }
 
         FormSection {
