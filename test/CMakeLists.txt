@@ -28,6 +28,7 @@ add_executable(bitcoinqml_unit_tests
   test_blockclockmodel.cpp
   test_bitcoinuri.cpp
   test_qmlfiledialog.cpp
+  test_paymenturihandler.cpp
   test_bitcoinamount.cpp
   test_debuglogmodel.cpp
   test_desktoptrayiconcontroller.cpp
@@ -138,6 +139,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/paymenturihandler.cpp
   ${QMLTESTS_QRC_CPP}
 )
 

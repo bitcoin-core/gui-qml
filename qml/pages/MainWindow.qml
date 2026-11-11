@@ -45,6 +45,8 @@ ApplicationWindow {
     readonly property bool waitForPostOnboardingWalletRoute: preInitOnboardingRanForUi && desktopWalletMode
     property bool postOnboardingWalletRouteResolved: false
     property bool shutdownInProgress: false
+    property bool paymentUriDeliveryInFlight: false
+    property bool paymentUriAnnounced: false
     readonly property var menuEditTarget: appWindow.editTarget(appWindow.activeFocusItem)
     readonly property var menuWalletController: appWindow.desktopWalletMode ? walletController : null
     readonly property bool menuNavigationEnabled: main.depth === 1
@@ -99,6 +101,67 @@ ApplicationWindow {
         walletCreationModal.open()
     }
 
+    // Raised once per request. The flag is cleared when the queue moves on, so
+    // a repeated URI is announced again while a retry is not.
+    function announcePendingPaymentUri(popup) {
+        if (appWindow.paymentUriAnnounced) {
+            return
+        }
+        appWindow.paymentUriAnnounced = true
+        popup.open()
+    }
+
+    function discardPendingPaymentUri() {
+        paymentUriHandler.completePendingRequest()
+    }
+
+    // A queued request that cannot be delivered now is retried on wallet changes.
+    function deliverPendingPaymentUri() {
+        if (appWindow.paymentUriDeliveryInFlight || !paymentUriHandler.hasPendingRequest) {
+            return
+        }
+        // Wallet creation covers the shell without changing the stack depth.
+        if (walletCreationModal.visible) {
+            return
+        }
+        if (!appWindow.walletAvailableForUi) {
+            appWindow.announcePendingPaymentUri(paymentUriWalletDisabledPopup)
+            return
+        }
+        if (!appWindow.desktopWalletMode || !walletController.initialized) {
+            return
+        }
+        const shell = main.depth === 1 ? main.currentItem : null
+        if (!shell || typeof shell.applyIncomingPaymentUri !== "function") {
+            return
+        }
+        // selectedWallet is never null: an empty model stands in until a wallet
+        // is open. Every swap before initialization resets the Send form.
+        if (!walletController.isWalletLoaded) {
+            appWindow.announcePendingPaymentUri(paymentUriNoWalletPopup)
+            return
+        }
+        paymentUriNoWalletPopup.close()
+        if (!shell.canAcceptPaymentUri()) {
+            return
+        }
+        appWindow.paymentUriDeliveryInFlight = true
+        if (!shell.applyIncomingPaymentUri(paymentUriHandler.pendingRequest(), qsTr("command line"))) {
+            appWindow.paymentUriDeliveryInFlight = false
+        }
+    }
+
+    function finishPendingPaymentUri(outcome) {
+        if (!appWindow.paymentUriDeliveryInFlight) {
+            return
+        }
+        appWindow.paymentUriDeliveryInFlight = false
+        if (outcome !== "interrupted") {
+            paymentUriHandler.completePendingRequest()
+        }
+        Qt.callLater(appWindow.deliverPendingPaymentUri)
+    }
+
     function resolvePostOnboardingWalletRoute() {
         if (appWindow.postOnboardingWalletRouteResolved) {
             return
@@ -113,6 +176,8 @@ ApplicationWindow {
         if (walletController.noWalletsFound) {
             main.currentItem.openNode()
             Qt.callLater(function() { walletCreationModal.openForOnboarding() })
+        } else {
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
     }
 
@@ -314,6 +379,51 @@ ApplicationWindow {
         }
     }
 
+    AlertPopup {
+        id: paymentUriNoWalletPopup
+        objectName: "paymentUriNoWalletPopup"
+        parent: Overlay.overlay
+        title: qsTr("No wallet open")
+        message: qsTr("A payment request is waiting. Open or create a wallet to review it.")
+        messageObjectName: "paymentUriNoWalletMessage"
+
+        AlertAction {
+            text: qsTr("Discard")
+            role: AlertAction.Cancel
+            buttonObjectName: "paymentUriNoWalletDiscardButton"
+            onTriggered: appWindow.discardPendingPaymentUri()
+        }
+
+        AlertAction {
+            text: qsTr("Open wallet")
+            buttonObjectName: "paymentUriNoWalletOpenButton"
+            onTriggered: appWindow.routeToShell("toggleWalletSelection")
+        }
+
+        AlertAction {
+            text: qsTr("Create wallet")
+            buttonObjectName: "paymentUriNoWalletCreateButton"
+            onTriggered: appWindow.openWalletCreation()
+        }
+    }
+
+    AlertPopup {
+        id: paymentUriWalletDisabledPopup
+        objectName: "paymentUriWalletDisabledPopup"
+        parent: Overlay.overlay
+        title: qsTr("Payment request ignored")
+        message: qsTr("This application was started without wallet support, so the payment request cannot be processed.")
+        messageObjectName: "paymentUriWalletDisabledMessage"
+
+        AlertAction {
+            text: qsTr("OK")
+            // Escape goes through this action too, so the next request is reported.
+            role: AlertAction.Neutral
+            buttonObjectName: "paymentUriWalletDisabledOkButton"
+            onTriggered: appWindow.discardPendingPaymentUri()
+        }
+    }
+
     NodeRuntimeDialog {
         parent: Overlay.overlay
     }
@@ -331,9 +441,24 @@ ApplicationWindow {
         target: appWindow.desktopWalletMode ? walletController : null
         function onInitializedChanged() {
             appWindow.resolvePostOnboardingWalletRoute()
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
         function onNoWalletsFoundChanged() {
             appWindow.resolvePostOnboardingWalletRoute()
+        }
+        function onSelectedWalletChanged() {
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
+        }
+        function onIsWalletLoadedChanged() {
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
+        }
+    }
+
+    Connections {
+        target: paymentUriHandler
+        function onPendingRequestChanged() {
+            appWindow.paymentUriAnnounced = false
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
     }
 
@@ -351,6 +476,9 @@ ApplicationWindow {
             onAddWallet: {
                 walletCreationModal.open()
             }
+            onPaymentRequestOutcome: (outcome) => appWindow.finishPendingPaymentUri(outcome)
+            onPaymentRequestAcceptable: Qt.callLater(appWindow.deliverPendingPaymentUri)
+            onActiveViewChanged: Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
     }
 
@@ -359,6 +487,7 @@ ApplicationWindow {
         onFinished: function(openActivity, wallet) {
             if (openActivity) appWindow.routeToShell("openWallet", wallet)
         }
+        onClosed: Qt.callLater(appWindow.deliverPendingPaymentUri)
     }
 
     Component {
@@ -390,6 +519,7 @@ ApplicationWindow {
                 Qt.callLater(appWindow.resolvePostOnboardingWalletRoute)
             }
         }
+        Qt.callLater(appWindow.deliverPendingPaymentUri)
     }
 
     Component {

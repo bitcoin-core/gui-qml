@@ -20,7 +20,7 @@ ColumnLayout {
     property int descriptionSize: 18
     property string descriptionColor: Theme.color.neutral8
     property bool descriptionBold: false
-    property int descriptionTextFormat: Text.AutoText
+    property int descriptionTextFormat: Text.PlainText
     property string subtext: ""
     property int subtextMargin
     property int subtextSize: 15
@@ -40,6 +40,7 @@ ColumnLayout {
             font.pixelSize: root.headerSize
             color: root.headerColor
             text: root.header
+            textFormat: Text.PlainText
             horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
@@ -79,6 +80,7 @@ ColumnLayout {
             font.pixelSize: root.subtextSize
             color: root.subtextColor
             text: root.subtext
+            textFormat: Text.PlainText
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
