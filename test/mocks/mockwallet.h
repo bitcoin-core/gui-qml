@@ -164,6 +164,8 @@ public:
     std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&)> create_bump_transaction_fn;
     std::function<bool(CMutableTransaction&)> sign_bump_transaction_fn;
     std::function<bool(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid&)> commit_bump_transaction_fn;
+    std::function<util::Result<std::string>(const fs::path&)> export_watch_only_wallet_fn;
+    std::function<bool(const std::string&)> backup_wallet_fn;
 
     struct Calls {
         CallCounter getNewDestination{"getNewDestination"};
@@ -216,6 +218,16 @@ public:
     {
         ++calls.getWalletTx;
         return get_wallet_tx_fn ? get_wallet_tx_fn(txid) : interfaces::WalletTx{};
+    }
+
+    bool backupWallet(const std::string& destination) override
+    {
+        return backup_wallet_fn ? backup_wallet_fn(destination) : StubWallet::backupWallet(destination);
+    }
+
+    util::Result<std::string> exportWatchOnlyWallet(const fs::path& destination) override
+    {
+        return export_watch_only_wallet_fn ? export_watch_only_wallet_fn(destination) : StubWallet::exportWatchOnlyWallet(destination);
     }
 
     std::set<interfaces::WalletTx> getWalletTxs() override

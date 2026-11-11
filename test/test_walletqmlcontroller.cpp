@@ -17,6 +17,7 @@
 #include <wallet/types.h>
 #include <wallet/walletutil.h>
 
+#include <QDate>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -326,6 +327,8 @@ private Q_SLOTS:
     void validateXpubRejectsGarbage();
     void validateXpubRejectsEmpty();
     void validateXpubTrimsWhitespace();
+    void homeFileUrlIsALocalFileUrl();
+    void walletFileDestinationProtectsTheWalletsFolder();
     void createWatchOnlyInvalidXpubSetsError();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
     void externalSignerCreationRequiresConfiguredPath();
@@ -623,6 +626,39 @@ void WalletQmlControllerTests::validateXpubRejectsEmpty()
     DrainingWalletController controller(node);
 
     QVERIFY(!controller.validateXpub(""));
+}
+
+void WalletQmlControllerTests::homeFileUrlIsALocalFileUrl()
+{
+    MockNode node;
+    DrainingWalletController controller(node);
+
+    QCOMPARE(controller.homeFileUrl(), QUrl::fromLocalFile(QDir::homePath()));
+    const QUrl file{controller.homeFileUrl(QStringLiteral("wallet-watch-only.txt"))};
+    QVERIFY(file.isLocalFile());
+    QCOMPARE(file.toLocalFile(), QDir::home().filePath(QStringLiteral("wallet-watch-only.txt")));
+}
+
+void WalletQmlControllerTests::walletFileDestinationProtectsTheWalletsFolder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString wallets{dir.filePath(QStringLiteral("wallets"))};
+    QVERIFY(QDir{}.mkpath(wallets));
+    MockNode node;
+    FakeWalletLoader loader;
+    loader.wallet_dir = wallets.toStdString();
+    node.wallet_loader_fn = [&loader]() -> interfaces::WalletLoader& { return loader; };
+    DrainingWalletController controller(node);
+
+    const QString today{QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"))};
+    QCOMPARE(controller.defaultWalletFilePath(nullptr, true, dir.path()),
+             QDir::toNativeSeparators(dir.filePath(QStringLiteral("wallet-watchonly-%1.dat").arg(today))));
+
+    QVariantMap result{controller.walletFileDestination(nullptr, QDir{wallets}.filePath(QStringLiteral("copy.bak")), false)};
+    QCOMPARE(result.value("status").toString(), QStringLiteral("blocked"));
+    result = controller.walletFileDestination(nullptr, dir.filePath(QStringLiteral("copy.bak")), false);
+    QCOMPARE(result.value("status").toString(), QStringLiteral("available"));
 }
 
 void WalletQmlControllerTests::validateXpubTrimsWhitespace()
