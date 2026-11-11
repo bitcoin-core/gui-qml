@@ -44,6 +44,8 @@ struct ViewOnlyImport {
     QString warning;
     //! The extended key with its origin, the same however it was pasted.
     QString key_id;
+    //! Zero-based line of the text that failed, or -1.
+    int error_line{-1};
 };
 
 //! Reads an extended public key, descriptors one per line, or the JSON
@@ -54,9 +56,10 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
 //! The parse result for the form: status (empty, invalid, valid), error,
 //! kind, descriptorCount, addressTypes, needsBirthDate, createdTime
 //! (seconds, or -1 when no descriptor has one), needsAddressType,
-//! addressTypeOptions ({id, label}), warning, importId (the same for input
-//! that only differs in formatting), and rows: one per address type and key
-//! ({addressType, key, receive, change, active, ranged, createdTime}).
+//! addressTypeOptions ({id, label}), errorLine, warning, importId (the same
+//! for input that only differs in formatting), and rows: one per address
+//! type and key ({addressType, key, receive, change, active, ranged,
+//! createdTime}).
 QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type = {});
 
 #endif // BITCOIN_QML_VIEWONLYIMPORT_H

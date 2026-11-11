@@ -42,6 +42,7 @@
 #include <qml/buttonkeyactivation.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/descriptorhighlighter.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
 
@@ -4555,6 +4556,7 @@ public Q_SLOTS:
         qmlRegisterType<MockFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+        qmlRegisterType<DescriptorHighlighter>("org.bitcoincore.qt", 1, 0, "DescriptorHighlighter");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
         engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);
