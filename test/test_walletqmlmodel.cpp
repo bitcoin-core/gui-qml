@@ -1008,6 +1008,22 @@ void WalletQmlModelTests::descriptorExportsJoinReceiveAndChange()
     const QVariantMap swapped_export{ExportFor(branch_model->descriptorExports(), "bech32")};
     QCOMPARE(swapped_export.value("descriptorParts").toMap().value("path").toString(), QString("/<1;0>/*"));
     QVERIFY(swapped_export.value("extendedKey").toString().isEmpty());
+
+    // A change chain this view can't read still keeps the key from being offered alone.
+    wallet::CWallet unread_wallet{chain.get(), "watch-only-unread-change-test", nullptr};
+    QVERIFY(unread_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+    const std::string unread_receive{"wpkh(" + OriginDescriptor(master, 84) + "/0/*)"};
+    const std::string unread_change{"wpkh(" + HexStr(DeriveHardened(master, {84, 1, 0}).key.GetPubKey()) + ")"};
+    LoadActiveDescriptor(unread_wallet, unread_receive, OutputType::BECH32);
+    LoadActiveDescriptor(unread_wallet, unread_change, OutputType::BECH32, true);
+    auto [unread_view, unread_model] = MakeWalletModel(nullptr, &unread_wallet);
+    const QVariantMap unread_export{ExportFor(unread_model->descriptorExports(), "bech32")};
+    QVERIFY(unread_export.value("extendedKey").toString().isEmpty());
+    QVERIFY(unread_export.value("descriptorParts").toMap().isEmpty());
+    const QStringList unread_lines{unread_export.value("descriptor").toString().split('\n')};
+    QCOMPARE(unread_lines.size(), 2);
+    QVERIFY(unread_lines.at(0).startsWith(QString::fromStdString(unread_receive) + "#"));
+    QVERIFY(unread_lines.at(1).startsWith(QString::fromStdString(unread_change) + "#"));
 }
 
 void WalletQmlModelTests::descriptorExportsUseMainnetSlip132Prefixes()

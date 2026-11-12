@@ -1354,12 +1354,23 @@ QVariantList WalletQmlModel::descriptorExports() const
     for (const OutputType type : DESCRIPTOR_EXPORT_TYPES) {
         const auto receive = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false));
         if (!receive) continue;
-        const auto change = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true));
+        const wallet::ScriptPubKeyMan* change_man{raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true)};
+        const auto change = ParseSingleKeyDescriptor(change_man);
+        // A change chain in another form is listed as it is, and no single key covers it.
+        const bool change_unreadable{change_man && !change};
         QVariantMap item;
         item.insert(QStringLiteral("id"), OutputTypeId(type));
         item.insert(QStringLiteral("label"), OutputTypeLabel(type));
         item.insert(QStringLiteral("description"), OutputTypeDescription(type));
-        const WatchOnlyDescriptor descriptor{MakeWatchOnlyDescriptor(*receive, change)};
+        WatchOnlyDescriptor descriptor{MakeWatchOnlyDescriptor(*receive, change)};
+        if (change_unreadable) {
+            std::string change_text;
+            const auto* change_desc_man = dynamic_cast<const wallet::DescriptorScriptPubKeyMan*>(change_man);
+            if (change_desc_man) change_desc_man->GetDescriptorString(change_text, /*priv=*/false);
+            descriptor = {.text = change_text.empty() ? receive->descriptor
+                                                      : receive->descriptor + QLatin1Char('\n') + QString::fromStdString(change_text),
+                          .parts = {}};
+        }
         item.insert(QStringLiteral("scriptName"), DescriptorScriptName(type));
         item.insert(QStringLiteral("descriptor"), descriptor.text);
         item.insert(QStringLiteral("descriptorParts"), descriptor.parts);
@@ -1367,7 +1378,7 @@ QVariantList WalletQmlModel::descriptorExports() const
         item.insert(QStringLiteral("changeChain"), change ? change->branch.mid(1) : QString{});
         item.insert(QStringLiteral("xpub"), receive->xpub);
         // A bare key implies /0/* and /1/*, so any other layout needs the descriptor.
-        const bool key_covers_both{receive->branch == QLatin1String("/0") &&
+        const bool key_covers_both{!change_unreadable && receive->branch == QLatin1String("/0") &&
                                    (!change || (!descriptor.parts.isEmpty() && change->branch == QLatin1String("/1")))};
         item.insert(QStringLiteral("extendedKey"), key_covers_both ? Slip132ExtendedKey(receive->xpub, type) : QString{});
         item.insert(QStringLiteral("fingerprint"), receive->fingerprint);
