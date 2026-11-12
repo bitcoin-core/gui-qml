@@ -19,8 +19,8 @@ OnboardingView {
     maximumContentWidth: 640
     heading: qsTr("The block clock")
     subheading: qsTr("The Bitcoin network targets a new block every 10 minutes. " +
-        "Sometimes it's faster and sometimes slower. The block clock indicates each " +
-        "block on a dial that represents the current day.")
+        "Sometimes it's faster and sometimes slower. The block clock shows the blocks " +
+        "of the last 12 hours on a dial, each placed at the time it arrived.")
     imageSource: useSharedMotion ? "" : Theme.image.blocktime
     imageView: useSharedMotion ? motionSpace : null
     imageSize: 200

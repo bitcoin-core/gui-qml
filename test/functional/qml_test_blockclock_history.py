@@ -21,8 +21,10 @@ def run_tests():
             # Use the model's local period on every poll, including if the
             # test crosses noon/midnight while waiting for notifications.
             period_start = harness.driver.get_property("blockClock", "blockClockModelRef.periodStart")
-            expected = sorted((timestamp - period_start) / 43200 for timestamp in timestamps
-                              if period_start <= timestamp < period_start + 43200)
+            current = harness.driver.get_property("blockClock", "blockClockModelRef.currentTimeFraction")
+            # The last twelve hours, with future blocks at the current time.
+            expected = sorted(min((timestamp - period_start) / 43200, current) for timestamp in timestamps
+                              if (timestamp - period_start) / 43200 >= current - 1)
             return (isinstance(fractions, list) and len(fractions) == len(expected)
                     and all(abs(actual - wanted) < 1e-10 for actual, wanted in zip(fractions, expected)))
 
