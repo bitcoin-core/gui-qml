@@ -4388,10 +4388,15 @@ public Q_SLOTS:
         // The minimal plugin cannot register application fonts or raise windows.
         // Fatal error tests call raise() to bring the error window forward.
         // Allow only the two exact plugin messages. Other Qt warnings still fail
-        // this test, and qmlEngineAvailable() rejects all QML engine warnings.
+        // this test. qmlEngineAvailable() covers warnings outside test functions.
         QTest::failOnWarning(QRegularExpression(QStringLiteral(
             "^(?!This plugin does not support (?:application fonts|raise\\(\\))$).*")));
 #endif
+    }
+
+    void emitWarningProbe()
+    {
+        qWarning("qt-warning-probe");
     }
 
     void applicationAvailable()
@@ -4434,6 +4439,14 @@ public Q_SLOTS:
         // Qt Test's per-function warning policy does not cover QML loading or
         // engine destruction. Observe both phases so these warnings also fail.
         connect(engine, &QQmlEngine::warnings, engine, [this](const QList<QQmlError>& warnings) {
+            // The engine emits this signal before logging the warning. Route
+            // active test functions through Qt Test, which honors ignoreWarning.
+            // Re-arm here too: data providers and initTestCase/cleanupTestCase
+            // run outside the per-test init() warning policy.
+            if (QTest::currentTestFunction()) {
+                failOnWarnings();
+                return;
+            }
             for (const auto& warning : warnings) {
                 m_had_warnings = true;
                 std::cerr << "Unexpected QML warning: " << warning.toString().toStdString() << '\n';

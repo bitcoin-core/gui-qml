@@ -180,6 +180,7 @@ endif()
 add_test(NAME bitcoinqml_qmlwarning_tests
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/qml/test_warnings.py
     $<TARGET_FILE:bitcoinqml_qmltests> ${Qt6_VERSION} ${qml_test_platform} ${PROJECT_BINARY_DIR}
+    "${CMAKE_CTEST_COMMAND}" "$<CONFIG>"
 )
 set_tests_properties(bitcoinqml_qmlwarning_tests PROPERTIES TIMEOUT 120 LABELS qml
   ENVIRONMENT "QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")

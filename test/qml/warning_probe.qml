@@ -26,17 +26,54 @@ TestCase {
             console.warn("teardown-console-warning-probe")
     }
 
+    function initTestCase() {
+        if (Qt.application.arguments.indexOf("WarningProbe::test_init_case") >= 0) {
+            createTemporaryQmlObject(
+                'import QtQml 2.15; QtObject { property int value: missingInitCaseWarningProbe.value }', this)
+        }
+    }
+
+    function cleanupTestCase() {
+        if (Qt.application.arguments.indexOf("WarningProbe::test_cleanup_case") >= 0) {
+            createTemporaryQmlObject(
+                'import QtQml 2.15; QtObject { property int value: missingCleanupCaseWarningProbe.value }', this)
+        }
+    }
+
     function init() {
         testSetup.failOnWarnings()
     }
 
-    function test_clean() {
+    function test_init_case() { verify(true) }
+    function test_cleanup_case() { verify(true) }
+
+    function test_provider_data() {
+        createTemporaryQmlObject(
+            'import QtQml 2.15; QtObject { property int value: missingDataWarningProbe.value }', this)
+        return [{tag: "warning in data provider"}]
+    }
+
+    function test_provider(data) { verify(true) }
+
+    function test_00_clean() {
         verify(true)
     }
 
     function test_console() {
         console.warn("console-warning-probe")
         verify(true)
+    }
+
+    function test_qt() {
+        testSetup.emitWarningProbe()
+        verify(true)
+    }
+
+    function test_ignored_binding() {
+        ignoreWarning(/.*missingExpectedBindingWarningProbe.*/)
+        const item = createTemporaryQmlObject(
+            'import QtQml 2.15; QtObject { property int value: missingExpectedBindingWarningProbe.value }', this)
+        verify(item !== null)
     }
 
     function test_binding() {
