@@ -3,8 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 
 Item {
     property int coinsSelected: 0
@@ -44,12 +42,12 @@ Item {
         lineHeight: Theme.text.body.lineHeight
         lineHeightMode: Text.FixedHeight
         text: {
-            if (coinCount === 0) {
+            if (root.coinCount === 0) {
                 qsTr("No coins available")
-            } else if (coinsSelected === 0) {
+            } else if (root.coinsSelected === 0) {
                 qsTr("Select")
             } else {
-                qsTr("%n coin selected", "", coinsSelected)
+                qsTr("%n coin selected", "", root.coinsSelected)
             }
         }
 

@@ -20,14 +20,14 @@ Page {
     property string pendingMigrationPath: ""
     // The wallet shown in the window. Wallet pages never look this up
     // themselves; each WalletView gets its wallet when it is created.
-    readonly property var activeWallet: walletController.isWalletLoaded ? walletController.selectedWallet : null
+    readonly property var activeWallet: ApplicationModels.walletController.isWalletLoaded ? ApplicationModels.walletController.selectedWallet : null
     readonly property WalletView activeView: {
         walletViews.count
         return root.viewForWallet(root.activeWallet)
     }
     readonly property bool walletTabSelected: navigationTabs.checkedButton !== null
-        && navigationTabs.checkedButton.index <= 2
-    readonly property Item walletSettingsHost: settingsLoader.item ? settingsLoader.item.walletSettingsHost : null
+        && (navigationTabs.checkedButton as WalletNavigationTab).index <= 2
+    readonly property Item walletSettingsHost: settingsLoader.item ? (settingsLoader.item as SettingsView).walletSettingsHost : null
     readonly property alias walletViews: walletViews
 
     ButtonGroup { id: navigationTabs }
@@ -37,7 +37,7 @@ Page {
     function viewForWallet(wallet) {
         if (!wallet) return null
         for (let index = 0; index < walletViews.count; ++index) {
-            const view = walletViews.itemAt(index)
+            const view = walletViews.itemAt(index) as WalletView
             if (view && view.wallet === wallet) return view
         }
         return null
@@ -48,7 +48,7 @@ Page {
     // A wallet that is unloading loses its view at once, before the
     // controller drops it from the list.
     function syncOpenWallets() {
-        const wallets = walletController.openWallets.filter(function(wallet) {
+        const wallets = ApplicationModels.walletController.openWallets.filter(function(wallet) {
             return wallet.available !== false
         })
         for (let index = openWalletsModel.count - 1; index >= 0; --index) {
@@ -148,8 +148,8 @@ Page {
 
     // Show a wallet's Activity, as long as that wallet is still open.
     function openWallet(wallet) {
-        if (!wallet || wallet.available === false || walletController.openWallets.indexOf(wallet) < 0) return
-        if (walletController.selectedWallet !== wallet) walletController.setSelectedWallet(wallet.name)
+        if (!wallet || wallet.available === false || ApplicationModels.walletController.openWallets.indexOf(wallet) < 0) return
+        if (ApplicationModels.walletController.selectedWallet !== wallet) ApplicationModels.walletController.setSelectedWallet(wallet.name)
         if (root.activeWallet === wallet) root.showWalletTab(WalletView.Activity)
     }
 
@@ -166,15 +166,15 @@ Page {
     }
 
     function toggleWalletSelection() {
-        if (!walletController.initialized) {
+        if (!ApplicationModels.walletController.initialized) {
             return
         }
         if (walletSelect.visible) {
             walletSelect.close()
             return
         }
-        walletListModel.listWalletDir()
-        if (walletController.noWalletsFound) {
+        ApplicationModels.walletListModel.listWalletDir()
+        if (ApplicationModels.walletController.noWalletsFound) {
             root.addWallet()
         } else {
             walletSelect.open()
@@ -182,11 +182,11 @@ Page {
     }
 
     function openWalletSelection() {
-        if (!walletController.initialized) {
+        if (!ApplicationModels.walletController.initialized) {
             return
         }
-        walletListModel.listWalletDir()
-        if (walletController.noWalletsFound) {
+        ApplicationModels.walletListModel.listWalletDir()
+        if (ApplicationModels.walletController.noWalletsFound) {
             root.addWallet()
         } else {
             walletSelect.open()
@@ -213,7 +213,7 @@ Page {
     ListModel { id: openWalletsModel }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onOpenWalletsChanged() {
             root.syncOpenWallets()
         }
@@ -244,17 +244,17 @@ Page {
             if (root.pendingMigrationPath.length === 0) {
                 return
             }
-            if (walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
+            if (ApplicationModels.walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
                 const showPassphraseError = migrationPassphrasePopup.opened
                 migrationRequiredPopup.close()
                 migrationPassphrasePopup.busy = false
-                migrationPassphrasePopup.errorText = showPassphraseError ? walletController.walletMigrationError : ""
+                migrationPassphrasePopup.errorText = showPassphraseError ? ApplicationModels.walletController.walletMigrationError : ""
                 migrationPassphrasePopup.open()
             } else {
                 migrationPassphrasePopup.busy = false
                 migrationPassphrasePopup.close()
                 migrationRequiredPopup.busy = false
-                migrationRequiredPopup.errorText = walletController.walletMigrationError
+                migrationRequiredPopup.errorText = ApplicationModels.walletController.walletMigrationError
                 migrationRequiredPopup.open()
             }
         }
@@ -266,14 +266,14 @@ Page {
             objectName: "walletBadge"
             implicitHeight: 48
             checked: walletSelect.visible
-            walletType: walletController.selectedWallet.keyScheme
-            text: walletController.selectedWallet.displayName
-            balance: walletController.selectedWallet.balance
-            balanceSatoshi: walletController.selectedWallet.balanceSatoshi
-            loading: !walletController.initialized
-            noWalletLoaded: !walletController.isWalletLoaded
-            noWalletsFound: walletController.noWalletsFound
-            keySchemeKind: walletController.selectedWallet.keySchemeKind
+            walletType: ApplicationModels.walletController.selectedWallet.keyScheme
+            text: ApplicationModels.walletController.selectedWallet.displayName
+            balance: ApplicationModels.walletController.selectedWallet.balance
+            balanceSatoshi: ApplicationModels.walletController.selectedWallet.balanceSatoshi
+            loading: !ApplicationModels.walletController.initialized
+            noWalletLoaded: !ApplicationModels.walletController.isWalletLoaded
+            noWalletsFound: ApplicationModels.walletController.noWalletsFound
+            keySchemeKind: ApplicationModels.walletController.selectedWallet.keySchemeKind
 
             onClicked: {
                 root.toggleWalletSelection()
@@ -281,7 +281,7 @@ Page {
 
             WalletSelect {
                 id: walletSelect
-                model: walletListModel
+                model: ApplicationModels.walletListModel
                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
                 width: Math.max(360, parent.width)
                 x: 0
@@ -291,7 +291,7 @@ Page {
                     root.addWallet()
                 }
                 onWalletSettingsRequested: (name, format) => {
-                    walletController.setSelectedWallet(name, format)
+                    ApplicationModels.walletController.setSelectedWallet(name, format)
                     root.openSettingsRoute("wallet")
                 }
                 onCloseWalletRequested: (name) => {
@@ -301,28 +301,28 @@ Page {
             }
         }
         centerItem: RowLayout {
-            visible: walletController.isWalletLoaded
-            NavigationTab {
+            visible: ApplicationModels.walletController.isWalletLoaded
+            WalletNavigationTab {
                 id: activityTabButton
                 objectName: "activityTabButton"
                 text: qsTr("Activity")
-                property int index: 0
+                index: 0
                 ButtonGroup.group: navigationTabs
                 onCheckedChanged: root.walletTabChecked(WalletView.Activity, checked)
             }
-            NavigationTab {
+            WalletNavigationTab {
                 id: sendTabButton
                 objectName: "sendTabButton"
                 text: qsTr("Send")
-                property int index: 1
+                index: 1
                 ButtonGroup.group: navigationTabs
                 onCheckedChanged: root.walletTabChecked(WalletView.Send, checked)
             }
-            NavigationTab {
+            WalletNavigationTab {
                 id: receiveTabButton
                 objectName: "receiveTabButton"
                 text: qsTr("Receive")
-                property int index: 2
+                index: 2
                 ButtonGroup.group: navigationTabs
                 onCheckedChanged: root.walletTabChecked(WalletView.Receive, checked)
             }
@@ -333,12 +333,12 @@ Page {
                 textSize: 11
                 shorten: true
             }
-            NavigationTab {
+            WalletNavigationTab {
                 id: blockClockTabButton
                 objectName: "blockClockTabButton"
                 checked: true
                 Layout.preferredWidth: 30
-                property int index: 3
+                index: 3
                 ButtonGroup.group: navigationTabs
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
@@ -348,13 +348,13 @@ Page {
                 Tooltip {
                     id: blockClockTooltip
                     objectName: "blockClockTooltip"
-                    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.initialSyncComplete
-                    property bool paused: nodeModel.pause
-                    property bool connected: nodeModel.numPeers > 0
-                    property bool faulted: nodeModel.faulted
-                    property bool offline: typeof networkStatusModel !== "undefined" && networkStatusModel.networkOffline
-                    property bool headerSyncActive: nodeModel.headerSyncActive
+                    property var syncState: Utils.formatRemainingSyncTime(ApplicationModels.nodeModel.remainingSyncTime)
+                    property bool synced: ApplicationModels.nodeModel.initialSyncComplete
+                    property bool paused: ApplicationModels.nodeModel.pause
+                    property bool connected: ApplicationModels.nodeModel.numPeers > 0
+                    property bool faulted: ApplicationModels.nodeModel.faulted
+                    property bool offline: typeof networkStatusModel !== "undefined" && ApplicationModels.networkStatusModel.networkOffline
+                    property bool headerSyncActive: ApplicationModels.nodeModel.headerSyncActive
 
                     anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: 8
@@ -369,9 +369,9 @@ Page {
                         } else if (paused) {
                             qsTr("Paused")
                         } else if (connected && synced) {
-                            qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
+                            qsTr("Blocktime\n" +  Number(ApplicationModels.nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
                         } else if (connected && headerSyncActive) {
-                            nodeModel.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers")
+                            ApplicationModels.nodeModel.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers")
                         } else if (connected) {
                             qsTr("Downloading blocks\n" +  syncState.text)
                         } else {
@@ -380,20 +380,20 @@ Page {
                     }
                 }
             }
-            NavigationTab {
+            WalletNavigationTab {
                 id: peersTabButton
                 objectName: "peersTabButton"
-                iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
+                iconSource: Utils.nodeConnectionIcon(ApplicationModels.nodeModel.numPeers)
                 iconColor: Theme.color.neutral7
                 iconSize: 24
                 Layout.preferredWidth: 30
-                property int index: 4
+                index: 4
                 ButtonGroup.group: navigationTabs
                 onCheckedChanged: {
                     if (checked) {
-                        peerTableModel.startAutoRefresh()
+                        ApplicationModels.peerTableModel.startAutoRefresh()
                     } else {
-                        peerTableModel.stopAutoRefresh()
+                        ApplicationModels.peerTableModel.stopAutoRefresh()
                     }
                 }
 
@@ -405,13 +405,13 @@ Page {
                     text: qsTr("Peers")
                 }
             }
-            NavigationTab {
+            WalletNavigationTab {
                 id: settingsTabButton
                 objectName: "desktopWalletSettingsTabButton"
                 iconSource: "image://images/gear-outline"
                 iconColor: Theme.color.neutral7
                 Layout.preferredWidth: 30
-                property int index: 5
+                index: 5
                 ButtonGroup.group: navigationTabs
 
                 Tooltip {
@@ -447,6 +447,7 @@ Page {
                 onCountChanged: root.showActiveViewTab()
 
                 WalletView {
+                    id: walletView
                     anchors.fill: parent
                     active: wallet === root.activeWallet
                     visible: active
@@ -461,7 +462,7 @@ Page {
                     onWalletSelectionRequested: root.openWalletSelection()
 
                     Connections {
-                        target: wallet
+                        target: walletView.wallet
                         ignoreUnknownSignals: true
                         function onAvailableChanged() {
                             Qt.callLater(root.syncOpenWallets)
@@ -475,7 +476,7 @@ Page {
         StackLayout {
             anchors.fill: parent
             visible: !root.walletTabSelected
-            currentIndex: navigationTabs.checkedButton ? Math.max(0, navigationTabs.checkedButton.index - 3) : 0
+            currentIndex: navigationTabs.checkedButton ? Math.max(0, (navigationTabs.checkedButton as WalletNavigationTab).index - 3) : 0
 
             Item {
                 id: blockClockTab
@@ -508,7 +509,7 @@ Page {
 
                     function applyPendingRoute() {
                         if (!item || pendingRoute.length === 0) return
-                        item.selectSection(pendingRoute)
+                        (item as SettingsView).selectSection(pendingRoute)
                         pendingRoute = ""
                     }
 
@@ -542,11 +543,11 @@ Page {
         cancelButtonObjectName: "walletMigrationCancelButton"
         confirmButtonObjectName: "walletMigrationConfirmButton"
         descriptionText: qsTr("This wallet uses a legacy format and needs to be updated before it can be opened.")
-        busy: walletController.walletMigrationInProgress
+        busy: ApplicationModels.walletController.walletMigrationInProgress
         onConfirmed: {
             migrationRequiredPopup.errorText = ""
             migrationRequiredPopup.close()
-            walletController.migrateWallet(root.pendingMigrationPath, "")
+            ApplicationModels.walletController.migrateWallet(root.pendingMigrationPath, "")
         }
     }
 
@@ -565,7 +566,7 @@ Page {
         busyConfirmText: qsTr("Updating...")
         onSubmitted: (passphrase) => {
             migrationPassphrasePopup.busy = true
-            walletController.migrateWallet(root.pendingMigrationPath, passphrase)
+            ApplicationModels.walletController.migrateWallet(root.pendingMigrationPath, passphrase)
         }
     }
 
@@ -601,7 +602,8 @@ Page {
         AlertAction {
             text: qsTr("Close wallet")
             buttonObjectName: "walletCloseConfirmationConfirmButton"
-            onTriggered: walletController.closeWallet(closeConfirmationPopup.walletName)
+            onTriggered: ApplicationModels.walletController.closeWallet(closeConfirmationPopup.walletName)
         }
     }
+
 }

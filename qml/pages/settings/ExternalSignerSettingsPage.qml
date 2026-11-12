@@ -3,11 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../../controls"
-import "../../components"
 
 SettingsPage {
     id: root
@@ -15,34 +15,34 @@ SettingsPage {
     title: qsTr("External signer")
     showBackButton: false
 
-    readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
+    readonly property var signerStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).signer || ({})
     property bool checkAfterSave: false
     property bool checkAfterValidation: false
-    readonly property bool signerPathPending: optionsModel.signerPathValidationPending || optionsModel.settingsPending
-    readonly property bool signerInputChanged: signerPathInput.text.trim() !== optionsModel.externalSignerPath
-    readonly property string signerPathError: optionsModel.signerPathError || ""
+    readonly property bool signerPathPending: ApplicationModels.optionsModel.signerPathValidationPending || ApplicationModels.optionsModel.settingsPending
+    readonly property bool signerInputChanged: signerPathInput.text.trim() !== ApplicationModels.optionsModel.externalSignerPath
+    readonly property string signerPathError: ApplicationModels.optionsModel.signerPathError || ""
     readonly property bool signerConnected: !root.signerPathPending && !root.signerInputChanged
         && root.signerPathError.length === 0
-        && walletController.canCreateExternalSignerWallet
+        && ApplicationModels.walletController.canCreateExternalSignerWallet
     readonly property string signerStatusText: {
         if (root.signerPathPending) return qsTr("Checking signer path…")
         if (root.signerPathError.length > 0) return root.signerPathError
         if (root.signerInputChanged) {
             return qsTr("Path updated. Press Check device to rescan with the current signer command.")
         }
-        if (walletController.canCreateExternalSignerWallet) {
-            return qsTr("Detected external signer: %1").arg(walletController.externalSignerName)
+        if (ApplicationModels.walletController.canCreateExternalSignerWallet) {
+            return qsTr("Detected external signer: %1").arg(ApplicationModels.walletController.externalSignerName)
         }
-        if (walletController.externalSignerError.length > 0) {
-            return walletController.externalSignerError
+        if (ApplicationModels.walletController.externalSignerError.length > 0) {
+            return ApplicationModels.walletController.externalSignerError
         }
         if ((root.signerStatus.infoText || "").length > 0) {
             return root.signerStatus.infoText
         }
-        if (optionsModel.walletSettingsDirty) {
+        if (ApplicationModels.optionsModel.walletSettingsDirty) {
             return qsTr("Path updated. Press Check device to rescan with the current signer command.")
         }
-        if (optionsModel.externalSignerPath.length > 0) {
+        if (ApplicationModels.optionsModel.externalSignerPath.length > 0) {
             return qsTr("No external signer is currently detected.")
         }
         return qsTr("Set the command path for HWI or another external signer tool.")
@@ -51,32 +51,32 @@ SettingsPage {
     function commitSignerPath() {
         if (root.signerPathError.length > 0) return false
         const normalizedPath = signerPathInput.text.trim()
-        if (normalizedPath !== optionsModel.externalSignerPath) {
-            optionsModel.externalSignerPath = normalizedPath
+        if (normalizedPath !== ApplicationModels.optionsModel.externalSignerPath) {
+            ApplicationModels.optionsModel.externalSignerPath = normalizedPath
         }
         return true
     }
 
     function checkDevice() {
-        if (optionsModel.signerPathValidationPending) {
+        if (ApplicationModels.optionsModel.signerPathValidationPending) {
             root.checkAfterValidation = true
             return
         }
         root.checkAfterValidation = false
         if (!root.commitSignerPath()) return
-        if (optionsModel.settingsPending) root.checkAfterSave = true
-        else walletController.refreshExternalSignerStatus()
+        if (ApplicationModels.optionsModel.settingsPending) root.checkAfterSave = true
+        else ApplicationModels.walletController.refreshExternalSignerStatus()
     }
 
     Connections {
-        target: optionsModel
+        target: ApplicationModels.optionsModel
         function onSignerPathValidationChanged() {
-            if (!optionsModel.signerPathValidationPending && root.checkAfterValidation) root.checkDevice()
+            if (!ApplicationModels.optionsModel.signerPathValidationPending && root.checkAfterValidation) root.checkDevice()
         }
         function onSettingsPendingChanged() {
-            if (optionsModel.settingsPending || !root.checkAfterSave) return
+            if (ApplicationModels.optionsModel.settingsPending || !root.checkAfterSave) return
             root.checkAfterSave = false
-            if (!optionsModel.settingsError) walletController.refreshExternalSignerStatus()
+            if (!ApplicationModels.optionsModel.settingsError) ApplicationModels.walletController.refreshExternalSignerStatus()
         }
     }
 
@@ -115,7 +115,7 @@ SettingsPage {
                         objectName: "externalSignerPathInput"
                         Layout.fillWidth: true
                         implicitHeight: 37
-                        text: optionsModel.externalSignerPath
+                        text: ApplicationModels.optionsModel.externalSignerPath
                         placeholderText: qsTr("Enter external signer path")
                         placeholderTextColor: Theme.color.neutral7
                         color: Theme.color.neutral9
@@ -141,7 +141,7 @@ SettingsPage {
                                 rightMargin: -2
                             }
                         }
-                        onTextChanged: optionsModel.requestExternalSignerPathValidation(text)
+                        onTextChanged: ApplicationModels.optionsModel.requestExternalSignerPathValidation(text)
                         onEditingFinished: root.checkDevice()
                         onAccepted: focus = false
                     }
@@ -194,5 +194,5 @@ SettingsPage {
         }
     }
 
-    Component.onCompleted: walletController.refreshExternalSignerStatus()
+    Component.onCompleted: ApplicationModels.walletController.refreshExternalSignerStatus()
 }

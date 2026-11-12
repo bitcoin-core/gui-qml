@@ -243,7 +243,7 @@ PageStack {
     Binding {
         target: root.recipient ? root.recipient.amount : null
         property: "unit"
-        value: optionsModel.displayUnit
+        value: ApplicationModels.optionsModel.displayUnit
         when: root.recipient !== null
     }
 
@@ -252,7 +252,7 @@ PageStack {
         satoshi: root.wallet && root.wallet.recipients
             ? root.wallet.recipients.totalAmountSatoshi
             : 0
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
     }
 
     initialItem: Page {
@@ -303,7 +303,7 @@ PageStack {
             padding: 0
             width: Overlay.overlay.width
             height: Overlay.overlay.height
-            onOpened: if (reviewStack.currentItem) reviewStack.currentItem.focusInitialControl()
+            onOpened: if (reviewStack.currentItem) (reviewStack.currentItem as SendTransactionReview).focusInitialControl()
 
             enter: Transition {
                 NumberAnimation {
@@ -829,10 +829,15 @@ PageStack {
             }
         }
 
+        function removeRecipient(index) {
+            root.wallet.recipients.removeAt(index)
+            expandedRecipient = root.wallet.recipients.currentIndex - 1
+        }
+
         property int expandedRecipient: root.wallet ? root.wallet.recipients.currentIndex - 1 : 0
         readonly property var currentEditor: {
             const revision = root.wallet ? root.wallet.recipients.currentIndex : 0
-            const row = recipientRepeater.itemAt(expandedRecipient)
+            const row = recipientRepeater.itemAt(expandedRecipient) as SendRecipientCard
             return row ? row.editorItem : null
         }
         readonly property var addressField: currentEditor ? currentEditor.addressField : null
@@ -856,7 +861,7 @@ PageStack {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top; anchors.topMargin: 28
                     spacing: 24
-                    enabled: walletController.initialized
+                    enabled: ApplicationModels.walletController.initialized
                     RowLayout {
                         Layout.fillWidth: true
                         ColumnLayout {
@@ -888,7 +893,14 @@ PageStack {
                                     animationAvailableWidth: Math.max(0, availableBalanceRow.parent.width
                                         - availableBalanceCaption.width - availableBalanceRow.spacing)
                                 }
-                                BitcoinAmount { id: availableAmount; satoshi: root.wallet ? (root.wallet.coinsListModel.coinCount, root.wallet.availableSendBalanceSatoshi) : 0; unit: optionsModel.displayUnit }
+                                BitcoinAmount {
+                                    id: availableAmount
+                                    satoshi: {
+                                        const coinCount = root.wallet ? root.wallet.coinsListModel.coinCount : 0
+                                        return root.wallet ? root.wallet.availableSendBalanceSatoshi : 0
+                                    }
+                                    unit: ApplicationModels.optionsModel.displayUnit
+                                }
                             }
                         }
                         OverflowMenuButton {
@@ -936,86 +948,25 @@ PageStack {
                                 Repeater {
                                     id: recipientRepeater
                                     model: root.wallet.recipients
-                                    delegate: Pane {
-                                        id: recipientCard
-                                        required property int index
-                                        required property var recipientObject
-                                        readonly property var walletModel: root.wallet
-                                        readonly property var pageController: sendPage
-                                        readonly property bool expanded: sendPage.expandedRecipient === index
-                                        readonly property var editorItem: editorLoader.item
-                                        objectName: "sendRecipientCard_" + index
+                                    delegate: SendRecipientCard {
+                                        id: recipientDelegate
+                                        wallet: root.wallet
                                         width: recipientColumn.width
-                                        implicitWidth: 0
-                                        padding: 12
-                                        implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-                                        background: Rectangle {
-                                            color: Theme.color.neutral1
-                                            radius: 10
+                                        expanded: sendPage.expandedRecipient === recipientDelegate.index
+                                        clipboardRequest: sendPage.showClipboardUriBanner
+                                        onToggleExpanded: {
+                                            const wasExpanded = recipientDelegate.expanded
+                                            root.wallet.recipients.setCurrentIndex(recipientDelegate.index)
+                                            sendPage.expandedRecipient = wasExpanded ? -1 : recipientDelegate.index
                                         }
-                                        contentItem: ColumnLayout {
-                                            spacing: 12
-                                            RowLayout {
-                                                visible: root.wallet.recipients.count > 1
-                                                Layout.fillWidth: true; spacing: 10
-                                                AbstractButton {
-                                                    objectName: "sendEditRecipient_" + recipientCard.index
-                                                    Layout.fillWidth: true; implicitHeight: 36
-                                                    //: Accessible action to expand or collapse one recipient in the stack.
-                                                    Accessible.name: qsTr("Edit recipient %1").arg(recipientCard.index + 1)
-                                                    onClicked: {
-                                                        const wasExpanded = recipientCard.expanded
-                                                        root.wallet.recipients.setCurrentIndex(recipientCard.index)
-                                                        sendPage.expandedRecipient = wasExpanded ? -1 : recipientCard.index
-                                                    }
-                                                    contentItem: RowLayout {
-                                                        spacing: 10
-                                                        Rectangle {
-                                                            implicitWidth: 28; implicitHeight: 28; radius: 14
-                                                            color: recipientCard.expanded ? Theme.color.orange : Theme.color.neutral3
-                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; font: Theme.text.subheading.font; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
-                                                        }
-                                                        CoreText {
-                                                            Layout.fillWidth: true
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            horizontalAlignment: Text.AlignLeft
-                                                            wrap: false
-                                                            elide: Text.ElideRight
-                                                            font: Theme.text.subheading.font
-                                                            text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
-                                                        }
-                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; font: Theme.text.monoDescription.font }
-                                                        Icon {
-                                                            source: "image://images/caret-right"
-                                                            rotation: recipientCard.expanded ? 90 : 0
-                                                            size: 9
-                                                            color: Theme.color.neutral6
-                                                            Behavior on rotation { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            Loader {
-                                                id: editorLoader
-                                                active: recipientCard.expanded || root.wallet.recipients.count === 1
-                                                visible: active
-                                                Layout.fillWidth: true
-                                                sourceComponent: SendRecipientEditor {
-                                                    wallet: root.wallet; recipient: recipientCard.recipientObject
-                                                    clipboardRequest: sendPage.showClipboardUriBanner
-                                                    canRemove: root.wallet.recipients.count > 1
-                                                    removeButtonObjectName: "sendRemoveRecipient_" + recipientCard.index
-                                                    onPasteRequested: function(field) { sendPage.handleClipboardPaste(field, editorLoader.item) }
-                                                    onEdited: { root.clearPrepareTransactionError(); root.scheduleFeeEstimates() }
-                                                    onRemoveRequested: {
-                                                        const walletModel = recipientCard.walletModel
-                                                        const pageController = recipientCard.pageController
-                                                        walletModel.recipients.removeAt(recipientCard.index)
-                                                        pageController.expandedRecipient = walletModel.recipients.currentIndex - 1
-                                                    }
-                                                }
-                                            }
+                                        onPasteRequested: function(field) {
+                                            sendPage.handleClipboardPaste(field, recipientDelegate.editorItem)
                                         }
+                                        onEdited: {
+                                            root.clearPrepareTransactionError()
+                                            root.scheduleFeeEstimates()
+                                        }
+                                        onRemoveRequested: sendPage.removeRecipient(recipientDelegate.index)
                                     }
                                 }
                             }
@@ -1112,8 +1063,8 @@ PageStack {
                             FormSection {
                                 Layout.fillWidth: true
                                 title: qsTr("Summary")
-                                BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
-                                BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
+                                BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: ApplicationModels.optionsModel.displayUnit }
+                                BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: ApplicationModels.optionsModel.displayUnit }
                                 ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
                                 ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
                             }
@@ -1138,7 +1089,7 @@ PageStack {
         // C++ context property set at startup). In production builds the Loader
         // is inactive and no hook items exist in the QML object tree.
         Loader {
-            active: testAutomationEnabled
+            active: ApplicationModels.testAutomationEnabled
             anchors.fill: parent
             sourceComponent: Component {
                 Item {
@@ -1192,6 +1143,7 @@ PageStack {
                 }
             }
         }
+
     }
 
     AlertPopup {
@@ -1246,4 +1198,5 @@ PageStack {
             reviewPassphrasePopup.errorText = root.wallet.transactionError
         }
     }
+
 }

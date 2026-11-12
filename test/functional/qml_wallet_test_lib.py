@@ -8,13 +8,12 @@ import base64
 import http.client
 import json
 import os
-import shutil
 import signal
 import socket
 import subprocess
-import tempfile
 import time
 
+from qml_test_harness import cleanup_test_directory, create_test_directory
 from qml_driver import QmlDriver, QmlDriverError
 from qml_test_harness import GUI_STARTUP_TIMEOUT, complete_onboarding, find_gui_binary, qml_onboarded_args, qml_qpa_platform, qsettings_sandbox_args
 
@@ -183,7 +182,7 @@ class WalletFlowHarness:
         self.port_offset = port_offset
         self.gui_binary = find_gui_binary()
         self.bitcoind_binary = None
-        self.tmpdir = tempfile.mkdtemp(prefix=f"{name}_")
+        self.tmpdir = create_test_directory(prefix=f"{name}_")
         self.socket_path = os.path.join(self.tmpdir, "test_bridge.sock")
         self.gui_datadir = os.path.join(self.tmpdir, "gui_node")
         self.source_datadir = os.path.join(self.tmpdir, "source_node")
@@ -297,10 +296,13 @@ class WalletFlowHarness:
     def stop(self):
         self.stop_source_node()
         self.stop_gui()
+        if not self.tmpdir:
+            return
         if os.getenv("KEEP_QML_TEST_TMPDIR") == "1":
             print(f"Preserving test directory: {self.tmpdir}")
         else:
-            shutil.rmtree(self.tmpdir, ignore_errors=True)
+            cleanup_test_directory(self.tmpdir)
+            self.tmpdir = None
 
     def process_output(self, process):
         if not process:

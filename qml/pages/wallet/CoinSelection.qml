@@ -146,12 +146,12 @@ Page {
                         id: checkBox
                         objectName: "coinSelectionCheckbox"
                         Layout.minimumWidth: 20
-                        enabled: !locked
-                        checked: selected
-                        visible: !locked
+                        enabled: !delegate.locked
+                        checked: delegate.selected
+                        visible: !delegate.locked
                         function click() {
-                            if (!locked) {
-                                listView.model.toggleCoinSelection(index)
+                            if (!delegate.locked) {
+                                listView.model.toggleCoinSelection(delegate.index)
                             }
                         }
                         MouseArea {
@@ -161,21 +161,21 @@ Page {
                             cursorShape: Qt.PointingHandCursor
                         }
 
-                        onToggled: listView.model.toggleCoinSelection(index)
+                        onToggled: listView.model.toggleCoinSelection(delegate.index)
                     }
                     Icon {
                         source: "qrc:/icons/lock"
                         color: Theme.color.neutral9
-                        visible: locked
+                        visible: delegate.locked
                         size: 20
                     }
                     CoreText {
-                        text: amount
+                        text: delegate.amount
                         font.pixelSize: 18
                     }
                     CoreText {
                         Layout.fillWidth: true
-                        text: label != "" ? label : address
+                        text: delegate.label != "" ? delegate.label : delegate.address
                         font.pixelSize: 18
                         elide: Text.ElideMiddle
                         wrapMode: Text.NoWrap

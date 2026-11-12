@@ -98,7 +98,7 @@ Page {
                 Layout.topMargin: root.detailTopMargin
                 Layout.leftMargin: 20
                 Layout.rightMargin: 20
-                Layout.maximumWidth: detailMaximumWidth
+                Layout.maximumWidth: root.detailMaximumWidth
                 sourceComponent: root.detailItem
             }
         }
@@ -148,8 +148,7 @@ Page {
                 anchors.top: information.bottom
                 anchors.bottom: undefined
             }
-            PropertyChanges {
-                target: scrollView
+            PropertyChanges { target: scrollView;
                 contentHeight: information.height + continueButton.height
                     + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
             }

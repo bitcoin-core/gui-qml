@@ -6,8 +6,11 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 StackView {
+    id: root
     property bool vertical: false
-    readonly property bool canGoBack: depth > 1 && currentItem && currentItem.navigationBackEnabled !== false
+    readonly property OnboardingView onboardingPage: currentItem as OnboardingView
+    readonly property bool canGoBack: depth > 1 && currentItem
+        && (!onboardingPage || onboardingPage.navigationBackEnabled)
 
     function goBack() {
         if (canGoBack) {
@@ -17,8 +20,8 @@ StackView {
 
     pushEnter: Transition {
         NumberAnimation {
-            property: vertical ? "y" : "x"
-            from: parent ? (vertical ? parent.height : parent.width) : 0
+            property: root.vertical ? "y" : "x"
+            from: root.parent ? (root.vertical ? root.parent.height : root.parent.width) : 0
             to: 0
             duration: 500
             easing.type: Easing.InOutCubic
@@ -26,17 +29,17 @@ StackView {
     }
     pushExit: Transition {
         NumberAnimation {
-            property: vertical ? "y" : "x"
+            property: root.vertical ? "y" : "x"
             from: 0
-            to: parent ? (vertical ? -parent.height : -parent.width) : 0
+            to: root.parent ? (root.vertical ? -root.parent.height : -root.parent.width) : 0
             duration: 500
             easing.type: Easing.InOutCubic
         }
     }
     popEnter: Transition {
         NumberAnimation {
-            property: vertical ? "y" : "x"
-            from: parent ? (vertical ? -parent.height : -parent.width) : 0
+            property: root.vertical ? "y" : "x"
+            from: root.parent ? (root.vertical ? -root.parent.height : -root.parent.width) : 0
             to: 0
             duration: 500
             easing.type: Easing.InOutCubic
@@ -44,9 +47,9 @@ StackView {
     }
     popExit: Transition {
         NumberAnimation {
-            property: vertical ? "y" : "x"
+            property: root.vertical ? "y" : "x"
             from: 0
-            to: parent ? (vertical ? parent.height : parent.width) : 0
+            to: root.parent ? (root.vertical ? root.parent.height : root.parent.width) : 0
             duration: 500
             easing.type: Easing.InOutCubic
         }

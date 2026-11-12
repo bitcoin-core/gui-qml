@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
 
@@ -14,8 +13,8 @@ RowLayout {
 
     Rectangle {
         Layout.alignment: Qt.AlignVCenter
-        height: 10
-        width: 10
+        implicitHeight: 10
+        implicitWidth: 10
         radius: 5
         color: root.indicatorColor
     }

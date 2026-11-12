@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
@@ -42,8 +41,8 @@ InformationPage {
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
             color: Theme.color.neutral3
-            width: scaleRow.implicitWidth + 6
-            height: scaleRow.implicitHeight + 6
+            implicitWidth: scaleRow.implicitWidth + 6
+            implicitHeight: scaleRow.implicitHeight + 6
             radius: 3
 
             Behavior on color {
@@ -68,7 +67,7 @@ InformationPage {
 
                     onClicked: {
                         root.trafficGraphScale = 300
-                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+                        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
@@ -84,7 +83,7 @@ InformationPage {
 
                     onClicked: {
                         root.trafficGraphScale = 3600
-                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+                        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
@@ -100,7 +99,7 @@ InformationPage {
 
                     onClicked: {
                         root.trafficGraphScale = 3600 * 12
-                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+                        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
@@ -116,7 +115,7 @@ InformationPage {
 
                     onClicked: {
                         root.trafficGraphScale = 3600 * 24
-                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+                        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
             }
@@ -124,7 +123,7 @@ InformationPage {
 
         TotalBytesIndicator {
             Layout.alignment: Qt.AlignHCenter
-            indicatorText: qsTr("Received: %1").arg(formatBytes(networkTrafficTower.totalBytesReceived))
+            indicatorText: qsTr("Received: %1").arg(root.formatBytes(ApplicationModels.networkTrafficTower.totalBytesReceived))
             indicatorColor: Theme.color.green
         }
 
@@ -137,14 +136,14 @@ InformationPage {
             lineColor: Theme.color.green
             markerLineColor: Theme.color.neutral2
             maxSamples: root.trafficGraphScale
-            maxValue: networkTrafficTower.maxReceivedRateBps
-            valueList: networkTrafficTower.receivedRateList
-            maxRateBps: networkTrafficTower.maxReceivedRateBps
+            maxValue: ApplicationModels.networkTrafficTower.maxReceivedRateBps
+            valueList: ApplicationModels.networkTrafficTower.receivedRateList
+            maxRateBps: ApplicationModels.networkTrafficTower.maxReceivedRateBps
         }
 
         TotalBytesIndicator {
             Layout.alignment: Qt.AlignHCenter
-            indicatorText: qsTr("Sent: %1").arg(formatBytes(networkTrafficTower.totalBytesSent))
+            indicatorText: qsTr("Sent: %1").arg(root.formatBytes(ApplicationModels.networkTrafficTower.totalBytesSent))
             indicatorColor: Theme.color.blue
         }
 
@@ -156,9 +155,9 @@ InformationPage {
             lineColor: Theme.color.blue
             markerLineColor: Theme.color.neutral2
             maxSamples: root.trafficGraphScale
-            maxValue: networkTrafficTower.maxSentRateBps
-            valueList: networkTrafficTower.sentRateList
-            maxRateBps: networkTrafficTower.maxSentRateBps
+            maxValue: ApplicationModels.networkTrafficTower.maxSentRateBps
+            valueList: ApplicationModels.networkTrafficTower.sentRateList
+            maxRateBps: ApplicationModels.networkTrafficTower.maxSentRateBps
         }
     }
 
@@ -173,8 +172,8 @@ InformationPage {
     }
 
     Component.onCompleted: {
-        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
-        networkTrafficTower.active = true
+        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+        ApplicationModels.networkTrafficTower.active = true
     }
-    Component.onDestruction: networkTrafficTower.active = false
+    Component.onDestruction: ApplicationModels.networkTrafficTower.active = false
 }

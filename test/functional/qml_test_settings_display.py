@@ -4,9 +4,9 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end tests for the redesigned Display settings page."""
 
-import shutil
 import sys
 
+from qml_test_harness import cleanup_test_directory
 from qml_test_harness import (
     QmlTestHarness,
     complete_onboarding,
@@ -158,7 +158,7 @@ def run_tests():
         test_settings_persistence(datadir)
     finally:
         if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            cleanup_test_directory(tmpdir)
 
     print("\nAll display settings tests PASSED")
 

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
@@ -17,7 +18,7 @@ Page {
     leftPadding: 20
     rightPadding: 20
     topPadding: 30
-    readonly property var languageStatus: (optionsModel.coreSettingStatuses || ({})).lang || ({})
+    readonly property var languageStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).lang || ({})
 
     header: SettingsHeader {
         title: qsTr("Choose language")
@@ -48,11 +49,11 @@ Page {
             clip: true
 
             model: {
-                const all = optionsModel.availableLanguages
+                const all = ApplicationModels.optionsModel.availableLanguages
                 if (searchField.text.length === 0) return all
                 const query = searchField.text.toLowerCase()
                 return all.filter(function(tag) {
-                    return optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
+                    return ApplicationModels.optionsModel.languageLabel(tag).toLowerCase().indexOf(query) !== -1
                 })
             }
 
@@ -66,7 +67,7 @@ Page {
 
                 objectName: "language_" + delegate.modelData
                 Accessible.role: Accessible.ListItem
-                Accessible.name: optionsModel.languageLabel(delegate.modelData)
+                Accessible.name: ApplicationModels.optionsModel.languageLabel(delegate.modelData)
                 enabled: root.languageStatus.canEdit !== false
                 leftPadding: 0
                 rightPadding: 0
@@ -89,7 +90,7 @@ Page {
                         Layout.fillWidth: true
                         Layout.topMargin: 14
                         Layout.bottomMargin: 14
-                        text: optionsModel.languageLabel(delegate.modelData)
+                        text: ApplicationModels.optionsModel.languageLabel(delegate.modelData)
                         font.pixelSize: 18
                         color: Theme.color.neutral9
                         horizontalAlignment: Text.AlignLeft
@@ -98,7 +99,7 @@ Page {
                     }
 
                     Icon {
-                        visible: delegate.modelData === optionsModel.language
+                        visible: delegate.modelData === ApplicationModels.optionsModel.language
                         source: "image://images/check"
                         color: Theme.color.orange
                         size: 24
@@ -106,7 +107,7 @@ Page {
                 }
 
                 onClicked: {
-                    optionsModel.language = delegate.modelData
+                    ApplicationModels.optionsModel.language = delegate.modelData
                     root.back()
                 }
             }

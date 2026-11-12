@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -14,13 +15,13 @@ Popup {
     readonly property int contentMargin: 28
 
     function syncOpenState() {
-        if (nodeModel.startupError.length > 0 && !opened) {
+        if (ApplicationModels.nodeModel.startupError.length > 0 && !opened) {
             open()
         }
     }
 
     Connections {
-        target: nodeModel
+        target: ApplicationModels.nodeModel
         function onStartupErrorChanged() {
             root.syncOpenState()
         }
@@ -79,7 +80,7 @@ Popup {
             CoreText {
                 objectName: "nodeFatalErrorText"
                 width: fatalErrorScroll.availableWidth
-                text: nodeModel.startupError
+                text: ApplicationModels.nodeModel.startupError
                 color: Theme.color.neutral8
                 font.pixelSize: 15
                 wrapMode: Text.WordWrap
@@ -94,7 +95,7 @@ Popup {
             Layout.rightMargin: root.contentMargin
             Layout.bottomMargin: root.contentMargin
             text: qsTr("Shut down")
-            onClicked: nodeModel.requestShutdown()
+            onClicked: ApplicationModels.nodeModel.requestShutdown()
         }
     }
 }

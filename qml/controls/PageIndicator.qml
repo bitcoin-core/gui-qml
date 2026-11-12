@@ -8,6 +8,8 @@ import QtQuick.Controls 2.15
 PageIndicator {
     id: root
     delegate: Rectangle {
+        required property int index
+        required property bool pressed
         implicitWidth: 10
         implicitHeight: 10
         radius: Math.round(width / 2)

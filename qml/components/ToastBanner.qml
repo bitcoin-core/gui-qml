@@ -113,7 +113,7 @@ Rectangle {
 
         Icon {
             objectName: root.objectName !== "" ? root.objectName + "Icon" : ""
-            visible: root.iconSource != ""
+            visible: root.iconSource.toString() !== ""
             source: root.iconSource
             color: root.iconColor
             size: 24
@@ -125,7 +125,7 @@ Rectangle {
         CoreText {
             objectName: root.textObjectName
             Layout.fillWidth: true
-            Layout.rightMargin: root.iconSource != ""
+            Layout.rightMargin: root.iconSource.toString() !== ""
                 && root.actionText === ""
                 && !root.showsCloseButton
                 ? 24
@@ -140,7 +140,7 @@ Rectangle {
             font.pixelSize: 15
             lineHeightMode: Text.FixedHeight
             lineHeight: 21
-            horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
+            horizontalAlignment: root.iconSource.toString() !== "" ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap
         }

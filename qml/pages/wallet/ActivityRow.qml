@@ -414,8 +414,8 @@ Item {
     }
 
     component AmountText: BitcoinAmountDisplayLabel {
-        font.family: optionsModel.moneyFont.family
-        font.weight: optionsModel.moneyFont.weight
+        font.family: ApplicationModels.optionsModel.moneyFont.family
+        font.weight: ApplicationModels.optionsModel.moneyFont.weight
         font.pixelSize: Theme.text.description.pixelSize
         lineHeight: Theme.text.description.lineHeight
         lineHeightMode: Text.FixedHeight

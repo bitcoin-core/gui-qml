@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
@@ -109,7 +108,7 @@ Item {
         spacing: root.contentSpacing
 
         Icon {
-            visible: root.iconSource != ""
+            visible: root.iconSource.toString() !== ""
             source: root.iconSource
             color: root.iconColor
             size: root.iconSize

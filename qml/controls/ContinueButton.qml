@@ -79,8 +79,8 @@ Button {
     background: Rectangle {
         id: bg
         implicitHeight: 46
-        color: backgroundColor
-        border.color: borderColor
+        color: root.backgroundColor
+        border.color: root.borderColor
         radius: root.backgroundRadius
 
         states: [

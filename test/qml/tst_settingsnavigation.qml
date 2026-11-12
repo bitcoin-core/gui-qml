@@ -850,6 +850,31 @@ TestCase {
         tryCompare(rpcConsole, "tabActive", false)
     }
 
+    function test_aboutDeveloperOptionsRequireLiveSettingsModel() {
+        compare(ApplicationModels.optionsModel, optionsModel)
+        compare(ApplicationModels.onboardingOptionsModel, null)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("about")
+        const developerRow = findChild(view, "aboutDeveloperRow")
+        verify(developerRow !== null)
+        compare(developerRow.visible, true)
+        compare(developerRow.enabled, true)
+        developerRow.clicked()
+        const developerPage = findChild(view, "settingsDeveloper")
+        verify(developerPage !== null)
+        const dbcacheField = findChild(developerPage, "developerDbcacheField")
+        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
+        verify(dbcacheField !== null)
+        verify(scriptThreadsField !== null)
+        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
+        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
+        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
+        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
+        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
+        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+    }
+
     function test_displayPageUsesInlineGenericPickers() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)

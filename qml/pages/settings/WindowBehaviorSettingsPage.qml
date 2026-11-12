@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 
@@ -12,7 +13,7 @@ SettingsPage {
     title: qsTr("Window behavior")
     showBackButton: false
 
-    property var windowBehaviorModel: desktopWindowBehaviorModel
+    property var windowBehaviorModel: ApplicationModels.desktopWindowBehaviorModel
 
     FormSection {
         Layout.fillWidth: true

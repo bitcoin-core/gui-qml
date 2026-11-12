@@ -11,7 +11,7 @@ import "../controls"
 Rectangle {
     id: root
     property var entry: ({})
-    property int displayUnit: optionsModel.displayUnit
+    property int displayUnit: ApplicationModels.optionsModel.displayUnit
     property string walletName: qsTr("Your wallet")
     property color accentColor: Theme.color.purple
     property bool input: false
@@ -147,6 +147,7 @@ Rectangle {
         Repeater {
             model: root.requests
             delegate: AbstractButton {
+                id: requestButton
                 required property var modelData
                 objectName: "transactionFlowRequest_" + modelData.requestId
                 Layout.fillWidth: true
@@ -163,7 +164,7 @@ Rectangle {
                     Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.lavender; size: 16 }
                     CoreText {
                         Layout.fillWidth: true
-                        text: qsTr("Payment request #%1").arg(modelData.requestId || "")
+                        text: qsTr("Payment request #%1").arg(requestButton.modelData.requestId || "")
                         color: Theme.color.lavender
                         font: Theme.text.caption.font
                         horizontalAlignment: Text.AlignLeft

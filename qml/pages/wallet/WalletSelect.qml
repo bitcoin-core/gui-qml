@@ -92,7 +92,7 @@ Popup {
     }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onWalletLoadSucceeded() {
             root.close()
         }
@@ -130,7 +130,7 @@ Popup {
                 enabled: listView.interactive
                 interactive: listView.interactive
             }
-            model: walletListModel
+            model: ApplicationModels.walletListModel
             section.property: "walletSection"
             section.criteria: ViewSection.FullString
             section.delegate: CoreText {
@@ -175,8 +175,8 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
-                        return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
-                            ? (balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel)
+                        return balance + " " + (ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                            ? (balanceSatoshi === 1 ? "sat" : "sats") : ApplicationModels.optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
@@ -191,8 +191,8 @@ Popup {
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
-                checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
-                enabled: !walletController.walletLoadInProgress
+                checked: loadState === WalletListModel.Open && ApplicationModels.walletController.selectedWallet.name === name
+                enabled: !ApplicationModels.walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
                 leftPadding: 10
                 rightPadding: 10
@@ -308,7 +308,7 @@ Popup {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             visible: delegate.loadState !== WalletListModel.Loading
-                            enabled: visible && !walletController.walletLoadInProgress
+                            enabled: visible && !ApplicationModels.walletController.walletLoadInProgress
                             size: 24
                             iconSize: 18
                             iconSource: "image://images/ellipsis"
@@ -395,11 +395,11 @@ Popup {
                 }
 
                 onClicked: {
-                    if (walletController.walletLoadInProgress) {
+                    if (ApplicationModels.walletController.walletLoadInProgress) {
                         return
                     }
-                    walletController.setSelectedWallet(name, format)
-                    if (walletController.isWalletOpen(name)) {
+                    ApplicationModels.walletController.setSelectedWallet(name, format)
+                    if (ApplicationModels.walletController.isWalletOpen(name)) {
                         root.close()
                     }
                     // Otherwise: stay open until walletLoadSucceeded or
@@ -418,7 +418,7 @@ Popup {
             textColor: Theme.color.orange
             hoverTextColor: Theme.color.orange
             iconSource: "image://images/plus-filled"
-            enabled: !walletController.walletLoadInProgress
+            enabled: !ApplicationModels.walletController.walletLoadInProgress
             onTriggered: {
                 root.addWallet()
                 root.close()

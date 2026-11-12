@@ -40,12 +40,12 @@ Page {
     }
 
     function reconcileSelection() {
-        if (selectedNodeId >= 0 && peerListModelProxy.indexOfNodeId(selectedNodeId) >= 0) return
+        if (selectedNodeId >= 0 && ApplicationModels.peerListModelProxy.indexOfNodeId(selectedNodeId) >= 0) return
 
         selectedNodeId = -1
         selectedDetails = null
-        if (!splitView.isCompact && peerListModelProxy.count > 0) {
-            selectPeer(peerListModelProxy.peerDetailsAt(0))
+        if (!splitView.isCompact && ApplicationModels.peerListModelProxy.count > 0) {
+            selectPeer(ApplicationModels.peerListModelProxy.peerDetailsAt(0))
         } else if (splitView.isCompact) {
             splitView.showPrimary()
         }
@@ -54,7 +54,7 @@ Page {
     Component.onCompleted: Qt.callLater(root.reconcileSelection)
 
     Connections {
-        target: peerListModelProxy
+        target: ApplicationModels.peerListModelProxy
         function onCountChanged() { Qt.callLater(root.reconcileSelection) }
     }
 
@@ -105,9 +105,9 @@ Page {
                     objectName: "noPeerDetailsLabel"
                     anchors.centerIn: parent
                     visible: root.selectedDetails === null
-                    text: nodeModel.numPeers === 0
+                    text: ApplicationModels.nodeModel.numPeers === 0
                         ? qsTr("No peers connected")
-                        : peerListModelProxy.count === 0
+                        : ApplicationModels.peerListModelProxy.count === 0
                             ? qsTr("No peers match your search or filters")
                             : qsTr("Select a peer to view its details")
                     font: Theme.text.description.font

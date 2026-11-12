@@ -25,6 +25,28 @@ from qml_driver import QmlDriver, QmlDriverError
 GUI_STARTUP_TIMEOUT = 30
 
 
+_OWNED_TEST_DIRECTORIES: set[str] = set()
+
+
+def create_test_directory(prefix, dir=None):
+    """Create and register a directory that this process may remove."""
+    directory = os.path.realpath(tempfile.mkdtemp(prefix=prefix, dir=dir))
+    _OWNED_TEST_DIRECTORIES.add(directory)
+    return directory
+
+
+def cleanup_test_directory(directory):
+    """Remove only an unchanged directory created by create_test_directory."""
+    directory = os.path.abspath(directory)
+    if directory not in _OWNED_TEST_DIRECTORIES or os.path.realpath(directory) != directory:
+        raise AssertionError(f"Refusing to remove an unowned test directory: {directory}")
+    try:
+        shutil.rmtree(directory)
+    except FileNotFoundError:
+        pass
+    _OWNED_TEST_DIRECTORIES.remove(directory)
+
+
 def pick_unused_port():
     """Return an available TCP port on 127.0.0.1."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -156,7 +178,7 @@ class QmlTestHarness:
             if tmpdir is not None:
                 self.tmpdir = tmpdir
             elif datadir is None:
-                self.tmpdir = tempfile.mkdtemp(prefix="qml_test_bridge_")
+                self.tmpdir = create_test_directory(prefix="qml_test_bridge_")
             else:
                 self.tmpdir = None
 
@@ -261,7 +283,7 @@ class QmlTestHarness:
         if self.driver:
             self.driver.close()
         if cleanup and self.tmpdir and self._owns_tmpdir:
-            shutil.rmtree(self.tmpdir, ignore_errors=True)
+            cleanup_test_directory(self.tmpdir)
             self.tmpdir = None
 
     def _candidate_debug_logs(self):

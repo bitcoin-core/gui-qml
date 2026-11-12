@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import org.bitcoincore.qt 1.0
@@ -36,7 +35,7 @@ SettingsPage {
 
     function selectScale(scale) {
         root.trafficGraphScale = scale
-        networkTrafficTower.updateFilterWindowSize(scale / 10)
+        ApplicationModels.networkTrafficTower.updateFilterWindowSize(scale / 10)
     }
 
     function formatBytes(bytes) {
@@ -51,10 +50,10 @@ SettingsPage {
 
     function updateNetworkTrafficActivity() {
         if (root.visible) {
-            networkTrafficTower.active = true
+            ApplicationModels.networkTrafficTower.active = true
             root.ownsNetworkTrafficActivity = true
         } else {
-            if (root.ownsNetworkTrafficActivity) networkTrafficTower.active = false
+            if (root.ownsNetworkTrafficActivity) ApplicationModels.networkTrafficTower.active = false
             root.ownsNetworkTrafficActivity = false
         }
     }
@@ -93,7 +92,7 @@ SettingsPage {
             objectName: "networkTrafficReceivedRow"
             Layout.fillWidth: true
             title: qsTr("Received")
-            value: root.formatBytes(networkTrafficTower.totalBytesReceived)
+            value: root.formatBytes(ApplicationModels.networkTrafficTower.totalBytesReceived)
             showDivider: false
             leadingItem: Rectangle {
                 implicitWidth: 10
@@ -112,9 +111,9 @@ SettingsPage {
                 markerLineColor: Theme.color.neutral3
                 unitLabelColor: Theme.color.neutral7
                 maxSamples: root.trafficGraphScale
-                maxValue: networkTrafficTower.maxReceivedRateBps
-                valueList: networkTrafficTower.receivedRateList
-                maxRateBps: networkTrafficTower.maxReceivedRateBps
+                maxValue: ApplicationModels.networkTrafficTower.maxReceivedRateBps
+                valueList: ApplicationModels.networkTrafficTower.receivedRateList
+                maxRateBps: ApplicationModels.networkTrafficTower.maxReceivedRateBps
             }
         }
 
@@ -122,7 +121,7 @@ SettingsPage {
             objectName: "networkTrafficSentRow"
             Layout.fillWidth: true
             title: qsTr("Sent")
-            value: root.formatBytes(networkTrafficTower.totalBytesSent)
+            value: root.formatBytes(ApplicationModels.networkTrafficTower.totalBytesSent)
             showDivider: false
             bottomPadding: 16
             leadingItem: Rectangle {
@@ -142,19 +141,19 @@ SettingsPage {
                 markerLineColor: Theme.color.neutral3
                 unitLabelColor: Theme.color.neutral7
                 maxSamples: root.trafficGraphScale
-                maxValue: networkTrafficTower.maxSentRateBps
-                valueList: networkTrafficTower.sentRateList
-                maxRateBps: networkTrafficTower.maxSentRateBps
+                maxValue: ApplicationModels.networkTrafficTower.maxSentRateBps
+                valueList: ApplicationModels.networkTrafficTower.sentRateList
+                maxRateBps: ApplicationModels.networkTrafficTower.maxSentRateBps
             }
         }
     }
 
     Component.onCompleted: {
-        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
+        ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
         root.updateNetworkTrafficActivity()
     }
     onVisibleChanged: root.updateNetworkTrafficActivity()
     Component.onDestruction: {
-        if (root.ownsNetworkTrafficActivity) networkTrafficTower.active = false
+        if (root.ownsNetworkTrafficActivity) ApplicationModels.networkTrafficTower.active = false
     }
 }

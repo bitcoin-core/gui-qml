@@ -19,6 +19,7 @@ TestCase {
     Component {
         id: fullWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -28,6 +29,7 @@ TestCase {
     Component {
         id: fullPreInitWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             preInit: true
@@ -38,6 +40,7 @@ TestCase {
     Component {
         id: storageLocation
         OnboardingStorageLocation {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -47,6 +50,7 @@ TestCase {
     Component {
         id: storageAmount
         OnboardingStorageAmount {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedBlockchainSize: 610
@@ -84,17 +88,35 @@ TestCase {
     Component {
         id: connection
         OnboardingConnection {
+            settingsModel: optionsModel
             width: 640
             height: 665
         }
     }
 
     function init() {
+        ApplicationModels.setPreInitForTest(true)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, optionsModel)
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 2
         optionsModel.setStorageStatusForTest(false, 123, "", "")
+    }
+
+    function cleanup() {
+        ApplicationModels.setPreInitForTest(false)
+        compare(ApplicationModels.optionsModel, optionsModel)
+        compare(ApplicationModels.onboardingOptionsModel, null)
+    }
+
+    function test_onboarding_uses_injected_model() {
+        const wizard = createTemporaryObject(fullPreInitWizard, this)
+        verify(wizard !== null)
+        compare(wizard.settingsModel, optionsModel)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, wizard.settingsModel)
     }
 
     function triggerButton(rootItem, objectName) {
@@ -205,22 +227,10 @@ TestCase {
         compare(aboutPage.title, "About Bitcoin Core")
         compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.neutral3)
 
-        findChild(aboutPage, "aboutDeveloperRow").clicked()
-        const developerPage = findChild(popup, "settingsDeveloper")
-        verify(developerPage !== null)
-        const developerSection = findChild(developerPage, "developerSettingsSection")
-        verify(developerSection !== null)
-        compare(developerSection.backgroundColor, Theme.color.neutral2)
-        const dbcacheField = findChild(developerPage, "developerDbcacheField")
-        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
-        verify(dbcacheField !== null)
-        verify(scriptThreadsField !== null)
-        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
-        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
-        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
-        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
-        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
-        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+        const developerRow = findChild(aboutPage, "aboutDeveloperRow")
+        compare(developerRow.visible, false)
+        compare(developerRow.enabled, false)
+
     }
 
     function test_normal_onboarding_starts_at_cover() {

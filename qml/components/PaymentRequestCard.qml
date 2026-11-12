@@ -19,7 +19,7 @@ Pane {
     property bool showMessage: true
     property bool showRecipientName: false
     property var clipboard: Clipboard
-    readonly property int amountUnit: optionsModel.displayUnit
+    readonly property int amountUnit: ApplicationModels.optionsModel.displayUnit
     property string amountErrorText: ""
     property string actionErrorText: ""
     property string addressErrorText: ""
@@ -146,7 +146,7 @@ Pane {
         // Preserve a typed draft. An untouched saved amount simply follows
         // the app's display unit without becoming an edit to the request.
         if (!saved) amountInput.modified = true
-        optionsModel.displayUnit = amountUnit === BitcoinAmount.SAT ? BitcoinAmount.BTC : BitcoinAmount.SAT
+        ApplicationModels.optionsModel.displayUnit = amountUnit === BitcoinAmount.SAT ? BitcoinAmount.BTC : BitcoinAmount.SAT
         if (!saved) saveField("amount", amountInput)
     }
     function createRequest() {
@@ -220,7 +220,7 @@ Pane {
     BitcoinAmount {
         id: receivedAmount
         satoshi: root.request ? root.request.receivedAmountSatoshi : 0
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
     }
     Connections {
         target: root.request

@@ -87,7 +87,7 @@ class RpcConsoleModel : public QObject
 
     Q_PROPERTY(bool executing READ executing NOTIFY executingChanged)
     Q_PROPERTY(QStringList availableCommands READ availableCommands NOTIFY availableCommandsChanged)
-    Q_PROPERTY(QAbstractListModel* outputModel READ outputModel CONSTANT)
+    Q_PROPERTY(RpcOutputListModel* outputModel READ outputModel CONSTANT)
     Q_PROPERTY(QColor requestColor MEMBER m_request_color)
     Q_PROPERTY(QColor replyColor   MEMBER m_reply_color)
     Q_PROPERTY(QColor errorColor   MEMBER m_error_color)
@@ -107,7 +107,7 @@ public:
 
     bool executing() const { return m_executing; }
     QStringList availableCommands() const { return m_available_commands; }
-    QAbstractListModel* outputModel() { return &m_output_model; }
+    RpcOutputListModel* outputModel() { return &m_output_model; }
 
     Q_INVOKABLE bool submitCommand(const QString& command, const QString& wallet_name = {});
 

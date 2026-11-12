@@ -218,7 +218,7 @@ std::vector<AddressListModel::AddressEntry> AddressListModel::collectEntries() c
             entry.address = address;
             entry.label = m_wallet_model->getAddressLabel(address);
             entry.category = Change;
-            entry.used = used_addresses.count(address) > 0;
+            entry.used = used_addresses.contains(address);
             entry.script_type = ScriptTypeName(DecodeDestination(address.toStdString()));
             const auto balance_it{balances.find(address)};
             entry.current_balance = balance_it == balances.end() ? 0 : balance_it->second;
@@ -237,7 +237,7 @@ std::vector<AddressListModel::AddressEntry> AddressListModel::collectEntries() c
         const QString address{QString::fromStdString(EncodeDestination(wallet_address.dest))};
         if (address.isEmpty()) continue;
 
-        const bool used{used_addresses.count(address) > 0};
+        const bool used{used_addresses.contains(address)};
         if (used && !m_show_used) {
             continue;
         }

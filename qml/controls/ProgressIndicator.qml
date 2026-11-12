@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 Control {
+    id: root
     property real progress: 0
     Behavior on progress {
         NumberAnimation {
@@ -15,17 +16,18 @@ Control {
         }
     }
     contentItem: Rectangle {
+        id: progressTrack
         implicitHeight: 6
         radius: Math.floor(height / 2)
         color: Theme.color.neutral3
         Item {
-            width: Math.round(progress * contentItem.width)
+            width: Math.round(root.progress * root.contentItem.width)
             height: parent.height
             clip: true
             Rectangle {
-                width: contentItem.width
-                height: contentItem.height
-                radius: contentItem.radius
+                width: root.contentItem.width
+                height: root.contentItem.height
+                radius: progressTrack.radius
                 color: Theme.color.orange
             }
         }

@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 Item {
@@ -170,7 +169,7 @@ Item {
             source: ""
             color: enabled ? Theme.color.neutral8 : Theme.color.neutral4
             size: 30
-            enabled: source != ""
+            enabled: source.toString() !== ""
             onClicked: root.iconClicked()
         }
     }

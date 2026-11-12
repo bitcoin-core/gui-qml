@@ -3,15 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
 
 Page {
     id: root
     signal back
-    property var settingsModel: optionsModel
+    property var settingsModel: ApplicationModels.optionsModel
     property bool onboarding: false
     property bool showBackButton: true
     background: null

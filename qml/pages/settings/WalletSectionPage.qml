@@ -18,7 +18,7 @@ SettingsPage {
     property var wallet: null
     property string errorText: ""
     readonly property bool walletLoaded: root.wallet !== null
-    readonly property bool noWalletsAvailable: walletController.noWalletsFound
+    readonly property bool noWalletsAvailable: ApplicationModels.walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
 
     signal selectWalletRequested()
@@ -35,15 +35,15 @@ SettingsPage {
     }
 
     function backupDefaultFileUrl() {
-        return "file://" + walletController.homePath() + "/" + root.backupFileName()
+        return "file://" + ApplicationModels.walletController.homePath() + "/" + root.backupFileName()
     }
 
     function resolvedBackupPath(rawPath) {
-        let normalized = walletController.normalizeWalletPath(rawPath)
+        let normalized = ApplicationModels.walletController.normalizeWalletPath(rawPath)
         if (normalized.length === 0) return ""
 
         const hasKnownSuffix = /\.(bak|dat)$/i.test(normalized)
-        if (walletController.walletPathExists(normalized) && !hasKnownSuffix) {
+        if (ApplicationModels.walletController.walletPathExists(normalized) && !hasKnownSuffix) {
             normalized += "/" + root.backupFileName()
         } else if (!hasKnownSuffix) {
             normalized += ".bak"
@@ -69,7 +69,7 @@ SettingsPage {
         id: backupDialog
         objectName: "walletSettingsBackupDialog"
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + walletController.homePath()
+        currentFolder: "file://" + ApplicationModels.walletController.homePath()
         currentFile: root.backupDefaultFileUrl()
         defaultSuffix: "bak"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]

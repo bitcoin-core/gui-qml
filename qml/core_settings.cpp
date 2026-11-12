@@ -453,7 +453,7 @@ common::SettingsValue DefaultCoreSettingValue(const QString& name)
 
 common::SettingsValue DisplaySettingValue(interfaces::Node& node, ArgsManager& args, const QString& name)
 {
-    const common::SettingsValue effective_value = args.GetSetting(std::string{"-"} + name.toStdString());
+    common::SettingsValue effective_value = args.GetSetting(std::string{"-"} + name.toStdString());
     if (!effective_value.isNull()) return effective_value;
     return node.getPersistentSetting(name.toStdString());
 }

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../../controls"
 
@@ -16,8 +17,8 @@ OnboardingView {
     signal retryRequested()
 
     title: ""
-    heading: walletController.walletImportErrorTitle
-    subheading: walletController.walletImportErrorDescription
+    heading: ApplicationModels.walletController.walletImportErrorTitle
+    subheading: ApplicationModels.walletController.walletImportErrorDescription
     headingObjectName: "importWalletErrorTitle"
     subheadingObjectName: "importWalletErrorDescription"
     maximumContentWidth: 800
@@ -51,7 +52,7 @@ OnboardingView {
             objectName: "importWalletErrorHelpText"
             Layout.fillWidth: true
             visible: text.length > 0
-            text: walletController.walletImportErrorHelpText
+            text: ApplicationModels.walletController.walletImportErrorHelpText
             color: Theme.color.neutral6
             font: Theme.text.caption.font
             wrap: true

@@ -54,7 +54,7 @@ PageStack {
     }
 
     function refreshOpenDetails() {
-        const page = stackView.currentItem
+        const page = stackView.currentItem as TransactionDetail
         if (!page || page.objectName !== "activityDetailsPage") return
         const details = detailProperties(page.txid, page.outputIndex)
         if (!details.transactionData) {
@@ -76,7 +76,7 @@ PageStack {
     onWalletChanged: { paymentRequestModal.close(); stackView.pop(null) }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onClosePaymentRequestDetailRequested(wallet) {
             if (wallet === stackView.wallet) paymentRequestModal.close()
         }
@@ -88,7 +88,7 @@ PageStack {
     Binding {
         target: stackView.wallet
         property: "displayUnit"
-        value: optionsModel.displayUnit
+        value: ApplicationModels.optionsModel.displayUnit
         when: stackView.wallet !== null
     }
 

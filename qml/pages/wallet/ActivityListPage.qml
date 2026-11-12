@@ -62,14 +62,14 @@ Page {
         if (wallet && wallet.transactionActivityModel.loadError) return qsTr("Activity could not be loaded")
         if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return qsTr("Loading wallet activity…")
         if (activitySourceEmpty)
-            return nodeModel.blockSyncActive ? qsTr("Syncing wallet activity…") : qsTr("No activity yet")
+            return ApplicationModels.nodeModel.blockSyncActive ? qsTr("Syncing wallet activity…") : qsTr("No activity yet")
         return qsTr("No activity matches your filters.")
     }
     function emptyActivityDescription() {
         if (wallet && wallet.transactionActivityModel.loadError) return wallet.transactionActivityModel.loadError
         if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return ""
         if (activitySourceEmpty)
-            return nodeModel.blockSyncActive ? qsTr("Transactions may appear as your wallet catches up.")
+            return ApplicationModels.nodeModel.blockSyncActive ? qsTr("Transactions may appear as your wallet catches up.")
                 : qsTr("Your transactions and payment requests will appear here.")
         return qsTr("Try changing your search, date, type, or amount filters.")
     }
@@ -145,17 +145,17 @@ Page {
         id: activityFilterProxy
         objectName: "activityFilterProxyModel"
         sourceModel: root.wallet ? root.wallet.transactionActivityModel : null
-        displayUnit: optionsModel.displayUnit
+        displayUnit: ApplicationModels.optionsModel.displayUnit
         groupBy: activitySettings.activityGrouping === "day" ? ActivityFilterProxyModel.Day : ActivityFilterProxyModel.Month
     }
     BitcoinAmount {
         id: lowerAmountFormatter
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
         satoshi: Math.round(amountSlider.lowerValue)
     }
     BitcoinAmount {
         id: upperAmountFormatter
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
         satoshi: Math.round(amountSlider.upperValue)
     }
     AppSettings {
@@ -430,7 +430,7 @@ Page {
                 anchors.top: parent.top
                 anchors.topMargin: 64
                 width: Math.min(root.activityContentWidth, 440)
-                visible: walletController.initialized && activityFilterProxy.count === 0
+                visible: ApplicationModels.walletController.initialized && activityFilterProxy.count === 0
                 spacing: 10
                 CoreText {
                     objectName: "activityEmptyStateTitle"
@@ -454,7 +454,7 @@ Page {
             }
 
             Column {
-                visible: !walletController.initialized
+                visible: !ApplicationModels.walletController.initialized
                 anchors.top: parent.top
                 anchors.topMargin: 28
                 x: root.activitySideInset
@@ -621,8 +621,8 @@ Page {
 
             Item {
                 Layout.alignment: Qt.AlignHCenter
-                width: 60
-                height: 60
+                implicitWidth: 60
+                implicitHeight: 60
 
                 Rectangle {
                     anchors.fill: parent

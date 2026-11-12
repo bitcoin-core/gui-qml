@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <qml/legacy_settings_migration.h>
 
 #include <chainparamsbase.h>
@@ -417,7 +419,7 @@ int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback)
 QString ReadLegacyGuiLanguage(const QString& chain)
 {
     const std::unique_ptr<QSettings> chain_settings = OpenSettings(QString::fromUtf8(QT_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/true));
-    const QString chain_language = chain_settings->value(SettingsKeys::LANGUAGE).toString();
+    QString chain_language = chain_settings->value(SettingsKeys::LANGUAGE).toString();
     if (!chain_language.isEmpty()) {
         return chain_language;
     }

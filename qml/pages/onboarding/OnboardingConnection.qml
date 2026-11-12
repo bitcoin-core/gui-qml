@@ -13,7 +13,7 @@ OnboardingView {
     objectName: "onboardingConnection"
     signal back()
     signal next()
-    property var settingsModel: optionsModel
+    required property var settingsModel
 
     isOnSurface: false
     backButtonInFooter: true

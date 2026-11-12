@@ -17,7 +17,6 @@ Requires:
 """
 
 import sys
-import time
 
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call
 

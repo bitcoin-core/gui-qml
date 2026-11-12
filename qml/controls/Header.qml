@@ -18,7 +18,7 @@ ColumnLayout {
     property string description: ""
     property int descriptionMargin: 10
     property int descriptionSize: 18
-    property string descriptionColor: Theme.color.neutral8
+    property color descriptionColor: Theme.color.neutral8
     property bool descriptionBold: false
     property int descriptionTextFormat: Text.AutoText
     property string subtext: ""
@@ -40,8 +40,8 @@ ColumnLayout {
             font.pixelSize: root.headerSize
             color: root.headerColor
             text: root.header
-            horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+            horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
+            wrapMode: root.wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -53,7 +53,7 @@ ColumnLayout {
         active: root.description.length > 0
         visible: active
         sourceComponent: Label {
-            topPadding: showHeader ? root.descriptionMargin : root.headerMargin
+            topPadding: root.showHeader ? root.descriptionMargin : root.headerMargin
             font.family: "BitcoinCoreSans"
             font.styleName: root.descriptionBold ? "Semi Bold" : "Regular"
             font.pixelSize: root.descriptionSize
@@ -61,7 +61,7 @@ ColumnLayout {
             text: root.description
             textFormat: root.descriptionTextFormat
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+            wrapMode: root.wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -80,7 +80,7 @@ ColumnLayout {
             color: root.subtextColor
             text: root.subtext
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+            wrapMode: root.wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

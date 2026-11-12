@@ -126,7 +126,7 @@ Page {
                             }) : []
                             currentValue: root.wallet && root.wallet.receivingAddress
                                 ? root.wallet.receivingAddress.addressType.toLowerCase() : ""
-                            enabled: walletController.initialized
+                            enabled: ApplicationModels.walletController.initialized
                             onActivated: function(value) {
                                 receiveAddressTypeMenu.close()
                                 root.ensureReceivingAddress(false, value)
@@ -180,7 +180,7 @@ Page {
                     request: root.request
                     addressErrorText: root.addressErrorText
                     clipboard: root.clipboard
-                    enabled: walletController.initialized
+                    enabled: ApplicationModels.walletController.initialized
                     onRetryAddressRequested: root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
                     onCreated: function(requestId) {
                         root.presentedRequest = root.request
@@ -228,7 +228,7 @@ Page {
         }
     }
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onOpenReceiveRequested(wallet) {
             if (wallet !== root.wallet) return
             Qt.callLater(function() {

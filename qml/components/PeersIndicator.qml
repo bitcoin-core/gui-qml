@@ -27,6 +27,8 @@ Row {
     Repeater {
         model: 5
         Rectangle {
+            id: peerIndicator
+            required property int index
             width: root.indicatorDimensions
             height: root.indicatorDimensions
             radius: width / 2
@@ -35,7 +37,7 @@ Row {
             Behavior on opacity { OpacityAnimator { duration: 150 } }
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
-                running: root.presentationActive && numOutboundPeers === 0 && index === 0 && !root.paused
+                running: root.presentationActive && root.numOutboundPeers === 0 && peerIndicator.index === 0 && !root.paused
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
             }

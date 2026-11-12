@@ -54,7 +54,7 @@ SettingsPage {
                 root.successText = qsTr("Password updated successfully.")
             } else {
                 if (acknowledgement.loadedTrailingItem) {
-                    acknowledgement.loadedTrailingItem.checked = false
+                    (acknowledgement.loadedTrailingItem as OptionSwitch).checked = false
                 }
                 root.saved()
             }
@@ -164,7 +164,7 @@ SettingsPage {
                 showDivider: false
                 accessibleRole: Accessible.CheckBox
                 trailingItem: OptionSwitch { }
-                onClicked: loadedTrailingItem.toggle()
+                onClicked: (loadedTrailingItem as OptionSwitch).toggle()
             }
 
             ToastBanner {
@@ -185,13 +185,13 @@ SettingsPage {
                 Layout.preferredWidth: Math.min(320, parent.width)
                 Layout.alignment: Qt.AlignHCenter
                 text: root.updating ? qsTr("Update password") : qsTr("Set password")
-                enabled: walletController.initialized
+                enabled: ApplicationModels.walletController.initialized
                     && newPassword.text !== ""
                     && confirmPassword.text !== ""
                     && newPassword.text === confirmPassword.text
                     && (root.updating
                         ? currentPassword.text !== ""
-                        : acknowledgement.loadedTrailingItem && acknowledgement.loadedTrailingItem.checked)
+                        : acknowledgement.loadedTrailingItem && (acknowledgement.loadedTrailingItem as OptionSwitch).checked)
                 onClicked: {
                     root.clearResult()
                     const ok = root.updating

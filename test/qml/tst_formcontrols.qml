@@ -22,6 +22,16 @@ TestCase {
     }
 
     Component {
+        id: informationPageComponent
+        InformationPage {
+            width: 640
+            height: 1600
+            headerText: "State compatibility"
+            buttonText: "Continue"
+        }
+    }
+
+    Component {
         id: formRowComponent
 
         FormRow {
@@ -657,5 +667,19 @@ TestCase {
         compare(row.loadedBodyItem.objectName, "exampleBodyContent")
         compare(row.loadedBodyItem.text, "/Users/example/Bitcoin")
         verify(row.implicitHeight > row.minimumRowHeight)
+    }
+
+    function test_informationPageStatesApplyOnQt62() {
+        const page = createTemporaryObject(informationPageComponent, host)
+        verify(page !== null)
+        const scroll = page.contentItem.children[0]
+        page.state = ""
+        scroll.contentHeight = 1
+        page.state = "MOBILE"
+        tryCompare(scroll, "contentHeight", scroll.height)
+        page.state = "DESKTOP"
+        tryVerify(function() { return scroll.contentHeight > 1 && scroll.contentHeight < scroll.height })
+        page.state = "MOBILE"
+        tryCompare(scroll, "contentHeight", scroll.height)
     }
 }

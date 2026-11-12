@@ -114,7 +114,10 @@ void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps, bool p
         return timestamp < m_timeline.period_start || timestamp >= period_end;
     }), block_timestamps.end());
 
-    if (m_timeline.block_timestamps == block_timestamps && !period_changed) return;
+    // Older Qt versions may pass null data to memcmp when comparing empty lists.
+    const bool history_unchanged{(m_timeline.block_timestamps.isEmpty() && block_timestamps.isEmpty()) ||
+                                 m_timeline.block_timestamps == block_timestamps};
+    if (history_unchanged && !period_changed) return;
     const auto previous_fractions{m_block_time_fractions};
     m_timeline.block_timestamps = std::move(block_timestamps);
     rebuildBlockTimeFractions();

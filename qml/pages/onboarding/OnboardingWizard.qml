@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import "../../controls"
 
 Item {
@@ -12,7 +11,7 @@ Item {
     clip: true
 
     signal finished()
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property bool preInit: false
     property bool reducedMotion: false
     property int assumedBlockchainSize: 0
@@ -32,7 +31,7 @@ Item {
         id: navigationBar
         objectName: "onboardingWizardNavigationBar"
         width: parent.width
-        title: root.currentItem ? root.currentItem.title : ""
+        title: root.currentItem ? (root.currentItem as OnboardingView).title : ""
         showBackButton: false
     }
 

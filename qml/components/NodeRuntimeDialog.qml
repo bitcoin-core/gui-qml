@@ -32,9 +32,9 @@ Popup {
     }
 
     function syncOpenState() {
-        if (nodeModel.runtimeDialogVisible && !opened) {
+        if (ApplicationModels.nodeModel.runtimeDialogVisible && !opened) {
             open()
-        } else if (!nodeModel.runtimeDialogVisible && opened) {
+        } else if (!ApplicationModels.nodeModel.runtimeDialogVisible && opened) {
             close()
         }
     }
@@ -60,7 +60,7 @@ Popup {
     }
 
     Connections {
-        target: nodeModel
+        target: ApplicationModels.nodeModel
         function onRuntimeDialogChanged() {
             root.syncOpenState()
             Qt.callLater(function() { root.tagRuntimeButtons() })
@@ -106,7 +106,7 @@ Popup {
             Icon {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
-                source: nodeModel.runtimeDialogIcon
+                source: ApplicationModels.nodeModel.runtimeDialogIcon
                 color: Theme.color.orange
                 size: 24
             }
@@ -114,7 +114,7 @@ Popup {
             CoreText {
                 objectName: "nodeRuntimeDialogTitle"
                 Layout.fillWidth: true
-                text: nodeModel.runtimeDialogTitle
+                text: ApplicationModels.nodeModel.runtimeDialogTitle
                 bold: true
                 font.pixelSize: 20
                 horizontalAlignment: Text.AlignLeft
@@ -134,7 +134,7 @@ Popup {
             CoreText {
                 objectName: "nodeRuntimeDialogMessage"
                 width: runtimeMessageScroll.availableWidth
-                text: nodeModel.runtimeDialogMessage
+                text: ApplicationModels.nodeModel.runtimeDialogMessage
                 color: Theme.color.neutral8
                 font.pixelSize: 15
                 wrapMode: Text.WordWrap
@@ -151,14 +151,14 @@ Popup {
             Layout.topMargin: 0
             padding: 0
             spacing: 12
-            standardButtons: nodeModel.runtimeDialogButtons
+            standardButtons: ApplicationModels.nodeModel.runtimeDialogButtons
             background: Item {}
 
             onCountChanged: Qt.callLater(function() { root.tagRuntimeButtons() })
             onStandardButtonsChanged: Qt.callLater(function() { root.tagRuntimeButtons() })
             Component.onCompleted: Qt.callLater(function() { root.tagRuntimeButtons() })
             onClicked: function(button) {
-                nodeModel.answerRuntimeDialog(root.standardButtonId(button))
+                ApplicationModels.nodeModel.answerRuntimeDialog(root.standardButtonId(button))
             }
 
             delegate: Button {

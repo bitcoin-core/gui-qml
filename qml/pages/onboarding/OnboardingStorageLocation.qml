@@ -13,7 +13,7 @@ OnboardingView {
     signal next()
 
     property int assumedChainstateSize: 0
-    property var settingsModel: optionsModel
+    required property var settingsModel
     readonly property int reducedStorageTargetGB: 2
     readonly property int freshMinimumStorageRequiredGB: root.assumedChainstateSize + root.reducedStorageTargetGB
     readonly property int minimumStorageRequiredGB: root.settingsModel.existingProfile
@@ -28,7 +28,7 @@ OnboardingView {
     subheading: qsTr("Where do you want to store the downloaded block data? You need a minimum of %1GB of storage.").arg(root.minimumStorageRequiredGB)
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageLocationButton"
-    primaryButtonEnabled: !loadedChildView || loadedChildView.validSelection
+    primaryButtonEnabled: !root.loadedChildView || (root.loadedChildView as StorageLocations).validSelection
     onBackClicked: root.back()
     onPrimaryClicked: root.next()
 

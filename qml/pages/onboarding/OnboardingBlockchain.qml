@@ -51,6 +51,7 @@ OnboardingView {
                     Repeater {
                         model: 10
                         Rectangle {
+                            required property int index
                             width: 14
                             height: 14
                             radius: 2

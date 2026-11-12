@@ -28,7 +28,6 @@ from qml_test_harness import (
     dump_qml_tree,
     parse_args,
 )
-from qml_driver import QmlDriver, QmlDriverError
 
 
 # How long to wait for pages that require the node to be running.

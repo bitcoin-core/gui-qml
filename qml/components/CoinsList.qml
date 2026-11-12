@@ -30,15 +30,15 @@ ColumnLayout {
     spacing: 16
     onWalletChanged: { markedIds = []; walletSelectionActive = false; pendingLockedCoinId = ""; errorText = "" }
 
-    BitcoinAmount { id: targetAmount; unit: optionsModel.displayUnit; satoshi: root.target }
-    BitcoinAmount { id: selectedAmountText; unit: optionsModel.displayUnit; satoshi: root.selectedAmount }
-    BitcoinAmount { id: remainingAmountText; unit: optionsModel.displayUnit; satoshi: root.remainingAmount }
-    BitcoinAmount { id: changeAmountText; unit: optionsModel.displayUnit; satoshi: root.changeAmount }
-    BitcoinAmount { id: totalAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
-    BitcoinAmount { id: spendableAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lockedAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lowerAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
-    BitcoinAmount { id: upperAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.upperValue }
+    BitcoinAmount { id: targetAmount; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.target }
+    BitcoinAmount { id: selectedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.selectedAmount }
+    BitcoinAmount { id: remainingAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.remainingAmount }
+    BitcoinAmount { id: changeAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.changeAmount }
+    BitcoinAmount { id: totalAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
+    BitcoinAmount { id: spendableAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lockedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lowerAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
+    BitcoinAmount { id: upperAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.upperValue }
 
     function toggleRow(row, coinId, locked, marked) {
         if (selectionMode && locked && !marked) {
@@ -257,7 +257,7 @@ ColumnLayout {
                     color: Theme.color.neutral3
                 }
             }
-            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }
+            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: ApplicationModels.optionsModel.displayUnit }
             contentItem: RowLayout {
                 spacing: 0
                 Item {

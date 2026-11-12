@@ -17,7 +17,6 @@ import os
 import sys
 import time
 
-from qml_driver import QmlDriverError
 from qml_test_harness import (
     QmlTestHarness,
     complete_preinit_onboarding,

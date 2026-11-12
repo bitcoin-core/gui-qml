@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../controls"
 
@@ -10,11 +11,11 @@ ColumnLayout {
     id: root
     property bool showRestartNotice: false
     property bool isOnSurface: false
-    property string dbcacheText: String(optionsModel.dbcacheSizeMiB)
-    property string scriptThreadsText: String(optionsModel.scriptThreads)
+    property string dbcacheText: String(ApplicationModels.optionsModel.dbcacheSizeMiB)
+    property string scriptThreadsText: String(ApplicationModels.optionsModel.scriptThreads)
     property string dbcacheError: ""
     property string scriptThreadsError: ""
-    readonly property var coreStatuses: optionsModel.coreSettingStatuses
+    readonly property var coreStatuses: ApplicationModels.optionsModel.coreSettingStatuses
 
     spacing: 24
 
@@ -42,8 +43,8 @@ ColumnLayout {
             maximumLength: 5
             text: root.dbcacheText
             validator: IntValidator {
-                bottom: optionsModel.minDbcacheSizeMiB
-                top: optionsModel.maxDbcacheSizeMiB
+                bottom: ApplicationModels.optionsModel.minDbcacheSizeMiB
+                top: ApplicationModels.optionsModel.maxDbcacheSizeMiB
             }
             onTextEdited: function(text) {
                 root.dbcacheText = text
@@ -51,13 +52,13 @@ ColumnLayout {
             }
             onEditingFinished: {
                 const value = parseInt(dbcacheRow.text)
-                if (isNaN(value) || value < optionsModel.minDbcacheSizeMiB
-                        || value > optionsModel.maxDbcacheSizeMiB) {
+                if (isNaN(value) || value < ApplicationModels.optionsModel.minDbcacheSizeMiB
+                        || value > ApplicationModels.optionsModel.maxDbcacheSizeMiB) {
                     root.dbcacheError = qsTr("This is not a valid cache size. Please choose a value between %1 and %2 MiB.")
-                        .arg(optionsModel.minDbcacheSizeMiB).arg(optionsModel.maxDbcacheSizeMiB)
+                        .arg(ApplicationModels.optionsModel.minDbcacheSizeMiB).arg(ApplicationModels.optionsModel.maxDbcacheSizeMiB)
                     return
                 }
-                optionsModel.dbcacheSizeMiB = value
+                ApplicationModels.optionsModel.dbcacheSizeMiB = value
                 root.dbcacheText = String(value)
                 root.dbcacheError = ""
             }
@@ -76,8 +77,8 @@ ColumnLayout {
             maximumLength: 5
             text: root.scriptThreadsText
             validator: IntValidator {
-                bottom: optionsModel.minScriptThreads
-                top: optionsModel.maxScriptThreads
+                bottom: ApplicationModels.optionsModel.minScriptThreads
+                top: ApplicationModels.optionsModel.maxScriptThreads
             }
             onTextEdited: function(text) {
                 root.scriptThreadsText = text
@@ -85,13 +86,13 @@ ColumnLayout {
             }
             onEditingFinished: {
                 const value = parseInt(scriptThreadsRow.text)
-                if (isNaN(value) || value < optionsModel.minScriptThreads
-                        || value > optionsModel.maxScriptThreads) {
+                if (isNaN(value) || value < ApplicationModels.optionsModel.minScriptThreads
+                        || value > ApplicationModels.optionsModel.maxScriptThreads) {
                     root.scriptThreadsError = qsTr("This is not a valid thread count. Please choose a value between %1 and %2 threads.")
-                        .arg(optionsModel.minScriptThreads).arg(optionsModel.maxScriptThreads)
+                        .arg(ApplicationModels.optionsModel.minScriptThreads).arg(ApplicationModels.optionsModel.maxScriptThreads)
                     return
                 }
-                optionsModel.scriptThreads = value
+                ApplicationModels.optionsModel.scriptThreads = value
                 root.scriptThreadsText = String(value)
                 root.scriptThreadsError = ""
             }

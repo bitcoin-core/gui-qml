@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
@@ -26,7 +27,7 @@ ApplicationWindow {
             headerBold: true
             header: qsTr("There was an issue starting up.")
             headerSize: 21
-            description: message
+            description: ApplicationModels.startupError
             descriptionMargin: 3
         }
         OutlineButton {

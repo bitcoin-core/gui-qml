@@ -108,7 +108,7 @@ Page {
     }
 
     function defaultSavePsbtFileUrl() {
-        return "file://" + walletController.homePath() + "/transaction-"
+        return "file://" + ApplicationModels.walletController.homePath() + "/transaction-"
             + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm") + ".psbt"
     }
 
@@ -159,7 +159,7 @@ Page {
         objectName: "sendTransactionReviewSaveDialog"
         title: qsTr("Save transaction as PSBT")
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + walletController.homePath()
+        currentFolder: "file://" + ApplicationModels.walletController.homePath()
         defaultSuffix: "psbt"
         nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
         property var targetWallet: null
@@ -233,6 +233,7 @@ Page {
                     Repeater {
                         model: root.transaction ? root.transaction.reviewedRecipients : []
                         delegate: FormRow {
+                            id: recipientRow
                             required property int index
                             required property var modelData
                             objectName: "sendTransactionReviewRecipient" + index
@@ -246,14 +247,14 @@ Page {
                             descriptionColor: Theme.color.neutral9
                             showLeadingItem: modelData.hasPaymentRequest
                             leadingItem: ActivityRequestBadge {
-                                objectName: "sendTransactionReviewRecipient" + index + "RequestBadge"
+                                objectName: "sendTransactionReviewRecipient" + recipientRow.index + "RequestBadge"
                                 inactive: true
                                 surfaceColor: Theme.color.neutral1
                                 statusText: qsTr("Payment request recipient")
                             }
                             trailingItem: BitcoinAmountDisplayLabel {
-                                objectName: "sendTransactionReviewRecipient" + index + "Amount"
-                                text: modelData.amount
+                                objectName: "sendTransactionReviewRecipient" + recipientRow.index + "Amount"
+                                text: recipientRow.modelData.amount
                                 font: Theme.text.monoDescription.font
                                 color: Theme.color.neutral9
                             }
@@ -310,7 +311,7 @@ Page {
                 Layout.fillWidth: true
                 flow: root.wallet && root.wallet.currentTransactionFlow ? root.wallet.currentTransactionFlow : ({})
                 transactionId: root.transaction ? root.transaction.txid : ""
-                displayUnit: optionsModel.displayUnit
+                displayUnit: ApplicationModels.optionsModel.displayUnit
                 walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                 interactive: false
             }

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -25,8 +26,8 @@ SettingsPage {
     property real prependAnchorOffset: 0
 
     function emptyMessage() {
-        if (debugLogModel.filter.length > 0) return qsTr("No log messages match this search")
-        if (debugLogModel.warningsAndErrorsOnly) return qsTr("No warnings or errors in the loaded messages")
+        if (ApplicationModels.debugLogModel.filter.length > 0) return qsTr("No log messages match this search")
+        if (ApplicationModels.debugLogModel.warningsAndErrorsOnly) return qsTr("No warnings or errors in the loaded messages")
         return qsTr("No log messages")
     }
 
@@ -34,11 +35,11 @@ SettingsPage {
         if (root.visible) {
             // A stale open failure from a previous visit is about that visit's
             // open attempt; start the page without it.
-            debugLogModel.clearOpenError()
-            debugLogModel.active = true
+            ApplicationModels.debugLogModel.clearOpenError()
+            ApplicationModels.debugLogModel.active = true
             root.ownsDebugLogActivity = true
         } else {
-            if (root.ownsDebugLogActivity) debugLogModel.active = false
+            if (root.ownsDebugLogActivity) ApplicationModels.debugLogModel.active = false
             root.ownsDebugLogActivity = false
         }
     }
@@ -90,9 +91,9 @@ SettingsPage {
             // Nothing to search or filter while the log cannot be read.
             // Opening the log is disabled too; the page keeps watching the
             // file and reloads it once it exists again.
-            enabled: debugLogModel.logAvailable
+            enabled: ApplicationModels.debugLogModel.logAvailable
             opacity: enabled ? 1.0 : 0.5
-            text: debugLogModel.filter
+            text: ApplicationModels.debugLogModel.filter
             placeholderText: qsTr("Search messages")
             accessibleName: qsTr("Search debug log messages")
             onTextChanged: searchDebounce.restart()
@@ -101,8 +102,8 @@ SettingsPage {
         FilterButton {
             id: messageFilterButton
             objectName: "debugLogFilterButton"
-            enabled: debugLogModel.logAvailable
-            active: debugLogModel.warningsAndErrorsOnly
+            enabled: ApplicationModels.debugLogModel.logAvailable
+            active: ApplicationModels.debugLogModel.warningsAndErrorsOnly
             Accessible.name: qsTr("Filter debug log messages")
             onClicked: {
                 if (messageFilterMenu.opened) {
@@ -113,29 +114,31 @@ SettingsPage {
             }
         }
 
-        ContextMenu {
-            id: messageFilterMenu
-            objectName: "debugLogFilterMenu"
-            parent: messageFilterButton
-            x: parent.width - width
-            y: parent.height + 2
-            modal: true
-            dim: false
+        QtObject {
+            readonly property ContextMenu menu: ContextMenu {
+                id: messageFilterMenu
+                objectName: "debugLogFilterMenu"
+                parent: messageFilterButton
+                x: parent.width - width
+                y: parent.height + 2
+                modal: true
+                dim: false
 
-            ContextMenuPicker {
-                id: messageFilterPicker
-                objectName: "debugLogMessageFilterPicker"
-                objectNameRole: "objectName"
-                currentValue: debugLogModel.warningsAndErrorsOnly
-                    ? "warnings-and-errors"
-                    : "all"
-                model: [
-                    { text: qsTr("All messages"), value: "all", objectName: "debugLogFilterAllMessages" },
-                    { text: qsTr("Warnings and errors"), value: "warnings-and-errors", objectName: "debugLogFilterWarningsAndErrors" }
-                ]
-                onActivated: function(value) {
-                    debugLogModel.warningsAndErrorsOnly = value === "warnings-and-errors"
-                    messageFilterMenu.close()
+                ContextMenuPicker {
+                    id: messageFilterPicker
+                    objectName: "debugLogMessageFilterPicker"
+                    objectNameRole: "objectName"
+                    currentValue: ApplicationModels.debugLogModel.warningsAndErrorsOnly
+                        ? "warnings-and-errors"
+                        : "all"
+                    model: [
+                        { text: qsTr("All messages"), value: "all", objectName: "debugLogFilterAllMessages" },
+                        { text: qsTr("Warnings and errors"), value: "warnings-and-errors", objectName: "debugLogFilterWarningsAndErrors" }
+                    ]
+                    onActivated: function(value) {
+                        ApplicationModels.debugLogModel.warningsAndErrorsOnly = value === "warnings-and-errors"
+                        messageFilterMenu.close()
+                    }
                 }
             }
         }
@@ -156,23 +159,25 @@ SettingsPage {
             }
         }
 
-        ContextMenu {
-            id: logOptionsMenu
-            objectName: "debugLogOptionsMenu"
-            parent: logOptionsButton
-            x: parent.width - width
-            y: parent.height + 2
-            modal: true
-            dim: false
+        QtObject {
+            readonly property ContextMenu menu: ContextMenu {
+                id: logOptionsMenu
+                objectName: "debugLogOptionsMenu"
+                parent: logOptionsButton
+                x: parent.width - width
+                y: parent.height + 2
+                modal: true
+                dim: false
 
-            ContextMenuButton {
-                objectName: "debugLogOpenFileButton"
-                // Nothing to hand to another application while the log cannot
-                // be read.
-                enabled: debugLogModel.logAvailable
-                text: qsTr("Open debug.log")
-                iconSource: "image://images/export"
-                onTriggered: debugLogModel.openLogFile()
+                ContextMenuButton {
+                    objectName: "debugLogOpenFileButton"
+                    // Nothing to hand to another application while the log cannot
+                    // be read.
+                    enabled: ApplicationModels.debugLogModel.logAvailable
+                    text: qsTr("Open debug.log")
+                    iconSource: "image://images/export"
+                    onTriggered: ApplicationModels.debugLogModel.openLogFile()
+                }
             }
         }
     }
@@ -183,10 +188,10 @@ SettingsPage {
     ToastBanner {
         objectName: "debugLogOpenErrorBanner"
         Layout.fillWidth: true
-        visible: debugLogModel.openError.length > 0
-        tintColor: debugLogModel.fileLoggingEnabled ? Theme.color.red : Theme.color.blue
+        visible: ApplicationModels.debugLogModel.openError.length > 0
+        tintColor: ApplicationModels.debugLogModel.fileLoggingEnabled ? Theme.color.red : Theme.color.blue
         iconSource: "image://images/info-filled"
-        text: debugLogModel.openError
+        text: ApplicationModels.debugLogModel.openError
         textObjectName: "debugLogOpenErrorText"
     }
 
@@ -219,7 +224,7 @@ SettingsPage {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.max(300, root.height - 298)
             clip: true
-            model: debugLogModel
+            model: ApplicationModels.debugLogModel
             spacing: 0
             cacheBuffer: 48 * 6
             reuseItems: false
@@ -227,7 +232,7 @@ SettingsPage {
 
             header: Item {
                 width: logList.width
-                height: debugLogModel.hasMoreLines ? 44 : 0
+                height: ApplicationModels.debugLogModel.hasMoreLines ? 44 : 0
 
                 NeutralButton {
                     objectName: "debugLogLoadMoreButton"
@@ -235,7 +240,7 @@ SettingsPage {
                     buttonSize: NeutralButton.Medium
                     visible: parent.height > 0
                     text: qsTr("Load older messages")
-                    onClicked: debugLogModel.loadMore()
+                    onClicked: ApplicationModels.debugLogModel.loadMore()
                 }
             }
             headerPositioning: ListView.InlineHeader
@@ -268,7 +273,7 @@ SettingsPage {
                 width: Math.max(0, parent.width - 48)
                 // The banner above reports a read failure, so the empty state
                 // does not repeat it.
-                visible: logList.count === 0 && debugLogModel.logAvailable
+                visible: logList.count === 0 && ApplicationModels.debugLogModel.logAvailable
                 text: root.emptyMessage()
                 color: Theme.color.neutral7
                 font: Theme.text.caption.font
@@ -321,7 +326,7 @@ SettingsPage {
         id: searchDebounce
         interval: 150
         repeat: false
-        onTriggered: debugLogModel.filter = searchBar.text
+        onTriggered: ApplicationModels.debugLogModel.filter = searchBar.text
     }
 
     Connections {

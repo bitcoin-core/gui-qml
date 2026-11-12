@@ -6,13 +6,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import org.bitcoincore.qt 1.0
 
 import "../controls"
 
 ColumnLayout {
     id: root
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property var coreSettingsModel: settingsModel.coreSettings
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0

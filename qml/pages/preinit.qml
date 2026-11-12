@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
 import "./onboarding"
@@ -25,11 +24,11 @@ ApplicationWindow {
     OnboardingWizard {
         anchors.fill: parent
         preInit: true
-        settingsModel: optionsModel
-        assumedBlockchainSize: optionsModel.assumedBlockchainSize
-        assumedChainstateSize: optionsModel.assumedChainstateSize
+        settingsModel: ApplicationModels.onboardingOptionsModel
+        assumedBlockchainSize: ApplicationModels.onboardingOptionsModel.assumedBlockchainSize
+        assumedChainstateSize: ApplicationModels.onboardingOptionsModel.assumedChainstateSize
         onFinished: {
-            if (!optionsModel.canFinish) return
+            if (!ApplicationModels.onboardingOptionsModel.canFinish) return
             appWindow.completed = true
             appWindow.starting = true
             appWindow.finished()
@@ -42,8 +41,8 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 20
-        visible: !appWindow.starting && optionsModel.previewError.length > 0
-        text: optionsModel.previewError
+        visible: !appWindow.starting && ApplicationModels.onboardingOptionsModel.previewError.length > 0
+        text: ApplicationModels.onboardingOptionsModel.previewError
         color: Theme.color.blue
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
