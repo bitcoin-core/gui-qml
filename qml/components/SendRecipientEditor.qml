@@ -124,7 +124,8 @@ ColumnLayout {
             errorText: root.recipient ? root.recipient.amountError : ""
             interceptPaste: true
             onInputTextChanged: root.edited()
-            onEditingFinished: root.edited()
+            // Text edits already update the draft and fee estimate. Formatting
+            // on focus loss must not disable Review during its mouse press.
             onPasteRequested: root.pasteRequested("amount")
         }
     }

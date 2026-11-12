@@ -52,7 +52,14 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "sendAmountInput", "1"));
         wallet->setCustomFeeEnabled(true);
         wallet->setCustomFeeRate("2");
+        auto* review = qmltest::Find(m_app, "sendReviewButton");
+        QVERIFY(review);
+        // macOS buttons normally keep text focus; exercise the Linux focus
+        // handoff too, without pre-blurring the amount or bypassing the click.
+        QVERIFY(review->setProperty("focusPolicy", Qt::StrongFocus));
+        QSignalSpy reviewed{review, SIGNAL(clicked())};
         QVERIFY(qmltest::Click(m_app, "sendReviewButton"));
+        QCOMPARE(reviewed.count(), 1);
         QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
         QTRY_VERIFY(qmltest::Find(m_app, "transactionReviewPopup")->property("opened").toBool());
         QVERIFY(!qmltest::Find(m_app, "sendTransactionReviewSendButton")->property("visible").toBool());

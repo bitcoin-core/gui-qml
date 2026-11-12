@@ -496,6 +496,23 @@ TestCase {
         compare(testSendRecipient.amount.display, "1.00000000")
     }
 
+    function test_finishing_unchanged_amount_does_not_restart_fee_estimation() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const amountInput = findChild(page, "sendAmountInput")
+        const review = findChild(page, "sendReviewButton")
+        amountInput.forceActiveFocus()
+        amountInput.selectAll()
+        const callsBeforeEdit = testWalletModel.scheduleFeeEstimatesCalls
+        keyClick("1")
+        compare(testSendRecipient.amount.display, "1.00000000")
+        verify(testWalletModel.scheduleFeeEstimatesCalls > callsBeforeEdit)
+        const callsBefore = testWalletModel.scheduleFeeEstimatesCalls
+        review.forceActiveFocus()
+        verify(!amountInput.activeFocus)
+        compare(testWalletModel.scheduleFeeEstimatesCalls, callsBefore)
+    }
+
     function test_send_amount_allows_editing_whole_part_before_decimal() {
         const page = createTemporaryObject(sendComponent, this)
         verify(page !== null)

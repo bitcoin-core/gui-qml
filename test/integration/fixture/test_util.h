@@ -169,18 +169,21 @@ inline bool ClickWithRetries(QObject* object)
     if (item->metaObject()->indexOfSignal("clicked()") < 0) return click();
     QSignalSpy clicked{item, SIGNAL(clicked())};
     const auto pressed = item->metaObject()->indexOfSignal("pressed()") < 0 ? nullptr : std::make_unique<QSignalSpy>(item, SIGNAL(pressed()));
-    const auto delivered = [&] { return (pressed && !pressed->isEmpty()) || !clicked.isEmpty(); };
+    const auto delivered = [&] { return !clicked.isEmpty(); };
     // Modal exit can consume a gesture. Keep retries visible in the report so
     // a successful test does not silently conceal swallowed input.
     const QString target = item->objectName();
     int attempts{0};
     const bool success = QTest::qWaitFor([&] {
         if (delivered()) return true;
+        // A press reached the target but was canceled (for example by becoming
+        // disabled). Do not retry a delivered gesture or report it as a click.
+        if (pressed && !pressed->isEmpty()) return true;
         ++attempts;
-        return click() && delivered();
+        return click() && (delivered() || (pressed && !pressed->isEmpty()));
     }, 10'000);
-    if (attempts > 1) qWarning() << "Click retries for" << target << "attempts:" << attempts << "delivered:" << success;
-    return success;
+    if (attempts > 1) qWarning() << "Click retries for" << target << "attempts:" << attempts << "delivered:" << delivered();
+    return success && delivered();
 }
 
 // Existing journeys tolerate modal-exit retries, but each retry is reported.
@@ -211,16 +214,28 @@ inline bool Click(BitcoinQmlApplication& app, const char* name)
     auto* object = WaitForVisible(app, name);
     QPointer<QQuickItem> item = qobject_cast<QQuickItem*>(object);
     if (!item || !WaitForPolish(item) || !item) return false;
-    for (auto* parent = item->parentItem(); parent; parent = parent->parentItem()) {
-        if (!parent->inherits("QQuickFlickable")) continue;
-        const auto rect = item->mapRectToItem(parent, item->boundingRect());
-        const auto offset = rect.top() < 0 ? rect.top() : std::max(0.0, rect.bottom() - parent->height());
-        if (offset != 0) parent->setProperty("contentY", parent->property("contentY").toDouble() + offset);
-    }
-    QCoreApplication::processEvents();
     const bool ready = QTest::qWaitFor([&] {
-        return item && item->isEnabled() && item->width() > 0 && item->height() > 0 &&
-               app.window()->contentItem()->contains(item->mapToItem(app.window()->contentItem(), item->boundingRect().center()));
+        if (!item || !WaitForPolish(item) || !item) return false;
+        bool scrolled{false};
+        for (auto* parent = item->parentItem(); parent; parent = parent->parentItem()) {
+            if (!parent->inherits("QQuickFlickable")) continue;
+            const auto rect = item->mapRectToItem(parent, item->boundingRect());
+            // Leave a pixel of room: QPoint rounding must not put the gesture
+            // on the exclusive bottom edge of a clipped viewport.
+            const auto offset = rect.height() > parent->height() - 2
+                ? rect.center().y() - parent->height() / 2
+                : rect.top() < 1 ? rect.top() - 1 : std::max(0.0, rect.bottom() - parent->height() + 1);
+            if (offset != 0) {
+                parent->setProperty("contentY", parent->property("contentY").toDouble() + offset);
+                scrolled = true;
+            }
+        }
+        if (scrolled || !item->isEnabled() || item->width() <= 0 || item->height() <= 0) return false;
+        const auto center = item->boundingRect().center();
+        for (auto* parent = item->parentItem(); parent; parent = parent->parentItem()) {
+            if (parent->clip() && !parent->contains(item->mapToItem(parent, center))) return false;
+        }
+        return app.window()->contentItem()->contains(item->mapToItem(app.window()->contentItem(), center));
     });
     if (!ready) qWarning() << "Cannot click" << name;
     return ready && item && Click(item.data());
