@@ -341,11 +341,14 @@ SettingsPage {
         ListRow {
             objectName: "walletDescriptorsRow"
             visible: root.canShowDescriptors
+            // Reading descriptors waits for the wallet lock the export holds.
+            enabled: !root.watchOnlyExportPending
             Layout.fillWidth: true
             //: Shows the wallet's public output descriptors and extended public keys.
             title: qsTr("Descriptors")
             //: Under the Descriptors row, so people looking for their xpub find it here.
-            description: qsTr("Public descriptors and extended keys (xpub) for watch-only wallets.")
+            description: root.watchOnlyExportPending ? qsTr("Saving a watch-only copy…")
+                : qsTr("Public descriptors and extended keys (xpub) for watch-only wallets.")
             showsDisclosureIndicator: true
             onClicked: root.descriptorsRequested()
         }

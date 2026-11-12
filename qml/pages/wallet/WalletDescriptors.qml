@@ -120,6 +120,7 @@ SettingsPage {
         objectName: "descriptorsCopyAll"
         buttonSize: NeutralButton.Large
         visible: root.completeExports.length > 0
+        enabled: !(root.wallet && root.wallet.watchOnlyWalletExportPending)
         Layout.fillWidth: true
         //: Copies every descriptor as JSON for Bitcoin Core's importdescriptors command.
         text: copyAllTimer.running ? qsTr("Copied") : qsTr("Copy all for Bitcoin Core")

@@ -198,6 +198,16 @@ TestCase {
         verify(note.text.indexOf("watch-only copy") > 0)
     }
 
+    function test_copy_all_waits_for_a_watch_only_export() {
+        const page = createList([segwit])
+        const button = findChild(page, "descriptorsCopyAll")
+        verify(button.enabled)
+        const wallet = makeWallet([segwit])
+        wallet.watchOnlyWalletExportPending = true
+        page.wallet = wallet
+        verify(!button.enabled)
+    }
+
     function test_copy_all_is_hidden_without_descriptors() {
         const page = createList([])
         verify(!findChild(page, "descriptorsCopyAll").visible)

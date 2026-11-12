@@ -281,7 +281,9 @@ TestCase {
         compare(testWalletModel.lastWatchOnlyExportPath, "/tmp/mine.bak")
         compare(findChild(popup, "backupSaveButton").enabled, false)
         compare(findChild(first.settingsStack, "walletBackupRow").enabled, false)
+        compare(findChild(first.settingsStack, "walletDescriptorsRow").enabled, false)
         testWalletModel.finishWatchOnlyWalletExport("")
+        tryCompare(findChild(first.settingsStack, "walletDescriptorsRow"), "enabled", true)
         tryCompare(popup, "visible", false)
         tryCompare(findChild(first.settingsStack, "walletSettingsResultText"), "text",
                    "Watch-only copy saved to /tmp/mine.bak")
