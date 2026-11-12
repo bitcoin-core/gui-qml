@@ -9,6 +9,10 @@ import "../../qml/controls"
 import "../../qml/pages/settings"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     id: testCase
     name: "FormControls"
     when: windowShown

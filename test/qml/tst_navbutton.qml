@@ -7,6 +7,10 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "NavButton"
     when: windowShown
     width: 300

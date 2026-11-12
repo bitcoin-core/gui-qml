@@ -499,7 +499,7 @@ Pane {
                         titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
                         valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
                         minimumRowHeight: 56
-                        value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
+                        value: root.request && root.wallet ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                         showDivider: true
                         dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
                     }

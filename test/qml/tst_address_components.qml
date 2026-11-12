@@ -12,6 +12,10 @@ import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "AddressComponents"
     when: windowShown
     width: 720

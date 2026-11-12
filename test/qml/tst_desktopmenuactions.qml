@@ -42,6 +42,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         actionsUnderTest = actionsComponent.createObject(testCase)
         verify(actionsUnderTest !== null)
     }

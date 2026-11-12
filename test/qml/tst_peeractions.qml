@@ -50,6 +50,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         testPeerDetailsModel.type = "Outbound Full Relay"
         testPeerDetailsModel.bytesSent = "1.0 MiB"
         nodeModel.resetPeerActionTestState()

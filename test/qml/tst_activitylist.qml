@@ -17,9 +17,10 @@ TestCase {
     width: 1180
     height: 950
 
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
-    FontLoader { source: "qrc:/fonts/robotomono/regular" }
+    // The minimal platform cannot register application fonts; use its fallback fonts.
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/regular" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/semibold" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
 
@@ -95,6 +96,7 @@ TestCase {
         ]
     }
     function init() {
+        testSetup.failOnWarnings()
         Theme.dark = true
         walletController.reset()
         walletController.initialized = true
@@ -112,6 +114,9 @@ TestCase {
         const page = createTemporaryObject(pageComponent, this, properties || {})
         verify(page !== null)
         waitForRendering(page)
+        // Filtering a partially incubated ListView leaves Qt cancelling stale
+        // cache indexes. Wait for the initial delegates before changing rows.
+        tryVerify(function() { return testSetup.incubatingObjectCount(page) === 0 })
         return page
     }
     function findRow(page, txid) {

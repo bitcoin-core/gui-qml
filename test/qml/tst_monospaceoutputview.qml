@@ -9,6 +9,10 @@ import QtTest 1.2
 import "../../qml/components"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "MonospaceOutputView"
     when: windowShown
     width: 520

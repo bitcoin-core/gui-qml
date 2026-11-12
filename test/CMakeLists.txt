@@ -138,6 +138,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/qrimageprovider.cpp
   ${QMLTESTS_QRC_CPP}
 )
 
@@ -154,16 +155,36 @@ target_link_libraries(bitcoinqml_qmltests
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickTest
+    Qt6::Test
     Qt6::Svg
+    QRencode::QRencode
 )
 
 target_include_directories(bitcoinqml_qmltests
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src
+    ${PROJECT_BINARY_DIR}/bitcoin/src
 )
 
-add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
+set(qml_test_platform minimal)
+add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform ${qml_test_platform})
+# Qt 6.2 has no QTest::failOnWarning(); leave this check disabled there too,
+# matching the component runner's version guard.
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.3)
+  # console.warn() does not emit QQmlEngine::warnings. Also reject messages
+  # printed outside a test function, before failOnWarning() is installed.
+  set_tests_properties(bitcoinqml_qmltests PROPERTIES
+    FAIL_REGULAR_EXPRESSION "(QWARN|QCRITICAL)[^\r\n]*qml:|\\[(warning|critical)\\] qml:")
+endif()
+
+add_test(NAME bitcoinqml_qmlwarning_tests
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/qml/test_warnings.py
+    $<TARGET_FILE:bitcoinqml_qmltests> ${Qt6_VERSION} ${qml_test_platform} ${PROJECT_BINARY_DIR}
+    "${CMAKE_CTEST_COMMAND}" "$<CONFIG>"
+)
+set_tests_properties(bitcoinqml_qmlwarning_tests PROPERTIES TIMEOUT 120 LABELS qml
+  ENVIRONMENT "QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
 
 set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests
@@ -171,6 +192,10 @@ set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml
 set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests PROPERTIES
   ENVIRONMENT "${gui_test_environment}")
+# Include severity and category so the console warning check can distinguish
+# console.warn() from console.log() during QML loading and teardown.
+set_property(TEST bitcoinqml_qmltests APPEND PROPERTY ENVIRONMENT
+  "QT_MESSAGE_PATTERN=[%{type}] %{category}: %{message}")
 
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")

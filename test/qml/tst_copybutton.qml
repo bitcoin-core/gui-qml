@@ -9,6 +9,10 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "CopyButton"
     when: windowShown
     width: 300

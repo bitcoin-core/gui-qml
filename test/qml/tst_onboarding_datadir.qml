@@ -90,6 +90,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false
         optionsModel.prune = true
