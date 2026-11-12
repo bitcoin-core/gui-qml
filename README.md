@@ -174,7 +174,7 @@ The subprocess fixture starts a fresh application and regtest node for each resu
 including production startup and shutdown. Modules are grouped into the nine
 [staging-plan stages](doc/integration-testing.md). Stages 1–3 run with wallets
 disabled and enabled; stages 4–9 require wallets. Each stage has its own CTest
-entry and `stageN` label, so stages can run independently or in parallel.
+entry and feature-group label (for example, `wallet_sending`), so stages can run independently or in parallel.
 Each process has its own temporary data directory and GUI settings, so changes to
 wallets, the chain, settings, and UI state cannot affect the next test or data row.
 The fixture uses Core's subprocess helper and returns the child's test and process
@@ -192,7 +192,7 @@ directory; use absolute paths for any external test resources.
 Select stages, modules, and modes with:
 
 ```sh
-ctest --test-dir build --output-on-failure -L '^stage6$'
+ctest --test-dir build --output-on-failure -L '^wallet_sending$'
 build/bin/bitcoinqml_integration_tests --list-modules
 build/bin/bitcoinqml_integration_tests -functions
 build/bin/bitcoinqml_integration_tests -datatags
@@ -226,7 +226,7 @@ they are not streamed live. Other Qt options affect the parent only.
 CTest writes integration reports to `build/test-reports/` and keeps failed profiles
 in `build/test-profiles/`. Both test workflows upload these directories and the
 CTest logs even after failures, with a separate artifact for each matrix job.
-The `ctest.xml` report records the overall CTest results; `integration-stageN.xml` provides
+The `ctest.xml` report records the overall CTest results; `integration-<group>.xml` (for example, `integration-wallet_sending.xml`) provides
 the individual test results, including application startup and shutdown failures.
 The process exit status remains authoritative if the parent itself is interrupted
 before finishing its report.
@@ -249,7 +249,7 @@ Test cases live in separate modules and take a `BitcoinQmlApplication&`, giving
 them access to the same node, models, and QML engine as the application.
 `test/integration/runner/` contains the parent Qt Test suite, entry point, and module
 declarations. `test/integration/fixture/` owns the subprocess, application fixture,
-and shared test helpers. Test case modules live in `test/integration/stageN_*/`.
+and shared test helpers. Test case modules live in feature directories such as `test/integration/wallet_sending/`.
 Add a new module to `test/integration/CMakeLists.txt`, declare its factory in
 `runner/test_cases.h`, and add its name, supported wallet modes, factory, and stage to
 `IntegrationTestModules()` in `runner/test_cases.cpp`. Use the factory signature

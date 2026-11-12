@@ -70,7 +70,7 @@ def run_scenarios(description, scenarios):
         return 0
 
     failed = False
-    passed = 0
+    skipped = False
     for case in selected:
         print(f"[RUN] stage={case.stage} case={case.name}", flush=True)
         started = time.monotonic()
@@ -86,8 +86,7 @@ def run_scenarios(description, scenarios):
             traceback.print_exc()
             status = 1
             failed = True
-        if status in (None, 0):
-            passed += 1
+        skipped = skipped or status == 77
         result = "SKIP" if status == 77 else "PASS" if status in (None, 0) else "FAIL"
         print(f"[{result}] stage={case.stage} case={case.name} seconds={time.monotonic() - started:.3f}", flush=True)
-    return 1 if failed else 0 if passed else 77
+    return 1 if failed else 77 if skipped else 0
