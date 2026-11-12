@@ -17,9 +17,21 @@
 struct ViewOnlyImport {
     enum class Kind { Empty, ExtendedKey, Descriptors, DescriptorJson };
 
+    //! What one request imports, for the list the form shows.
+    struct Source {
+        OutputType type{OutputType::UNKNOWN};
+        //! The key origin, or the key when there is none.
+        QString key;
+        bool ranged{false};
+        //! A <0;1> descriptor covers receive and change.
+        bool multipath{false};
+    };
+
     Kind kind{Kind::Empty};
     QString error;
     std::vector<wallet::ImportDescriptorRequest> requests;
+    //! One per request.
+    std::vector<Source> sources;
     //! Requests without a creation time. They take the birth time the user picks.
     std::vector<size_t> undated;
     std::vector<OutputType> output_types;
@@ -38,7 +50,9 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
 //! The parse result for the form: status (empty, invalid, valid), error,
 //! kind, descriptorCount, addressTypes, needsBirthDate, createdTime
 //! (seconds, or -1 when no descriptor has one), needsAddressType,
-//! addressTypeOptions ({id, label}) and errorLine.
+//! addressTypeOptions ({id, label}), errorLine, and rows: one per address
+//! type and key ({addressType, key, receive, change, active, ranged,
+//! createdTime}).
 QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type = {});
 
 #endif // BITCOIN_QML_VIEWONLYIMPORT_H

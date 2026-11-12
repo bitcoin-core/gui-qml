@@ -266,6 +266,114 @@ OnboardingView {
                 ? root.importInfo.errorLine : -1
         }
 
+        ColumnLayout {
+            id: importRows
+            objectName: "watchOnlyImportRows"
+            // Columns take the widest row's width, so they line up.
+            function columnWidth(column) {
+                let width = 0
+                for (let i = 0; i < rowRepeater.count; ++i) {
+                    const item = rowRepeater.itemAt(i)
+                    if (item) width = Math.max(width, item[column])
+                }
+                return width
+            }
+            readonly property real typeWidth: columnWidth("typeWidth")
+            readonly property real coverageWidth: columnWidth("coverageWidth")
+            readonly property real createdWidth: columnWidth("createdWidth")
+            readonly property real inactiveWidth: columnWidth("inactiveWidth")
+            visible: root.watchOnly && root.importReady && root.importInfo.kind !== "extendedKey"
+            Layout.fillWidth: true
+            Layout.topMargin: -8
+            spacing: 4
+
+            Repeater {
+                id: rowRepeater
+                model: importRows.visible ? root.importInfo.rows : []
+                RowLayout {
+                    required property var modelData
+                    required property int index
+                    readonly property bool inactive: modelData.ranged && !modelData.active
+                    readonly property real typeWidth: typeText.implicitWidth
+                    readonly property real coverageWidth: coverageText.implicitWidth
+                    readonly property real createdWidth: createdText.text.length > 0 ? createdText.implicitWidth : 0
+                    readonly property real inactiveWidth: inactive ? inactivePill.implicitWidth : 0
+                    objectName: "watchOnlyImportRow_" + index
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    CoreText {
+                        id: typeText
+                        Layout.preferredWidth: importRows.typeWidth
+                        text: modelData.addressType
+                        color: Theme.color.neutral8
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        text: modelData.key
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.monoCaption
+                        wrap: false
+                        elide: Text.ElideMiddle
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        id: coverageText
+                        objectName: "watchOnlyImportRowCoverage"
+                        Layout.preferredWidth: importRows.coverageWidth
+                        text: !modelData.ranged ? qsTr("single address")
+                            : modelData.receive && modelData.change ? qsTr("receive and change")
+                            : modelData.receive ? qsTr("receive") : qsTr("change")
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        id: createdText
+                        objectName: "watchOnlyImportRowCreated"
+                        visible: importRows.createdWidth > 0
+                        Layout.preferredWidth: importRows.createdWidth
+                        text: {
+                            const format = "d MMM yyyy"
+                            const created = new Date(modelData.createdTime * 1000).toLocaleDateString(Qt.locale(), format)
+                            if (modelData.createdTime < 0 || root.importInfo.createdTime < 0
+                                    || created === new Date(root.importInfo.createdTime * 1000).toLocaleDateString(Qt.locale(), format)) {
+                                return ""
+                            }
+                            //: %1 is the date a descriptor was created.
+                            return qsTr("created %1").arg(created)
+                        }
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    Item {
+                        visible: importRows.inactiveWidth > 0
+                        Layout.preferredWidth: importRows.inactiveWidth
+                        Layout.preferredHeight: inactivePill.implicitHeight
+                        StatusPill {
+                            id: inactivePill
+                            objectName: "watchOnlyImportRowInactive"
+                            visible: inactive
+                            text: qsTr("Not active")
+                            showDot: false
+                            leftPadding: 6
+                            rightPadding: 6
+                            topPadding: 1
+                            bottomPadding: 1
+                            implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
+                        }
+                    }
+                }
+            }
+        }
+
         FormSection {
             objectName: "watchOnlyAddressType"
             visible: root.watchOnly && root.needsAddressType

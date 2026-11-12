@@ -54,6 +54,7 @@ private Q_SLOTS:
     void listDescriptorsOutputKeepsItsMetadata();
     void importDescriptorsArrayMarksUndatedEntries();
     void malformedJsonIsRejected();
+    void rowsGroupReceiveAndChangeOfOneKey();
 };
 
 void ViewOnlyImportTests::initTestCase()
@@ -253,6 +254,36 @@ void ViewOnlyImportTests::malformedJsonIsRejected()
         const QString error{ParseViewOnlyImport(json).error};
         QVERIFY2(error.contains(expected), qPrintable(json + " -> " + error));
     }
+}
+
+void ViewOnlyImportTests::rowsGroupReceiveAndChangeOfOneKey()
+{
+    const QString origin{QStringLiteral("[d34db33f/84h/0h/0h]")};
+    const QString json{QStringLiteral(R"([
+        {"desc": "%1", "timestamp": 1700000000, "active": true, "internal": false},
+        {"desc": "%2", "timestamp": 1690000000, "active": true, "internal": true},
+        {"desc": "%3", "timestamp": 1600000000, "active": false}
+    ])").arg(Desc("wpkh", "0/*").replace(XPUB, origin + XPUB), Desc("wpkh", "1/*").replace(XPUB, origin + XPUB), Desc("tr", "0/*"))};
+    const QVariantList rows = DescribeViewOnlyImport(json).value("rows").toList();
+    QCOMPARE(rows.size(), 2);
+    const QVariantMap segwit{rows[0].toMap()};
+    QCOMPARE(segwit.value("addressType").toString(), QStringLiteral("Bech32 (SegWit)"));
+    QCOMPARE(segwit.value("key").toString(), origin);
+    QVERIFY(segwit.value("receive").toBool() && segwit.value("change").toBool());
+    QVERIFY(segwit.value("active").toBool() && segwit.value("ranged").toBool());
+    QCOMPARE(segwit.value("createdTime").toLongLong(), 1690000000);
+    const QVariantMap taproot{rows[1].toMap()};
+    QCOMPARE(taproot.value("key").toString(), XPUB);
+    QVERIFY(taproot.value("receive").toBool() && !taproot.value("change").toBool());
+    QVERIFY(!taproot.value("active").toBool());
+
+    const QVariantList lines = DescribeViewOnlyImport(Desc("sh(wpkh", "<0;1>/*") + ")\n" + QStringLiteral("pkh(%1)").arg(PUBKEY))
+                                 .value("rows").toList();
+    QCOMPARE(lines.size(), 2);
+    QVERIFY(lines[0].toMap().value("receive").toBool() && lines[0].toMap().value("change").toBool());
+    QCOMPARE(lines[0].toMap().value("createdTime").toLongLong(), -1);
+    QCOMPARE(lines[1].toMap().value("key").toString(), PUBKEY);
+    QVERIFY(!lines[1].toMap().value("ranged").toBool());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

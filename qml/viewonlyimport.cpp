@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <exception>
+#include <iterator>
 #include <optional>
 #include <set>
 #include <string>
@@ -38,11 +39,20 @@ struct DescriptorCheck {
     size_t count{0};
     bool ranged{false};
     bool change_chain{false};
+    ViewOnlyImport::Source source;
 };
 
 // A comma would mean more keys or a script tree.
 const QRegularExpression SINGLE_KEY_SCRIPT{QStringLiteral(R"(^(pkh|wpkh|sh\(wpkh|tr)\([^,]*$)")};
 const QRegularExpression CHANGE_CHAIN{QStringLiteral(R"(/1/\*\))")};
+// The key inside the innermost script, with its origin if it has one.
+const QRegularExpression SCRIPT_KEY{QStringLiteral(R"(\((\[[0-9a-fA-F]{8}[^\]]*\])?([^()\[\]/#,]+)(?=[/)]))")};
+
+QString KeyLabel(const std::string& descriptor)
+{
+    const QRegularExpressionMatch match{SCRIPT_KEY.match(QString::fromStdString(descriptor))};
+    return match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
+}
 
 // Parse derives public keys from private ones, which needs the signing
 // context, so private keys are found before parsing.
@@ -87,6 +97,7 @@ DescriptorCheck CheckDescriptor(const std::string& descriptor)
     check.ranged = parsed.front()->IsRange();
     check.change_chain = parsed.size() == 1 &&
                          CHANGE_CHAIN.match(QString::fromStdString(parsed.front()->ToString())).hasMatch();
+    check.source = {check.types.front(), KeyLabel(descriptor), check.ranged, parsed.size() > 1};
     // The wallet's importer requires a checksum.
     check.descriptor = descriptor.find('#') == std::string::npos
         ? descriptor + "#" + GetDescriptorChecksum(descriptor)
@@ -169,6 +180,7 @@ ViewOnlyImport ParseJson(const std::string& text)
             if (!next.isNull()) request.next_index = next.getInt<int64_t>();
 
             result.requests.push_back(std::move(request));
+            result.sources.push_back(check.source);
             AddTypes(result, check);
         } catch (const std::exception&) {
             return Failed(Kind::DescriptorJson, QObject::tr("%1 has a field of the wrong type.").arg(position));
@@ -206,6 +218,7 @@ ViewOnlyImport ParseLines(const QStringList& lines)
         if (check.ranged && check.count == 1) request.internal = check.change_chain;
         result.undated.push_back(result.requests.size());
         result.requests.push_back(std::move(request));
+        result.sources.push_back(check.source);
         AddTypes(result, check);
     }
     if (std::ranges::none_of(result.requests, &ImportDescriptorRequest::active)) {
@@ -380,12 +393,44 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
 
     QStringList address_types;
     for (const OutputType type : parsed.output_types) address_types.append(QmlUtil::OutputTypeLabel(type));
+    const int64_t now{QDateTime::currentSecsSinceEpoch()};
     std::optional<int64_t> created;
+    // Receive and change of one key share a row.
+    QVariantList rows;
     for (size_t i = 0; i < parsed.requests.size(); ++i) {
-        if (std::ranges::find(parsed.undated, i) != parsed.undated.end()) continue;
+        const ImportDescriptorRequest& request{parsed.requests[i]};
+        const ViewOnlyImport::Source& source{parsed.sources[i]};
+        std::optional<int64_t> time;
         // An unset timestamp here was "now".
-        const int64_t time{parsed.requests[i].timestamp.value_or(QDateTime::currentSecsSinceEpoch())};
-        created = std::min(created.value_or(time), time);
+        if (std::ranges::find(parsed.undated, i) == parsed.undated.end()) time = request.timestamp.value_or(now);
+        if (time) created = std::min(created.value_or(*time), *time);
+
+        const QString type{QmlUtil::OutputTypeLabel(source.type)};
+        const auto same_row = [&](const QVariant& row) {
+            const QVariantMap map{row.toMap()};
+            return map.value(QStringLiteral("addressType")) == type && map.value(QStringLiteral("key")) == source.key &&
+                   map.value(QStringLiteral("active")) == request.active && map.value(QStringLiteral("ranged")) == source.ranged;
+        };
+        auto row_it{std::ranges::find_if(rows, same_row)};
+        if (row_it == rows.end()) {
+            rows.append(QVariantMap{{QStringLiteral("addressType"), type},
+                                    {QStringLiteral("key"), source.key},
+                                    {QStringLiteral("receive"), false},
+                                    {QStringLiteral("change"), false},
+                                    {QStringLiteral("active"), request.active},
+                                    {QStringLiteral("ranged"), source.ranged},
+                                    {QStringLiteral("createdTime"), qlonglong(-1)}});
+            row_it = std::prev(rows.end());
+        }
+        QVariantMap row{row_it->toMap()};
+        const bool change{request.internal.value_or(false)};
+        if (source.multipath || !change) row.insert(QStringLiteral("receive"), true);
+        if (source.multipath || change) row.insert(QStringLiteral("change"), true);
+        if (time) {
+            const qlonglong row_time{row.value(QStringLiteral("createdTime")).toLongLong()};
+            row.insert(QStringLiteral("createdTime"), row_time < 0 ? qlonglong(*time) : std::min(row_time, qlonglong(*time)));
+        }
+        *row_it = row;
     }
     result.insert(QStringLiteral("status"), QStringLiteral("valid"));
     result.insert(QStringLiteral("descriptorCount"), qulonglong(parsed.descriptor_count));
@@ -394,6 +439,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     result.insert(QStringLiteral("needsBirthDate"), !parsed.undated.empty() || (parsed.needs_address_type && parsed.requests.empty()));
     result.insert(QStringLiteral("createdTime"), qlonglong(created.value_or(-1)));
     result.insert(QStringLiteral("needsAddressType"), parsed.needs_address_type);
+    result.insert(QStringLiteral("rows"), rows);
     if (parsed.needs_address_type) {
         QVariantList options;
         for (const OutputType type : {OutputType::BECH32, OutputType::BECH32M, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {

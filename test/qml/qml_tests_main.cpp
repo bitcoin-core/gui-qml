@@ -2063,6 +2063,13 @@ public:
         result.insert("needsBirthDate", !json);
         result.insert("createdTime", json ? 1700000000LL : -1LL);
         result.insert("needsAddressType", key);
+        if (json) {
+            const QVariantMap segwit{{"addressType", "Bech32 (SegWit)"}, {"key", "[d34db33f/84h/0h/0h]"}, {"receive", true},
+                                     {"change", true}, {"active", true}, {"ranged", true}, {"createdTime", 1700000000LL}};
+            const QVariantMap taproot{{"addressType", "Bech32m (Taproot)"}, {"key", "[d34db33f/86h/0h/0h]"}, {"receive", true},
+                                      {"change", false}, {"active", false}, {"ranged", true}, {"createdTime", 1800000000LL}};
+            result.insert("rows", QVariantList{segwit, taproot});
+        }
         if (key) {
             const QVariantMap taproot{{"id", "bech32m"}, {"label", "Bech32m (Taproot)"}};
             const QVariantMap segwit{{"id", "bech32"}, {"label", "Bech32 (SegWit)"}};
