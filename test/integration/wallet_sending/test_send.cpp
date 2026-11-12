@@ -324,6 +324,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "reviewPassphraseField", "review password"));
         QVERIFY(qmltest::Click(m_app, "reviewPassphraseConfirmButton"));
         QTRY_VERIFY(qmltest::Find(m_app, "transactionReviewPopup")->property("opened").toBool());
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "review password").isEmpty());
         QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
         QVERIFY(wallet->isLocked());
         QVERIFY(qmltest::Click(m_app, "sendTransactionReviewSendButton"));
@@ -459,6 +460,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "reviewPassphraseField", "fallback password"));
         QVERIFY(qmltest::Click(m_app, "reviewPassphraseConfirmButton"));
         QTRY_VERIFY(qmltest::Find(m_app, "transactionReviewPopup")->property("opened").toBool());
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "fallback password").isEmpty());
         QVERIFY(wallet->isLocked());
         QVERIFY(qmltest::Click(m_app, "sendTransactionReviewSendButton"));
         QVERIFY(qmltest::WaitForVisible(m_app, "sendCompletePage"));

@@ -30,6 +30,27 @@ private Q_SLOTS:
         }));
     }
 
+    void secretTextSweepIncludesVisualAndObjectChildren()
+    {
+        QObject owner;
+        QQuickItem visual;
+        visual.setParentItem(m_app.window()->contentItem());
+        visual.setObjectName("visualSecretProbe");
+        visual.setProperty("message", "prefix sensitive token suffix");
+        QObject child{&owner};
+        child.setObjectName("objectSecretProbe");
+        child.setProperty("errorText", "sensitive token");
+        visual.setParent(&owner);
+        QCOMPARE(qmltest::SecretTextLocations(m_app.window(), "sensitive token"),
+                 QStringList{"visualSecretProbe.message"});
+        const auto owner_leaks = qmltest::SecretTextLocations(&owner, "sensitive token");
+        QCOMPARE(owner_leaks.size(), 2);
+        QVERIFY(owner_leaks.contains("visualSecretProbe.message"));
+        QVERIFY(owner_leaks.contains("objectSecretProbe.errorText"));
+        visual.setProperty("message", QString{});
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "sensitive token").isEmpty());
+    }
+
     void settingsPagesLoadAndReturnToRetainedBlockClock()
     {
         QPointer<QObject> clock{qmltest::Find(m_app, "blockClock")};

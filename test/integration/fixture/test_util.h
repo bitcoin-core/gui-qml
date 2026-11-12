@@ -105,6 +105,31 @@ inline QObject* Find(BitcoinQmlApplication& app, const char* name)
     return Find(app.window(), object_name);
 }
 
+// Check visual and QObject children, including popup overlays and retained pages.
+// Return locations only, never the secret itself, in failure diagnostics.
+inline QStringList SecretTextLocations(QObject* root, const QString& secret)
+{
+    QStringList leaks;
+    QList<QObject*> pending{root};
+    QSet<QObject*> visited;
+    while (!pending.isEmpty()) {
+        auto* object = pending.takeLast();
+        if (!object || visited.contains(object)) continue;
+        visited.insert(object);
+        for (const char* property : {"text", "errorText", "message"}) {
+            if (!secret.isEmpty() && object->property(property).toString().contains(secret)) {
+                leaks.append(QStringLiteral("%1.%2").arg(object->objectName(), QString::fromLatin1(property)));
+            }
+        }
+        pending.append(object->children());
+        if (auto* window = qobject_cast<QQuickWindow*>(object)) pending.append(window->contentItem());
+        if (auto* item = qobject_cast<QQuickItem*>(object)) {
+            for (auto* child : item->childItems()) pending.append(child);
+        }
+    }
+    return leaks;
+}
+
 inline bool TransitionsFinished(QObject* root)
 {
     QList<QObject*> pending{root};
@@ -130,7 +155,7 @@ inline bool WaitForPolish(QQuickItem* item)
 #endif
 }
 
-inline bool Click(QObject* object)
+inline bool ClickWithRetries(QObject* object)
 {
     QPointer<QQuickItem> item = qobject_cast<QQuickItem*>(object);
     if (!item || !item->isVisible() || !item->isEnabled() || !WaitForPolish(item) || !item ||
@@ -145,12 +170,23 @@ inline bool Click(QObject* object)
     QSignalSpy clicked{item, SIGNAL(clicked())};
     const auto pressed = item->metaObject()->indexOfSignal("pressed()") < 0 ? nullptr : std::make_unique<QSignalSpy>(item, SIGNAL(pressed()));
     const auto delivered = [&] { return (pressed && !pressed->isEmpty()) || !clicked.isEmpty(); };
-    // A modal exit can consume input on the next control. Observe the press
-    // before its click handler can remove the control or close its dialog.
-    return QTest::qWaitFor([&] {
+    // Modal exit can consume a gesture. Keep retries visible in the report so
+    // a successful test does not silently conceal swallowed input.
+    const QString target = item->objectName();
+    int attempts{0};
+    const bool success = QTest::qWaitFor([&] {
         if (delivered()) return true;
+        ++attempts;
         return click() && delivered();
     }, 10'000);
+    if (attempts > 1) qWarning() << "Click retries for" << target << "attempts:" << attempts << "delivered:" << success;
+    return success;
+}
+
+// Existing journeys tolerate modal-exit retries, but each retry is reported.
+inline bool Click(QObject* object)
+{
+    return ClickWithRetries(object);
 }
 
 inline bool OpenSettings(BitcoinQmlApplication& app)

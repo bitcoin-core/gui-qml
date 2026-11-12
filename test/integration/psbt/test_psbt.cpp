@@ -142,13 +142,29 @@ private Q_SLOTS:
         const auto bytes = QByteArray::fromBase64(QByteArray::fromStdString(psbt));
         QCOMPARE(file.write(bytes), bytes.size());
         file.close();
-        QCOMPARE(reviewer->importPsbtFromFile(file.fileName()), WalletQmlModel::PsbtImportResult::WalletCannotSign);
+        QVERIFY(qmltest::Click(m_app, "sendTabButton"));
+        auto* import_path = qmltest::Find(m_app, "psbtImportPathField");
+        QVERIFY(import_path && import_path->setProperty("text", file.fileName()));
+        QVERIFY(qmltest::Click(m_app, "sendOptionsButton"));
+        QVERIFY(qmltest::Click(m_app, "sendImportPsbtFromFileButton"));
+        QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
+        QTRY_VERIFY(qmltest::Find(m_app, "transactionReviewPopup")->property("opened").toBool());
+        auto* warning = qmltest::WaitForVisible(m_app, "sendTransactionReviewWarning");
+        QVERIFY(warning);
+        QCOMPARE(warning->property("message").toString(), QStringLiteral("This wallet does not have the keys to sign this transaction."));
+        QVERIFY(!qmltest::Find(m_app, "sendTransactionReviewSendButton")->property("visible").toBool());
+        QVERIFY(qmltest::Find(m_app, "sendTransactionReviewSaveButton")->property("visible").toBool());
         QVERIFY(reviewer->currentTransaction());
         QVERIFY(reviewer->currentTransactionIsImportedPsbt());
         QVERIFY(!reviewer->currentTransactionCanSend());
         QVERIFY(!reviewer->currentTransactionCanBroadcast());
         QVERIFY(!reviewer->sendTransaction());
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
+        QVERIFY(qmltest::Click(m_app, "sendTransactionReviewCloseButton"));
+        QTRY_VERIFY(!qmltest::Find(m_app, "transactionReviewPopup")->property("visible").toBool());
+        QVERIFY(qmltest::WaitForVisible(m_app, "sendOptionsButton"));
+        QCOMPARE(qmltest::Find(m_app, "sendAddressInput")->property("text").toString(), QString{});
+        QCOMPARE(qmltest::Find(m_app, "sendAmountInput")->property("text").toString(), QString{});
     }
 
     void feeReplacementRequiresConfirmation()

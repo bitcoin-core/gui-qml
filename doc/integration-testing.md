@@ -116,7 +116,9 @@ The functional workflow contains 11 feature suites. Scenario metadata identifies
 where GUI behavior is introduced; the numbers remain selection/ownership data,
 not filenames. All scripts support `--list`, `--case` and `--stage`. Individual
 scenarios own their profiles and are independently runnable. Stage selection is
-exact, so building a cumulative stage selects every applicable earlier stage too.
+exact. To validate a cumulative stage, pass `--stage` for each earlier stage to
+functional scripts (the option may be repeated), or run each earlier stage's
+integration CTest entry. The integration runner accepts `--stage` only once.
 This mapping does not certify that intermediate-stage builds are already ordered.
 
 | Suite (`test/functional/`) | Stage | Named scenarios and retained boundary |
