@@ -71,12 +71,14 @@ In addition the following dependencies are required for the GUI and tests:
 ```
 sudo apt install \
   qt6-base-dev \
+  qt6-base-private-dev \
   qt6-base-dev-tools \
   qt6-tools-dev \
   qt6-l10n-tools \
   qt6-tools-dev-tools \
   qt6-declarative-dev \
   qt6-svg-dev \
+  qt6-declarative-private-dev \
   qml6-module-qt-labs-platform \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick \
@@ -181,9 +183,15 @@ Select modules and modes with:
 build/bin/bitcoinqml_integration_tests --list-modules
 build/bin/bitcoinqml_integration_tests -functions
 build/bin/bitcoinqml_integration_tests -datatags
-QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=navigation
-QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software build/bin/bitcoinqml_integration_tests --module=navigation
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
 ```
+
+Application and QML test executables apply the same cache policy: Qt 6.6 and
+newer use embedded AOT units and ignore host-generated disk caches; older Qt
+versions use embedded source with disk caching disabled. The policy overrides
+`QML_DISABLE_DISK_CACHE`, `QML_DISK_CACHE`, and `QML_FORCE_DISK_CACHE`, so these
+environment variables cannot select a different test execution mode.
 
 Omitting `--module` selects all modules; omitting `--wallet` selects each module's
 supported modes. Add `--test=chainSyncFollowsRealCoreBlockNotifications` to the last

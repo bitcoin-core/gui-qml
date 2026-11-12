@@ -19,6 +19,8 @@ private Q_SLOTS:
     void localized_default_and_canonical_are_independent();
     void format_btc_basic();
     void format_btc_negative();
+    void format_minimum_integer_data();
+    void format_minimum_integer();
     void format_btc_thinSpaceSeparators();
     void format_mbtc_and_ubtc();
     void format_sat_noDecimals();
@@ -76,6 +78,25 @@ void QmlBitcoinUnitsTests::format_btc_basic()
 void QmlBitcoinUnitsTests::format_btc_negative()
 {
     QCOMPARE(QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, -1), QString("-0.00000001"));
+}
+
+void QmlBitcoinUnitsTests::format_minimum_integer_data()
+{
+    QTest::addColumn<int>("unit");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("btc") << 0 << QString{"-92233720368.54775808"};
+    QTest::newRow("mbtc") << 1 << QString{"-92233720368547.75808"};
+    QTest::newRow("bits") << 2 << QString{"-92233720368547758.08"};
+    QTest::newRow("sats") << 3 << QString{"-9223372036854775808"};
+}
+
+void QmlBitcoinUnitsTests::format_minimum_integer()
+{
+    QFETCH(int, unit);
+    QFETCH(QString, expected);
+    QCOMPARE(QmlBitcoinUnits::format(QmlBitcoinUnits::fromDisplayUnit(unit),
+                 std::numeric_limits<qint64>::min(), true, QmlBitcoinUnits::SeparatorStyle::NEVER),
+        expected);
 }
 
 void QmlBitcoinUnitsTests::format_btc_thinSpaceSeparators()
