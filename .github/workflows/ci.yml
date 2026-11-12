@@ -91,6 +91,12 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Test QML host-cache isolation
+        env:
+          BITCOIN_CORE_APP: ${{ github.workspace }}/build/bin/bitcoin-core-app
+          QML_TEST_QPA_PLATFORM: minimal
+        run: python3 test/functional/qml_test_cache_policy.py
+
       - name: Run tests
         if: env.BUILD_APP_TESTS == 'ON'
         run: |
