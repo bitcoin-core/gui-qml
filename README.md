@@ -147,7 +147,9 @@ ctest --test-dir build --output-on-failure -L 'unit|qml'
 
 On Qt 6.3 and newer, QML component tests fail on unexpected warnings. Each
 `init()` calls `testSetup.failOnWarnings()` because Qt Test clears its warning
-policy after each test. Engine warnings also fail the executable during QML
+policy after each test; the warning-probe script checks this convention in every
+component TestCase. Within a test, use `ignoreWarning()` for an explicitly
+expected warning. Engine warnings also fail the executable during QML
 loading and teardown. CTest rejects console warnings outside test functions.
 The exact headless-platform diagnostics about application fonts and `raise()`
 are allowed; QML binding and resource warnings are not.
@@ -155,7 +157,9 @@ are allowed; QML binding and resource warnings are not.
 The new warning checks are disabled on Qt 6.2, which does not provide
 `QTest::failOnWarning()`. The tests still build and run. The
 `bitcoinqml_qmlwarning_tests` CTest entry verifies both version paths with
-separate clean, console, binding, startup, and teardown processes.
+clean-then-warning sequences (including native Qt warnings), an expected binding
+warning, and startup/teardown processes. Nested CTest calls use the configured
+CTest executable and active build configuration, including multi-config builds.
 
 Build and run the application and node integration tests:
 
