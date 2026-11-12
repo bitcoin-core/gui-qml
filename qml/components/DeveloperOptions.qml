@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../controls"
 
@@ -39,27 +40,21 @@ ColumnLayout {
             errorText: root.dbcacheError
             fieldObjectName: "developerDbcacheField"
             fieldWidth: 88
-            maximumLength: 5
             text: root.dbcacheText
-            validator: IntValidator {
+            validator: IntegerInputValidator {
                 bottom: optionsModel.minDbcacheSizeMiB
                 top: optionsModel.maxDbcacheSizeMiB
+                onInputRejected: dbcacheRow.editingFinished()
             }
             onTextEdited: function(text) {
                 root.dbcacheText = text
                 root.dbcacheError = ""
             }
             onEditingFinished: {
-                const value = parseInt(dbcacheRow.text)
-                if (isNaN(value) || value < optionsModel.minDbcacheSizeMiB
-                        || value > optionsModel.maxDbcacheSizeMiB) {
-                    root.dbcacheError = qsTr("This is not a valid cache size. Please choose a value between %1 and %2 MiB.")
-                        .arg(optionsModel.minDbcacheSizeMiB).arg(optionsModel.maxDbcacheSizeMiB)
-                    return
+                root.dbcacheError = optionsModel.commitDbcacheSizeMiB(dbcacheRow.text, dbcacheRow.validator.locale)
+                if (root.dbcacheError.length === 0) {
+                    root.dbcacheText = String(optionsModel.dbcacheSizeMiB)
                 }
-                optionsModel.dbcacheSizeMiB = value
-                root.dbcacheText = String(value)
-                root.dbcacheError = ""
             }
         }
 
@@ -73,27 +68,21 @@ ColumnLayout {
             errorText: root.scriptThreadsError
             fieldObjectName: "developerScriptThreadsField"
             fieldWidth: 88
-            maximumLength: 5
             text: root.scriptThreadsText
-            validator: IntValidator {
+            validator: IntegerInputValidator {
                 bottom: optionsModel.minScriptThreads
                 top: optionsModel.maxScriptThreads
+                onInputRejected: scriptThreadsRow.editingFinished()
             }
             onTextEdited: function(text) {
                 root.scriptThreadsText = text
                 root.scriptThreadsError = ""
             }
             onEditingFinished: {
-                const value = parseInt(scriptThreadsRow.text)
-                if (isNaN(value) || value < optionsModel.minScriptThreads
-                        || value > optionsModel.maxScriptThreads) {
-                    root.scriptThreadsError = qsTr("This is not a valid thread count. Please choose a value between %1 and %2 threads.")
-                        .arg(optionsModel.minScriptThreads).arg(optionsModel.maxScriptThreads)
-                    return
+                root.scriptThreadsError = optionsModel.commitScriptThreads(scriptThreadsRow.text, scriptThreadsRow.validator.locale)
+                if (root.scriptThreadsError.length === 0) {
+                    root.scriptThreadsText = String(optionsModel.scriptThreads)
                 }
-                optionsModel.scriptThreads = value
-                root.scriptThreadsText = String(value)
-                root.scriptThreadsError = ""
             }
         }
     }

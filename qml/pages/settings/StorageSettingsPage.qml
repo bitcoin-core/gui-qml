@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 
 import "../../controls"
@@ -18,20 +19,6 @@ SettingsPage {
     property bool onboarding: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var pruneSetting: coreSettingsModel.entry("prune")
-    readonly property bool hasStorageResult: root.settingsModel
-        && root.settingsModel["storageAvailableText"] !== undefined
-        && root.settingsModel.storageAvailableText.length > 0
-        && !root.settingsModel.storageCheckPending
-    readonly property int availableStorageGB: root.hasStorageResult
-        ? root.settingsModel.storageAvailableGB
-        : 0
-    readonly property int assumedChainstateSizeGB: root.settingsModel
-        && root.settingsModel["assumedChainstateSize"] !== undefined
-        ? root.settingsModel.assumedChainstateSize
-        : 0
-    readonly property int maxPruneSizeGB: root.hasStorageResult
-        ? Math.max(0, root.availableStorageGB - root.assumedChainstateSizeGB)
-        : 0
     property string pruneTargetText: String(pruneSetting.value)
     property string pruneTargetError: ""
 
@@ -42,19 +29,6 @@ SettingsPage {
         pruneTargetError = ""
     }
 
-    function validatePruneTarget(value) {
-        if (isNaN(value) || value < 1) {
-            return qsTr("Choose a storage limit of at least 1 GB.")
-        }
-        if (root.hasStorageResult && value > root.maxPruneSizeGB) {
-            if (root.maxPruneSizeGB < 1) {
-                return qsTr("There is not enough available storage for reduced storage in this data directory.")
-            }
-            return qsTr("Choose a value between 1 GB and %1 GB for this data directory.").arg(root.maxPruneSizeGB)
-        }
-        return ""
-    }
-
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Block storage")
@@ -63,9 +37,14 @@ SettingsPage {
 
         FormRow {
             Layout.fillWidth: true
+            objectName: "pruneModeRow"
             title: qsTr("Store recent blocks only")
             dividerColor: root.onboarding ? Theme.color.neutral3 : Theme.color.neutral2
-            supportingText: root.pruneSetting.infoText
+            supportingText: root.onboarding && root.settingsModel.keepingCurrentStorage
+                && root.settingsModel.currentPruneTargetMiB === 1
+                //: Explains the automatic-pruning switch when onboarding an existing manually pruned node. Turning it off after enabling it selects full storage.
+                ? qsTr("Manual pruning is currently selected. Turning this switch on enables automatic pruning; turning it off afterwards selects full storage.")
+                : root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
             trailingItem: OptionSwitch {
                 objectName: "pruneSwitch"
@@ -82,7 +61,10 @@ SettingsPage {
             fieldObjectName: "pruneTargetInput"
             fieldWidth: 80
             text: root.pruneTargetText
-            validator: IntValidator { bottom: 1 }
+            validator: IntegerInputValidator {
+                bottom: 1
+                onInputRejected: pruneTargetRow.editingFinished()
+            }
             errorText: root.pruneTargetError
             supportingText: root.pruneTargetError.length === 0 ? root.pruneSetting.infoText : ""
             showDivider: false
@@ -91,12 +73,11 @@ SettingsPage {
                 root.pruneTargetError = ""
             }
             onEditingFinished: {
-                const parsed = parseInt(pruneTargetRow.text)
-                root.pruneTargetError = root.validatePruneTarget(parsed)
+                root.pruneTargetError = root.settingsModel.commitPruneSizeGB(
+                    pruneTargetRow.text, pruneTargetRow.validator.locale)
                 if (root.pruneTargetError.length === 0) {
-                    root.pruneSetting.value = parsed
-                    root.pruneTargetText = String(parsed)
-                    root.pruneTargetCommitted(parsed)
+                    root.pruneTargetText = String(root.pruneSetting.value)
+                    root.pruneTargetCommitted(root.pruneSetting.value)
                 }
             }
         }

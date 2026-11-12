@@ -19,19 +19,26 @@ ColumnLayout {
     property bool customStorage: false
     property int customStorageAmount
     signal storageSelectionChanged(bool customStorage, int customStorageAmount)
-    readonly property int reducedStorageTargetGB: 2
+    readonly property int reducedStorageTargetGB: root.existingProfile && root.currentPruneTargetMiB > 1
+        ? Math.ceil(root.currentPruneTargetMiB * 1024 * 1024 / 1000000000) : 2
     readonly property int reduceRequiredGB: root.assumedChainstateSize + root.reducedStorageTargetGB
     readonly property int fullRequiredGB: root.settingsModel.fullStorageRequiredGB || (root.assumedBlockchainSize + root.assumedChainstateSize)
     readonly property int availableGB: root.settingsModel.storageAvailableGB || 0
     readonly property bool hasStorageResult: root.settingsModel.storageAvailableText && !root.settingsModel.storageCheckPending
     readonly property var pruneSetting: root.coreSettingsModel.entry("prune")
     readonly property bool storageOptionsEditable: root.pruneSetting.canEdit
-    readonly property bool showCustomOption: root.customStorage || (root.pruneSetting.enabled && root.pruneSetting.value !== root.reducedStorageTargetGB)
-    readonly property int effectiveCustomStorageAmount: root.customStorage ? root.customStorageAmount : root.pruneSetting.value
+    readonly property bool existingProfile: root.settingsModel.existingProfile || false
+    readonly property bool keepingCurrentStorage: root.existingProfile && root.settingsModel.keepingCurrentStorage
+    readonly property real currentPruneTargetMiB: root.existingProfile ? root.settingsModel.currentPruneTargetMiB : 0
+    readonly property bool showCustomOption: root.customStorage || (!root.keepingCurrentStorage && root.pruneSetting.enabled
+        && ((root.existingProfile && root.currentPruneTargetMiB > 0) || root.pruneSetting.value !== root.reducedStorageTargetGB))
+    readonly property int effectiveCustomStorageAmount: root.existingProfile && root.currentPruneTargetMiB > 0
+        && !root.keepingCurrentStorage && root.pruneSetting.enabled
+        ? root.pruneSetting.value : root.customStorage ? root.customStorageAmount : root.pruneSetting.value
     readonly property int customRequiredGB: root.effectiveCustomStorageAmount + root.assumedChainstateSize
 
     function hasEnoughStorage(requiredGB) {
-        if (root.settingsModel.existingProfile) return root.settingsModel.storageEnoughForSelected
+        if (root.existingProfile) return root.settingsModel.storageEnoughForSelected
         return !root.hasStorageResult || root.availableGB >= requiredGB
     }
 
@@ -53,15 +60,26 @@ ColumnLayout {
         Layout.fillWidth: true
         ButtonGroup.group: group
         surfaceSelectionStyle: true
-        text: qsTr("Reduce storage")
-        description: qsTr("Uses about %1GB. For regular wallet use.").arg(root.reduceRequiredGB)
+        text: root.currentPruneTargetMiB === 1 ? qsTr("Manual pruning") : qsTr("Reduce storage")
+        badgeText: root.existingProfile && root.currentPruneTargetMiB > 0
+            ? qsTr("Your current setting") : recommended ? qsTr("Recommended") : ""
+        description: root.currentPruneTargetMiB === 1
+            ? qsTr("Prune older blocks manually to control storage use.")
+            : qsTr("Uses about %1GB with older data pruned, suitable for regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
-        recommended: root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
-        checked: root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
+        recommended: !root.existingProfile && root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
+        // Read the model notification directly to restore native button toggles even
+        // when selecting the same target keeps the derived current-setting value.
+        checked: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
+            : root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
+                && !(root.existingProfile && root.currentPruneTargetMiB > 0)
         onClicked: {
             root.storageSelectionChanged(root.showCustomOption, root.effectiveCustomStorageAmount)
-            root.pruneSetting.enabled = true
-            root.pruneSetting.value = root.reducedStorageTargetGB
+            if (root.existingProfile && root.currentPruneTargetMiB > 0) {
+                root.settingsModel.keepCurrentStorage()
+            } else {
+                root.settingsModel.selectStorage(true, root.reducedStorageTargetGB)
+            }
         }
     }
     OptionButton {
@@ -70,13 +88,26 @@ ColumnLayout {
         ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Store all data")
-        checked: !root.pruneSetting.enabled
+        checked: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB === 0 : !root.pruneSetting.enabled
+        badgeText: root.existingProfile && root.currentPruneTargetMiB === 0
+            ? qsTr("Your current setting") : recommended ? qsTr("Recommended") : ""
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.fullRequiredGB)
-        recommended: root.storageOptionsEditable && root.settingsModel.storageEnoughForFull
+        recommended: !root.existingProfile && root.storageOptionsEditable && root.settingsModel.storageEnoughForFull
+        errorText: (root.existingProfile && root.currentPruneTargetMiB > 0
+            ? qsTr("May require downloading the full blockchain again.") : "")
+            + (root.hasStorageResult && root.availableGB < root.fullRequiredGB
+                ? (root.existingProfile && root.currentPruneTargetMiB > 0 ? "\n" : "")
+                    //: Advisory storage warning on the full-storage option. %1 is the estimated download size in GB; %2 is free disk space in GB. Existing blocks reduce the additional space needed.
+                    + qsTr("A full download needs about %1GB; %2GB available. Existing block data can be reused.").arg(root.fullRequiredGB).arg(root.availableGB)
+                : "")
         onClicked: {
             root.storageSelectionChanged(root.showCustomOption, root.effectiveCustomStorageAmount)
-            root.pruneSetting.enabled = false
+            if (root.existingProfile && root.currentPruneTargetMiB === 0) {
+                root.settingsModel.keepCurrentStorage()
+            } else {
+                root.settingsModel.selectStorage(false, root.pruneSetting.value)
+            }
         }
     }
     Loader {
@@ -87,14 +118,14 @@ ColumnLayout {
             objectName: "storageCustomOption"
             ButtonGroup.group: group
             surfaceSelectionStyle: true
-            checked: root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
+            checked: !(root.existingProfile && root.settingsModel.keepingCurrentStorage) && root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
             text: qsTr("Custom")
-            description: qsTr("Storing recent blocks up to %1 GB.").arg(root.effectiveCustomStorageAmount)
+            description: qsTr("Storing recent blocks up to %1 GB. Uses about %2 GB in total.")
+                .arg(root.effectiveCustomStorageAmount).arg(root.customRequiredGB)
             enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.customRequiredGB)
             onClicked: {
                 root.storageSelectionChanged(true, root.effectiveCustomStorageAmount)
-                root.pruneSetting.enabled = true
-                root.pruneSetting.value = root.effectiveCustomStorageAmount
+                root.settingsModel.selectStorage(true, root.effectiveCustomStorageAmount)
             }
         }
     }

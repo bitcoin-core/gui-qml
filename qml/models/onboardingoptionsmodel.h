@@ -34,6 +34,7 @@ class OnboardingOptionsModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString dataDir READ dataDir NOTIFY dataDirChanged)
+    Q_PROPERTY(QString customDataDir READ customDataDir NOTIFY customDataDirStringChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
@@ -56,6 +57,8 @@ class OnboardingOptionsModel : public QObject
     Q_PROPERTY(int assumedBlockchainSize READ assumedBlockchainSize NOTIFY assumedSizesChanged)
     Q_PROPERTY(int assumedChainstateSize READ assumedChainstateSize NOTIFY assumedSizesChanged)
     Q_PROPERTY(bool existingProfile READ existingProfile NOTIFY storageStatusChanged)
+    Q_PROPERTY(qint64 currentPruneTargetMiB READ currentPruneTargetMiB NOTIFY storageStatusChanged)
+    Q_PROPERTY(bool keepingCurrentStorage READ keepingCurrentStorage NOTIFY storageStatusChanged)
     Q_PROPERTY(bool storageCheckPending READ storageCheckPending NOTIFY storageStatusChanged)
     Q_PROPERTY(QString storageStatus READ storageStatus NOTIFY storageStatusChanged)
     Q_PROPERTY(int storageAvailableGB READ storageAvailableGB NOTIFY storageStatusChanged)
@@ -80,6 +83,7 @@ public:
     void beginShutdown();
     bool validationPending() const { return m_preview_pending; }
     QString dataDir() const { return m_data_dir; }
+    QString customDataDir() const { return m_custom_datadir_string; }
     QString getDefaultDataDirString() const;
     QUrl getDefaultDataDirectory() const;
     Q_INVOKABLE QString getCustomDataDirString() const;
@@ -92,6 +96,7 @@ public:
     void setPrune(bool prune);
     int pruneSizeGB() const { return m_core_settings.values().prune_size_gb; }
     void setPruneSizeGB(int prune_size_gb);
+    Q_INVOKABLE QString commitPruneSizeGB(const QString& text, const QString& locale_name);
     bool listen() const { return m_core_settings.values().listen; }
     void setListen(bool listen);
     bool natpmp() const { return m_core_settings.values().natpmp; }
@@ -116,6 +121,10 @@ public:
     int assumedBlockchainSize() const { return m_assumed_blockchain_size; }
     int assumedChainstateSize() const { return m_assumed_chainstate_size; }
     bool existingProfile() const { return m_profile.existing_profile; }
+    qint64 currentPruneTargetMiB() const { return m_current_prune_target_mib; }
+    bool keepingCurrentStorage() const { return existingProfile() && !m_core_settings.isTouched(QStringLiteral("prune")); }
+    Q_INVOKABLE void keepCurrentStorage();
+    Q_INVOKABLE void selectStorage(bool prune, int prune_size_gb);
     bool storageCheckPending() const { return m_storage_check_pending; }
     QString storageStatus() const;
     int storageAvailableGB() const;
@@ -172,6 +181,7 @@ private:
     void startStorageCheck(uint64_t request_id, const QString& path);
     void applyStorageCheckResult(uint64_t request_id, const QmlDataDir::StorageSpaceResult& result);
     void applyAutomaticPruneRecommendation();
+    void clearUnchangedStorageSelection();
     void emitStorageStatusChanged();
     QmlCoreSettings::Values coreValues() const;
     QmlOnboardingStorage::State storageState() const;
@@ -193,6 +203,8 @@ private:
     CoreSettingsModel m_core_settings;
     QString m_preview_error;
     QmlOnboardingSettings::ProfileSummary m_profile;
+    QmlCoreSettings::Values m_preview_values;
+    int64_t m_current_prune_target_mib{0};
     int m_assumed_blockchain_size{0};
     int m_assumed_chainstate_size{0};
     uint64_t m_storage_request_id{0};

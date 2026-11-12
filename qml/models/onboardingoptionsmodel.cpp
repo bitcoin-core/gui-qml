@@ -18,7 +18,9 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <exception>
+#include <limits>
 #include <utility>
 
 OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bool can_listen_ipc, QObject* parent)
@@ -34,6 +36,7 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
         if (origin == CoreSettingsModel::ChangeOrigin::User &&
             (QmlCoreSettings::PruneChanged(change) || QmlCoreSettings::PruneSizeGBChanged(change))) {
             m_prune_auto_recommended = false;
+            clearUnchangedStorageSelection();
             emitStorageStatusChanged();
         }
     });
@@ -176,10 +179,6 @@ bool OnboardingOptionsModel::selectCustomDataDir(const QString& path)
 
 void OnboardingOptionsModel::useDefaultDataDir()
 {
-    if (!m_custom_datadir_string.isEmpty()) {
-        m_custom_datadir_string.clear();
-        Q_EMIT customDataDirStringChanged({});
-    }
     const QString default_data_dir = getDefaultDataDirString();
     m_data_dir_source = QmlOnboardingSettings::DataDirSource::UserSelection;
     setDataDir(default_data_dir);
@@ -190,6 +189,10 @@ void OnboardingOptionsModel::setDataDir(const QString& path)
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
     const QString effective = normalized.isEmpty() ? getDefaultDataDirString() : normalized;
     if (effective != m_data_dir) {
+        // Choices belong to the selected profile; never overwrite another profile
+        // with settings edited before changing directories.
+        m_core_settings.clearTouchedSettings();
+        m_prune_auto_recommended = false;
         m_data_dir = effective;
         Q_EMIT dataDirChanged(m_data_dir);
     }
@@ -205,6 +208,42 @@ void OnboardingOptionsModel::setPrune(bool prune)
 void OnboardingOptionsModel::setPruneSizeGB(int prune_size_gb)
 {
     m_core_settings.changePruneSizeGB(prune_size_gb);
+}
+
+QString OnboardingOptionsModel::commitPruneSizeGB(const QString& text, const QString& locale_name)
+{
+    const int maximum = !storageCheckPending() && !storageAvailableText().isEmpty()
+        ? std::max(0, storageAvailableGB() - assumedChainstateSize())
+        : std::numeric_limits<int>::max() - assumedChainstateSize();
+    return m_core_settings.commitPruneSizeGB(text, locale_name, maximum);
+}
+
+void OnboardingOptionsModel::keepCurrentStorage()
+{
+    if (!existingProfile()) return;
+    m_core_settings.clearTouched(QStringLiteral("prune"));
+    applyPreviewValues(m_preview_values, m_core_settings.statuses());
+    m_prune_auto_recommended = false;
+    emitStorageStatusChanged();
+}
+
+void OnboardingOptionsModel::clearUnchangedStorageSelection()
+{
+    const int64_t target_mib = prune() ? QmlCoreSettings::PruneGBToMiB(pruneSizeGB()) : 0;
+    if (existingProfile() && target_mib == currentPruneTargetMiB()) {
+        m_core_settings.clearTouched(QStringLiteral("prune"));
+    }
+}
+
+void OnboardingOptionsModel::selectStorage(bool prune, int prune_size_gb)
+{
+    if (!m_core_settings.canEdit(QStringLiteral("prune"))) return;
+    m_core_settings.changePrune(prune);
+    if (prune) m_core_settings.changePruneSizeGB(prune_size_gb);
+    m_core_settings.markTouched(QStringLiteral("prune"));
+    clearUnchangedStorageSelection();
+    m_prune_auto_recommended = false;
+    emitStorageStatusChanged();
 }
 
 void OnboardingOptionsModel::setListen(bool listen)
@@ -467,6 +506,8 @@ void OnboardingOptionsModel::applyPreview(const QmlOnboardingSettings::PreviewRe
     m_assumed_blockchain_size = preview.assumed_blockchain_size;
     m_assumed_chainstate_size = preview.assumed_chainstate_size;
     m_profile = preview.profile;
+    m_preview_values = preview.values;
+    m_current_prune_target_mib = preview.prune_target_mib;
     if (m_profile.existing_profile && m_prune_auto_recommended) {
         m_core_settings.changePruneRecommendation(preview.values.prune, preview.values.prune_size_gb, /*mark_touched=*/false);
         m_prune_auto_recommended = false;
