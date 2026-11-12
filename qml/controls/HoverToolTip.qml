@@ -22,6 +22,8 @@ ToolTip {
     }
 
     contentItem: Tooltip {
+        // Avoid the deferred-state lifetime bug in Qt 6.2 (fixed in 6.3).
+        id: tooltipContent
         width: implicitWidth
         height: implicitHeight
         text: root.text
