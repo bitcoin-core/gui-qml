@@ -323,12 +323,12 @@ Page {
 
     Component {
         id: storagePage
-        SettingsPages.StorageSettingsPage {}
+        SettingsPages.StorageSettingsPage { settingsModel: ApplicationModels.optionsModel }
     }
 
     Component {
         id: connectionPage
-        SettingsPages.ConnectionSettingsPage {}
+        SettingsPages.ConnectionSettingsPage { settingsModel: ApplicationModels.optionsModel }
     }
 
     Component {

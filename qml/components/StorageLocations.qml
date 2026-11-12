@@ -6,13 +6,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import org.bitcoincore.qt 1.0
 
 import "../controls"
 
 ColumnLayout {
     id: root
-    property var settingsModel: ApplicationModels.optionsModel
+    required property var settingsModel
     property int minimumStorageRequiredGB: 0
     property string validationError: ""
     readonly property string storageAvailableText: root.settingsModel.storageAvailableText || ""

@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -16,7 +15,7 @@ SettingsPage {
     title: qsTr("Proxy settings")
     backButtonObjectName: "proxySettingsBackButton"
 
-    property var settingsModel: ApplicationModels.optionsModel
+    required property var settingsModel
     property bool onboardingModal: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var proxySetting: coreSettingsModel.entry("proxy")

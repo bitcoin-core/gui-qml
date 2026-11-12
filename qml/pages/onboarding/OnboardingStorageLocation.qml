@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -14,7 +13,7 @@ OnboardingView {
     signal next()
 
     property int assumedChainstateSize: 0
-    property var settingsModel: ApplicationModels.optionsModel
+    required property var settingsModel
     readonly property int reducedStorageTargetGB: 2
     readonly property int freshMinimumStorageRequiredGB: root.assumedChainstateSize + root.reducedStorageTargetGB
     readonly property int minimumStorageRequiredGB: root.settingsModel.existingProfile

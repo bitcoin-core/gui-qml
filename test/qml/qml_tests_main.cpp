@@ -4280,7 +4280,7 @@ class MockApplicationModels : public QObject
     Q_PROPERTY(MockNodeModel* nodeModel READ nodeModel CONSTANT)
     Q_PROPERTY(MockChainModel* chainModel READ chainModel CONSTANT)
     Q_PROPERTY(MockBlockClockModel* blockClockModel READ blockClockModel CONSTANT)
-    Q_PROPERTY(MockOptionsModel* optionsModel READ optionsModel CONSTANT)
+    Q_PROPERTY(MockOptionsModel* optionsModel READ optionsModel NOTIFY settingsModelsChanged)
     Q_PROPERTY(MockNetworkTrafficTower* networkTrafficTower READ networkTrafficTower CONSTANT)
     Q_PROPERTY(MockNetworkStatusModel* networkStatusModel READ networkStatusModel CONSTANT)
     Q_PROPERTY(MockPeerTableModel* peerTableModel READ peerTableModel CONSTANT)
@@ -4292,7 +4292,7 @@ class MockApplicationModels : public QObject
     Q_PROPERTY(MockWalletListModel* walletListModel READ walletListModel CONSTANT)
     Q_PROPERTY(MockDesktopWindowBehaviorModel* desktopWindowBehaviorModel READ desktopWindowBehaviorModel CONSTANT)
     Q_PROPERTY(QObject* desktopTrayIconController READ desktopTrayIconController CONSTANT)
-    Q_PROPERTY(MockOptionsModel* onboardingOptionsModel READ onboardingOptionsModel CONSTANT)
+    Q_PROPERTY(MockOptionsModel* onboardingOptionsModel READ onboardingOptionsModel NOTIFY settingsModelsChanged)
     Q_PROPERTY(bool testAutomationEnabled READ testAutomationEnabled CONSTANT)
     Q_PROPERTY(QString startupError READ startupError CONSTANT)
 
@@ -4302,7 +4302,7 @@ public:
     MockNodeModel* nodeModel() const { return m_context->contextProperty(QStringLiteral("nodeModel")).value<MockNodeModel*>(); }
     MockChainModel* chainModel() const { return m_context->contextProperty(QStringLiteral("chainModel")).value<MockChainModel*>(); }
     MockBlockClockModel* blockClockModel() const { return m_context->contextProperty(QStringLiteral("blockClockModel")).value<MockBlockClockModel*>(); }
-    MockOptionsModel* optionsModel() const { return m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
+    MockOptionsModel* optionsModel() const { return m_preinit ? nullptr : m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
     MockNetworkTrafficTower* networkTrafficTower() const { return m_context->contextProperty(QStringLiteral("networkTrafficTower")).value<MockNetworkTrafficTower*>(); }
     MockNetworkStatusModel* networkStatusModel() const { return m_context->contextProperty(QStringLiteral("networkStatusModel")).value<MockNetworkStatusModel*>(); }
     MockPeerTableModel* peerTableModel() const { return m_context->contextProperty(QStringLiteral("peerTableModel")).value<MockPeerTableModel*>(); }
@@ -4314,11 +4314,22 @@ public:
     MockWalletListModel* walletListModel() const { return m_context->contextProperty(QStringLiteral("walletListModel")).value<MockWalletListModel*>(); }
     MockDesktopWindowBehaviorModel* desktopWindowBehaviorModel() const { return m_context->contextProperty(QStringLiteral("desktopWindowBehaviorModel")).value<MockDesktopWindowBehaviorModel*>(); }
     QObject* desktopTrayIconController() const { return m_context->contextProperty(QStringLiteral("desktopTrayIconController")).value<QObject*>(); }
-    MockOptionsModel* onboardingOptionsModel() const { return m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
+    MockOptionsModel* onboardingOptionsModel() const { return !m_preinit ? nullptr : m_context->contextProperty(QStringLiteral("optionsModel")).value<MockOptionsModel*>(); }
     bool testAutomationEnabled() const { return m_context->contextProperty(QStringLiteral("testAutomationEnabled")).toBool(); }
     QString startupError() const { return m_context->contextProperty(QStringLiteral("message")).toString(); }
 
+    Q_INVOKABLE void setPreInitForTest(bool preinit)
+    {
+        if (m_preinit == preinit) return;
+        m_preinit = preinit;
+        Q_EMIT settingsModelsChanged();
+    }
+
+Q_SIGNALS:
+    void settingsModelsChanged();
+
 private:
+    bool m_preinit{false};
     QQmlContext* m_context;
 };
 
