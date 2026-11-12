@@ -13,6 +13,7 @@
 #include <wallet/types.h>
 
 #include <QVariantMap>
+#include <utility>
 
 using wallet::AddressPurpose;
 
@@ -61,8 +62,14 @@ AddressListModel::AddressListModel(WalletQmlModel* parent)
     , m_wallet_model(parent)
 {
     if (m_wallet_model) {
-        connect(m_wallet_model, &WalletQmlModel::addressListChanged, this, &AddressListModel::refresh);
-        connect(m_wallet_model, &WalletQmlModel::balanceChanged, this, &AddressListModel::refresh);
+        connect(m_wallet_model, &WalletQmlModel::walletStateChanged, this, &AddressListModel::refresh);
+        connect(m_wallet_model, &WalletQmlModel::receiveOperationFinished, this, [this](const QString& operation, bool success) {
+            if (operation != QStringLiteral("label") || m_pending_label_address.isEmpty()) return;
+            const auto address = std::exchange(m_pending_label_address, {});
+            const auto label = std::exchange(m_pending_label, {});
+            Q_EMIT labelChangePendingChanged();
+            Q_EMIT labelChangeFinished(address, label, success, m_wallet_model->receiveOperationError());
+        });
     }
     refresh();
 }
@@ -182,9 +189,11 @@ void AddressListModel::setDisplayUnit(int unit)
 
 bool AddressListModel::setAddressLabel(const QString& address, const QString& label)
 {
-    if (!m_wallet_model || address.isEmpty()) return false;
+    if (!m_wallet_model || address.isEmpty() || labelChangePending()) return false;
     if (!m_wallet_model->setAddressLabel(address, label)) return false;
-    refresh();
+    m_pending_label_address = address;
+    m_pending_label = label;
+    Q_EMIT labelChangePendingChanged();
     return true;
 }
 

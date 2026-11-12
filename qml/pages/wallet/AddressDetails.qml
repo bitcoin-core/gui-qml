@@ -22,6 +22,7 @@ ColumnLayout {
     property bool hasPaymentRequest: false
     property bool canEditLabel: category !== "change"
     property string noteErrorText: ""
+    property bool labelChangePending: false
 
     signal closeRequested
     signal createPaymentRequestRequested
@@ -102,17 +103,18 @@ ColumnLayout {
             Layout.fillWidth: true
             //: Private address note, also used as the payment request's note to self.
             title: qsTr("Note to self")
+            description: root.labelChangePending ? qsTr("Saving…") : ""
             fieldObjectName: "addressDetailsNoteField"
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
             //: Placeholder shown when an address has no private note yet.
             placeholderText: qsTr("Add note...")
             enabled: root.canEditLabel
-            readOnly: !root.canEditLabel
+            readOnly: !root.canEditLabel || root.labelChangePending
             errorText: root.noteErrorText
             dividerColor: Theme.color.neutral3
             onEditingFinished: {
-                if (text !== root.label) {
+                if (!root.labelChangePending && text !== root.label) {
                     root.editLabelRequested(root.address, text)
                 }
             }

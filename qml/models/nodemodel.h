@@ -62,6 +62,8 @@ class NodeModel : public QObject
     Q_PROPERTY(bool networkActionReady READ networkActionReady NOTIFY networkActionReadyChanged)
     Q_PROPERTY(bool networkActionPending READ networkActionPending NOTIFY networkActionPendingChanged)
     Q_PROPERTY(QString networkActionError READ networkActionError NOTIFY networkActionErrorChanged)
+    Q_PROPERTY(bool peerActionPending READ peerActionPending NOTIFY peerActionPendingChanged)
+    Q_PROPERTY(QString peerActionError READ peerActionError NOTIFY peerActionErrorChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
@@ -82,10 +84,14 @@ public:
     explicit NodeModel(interfaces::Node& node, bool backend_ready = true);
     ~NodeModel() override;
     void beginShutdown();
+    void acknowledgeBanNotification();
+    std::shared_ptr<BackendExecutor> peerCommandExecutor() const { return m_commands; }
     bool isDrained() const { return m_drained; }
     bool networkActionReady() const { return m_backend_queries_ready && !m_shutdown_requested && !m_workers_stopping; }
     bool networkActionPending() const { return m_network_action_pending; }
     QString networkActionError() const { return m_network_action_error; }
+    bool peerActionPending() const { return m_peer_action_pending; }
+    QString peerActionError() const { return m_peer_action_error; }
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
@@ -130,8 +136,6 @@ public:
     unsigned int runtimeDialogButtons() const { return m_runtime_dialog_buttons; }
     bool runtimeDialogQuestion() const { return m_runtime_dialog_question; }
 
-    Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
-    Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
     Q_INVOKABLE void refreshMempoolInfo();
 
     Q_INVOKABLE void startNodeInitializionThread();
@@ -144,7 +148,8 @@ public:
     Q_INVOKABLE QString defaultProxyAddress();
     Q_INVOKABLE bool disconnectPeer(int nodeId);
     Q_INVOKABLE bool banPeer(const QString& rawAddress, int64_t banDuration);
-    Q_INVOKABLE QVariantList nodeInformationRows();
+    Q_INVOKABLE QVariantList nodeInformationRows() const;
+    Q_INVOKABLE void refreshNodeInformation();
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
     Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
@@ -160,6 +165,9 @@ Q_SIGNALS:
     void networkActionReadyChanged();
     void networkActionPendingChanged();
     void networkActionErrorChanged();
+    void peerActionPendingChanged();
+    void peerActionErrorChanged();
+    void peerActionFinished(const QString& action, bool success, const QString& error);
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -193,9 +201,21 @@ protected:
 private:
     struct Notifications;
     struct StatusSnapshot;
+    struct InformationSnapshot {
+        QString user_agent;
+        QString data_dir;
+        QString blocks_dir;
+        QString startup_time;
+        QString network;
+        QString local_addresses;
+    };
     std::shared_ptr<Notifications> m_notifications;
     BackendExecutor m_snapshots;
     std::shared_ptr<BackendExecutor> m_commands{std::make_shared<BackendExecutor>()};
+    InformationSnapshot m_information;
+    bool m_information_ready{false};
+    bool m_information_pending{false};
+    bool m_information_again{false};
     bool m_status_ready{false};
     bool m_status_pending{false};
     bool m_status_again{false};
@@ -203,6 +223,8 @@ private:
     bool m_network_action_pending{false};
     bool m_network_desired_pause{false};
     QString m_network_action_error;
+    bool m_peer_action_pending{false};
+    QString m_peer_action_error;
     bool m_shutdown_poll_pending{false};
     bool m_drained{false};
     bool m_seen_block_tip{false};
@@ -213,6 +235,7 @@ private:
     void refreshStatus();
     void finishDrain();
     void submitNetworkAction();
+    void finishPeerAction(const QString& action, bool success, const QString& error = {});
 
     struct MempoolInfo {
         int transaction_count{0};

@@ -20,6 +20,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -34,6 +36,7 @@
 #include <qml/bitcoinamount.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/models/imagesavemodel.h>
 
 class MockAppMode : public QObject
 {
@@ -360,6 +363,8 @@ class MockAddressListModel : public QAbstractListModel
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
+    Q_PROPERTY(bool labelChangePending MEMBER m_label_change_pending NOTIFY labelChangePendingChanged)
+    Q_PROPERTY(int labelChangeDelay MEMBER m_label_change_delay)
 
 public:
     enum Category {
@@ -466,7 +471,17 @@ public:
     Q_INVOKABLE void refresh() {}
     Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label)
     {
-        if (!m_set_address_label_succeeds) return false;
+        if (m_label_change_pending) return false;
+        m_label_change_pending = true;
+        Q_EMIT labelChangePendingChanged();
+        QTimer::singleShot(m_label_change_delay, this, [this, address, label, success = m_set_address_label_succeeds] {
+            m_label_change_pending = false;
+            Q_EMIT labelChangePendingChanged();
+            Q_EMIT labelChangeFinished(address, label, success, success ? QString{} : QStringLiteral("This address is no longer available."));
+        });
+        if (!m_set_address_label_succeeds) {
+            return true;
+        }
         for (int row = 0; row < rowCount(); ++row) {
             Entry& entry{m_rows.at(row)};
             if (entry.address != address) continue;
@@ -494,6 +509,8 @@ public:
     }
 
 Q_SIGNALS:
+    void labelChangePendingChanged();
+    void labelChangeFinished(const QString& address, const QString& label, bool success, const QString& error);
     void categoryChanged();
     void showUsedChanged();
     void countChanged();
@@ -518,6 +535,8 @@ private:
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
+    bool m_label_change_pending{false};
+    int m_label_change_delay{0};
 };
 
 class MockFileDialog : public QObject
@@ -947,6 +966,9 @@ private:
 class MockCoinsListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool lockOperationPending MEMBER m_lock_pending NOTIFY lockOperationStateChanged)
+    Q_PROPERTY(QString lockOperationError MEMBER m_lock_error NOTIFY lockOperationStateChanged)
+    Q_PROPERTY(int lockRequests MEMBER m_lock_requests NOTIFY lockOperationStateChanged)
     Q_PROPERTY(qint64 totalSelectedSatoshi READ totalSelectedSatoshi NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(qint64 totalSatoshi READ totalSatoshi CONSTANT)
     Q_PROPERTY(qint64 lockedSatoshi READ lockedSatoshi CONSTANT)
@@ -1039,7 +1061,19 @@ public:
     Q_INVOKABLE void beginSelection() { m_snapshot = m_rows; }
     Q_INVOKABLE void applySelection() { m_snapshot.clear(); }
     Q_INVOKABLE void cancelSelection() { if (m_snapshot.empty()) return; beginResetModel(); m_rows=m_snapshot; m_snapshot.clear(); endResetModel(); emitAggregateSignals(); }
-    Q_INVOKABLE bool setCoinsLocked(const QStringList&, bool) { return true; }
+    Q_INVOKABLE bool setCoinsLocked(const QStringList&, bool) {
+        if (m_lock_pending) return false;
+        m_lock_pending = true;
+        m_lock_error.clear();
+        ++m_lock_requests;
+        Q_EMIT lockOperationStateChanged();
+        return true;
+    }
+    Q_INVOKABLE void finishLockOperation(const QString& error) {
+        m_lock_error = error;
+        m_lock_pending = false;
+        Q_EMIT lockOperationStateChanged();
+    }
     int coinCount() const { return rowCount(); }
 
     QString totalSelected() const
@@ -1107,6 +1141,10 @@ public:
 
     Q_INVOKABLE void reset()
     {
+        m_lock_pending = false;
+        m_lock_error.clear();
+        m_lock_requests = 0;
+        Q_EMIT lockOperationStateChanged();
         beginResetModel();
         m_rows = {
             {QStringLiteral("bcrt1qcoin1"), QStringLiteral("0.00100000 BTC"), QStringLiteral("utxo-1"), false, false, QStringLiteral("coin-1")},
@@ -1120,6 +1158,7 @@ public:
     Q_INVOKABLE void update() {}
 
 Q_SIGNALS:
+    void lockOperationStateChanged();
     void viewChanged();
     void selectedCoinsCountChanged();
     void coinCountChanged();
@@ -1128,6 +1167,9 @@ Q_SIGNALS:
     void changeAmountChanged();
 
 private:
+    bool m_lock_pending{false};
+    QString m_lock_error;
+    int m_lock_requests{0};
     void emitAggregateSignals()
     {
         Q_EMIT selectedCoinsCountChanged();
@@ -1200,6 +1242,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString externalSignerStatus MEMBER m_external_signer_status NOTIFY walletInfoChanged)
     Q_PROPERTY(bool canManagePassphrase MEMBER m_can_manage_passphrase NOTIFY walletInfoChanged)
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
+    Q_PROPERTY(bool settingsBusy MEMBER m_settings_busy NOTIFY settingsBusyChanged)
+    Q_PROPERTY(bool settingsAutoComplete MEMBER m_settings_auto_complete)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(int backupWalletCalls READ backupWalletCalls NOTIFY backupWalletCallsChanged)
     Q_PROPERTY(QString transactionError MEMBER m_transaction_error NOTIFY transactionErrorChanged)
@@ -1209,7 +1253,13 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastLoadedPaymentRequestDetailId MEMBER m_last_loaded_payment_request_detail_id NOTIFY lastLoadedPaymentRequestDetailIdChanged)
     Q_PROPERTY(QString lastTemplateRequestId MEMBER m_last_template_request_id NOTIFY lastTemplateRequestIdChanged)
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
+    Q_PROPERTY(bool walletStateReady MEMBER m_wallet_state_ready NOTIFY walletStateChanged)
+    Q_PROPERTY(QString walletStateError MEMBER m_wallet_state_error NOTIFY walletStateChanged)
+    Q_PROPERTY(bool receiveOperationPending MEMBER m_receive_operation_pending NOTIFY receiveOperationPendingChanged)
+    Q_PROPERTY(QString receiveOperationError MEMBER m_receive_operation_error NOTIFY receiveOperationErrorChanged)
+    Q_PROPERTY(QVariantList receiveAddressTypes READ availableReceiveAddressTypes NOTIFY walletInfoChanged)
     Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
+    Q_PROPERTY(bool holdReceiveOperations MEMBER m_hold_receive_operations)
 
 public:
     enum class KeyScheme {
@@ -1240,6 +1290,30 @@ public:
     QString m_last_loaded_payment_request_detail_id;
     QString m_last_template_request_id;
     QString m_last_removed_request_id;
+    bool m_wallet_state_ready{true};
+    QString m_wallet_state_error;
+    bool m_receive_operation_pending{false};
+    QString m_receive_operation_error;
+    void completeReceiveOperation(const QString& operation, bool success)
+    {
+        m_receive_operation_pending = false;
+        m_receive_operation_error = success ? QString{} : QStringLiteral("The payment request could not be deleted. Please try again.");
+        Q_EMIT receiveOperationPendingChanged();
+        Q_EMIT receiveOperationErrorChanged();
+        Q_EMIT receiveOperationFinished(operation, success);
+    }
+    void finishReceiveOperation(QString operation, bool success = true)
+    {
+        m_receive_operation_pending = true;
+        Q_EMIT receiveOperationPendingChanged();
+        if (m_hold_receive_operations) {
+            m_held_receive_operation = {operation, success};
+            return;
+        }
+        QTimer::singleShot(0, this, [this, operation, success] { completeReceiveOperation(operation, success); });
+    }
+    bool m_hold_receive_operations{false};
+    std::optional<std::pair<QString, bool>> m_held_receive_operation;
     bool m_remove_receive_request_result{true};
     bool m_receive_request_reconciliation_pending{false};
     QString m_saved_payment_request_label;
@@ -1279,6 +1353,7 @@ public:
             Q_EMIT m_receiving_address.addressChanged();
             Q_EMIT m_receiving_address.addressTypeChanged();
         }
+        finishReceiveOperation(QStringLiteral("address"));
         return true;
     }
     Q_INVOKABLE bool ensureReceivingAddressWithPassphrase(const QString&, bool next = false, const QString& type = {})
@@ -1582,6 +1657,7 @@ public:
         Q_EMIT request->idChanged();
         Q_EMIT request->addressChanged();
         Q_EMIT request->isEditingChanged();
+        finishReceiveOperation(QStringLiteral("save"));
         return true;
     }
     Q_INVOKABLE bool updatePaymentRequest(const QString& id, qint64 amount, const QString& label, const QString& message, const QString& note)
@@ -1593,6 +1669,7 @@ public:
         request->setProperty("label", label);
         request->setProperty("message", message);
         request->setProperty("noteSelf", note);
+        finishReceiveOperation(QStringLiteral("update"));
         return true;
     }
     Q_INVOKABLE bool commitPaymentRequestWithPassphrase(const QString&)
@@ -1605,12 +1682,55 @@ public:
         m_settings_error.clear();
         Q_EMIT settingsErrorChanged();
     }
+    Q_INVOKABLE bool encryptWallet(const QString&)
+    {
+        return startSettingsOperation(QStringLiteral("encrypt"));
+    }
+    Q_INVOKABLE bool changeWalletPassphrase(const QString&, const QString&)
+    {
+        return startSettingsOperation(QStringLiteral("passphrase"));
+    }
+    Q_INVOKABLE void completeSettingsOperation(bool success)
+    {
+        if (!m_settings_busy) return;
+        const QString operation = std::exchange(m_pending_settings_operation, QString{});
+        m_settings_busy = false;
+        if (success && operation == QStringLiteral("encrypt")) {
+            m_is_encrypted = true;
+            m_is_locked = true;
+            Q_EMIT securityStateChanged();
+        }
+        if (!success) {
+            m_settings_error = QStringLiteral("The wallet operation failed.");
+            Q_EMIT settingsErrorChanged();
+        }
+        Q_EMIT settingsBusyChanged();
+        Q_EMIT settingsOperationFinished(operation, success);
+    }
+    bool startSettingsOperation(const QString& operation)
+    {
+        if (m_settings_busy) return false;
+        clearSettingsError();
+        m_settings_busy = true;
+        m_pending_settings_operation = operation;
+        Q_EMIT settingsBusyChanged();
+        if (m_settings_auto_complete) QTimer::singleShot(0, this, [this] { completeSettingsOperation(true); });
+        return true;
+    }
     Q_INVOKABLE bool backupWallet(const QString& path)
     {
-        m_last_backup_path = path;
-        ++m_backup_wallet_calls;
-        clearSettingsError();
-        Q_EMIT backupWalletCallsChanged();
+        if (m_settings_busy) return false;
+        m_settings_busy = true;
+        Q_EMIT settingsBusyChanged();
+        QTimer::singleShot(0, this, [this, path] {
+            m_last_backup_path = path;
+            ++m_backup_wallet_calls;
+            clearSettingsError();
+            m_settings_busy = false;
+            Q_EMIT backupWalletCallsChanged();
+            Q_EMIT settingsBusyChanged();
+            Q_EMIT settingsOperationFinished(QStringLiteral("backup"), true);
+        });
         return true;
     }
     Q_INVOKABLE void resetWalletSettingsTestState()
@@ -1656,12 +1776,21 @@ public:
         Q_EMIT request->addressTypeChanged();
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
+        finishReceiveOperation(QStringLiteral("rememberAddress"));
+    }
+    Q_INVOKABLE void releaseReceiveOperation()
+    {
+        if (!m_held_receive_operation) return;
+        const auto [operation, success] = *std::exchange(m_held_receive_operation, std::nullopt);
+        completeReceiveOperation(operation, success);
     }
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id)
     {
-        if (!m_remove_receive_request_result) return false;
-        m_last_removed_request_id = request_id;
-        Q_EMIT lastRemovedRequestIdChanged();
+        if (m_remove_receive_request_result) {
+            m_last_removed_request_id = request_id;
+            Q_EMIT lastRemovedRequestIdChanged();
+        }
+        finishReceiveOperation(QStringLiteral("remove"), m_remove_receive_request_result);
         return true;
     }
 
@@ -1692,6 +1821,8 @@ Q_SIGNALS:
     void securityStateChanged();
     void walletInfoChanged();
     void settingsErrorChanged();
+    void settingsBusyChanged();
+    void settingsOperationFinished(const QString& operation, bool success);
     void backupWalletCallsChanged();
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
@@ -1702,6 +1833,10 @@ Q_SIGNALS:
     void lastTemplateRequestIdChanged();
     void lastRemovedRequestIdChanged();
     void removeReceiveRequestResultChanged();
+    void walletStateChanged();
+    void receiveOperationPendingChanged();
+    void receiveOperationErrorChanged();
+    void receiveOperationFinished(const QString& operation, bool success);
     void receiveRequestReconciliationPendingChanged();
 
 private:
@@ -1731,6 +1866,9 @@ private:
     QString m_external_signer_status{QStringLiteral("Not used")};
     bool m_can_manage_passphrase{true};
     QString m_settings_error;
+    bool m_settings_busy{false};
+    bool m_settings_auto_complete{true};
+    QString m_pending_settings_operation;
     QString m_last_backup_path;
     int m_backup_wallet_calls{0};
     QString m_transaction_error;
@@ -2718,9 +2856,6 @@ Q_SIGNALS:
 class MockNodeModel : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool networkActionReady MEMBER m_network_action_ready NOTIFY networkActionReadyChanged)
-    Q_PROPERTY(bool networkActionPending MEMBER m_network_action_pending NOTIFY networkActionPendingChanged)
-    Q_PROPERTY(QString networkActionError MEMBER m_network_action_error NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool pause MEMBER m_pause NOTIFY pauseChanged)
     Q_PROPERTY(int numPeers MEMBER m_num_peers NOTIFY numPeersChanged)
     Q_PROPERTY(int numInboundPeers MEMBER m_num_inbound_peers NOTIFY numInboundPeersChanged)
@@ -2751,6 +2886,12 @@ class MockNodeModel : public QObject
     Q_PROPERTY(double mempoolMaxUsageMB MEMBER m_mempool_max_usage_mb NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
     Q_PROPERTY(bool mempoolInformationAvailable MEMBER m_mempool_information_available NOTIFY mempoolInformationAvailableChanged)
+    Q_PROPERTY(bool peerActionPending MEMBER m_peer_action_pending NOTIFY peerActionPendingChanged)
+    Q_PROPERTY(QString peerActionError MEMBER m_peer_action_error NOTIFY peerActionErrorChanged)
+    Q_PROPERTY(bool peerActionAutoComplete MEMBER m_peer_action_auto_complete NOTIFY peerActionStateChanged)
+    Q_PROPERTY(bool networkActionReady MEMBER m_network_action_ready NOTIFY networkActionReadyChanged)
+    Q_PROPERTY(bool networkActionPending MEMBER m_network_action_pending NOTIFY networkActionPendingChanged)
+    Q_PROPERTY(QString networkActionError MEMBER m_network_action_error NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool disconnectPeerResult MEMBER m_disconnect_peer_result NOTIFY peerActionStateChanged)
     Q_PROPERTY(bool banPeerResult MEMBER m_ban_peer_result NOTIFY peerActionStateChanged)
     Q_PROPERTY(int disconnectPeerCalls READ disconnectPeerCalls NOTIFY peerActionCallsChanged)
@@ -2759,6 +2900,12 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString lastBannedAddress MEMBER m_last_banned_address NOTIFY peerActionCallsChanged)
 
 public:
+    bool m_peer_action_pending{false};
+    bool m_peer_action_auto_complete{true};
+    QString m_peer_action_error;
+    QString m_pending_peer_action;
+    bool m_pending_peer_success{false};
+    quint64 m_peer_action_generation{0};
     bool m_network_action_ready{true};
     bool m_network_action_pending{false};
     QString m_network_action_error;
@@ -2799,6 +2946,7 @@ public:
     int m_ban_peer_calls{0};
     bool hasWarnings() const { return !m_warning_list.isEmpty(); }
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
+    bool peerActionPending() const { return m_peer_action_pending; }
     int disconnectPeerCalls() const { return m_disconnect_peer_calls; }
     int banPeerCalls() const { return m_ban_peer_calls; }
     void setMempoolInfoPollingActive(bool active)
@@ -2816,6 +2964,7 @@ public:
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }
+    Q_INVOKABLE void refreshNodeInformation() { Q_EMIT nodeInformationChanged(); }
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;
@@ -2847,6 +2996,7 @@ public:
         m_warning_list = warnings;
         m_warnings = warnings.join(QStringLiteral("<hr />"));
         Q_EMIT warningsChanged();
+        Q_EMIT nodeInformationChanged();
     }
     Q_INVOKABLE void setBlockSyncActiveForTest(bool active)
     {
@@ -2877,6 +3027,13 @@ public:
     }
     Q_INVOKABLE void resetPeerActionTestState()
     {
+        ++m_peer_action_generation;
+        m_peer_action_pending = false;
+        m_peer_action_auto_complete = true;
+        m_peer_action_error.clear();
+        m_pending_peer_action.clear();
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
         m_disconnect_peer_result = true;
         m_ban_peer_result = true;
         m_disconnect_peer_calls = 0;
@@ -2893,23 +3050,56 @@ public:
         };
         return pattern.match(value).hasMatch();
     }
+    bool startPeerAction(const QString& action, bool success)
+    {
+        if (m_peer_action_pending) return false;
+        m_peer_action_pending = true;
+        m_peer_action_error.clear();
+        m_pending_peer_action = action;
+        m_pending_peer_success = success;
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
+        const auto generation = m_peer_action_generation;
+        if (m_peer_action_auto_complete) QTimer::singleShot(0, this, [this, generation] {
+            if (generation == m_peer_action_generation) completePeerAction(m_pending_peer_success);
+        });
+        return true;
+    }
+    Q_INVOKABLE void completePeerAction(bool success)
+    {
+        if (!m_peer_action_pending) return;
+        const auto action = m_pending_peer_action;
+        m_peer_action_pending = false;
+        m_peer_action_error = success ? QString{} : action == QStringLiteral("ban")
+            ? QStringLiteral("Could not ban peer. The node rejected the request.")
+            : QStringLiteral("Could not disconnect peer. The node rejected the request.");
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
+        Q_EMIT peerActionFinished(action, success, m_peer_action_error);
+    }
     Q_INVOKABLE bool disconnectPeer(int node_id)
     {
+        if (m_peer_action_pending) return false;
         m_last_disconnected_node_id = node_id;
         ++m_disconnect_peer_calls;
         Q_EMIT peerActionCallsChanged();
-        return m_disconnect_peer_result;
+        return startPeerAction(QStringLiteral("disconnect"), m_disconnect_peer_result);
     }
     Q_INVOKABLE bool banPeer(const QString& raw_address, qint64 ban_duration)
     {
+        if (m_peer_action_pending) return false;
         m_last_banned_address = raw_address;
         Q_UNUSED(ban_duration);
         ++m_ban_peer_calls;
         Q_EMIT peerActionCallsChanged();
-        return m_ban_peer_result;
+        return startPeerAction(QStringLiteral("ban"), m_ban_peer_result);
     }
 
 Q_SIGNALS:
+    void nodeInformationChanged();
+    void peerActionPendingChanged();
+    void peerActionErrorChanged();
+    void peerActionFinished(const QString& action, bool success, const QString& error);
     void networkActionReadyChanged();
     void networkActionPendingChanged();
     void networkActionErrorChanged();
@@ -2940,6 +3130,9 @@ Q_SIGNALS:
 class MockPeerTableModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool ready MEMBER m_ready CONSTANT)
+    Q_PROPERTY(bool refreshPending MEMBER m_refresh_pending NOTIFY refreshCallsChanged)
+    Q_PROPERTY(QString refreshError MEMBER m_refresh_error NOTIFY refreshCallsChanged)
     Q_PROPERTY(bool autoRefreshActive MEMBER m_auto_refresh_active NOTIFY autoRefreshActiveChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
@@ -2963,6 +3156,9 @@ Q_SIGNALS:
     void autoRefreshActiveChanged();
 
 private:
+    bool m_ready{true};
+    bool m_refresh_pending{false};
+    QString m_refresh_error;
     int m_refresh_calls{0};
     bool m_auto_refresh_active{false};
 };
@@ -3157,6 +3353,10 @@ private:
 class MockBanListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool actionPending READ actionPending NOTIFY actionStateChanged)
+    Q_PROPERTY(QString actionError MEMBER m_action_error NOTIFY actionStateChanged)
+    Q_PROPERTY(QString refreshError MEMBER m_refresh_error NOTIFY refreshCallsChanged)
+    Q_PROPERTY(bool actionAutoComplete MEMBER m_action_auto_complete NOTIFY actionStateChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool unbanResult MEMBER m_unban_result NOTIFY actionStateChanged)
     Q_PROPERTY(bool resetOnUnban MEMBER m_reset_on_unban NOTIFY actionStateChanged)
@@ -3169,6 +3369,7 @@ public:
         BanUntilRole
     };
 
+    bool actionPending() const { return m_action_pending || m_external_action_pending; }
     int count() const { return 1; }
     int unbanCalls() const { return m_unban_calls; }
     int refreshCalls() const { return m_refresh_calls; }
@@ -3202,23 +3403,61 @@ public:
 
     Q_INVOKABLE bool unbanAt(int row)
     {
+        if (actionPending() || row < 0 || row >= count()) return false;
+        m_action_pending = true;
+        m_action_error.clear();
         ++m_unban_calls;
+        Q_EMIT actionStateChanged();
         Q_EMIT actionCallsChanged();
         if (m_reset_on_unban) {
             beginResetModel();
             endResetModel();
         }
-        return row >= 0 && row < count() && m_unban_result;
+        const auto generation = m_action_generation;
+        if (m_action_auto_complete) QTimer::singleShot(0, this, [this, generation] {
+            if (generation == m_action_generation) completeUnban(m_unban_result);
+        });
+        return true;
+    }
+    Q_INVOKABLE void completeUnban(bool success)
+    {
+        if (!m_action_pending) return;
+        m_action_pending = false;
+        m_action_error = success ? QString{} : QStringLiteral("Could not unban peer. The ban list may have changed.");
+        Q_EMIT actionStateChanged();
+        Q_EMIT unbanFinished(success, m_action_error);
     }
 
+    void setExternalActionPending(bool pending)
+    {
+        m_external_action_pending = pending;
+        Q_EMIT actionStateChanged();
+    }
+    void finishExternalAction(bool refresh_required)
+    {
+        setExternalActionPending(false);
+        if (refresh_required || m_refresh_requested) refresh();
+    }
     Q_INVOKABLE void refresh()
     {
+        if (actionPending()) {
+            m_refresh_requested = true;
+            return;
+        }
+        m_refresh_requested = false;
         ++m_refresh_calls;
         Q_EMIT refreshCallsChanged();
     }
 
     Q_INVOKABLE void resetTestState()
     {
+        ++m_action_generation;
+        m_action_pending = false;
+        m_external_action_pending = false;
+        m_refresh_requested = false;
+        m_action_auto_complete = true;
+        m_action_error.clear();
+        m_refresh_error.clear();
         m_unban_result = true;
         m_reset_on_unban = false;
         m_unban_calls = 0;
@@ -3229,12 +3468,20 @@ public:
     }
 
 Q_SIGNALS:
+    void unbanFinished(bool success, const QString& error);
     void countChanged();
     void actionStateChanged();
     void actionCallsChanged();
     void refreshCallsChanged();
 
 private:
+    bool m_action_pending{false};
+    bool m_external_action_pending{false};
+    bool m_refresh_requested{false};
+    bool m_action_auto_complete{true};
+    quint64 m_action_generation{0};
+    QString m_action_error;
+    QString m_refresh_error;
     bool m_unban_result{true};
     bool m_reset_on_unban{false};
     int m_unban_calls{0};
@@ -3522,6 +3769,10 @@ private:
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool exportPending READ exportPending NOTIFY exportPendingChanged)
+    Q_PROPERTY(QString exportError READ exportError NOTIFY exportErrorChanged)
+    Q_PROPERTY(bool exportSucceeds MEMBER m_export_succeeds)
+    Q_PROPERTY(bool autoCompleteExport MEMBER m_auto_complete_export)
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
@@ -3778,10 +4029,28 @@ public:
 
     int count() const { return rowCount(); }
 
-    Q_INVOKABLE bool exportCsv(const QString& path) const
+    bool exportPending() const { return m_export_pending; }
+    QString exportError() const { return m_export_error; }
+
+    Q_INVOKABLE bool exportCsv(const QString& path)
     {
-        Q_UNUSED(path);
+        if (m_export_pending || path.isEmpty()) return false;
+        m_export_pending = true;
+        m_export_error.clear();
+        Q_EMIT exportPendingChanged();
+        Q_EMIT exportErrorChanged();
+        if (m_auto_complete_export) QTimer::singleShot(0, this, &MockActivityFilterProxyModel::completeExport);
         return true;
+    }
+
+    Q_INVOKABLE void completeExport()
+    {
+        if (!m_export_pending) return;
+        m_export_pending = false;
+        m_export_error = m_export_succeeds ? QString{} : QStringLiteral("The Activity CSV could not be saved.");
+        Q_EMIT exportPendingChanged();
+        Q_EMIT exportErrorChanged();
+        Q_EMIT exportFinished(m_export_succeeds);
     }
 
     bool matchesTypes(const QModelIndex& row) const
@@ -3847,8 +4116,15 @@ Q_SIGNALS:
 
     void groupByChanged();
     void pendingBalanceChanged();
+    void exportPendingChanged();
+    void exportErrorChanged();
+    void exportFinished(bool success);
 
 private:
+    bool m_export_pending{false};
+    bool m_export_succeeds{true};
+    bool m_auto_complete_export{true};
+    QString m_export_error;
     QString m_search_text;
     GroupBy m_group_by{Month};
     DateFilter m_date_filter{DateAll};
@@ -4315,6 +4591,13 @@ public Q_SLOTS:
         static MockNetworkStatusModel network_status_model;
         static MockPeerListModelProxy peer_list_model_proxy;
         static MockBanListModel ban_list_model;
+        connect(&node_model, &MockNodeModel::peerActionPendingChanged, engine, [] {
+            if (node_model.peerActionPending()) ban_list_model.setExternalActionPending(true);
+        });
+        connect(&node_model, &MockNodeModel::peerActionFinished, engine, [](const QString& action, bool success, const QString&) {
+            if (success) peer_table_model.refresh();
+            ban_list_model.finishExternalAction(action == QStringLiteral("ban"));
+        });
         static MockPeerDetailsModel peer_details_model;
         static MockPeerDetailsModel other_peer_details_model;
         other_peer_details_model.m_node_id = 8;
@@ -4396,6 +4679,7 @@ public Q_SLOTS:
             "Test stub type"
         );
         qmlRegisterType<MockFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
+        qmlRegisterType<ImageSaveModel>("org.bitcoincore.qt", 1, 0, "ImageSaveModel");
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
