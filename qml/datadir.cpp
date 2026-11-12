@@ -119,6 +119,8 @@ QString ValidateCustomDataDir(const QString& path)
         if (!target_info.isWritable()) {
             return QCoreApplication::translate("DataDirectory", "The selected directory is not writable.");
         }
+        // Existing directories do not require creating an entry in their parent.
+        return {};
     }
 
     QString parent_path = target_info.absoluteDir().absolutePath();

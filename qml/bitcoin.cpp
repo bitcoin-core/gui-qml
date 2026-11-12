@@ -730,6 +730,18 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         // Hold the locks through startup, rather than probing and leaving a
         // race before committing wizard choices to another node's profile.
         // Core accepts locks already held by this process in baseInitialize.
+        // GetBlocksDirPath returns an empty path for an invalid -blocksdir;
+        // locking that path would otherwise target the working directory.
+        // GetBlocksDirPath also creates <datadir>/<network>/blocks and throws
+        // if that is a regular file or a dangling symlink. Report it like
+        // bitcoind instead of aborting without a window.
+        try {
+            if (!fs::is_directory(gArgs.GetBlocksDirPath())) {
+                return InitError(strprintf(_("Specified blocks directory \"%s\" does not exist."), gArgs.GetArg("-blocksdir", "")));
+            }
+        } catch (const fs::filesystem_error& e) {
+            return InitError(Untranslated(e.what()));
+        }
         if (!AppInitLockDirectories()) return false;
         QString finalize_settings_error;
         if (!QmlOnboardingSettings::FinalizeStartupSettings(
