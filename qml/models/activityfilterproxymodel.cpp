@@ -7,6 +7,7 @@
 #include <qml/bitcoinunits.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
+#include <qml/util.h>
 
 #include <algorithm>
 
@@ -95,10 +96,10 @@ QVariant ActivityFilterProxyModel::data(const QModelIndex& index, int role) cons
         const bool pending = QSortFilterProxyModel::data(index, TransactionActivityModel::IsPendingRole).toBool();
         const auto date = QDateTime::fromSecsSinceEpoch(QSortFilterProxyModel::data(index, TransactionActivityModel::TimestampRole).toLongLong());
         if (role == DateTimeLabelRole) {
-            return QLocale().toString(date, m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
+            return QmlUtil::GregorianLocale().toString(date, m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
         }
         if (role == SectionKeyRole) return pending ? QStringLiteral("pending") : date.toString(m_group_by == Day ? "yyyy-MM-dd" : "yyyy-MM");
-        return pending ? tr("Pending") : QLocale().toString(date.date(), m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
+        return pending ? tr("Pending") : QmlUtil::GregorianLocale().toString(date.date(), m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
     }
     return QSortFilterProxyModel::data(index, role);
 }

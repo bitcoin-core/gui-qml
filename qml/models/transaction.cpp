@@ -5,6 +5,7 @@
 #include <qml/models/transaction.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/util.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
 #include <wallet/types.h>
@@ -86,10 +87,10 @@ QString Transaction::dateTimeString() const
     int currentYear = QDate::currentDate().year();
     if (dateTime.date().year() == currentYear) {
         //: Qt date format pattern for a current-year date; translators may reorder the fields for their locale
-        return QLocale().toString(dateTime, tr("MMMM d"));
+        return QmlUtil::GregorianLocale().toString(dateTime, tr("MMMM d"));
     } else {
         //: Qt date format pattern for a date in an earlier year; translators may reorder the fields for their locale
-        return QLocale().toString(dateTime, tr("MMMM d, yyyy"));
+        return QmlUtil::GregorianLocale().toString(dateTime, tr("MMMM d, yyyy"));
     }
 }
 

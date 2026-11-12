@@ -308,8 +308,9 @@ ColumnLayout {
             // The one place a pattern is unavoidable: Locale has no month-and-year
             // format to ask for. toLocaleDateString still localizes the month name
             // here (a Qt.formatDate format string would render C-locale English),
-            // so only the field order is fixed.
-            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
+            // so only the field order is fixed. Qt.locale(name) drops the system
+            // calendar, whose month names would not match the Gregorian grid.
+            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(Qt.locale().name), "MMMM yyyy")
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
             textStyle: Theme.text.subheading

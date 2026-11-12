@@ -7,6 +7,7 @@
 
 #include <support/allocators/secure.h>
 
+#include <QLocale>
 #include <QString>
 #include <QtGlobal>
 
@@ -28,6 +29,13 @@ QString GraphicsApi(QQuickWindow* window);
  * Writes to debug.log short info about the used Qt and the host system.
  */
 void LogQtInfo();
+
+/**
+ * Copy of the locale without system overrides, for date patterns. The system
+ * locale names months from the user's calendar (Persian, Hebrew, ...) while Qt
+ * fills the day and year from the Gregorian one.
+ */
+QLocale GregorianLocale(const QLocale& locale = QLocale());
 
 SecureString SecureStringFromQString(const QString& value);
 void ClearSecureString(SecureString& value);
