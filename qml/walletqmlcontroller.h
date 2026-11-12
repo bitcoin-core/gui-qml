@@ -182,6 +182,7 @@ private:
     bool walletNameExists(const QString& name) const;
     QString describeImportedWalletKeyScheme(interfaces::Wallet& wallet) const;
     QString walletLocationPath(const WalletQmlModel* wallet) const;
+    QString walletLocationPath(const QString& name) const;
     void setWalletCreateError(const QString& error);
     void setWalletLoadInProgress(bool in_progress);
     void setWalletLoadError(const QString& error);

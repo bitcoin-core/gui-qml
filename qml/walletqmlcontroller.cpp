@@ -211,8 +211,15 @@ QString WalletQmlController::defaultWalletFilePath(WalletQmlModel* wallet, bool 
 QVariantMap WalletQmlController::walletFileDestination(WalletQmlModel* wallet, const QString& path, bool watch_only) const
 {
     QStringList protected_paths{QString::fromStdString(m_node.walletLoader().getWalletDir())};
-    // A wallet loaded by path can live outside the wallets folder.
+    // A wallet loaded by path can live outside the wallets folder. Replacing
+    // any loaded wallet's file would bypass its database lock.
     protected_paths.append(walletLocationPath(wallet));
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        for (const WalletQmlModel* loaded : m_wallets) protected_paths.append(walletLocationPath(loaded));
+    }
+    // A closing wallet keeps its database open until it finishes.
+    for (const QString& retiring : m_retiring_wallet_names) protected_paths.append(walletLocationPath(retiring));
     const QString name{wallet && wallet != m_empty_wallet ? wallet->name() : QString{}};
     return DescribeWalletFileDestination(path, watch_only, name, protected_paths, QDateTime::currentDateTime());
 }
@@ -222,8 +229,12 @@ QString WalletQmlController::walletLocationPath(const WalletQmlModel* wallet) co
     if (!wallet || wallet == m_empty_wallet) {
         return {};
     }
+    return walletLocationPath(wallet->name());
+}
 
-    const QString wallet_name{wallet->name().trimmed()};
+QString WalletQmlController::walletLocationPath(const QString& name) const
+{
+    const QString wallet_name{name.trimmed()};
     if (wallet_name.isEmpty()) {
         return {};
     }
