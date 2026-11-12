@@ -98,7 +98,7 @@ private:
     std::shared_ptr<interfaces::Wallet> m_wallet;
     std::set<QString> m_observed_addresses;
     std::optional<uint256> m_last_processed_block;
-    bool m_unconfirmed_payments{false};
+    std::set<Txid> m_unconfirmed_payment_txids;
 };
 
 #endif // BITCOIN_QML_MODELS_WALLETSTATESNAPSHOT_H

@@ -156,6 +156,7 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
         request_addresses.insert(address);
         if (request.payment_received) m_observed_addresses.insert(address);
     }
+    std::set<Txid> unconfirmed_payment_txids;
     std::set<COutPoint> change_outputs;
     for (const auto& tx : m_wallet->getWalletTxs()) {
         if (!tx.tx) continue;
@@ -174,14 +175,14 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
         }
         if (received.empty()) continue;
         interfaces::WalletTxStatus status{};
-        interfaces::WalletOrderForm order_form;
+        std::vector<std::string> messages;
+        std::vector<std::string> payment_requests;
         bool in_mempool{false};
         int blocks{0};
-        m_wallet->getWalletTxDetails(tx.tx->GetHash(), status, order_form, in_mempool, blocks);
-        const auto replacement = tx.value_map.find("replaced_by_txid");
-        const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+        m_wallet->getWalletTxDetails(tx.tx->GetHash(), status, messages, payment_requests, in_mempool, blocks);
+        const bool replaced = tx.replaced_by_txid.has_value();
         if (status.depth_in_main_chain < 0 || status.is_abandoned || (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) continue;
-        state.unconfirmed_payments |= status.depth_in_main_chain == 0;
+        if (status.depth_in_main_chain == 0) unconfirmed_payment_txids.insert(tx.tx->GetHash());
         for (const auto& [address, amount] : received) state.received_amounts[address] += amount;
     }
     for (const auto& [ancestor, coins] : state.coins) {
@@ -202,7 +203,8 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
         }
     }
     if (have_processed_block) m_last_processed_block = processed_block;
-    m_unconfirmed_payments = state.unconfirmed_payments;
+    state.unconfirmed_payments = !unconfirmed_payment_txids.empty();
+    m_unconfirmed_payment_txids = std::move(unconfirmed_payment_txids);
     return state;
 }
 
@@ -212,11 +214,24 @@ std::optional<WalletStateSnapshot> WalletStateBackend::poll(interfaces::Node* no
     // not emit a transaction notification. Retry busy wallets on the next poll.
     interfaces::WalletBalances balances;
     uint256 processed_block;
-    if (!m_unconfirmed_payments) {
-        if (!m_wallet->tryGetBalances(balances, processed_block)) return std::nullopt;
-        if (m_last_processed_block == processed_block) return std::nullopt;
+    if (!m_wallet->tryGetBalances(balances, processed_block)) return std::nullopt;
+    if (m_last_processed_block != processed_block) return read(node);
+
+    // Mempool eviction need not notify the receiving wallet. Check only the
+    // outstanding payments; an unchanged payment must not rebuild every wallet
+    // model (and destroy an address label editor) on each timer tick.
+    for (const auto& txid : m_unconfirmed_payment_txids) {
+        interfaces::WalletTxStatus status{};
+        std::vector<std::string> messages;
+        std::vector<std::string> payment_requests;
+        bool in_mempool{false};
+        int blocks{0};
+        const auto tx = m_wallet->getWalletTxDetails(txid, status, messages, payment_requests, in_mempool, blocks);
+        if (status.depth_in_main_chain != 0 || status.is_abandoned || !in_mempool || tx.replaced_by_txid.has_value()) {
+            return read(node);
+        }
     }
-    return read(node);
+    return std::nullopt;
 }
 
 bool WalletStateBackend::setAddressType(interfaces::Node* node, const QString& type)

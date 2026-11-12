@@ -265,6 +265,7 @@ private:
     std::map<Txid, interfaces::WalletTx> m_transaction_details;
 
 public:
+    bool tryGetBalances(interfaces::WalletBalances&, uint256& block) override { block = uint256{}; return true; }
     void setWalletTxsFn(std::function<std::set<interfaces::WalletTx>()> fn)
     {
         std::lock_guard lock{m_transaction_mutex};
@@ -784,6 +785,7 @@ private Q_SLOTS:
     void emptyPaymentRequestCanRemoveSavedPrivateNote();
     void paymentArrivalLocksRequestAndPreservesNote();
     void paymentRequestTracksActualReceivedAmount();
+    void unchangedUnconfirmedPaymentDoesNotRebuildWallet();
     void replacementNotificationRechecksReceiverOriginal();
     void cancelledPaymentWithoutNotificationClearsReceivedAmount();
     void reconciliationBatchesActivityRebuilds();
@@ -2631,6 +2633,39 @@ void WalletQmlModelTests::replacementNotificationRechecksReceiverOriginal()
     QTRY_COMPARE(changed.size(), 1);
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{100});
     QVERIFY(model->detailPaymentRequest()->paymentReceived());
+}
+
+void WalletQmlModelTests::unchangedUnconfirmedPaymentDoesNotRebuildWallet()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(CompleteReceive(*model, model->commitPaymentRequest()));
+    CMutableTransaction incoming;
+    incoming.vout.emplace_back(100, GetScriptForDestination(model->currentPaymentRequest()->destination()));
+    const auto payment = MakeIncomingPayment(incoming, {true});
+    wallet->setTransactionDetails(payment);
+    std::atomic_int full_scans{0};
+    wallet->setWalletTxsFn([&] {
+        ++full_scans;
+        return std::set<interfaces::WalletTx>{payment};
+    });
+    const auto drain = qScopeGuard([&] {
+        model->beginShutdown();
+        if (!QTest::qWaitFor([&] { return model->backendExecutor()->isDrained(); })) qFatal("Wallet queue did not drain");
+    });
+    wallet->transaction_changed_fn(payment.tx->GetHash(), CT_NEW);
+    QTRY_COMPARE(model->currentPaymentRequest()->receivedAmountSatoshi(), qint64{100});
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    const int scans = full_scans.load();
+    QSignalSpy changed{model.get(), &WalletQmlModel::walletStateChanged};
+    QTest::qWait(2200);
+    QCOMPARE(full_scans.load(), scans);
+    QCOMPARE(changed.count(), 0);
+
+    // A status transition without a notification still reconciles the wallet.
+    wallet->setTransactionInMempool(payment.tx->GetHash(), false);
+    QTRY_COMPARE(model->currentPaymentRequest()->receivedAmountSatoshi(), qint64{0});
+    QVERIFY(full_scans.load() > scans);
+    QVERIFY(model->currentPaymentRequest()->paymentReceived());
 }
 
 void WalletQmlModelTests::cancelledPaymentWithoutNotificationClearsReceivedAmount()
