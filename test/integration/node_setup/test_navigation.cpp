@@ -6,6 +6,7 @@
 #include <test/integration/fixture/test_util.h>
 
 #include <QMetaEnum>
+#include <QQmlComponent>
 #include <QPointer>
 #include <QSignalSpy>
 
@@ -28,6 +29,70 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor([&] {
             return clock->property("visible").toBool() && qmltest::TransitionsFinished(m_app.window());
         }));
+    }
+
+    void canceledPressIsNotReportedAsAClick()
+    {
+        QQmlComponent component{&m_app.engine()};
+        component.setData(R"(
+            import QtQuick 2.15
+            import QtQuick.Controls 2.15
+            Button {
+                width: 120; height: 40
+                objectName: "cancelingButton"
+                onPressed: enabled = false
+            }
+        )", QUrl{});
+        std::unique_ptr<QObject> object{component.create()};
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* button = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(button);
+        button->setParentItem(m_app.window()->contentItem());
+        QSignalSpy pressed{button, SIGNAL(pressed())};
+        QSignalSpy clicked{button, SIGNAL(clicked())};
+        QVERIFY(!qmltest::Click(button));
+        QCOMPARE(pressed.count(), 1);
+        QCOMPARE(clicked.count(), 0);
+    }
+
+    void clickRescrollsAfterDeferredLayoutChanges()
+    {
+        QQmlComponent component{&m_app.engine()};
+        component.setData(R"(
+            import QtQuick 2.15
+            import QtQuick.Controls 2.15
+            Flickable {
+                id: viewport
+                width: 200; height: 150; clip: true
+                contentWidth: width; contentHeight: 600
+                property bool adjusted: false
+                onContentYChanged: {
+                    if (adjusted) return
+                    adjusted = true
+                    Qt.callLater(function() {
+                        target.y += 150
+                        contentHeight += 150
+                        target.enabled = true
+                    })
+                }
+                Button {
+                    id: target
+                    objectName: "deferredLayoutButton"
+                    y: 500; width: 120; height: 40
+                    enabled: false
+                }
+            }
+        )", QUrl{});
+        std::unique_ptr<QObject> object{component.create()};
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto* viewport = qobject_cast<QQuickItem*>(object.get());
+        QVERIFY(viewport);
+        viewport->setParentItem(m_app.window()->contentItem());
+        auto* button = qmltest::Find(viewport, "deferredLayoutButton");
+        QVERIFY(button);
+        QSignalSpy clicked{button, SIGNAL(clicked())};
+        QVERIFY(qmltest::Click(m_app, "deferredLayoutButton"));
+        QCOMPARE(clicked.count(), 1);
     }
 
     void secretTextSweepIncludesVisualAndObjectChildren()
