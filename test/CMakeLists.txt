@@ -173,7 +173,7 @@ target_include_directories(bitcoinqml_qmltests
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
-set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
+set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software")
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests
   bitcoinqml_process_checks bitcoinqml_cache_policy_checks PROPERTIES LABELS unit)
 set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)

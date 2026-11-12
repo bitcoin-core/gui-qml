@@ -14,7 +14,8 @@ import tempfile
 import time
 
 
-STARTUP_SECONDS = 5
+STARTUP_SECONDS = 30
+PREINIT_READY = "QML preinit window ready"
 QML_CACHE_ENVIRONMENT = (
     "QML_DISABLE_DISK_CACHE",
     "QML_DISK_CACHE",
@@ -82,7 +83,7 @@ def find_gui_binary():
 
 
 def launch(gui_binary, launch_root, cache_path=None, force_host_cache=False):
-    """Start the app long enough to load its initial QML document."""
+    """Wait for the initial QML root, failing if startup stalls or exits."""
     home = launch_root / "home"
     config = launch_root / "config"
     datadir = launch_root / "datadir"
@@ -102,6 +103,7 @@ def launch(gui_binary, launch_root, cache_path=None, force_host_cache=False):
                 "minimal" if sys.platform == "darwin" else "offscreen",
             ),
             "QT_QUICK_BACKEND": "software",
+            "QT_LOGGING_RULES": env.get("QT_LOGGING_RULES", "") + "\nbitcoin.qml.startup.info=true",
             "LIBGL_ALWAYS_SOFTWARE": "1",
         }
     )
@@ -112,33 +114,41 @@ def launch(gui_binary, launch_root, cache_path=None, force_host_cache=False):
         env["QML_DISK_CACHE"] = "qmlc"
         env["QML_FORCE_DISK_CACHE"] = "1"
 
-    process = subprocess.Popen(
-        [
-            str(gui_binary),
-            "-regtest",
-            f"-datadir={datadir}",
-            "-nolisten",
-        ],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    deadline = time.monotonic() + STARTUP_SECONDS
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            output, _ = process.communicate()
+    output_path = launch_root / "startup.log"
+    # A file cannot fill up like an undrained PIPE and stall the child before
+    # it reaches the QML document that this smoke test is meant to exercise.
+    with output_path.open("w", encoding="utf-8") as output:
+        process = subprocess.Popen(
+            [str(gui_binary), "-regtest", f"-datadir={datadir}", "-nolisten", "-qml_onboarded=0"],
+            env=env,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + STARTUP_SECONDS
+            while time.monotonic() < deadline:
+                diagnostics = output_path.read_text(encoding="utf-8", errors="replace")
+                if process.poll() is not None:
+                    diagnostics = output_path.read_text(encoding="utf-8", errors="replace")
+                    raise AssertionError(
+                        f"bitcoin-core-app exited during startup with {process.returncode}:\n{diagnostics}"
+                    )
+                if PREINIT_READY in diagnostics:
+                    return
+                time.sleep(0.1)
             raise AssertionError(
-                f"bitcoin-core-app exited during startup with {process.returncode}:\n{output}"
+                f"bitcoin-core-app did not load preinit.qml within {STARTUP_SECONDS}s:\n"
+                + output_path.read_text(encoding="utf-8", errors="replace")
             )
-        time.sleep(0.1)
-
-    process.terminate()
-    try:
-        process.communicate(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.communicate()
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 def qml_cache_files(root):
@@ -155,7 +165,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="qml_cache_policy_") as tmpdir:
         root = Path(tmpdir)
 
-        launch(gui_binary, root / "cold")
+        cold_cache = root / "cold-cache"
+        cold_cache.mkdir()
+        launch(gui_binary, root / "cold", cache_path=cold_cache)
         cold_cache_files = qml_cache_files(root)
         if cold_cache_files:
             raise AssertionError(f"cold launch wrote QML cache files: {cold_cache_files}")

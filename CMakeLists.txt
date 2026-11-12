@@ -101,12 +101,6 @@ set(BITCOIN_QML_COMPAT_FILES
   "${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml"
   "${BITCOIN_QML_COMPAT_DIR}/BitcoinAmountDigit.qml"
 )
-set_source_files_properties("${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml" PROPERTIES
-  QT_RESOURCE_ALIAS "qml/controls/AppSettings.qml"
-)
-set_source_files_properties("${BITCOIN_QML_COMPAT_DIR}/BitcoinAmountDigit.qml" PROPERTIES
-  QT_RESOURCE_ALIAS "qml/controls/BitcoinAmountDigit.qml"
-)
 list(APPEND BITCOIN_QML_FILES ${BITCOIN_QML_COMPAT_FILES})
 set(BITCOIN_QML_FILES_ABSOLUTE)
 foreach(qml_file IN LISTS BITCOIN_QML_FILES)

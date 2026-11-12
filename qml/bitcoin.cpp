@@ -97,6 +97,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QLoggingCategory>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFontDatabase>
@@ -156,6 +157,8 @@ bool IsBenignQtFontWarning(const QString& msg)
 }
 
 namespace {
+Q_LOGGING_CATEGORY(qml_startup_log, "bitcoin.qml.startup", QtWarningMsg)
+
 bool WalletEnabledFromArgs()
 {
 #ifdef ENABLE_WALLET
@@ -422,6 +425,8 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     if (!context.window) {
         return PreInitOnboardingStatus::FAILED;
     }
+
+    qCInfo(qml_startup_log, "QML preinit window ready");
 
     QEventLoop loop;
     QObject::connect(context.engine->rootObjects().first(), SIGNAL(finished()), &loop, SLOT(quit()));

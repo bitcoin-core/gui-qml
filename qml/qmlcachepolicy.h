@@ -7,6 +7,7 @@
 
 //! Ignore host-generated QML cache files. Call before constructing a Qt
 //! application or QML engine so embedded generated units use the same policy.
+//! Mutates the process environment; other threads must not read it concurrently.
 void ConfigureQmlCachePolicy();
 
 #endif // BITCOIN_QML_QMLCACHEPOLICY_H
