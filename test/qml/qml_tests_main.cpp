@@ -2577,7 +2577,7 @@ public:
     Q_INVOKABLE QString getCustomDataDirString() const { return m_custom_data_dir; }
     Q_INVOKABLE void setCustomDataDirString(const QString& dir) { m_custom_data_dir = dir; Q_EMIT customDataDirStringChanged(); }
     Q_INVOKABLE void setCustomDataDirArgs(const QString& dir) { selectCustomDataDir(dir); }
-    Q_INVOKABLE QString validateCustomDataDir(const QString&) const { return {}; }
+    Q_INVOKABLE QString validateCustomDataDir(const QString& path) const { return path == m_data_dir ? QString{} : QStringLiteral("The directory has not been checked."); }
     Q_INVOKABLE bool selectCustomDataDir(const QString& dir) { setCustomDataDirString(dir); m_data_dir = dir; Q_EMIT dataDirChanged(); return true; }
     Q_INVOKABLE void useDefaultDataDir() { m_data_dir = getDefaultDataDirString(); Q_EMIT dataDirChanged(); }
     Q_INVOKABLE void setStorageStatusForTest(bool pending, int available_gb, const QString& error_text, const QString& warning_text) {

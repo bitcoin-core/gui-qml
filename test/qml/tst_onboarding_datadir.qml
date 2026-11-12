@@ -413,6 +413,7 @@ TestCase {
         compare(customOption.checked, false)
         compare(customOption.customDir, "/tmp/probe-custom")
         const dialog = findChild(page, "customDataDirFolderDialog")
+        compare(optionsModel.validateCustomDataDir("/tmp/probe-custom"), "The directory has not been checked.")
         customOption.clicked()
         compare(optionsModel.dataDir, "/tmp/probe-custom")
         compare(customOption.checked, true)
@@ -582,6 +583,8 @@ TestCase {
         compare(fullOption.checked, true)
         compare(fullOption.visible, true)
         compare(fullOption.badgeText, "Your current setting")
+        compare(fullOption.errorText, "A full download needs about 622GB; 5GB available. Existing block data can be reused.")
+        verify(findChild(fullOption, "optionButtonErrorText").visible)
         compare(fullOption.recommended, false)
         tryCompare(infoPage, "primaryButtonEnabled", true)
     }
@@ -661,6 +664,9 @@ TestCase {
         const popup = findChild(page, "onboardingStorageSettingsPopup")
         tryCompare(popup, "visible", true)
         const pruneSwitch = findChild(popup, "pruneSwitch")
+        if (data.target === 1) {
+            verify(findChild(popup, "pruneModeRow").supportingText.indexOf("Manual pruning is currently selected.") === 0)
+        }
         if (pruneSwitch.checked) {
             pruneSwitch.toggle()
             pruneSwitch.toggled()
@@ -793,7 +799,7 @@ TestCase {
         compare(reduce.checked, true)
         compare(reduce.enabled, true)
         compare(full.enabled, true)
-        compare(full.errorText, "May require downloading the full blockchain again.\n622GB needed; 5GB available.")
+        compare(full.errorText, "May require downloading the full blockchain again.\nA full download needs about 622GB; 5GB available. Existing block data can be reused.")
         compare(page.primaryButtonEnabled, true)
 
         full.clicked()

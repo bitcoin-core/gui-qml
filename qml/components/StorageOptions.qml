@@ -94,12 +94,13 @@ ColumnLayout {
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.fullRequiredGB)
         recommended: !root.existingProfile && root.storageOptionsEditable && root.settingsModel.storageEnoughForFull
-        errorText: root.existingProfile && root.currentPruneTargetMiB > 0
-            ? qsTr("May require downloading the full blockchain again.")
-                + (root.hasStorageResult && root.availableGB < root.fullRequiredGB
-                    ? "\n" + qsTr("%1GB needed; %2GB available.").arg(root.fullRequiredGB).arg(root.availableGB)
-                    : "")
-            : ""
+        errorText: (root.existingProfile && root.currentPruneTargetMiB > 0
+            ? qsTr("May require downloading the full blockchain again.") : "")
+            + (root.hasStorageResult && root.availableGB < root.fullRequiredGB
+                ? (root.existingProfile && root.currentPruneTargetMiB > 0 ? "\n" : "")
+                    //: Advisory storage warning on the full-storage option. %1 is the estimated download size in GB; %2 is free disk space in GB. Existing blocks reduce the additional space needed.
+                    + qsTr("A full download needs about %1GB; %2GB available. Existing block data can be reused.").arg(root.fullRequiredGB).arg(root.availableGB)
+                : "")
         onClicked: {
             root.storageSelectionChanged(root.showCustomOption, root.effectiveCustomStorageAmount)
             if (root.existingProfile && root.currentPruneTargetMiB === 0) {

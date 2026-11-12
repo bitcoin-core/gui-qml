@@ -83,8 +83,11 @@ ColumnLayout {
         showErrorText: checked && root.selectedLocationStorageError.length > 0
         onClicked: {
             if (root.settingsModel.customDataDir.length > 0) {
-                root.validationError = root.settingsModel.validateCustomDataDir(root.settingsModel.customDataDir)
-                if (root.validationError === "") root.settingsModel.selectCustomDataDir(root.settingsModel.customDataDir)
+                root.validationError = ""
+                if (!root.settingsModel.selectCustomDataDir(root.settingsModel.customDataDir)) {
+                    //: Error shown if the remembered custom data directory cannot be submitted for validation.
+                    root.validationError = qsTr("The selected data directory could not be checked.")
+                }
             } else {
                 folderDialog.open()
             }

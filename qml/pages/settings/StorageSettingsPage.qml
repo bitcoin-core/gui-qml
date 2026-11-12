@@ -37,9 +37,14 @@ SettingsPage {
 
         FormRow {
             Layout.fillWidth: true
+            objectName: "pruneModeRow"
             title: qsTr("Store recent blocks only")
             dividerColor: root.onboarding ? Theme.color.neutral3 : Theme.color.neutral2
-            supportingText: root.pruneSetting.infoText
+            supportingText: root.onboarding && root.settingsModel.keepingCurrentStorage
+                && root.settingsModel.currentPruneTargetMiB === 1
+                //: Explains the automatic-pruning switch when onboarding an existing manually pruned node. Turning it off after enabling it selects full storage.
+                ? qsTr("Manual pruning is currently selected. Turning this switch on enables automatic pruning; turning it off afterwards selects full storage.")
+                : root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
             trailingItem: OptionSwitch {
                 objectName: "pruneSwitch"

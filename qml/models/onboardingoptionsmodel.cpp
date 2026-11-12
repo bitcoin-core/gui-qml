@@ -189,7 +189,9 @@ void OnboardingOptionsModel::setDataDir(const QString& path)
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
     const QString effective = normalized.isEmpty() ? getDefaultDataDirString() : normalized;
     if (effective != m_data_dir) {
-        m_core_settings.clearTouched(QStringLiteral("prune"));
+        // Choices belong to the selected profile; never overwrite another profile
+        // with settings edited before changing directories.
+        m_core_settings.clearTouchedSettings();
         m_prune_auto_recommended = false;
         m_data_dir = effective;
         Q_EMIT dataDirChanged(m_data_dir);

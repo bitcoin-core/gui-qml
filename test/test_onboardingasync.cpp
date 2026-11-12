@@ -60,6 +60,7 @@ private Q_SLOTS:
     void reselectCustomDataDirAfterRepair();
     void reselectCustomDataDirReloadsConfig();
     void reselectDefaultDataDirRefreshesPreview();
+    void changingDirectoryResetsNetworkChoices();
     void blockedConfigReadKeepsGuiResponsiveAndRejectsStaleSelection();
 };
 
@@ -329,6 +330,48 @@ void OnboardingAsyncTests::reselectCustomDataDirReloadsConfig()
     QVERIFY(model.listen());
     QVERIFY(model.server()); // Refreshes preserve settings edited during onboarding.
     QCOMPARE(directory_changed.count(), 0);
+    QSignalSpy drained(&model, &OnboardingOptionsModel::shutdownFinished);
+    model.beginShutdown();
+    QTRY_COMPARE(drained.count(), 1);
+}
+
+void OnboardingAsyncTests::changingDirectoryResetsNetworkChoices()
+{
+    QTemporaryDir first;
+    QTemporaryDir second;
+    QVERIFY(first.isValid());
+    QVERIFY(second.isValid());
+    QVERIFY(QDir().mkpath(second.filePath("regtest")));
+    QVERIFY(WriteFile(second.filePath("regtest/settings.json"),
+        R"({"proxy":"127.0.0.1:9050","onion":"127.0.0.1:9150","listen":false,"natpmp":false,"server":true})"));
+    OnboardingOptionsModel model({"bitcoin-qt", "-regtest"}, false);
+    QTRY_VERIFY(!model.validationPending());
+    QVERIFY(model.selectCustomDataDir(first.path()));
+    QTRY_VERIFY(model.canFinish());
+    model.setProxyEnabled(true);
+    model.setProxyEnabled(false);
+    model.setTorEnabled(true);
+    model.setTorEnabled(false);
+    model.setListen(false);
+    model.setListen(true);
+    model.setNatpmp(true);
+    model.setServer(true);
+    model.setServer(false);
+    QVERIFY(model.applyRequest().touched_settings.contains(QStringLiteral("proxy")));
+    QVERIFY(model.selectCustomDataDir(second.path()));
+    QTRY_VERIFY(model.canFinish());
+    QVERIFY(model.applyRequest().touched_settings.isEmpty());
+    QVERIFY(model.proxyEnabled());
+    QCOMPARE(model.proxyAddress(), QStringLiteral("127.0.0.1:9050"));
+    QVERIFY(model.torEnabled());
+    QCOMPARE(model.torAddress(), QStringLiteral("127.0.0.1:9150"));
+    QVERIFY(!model.listen());
+    QVERIFY(!model.natpmp());
+    QVERIFY(model.server());
+    QVERIFY(model.selectCustomDataDir(first.path()));
+    QTRY_VERIFY(model.canFinish());
+    QVERIFY(!model.proxyEnabled());
+    QVERIFY(!model.torEnabled());
     QSignalSpy drained(&model, &OnboardingOptionsModel::shutdownFinished);
     model.beginShutdown();
     QTRY_COMPARE(drained.count(), 1);
