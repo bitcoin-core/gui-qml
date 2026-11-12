@@ -914,7 +914,7 @@ void TransactionActivityModelTests::groupsPendingMonthsAndDaysAndCountsParents()
     QCOMPARE(proxy.index(3, 0).data(Proxy::SectionKeyRole).toString(), QString("2026-08"));
     proxy.setGroupBy(Proxy::Day);
     QCOMPARE(Find(proxy, Id(august)).data(Proxy::SectionKeyRole).toString(), QString("2026-08-13"));
-    QCOMPARE(Find(proxy, Id(august)).data(Proxy::DateTimeLabelRole).toString(), QLocale().toString(QDateTime::fromSecsSinceEpoch(august.time), "h:mm AP"));
+    QCOMPARE(Find(proxy, Id(august)).data(Proxy::DateTimeLabelRole).toString(), QLocale().toString(QDateTime::fromSecsSinceEpoch(august.time), QLocale().timeFormat(QLocale::ShortFormat)));
     QCOMPARE(Find(proxy, Id(incoming)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
     QVERIFY(Find(proxy, Id(incoming)).data(Proxy::DateTimeLabelRole).toString().contains("12"));
     f.state->statuses[incoming.tx->GetHash()].depth_in_main_chain = 1;

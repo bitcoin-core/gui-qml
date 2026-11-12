@@ -132,6 +132,7 @@ Q_SIGNALS:
     void groupByChanged();
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
     bool lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const override;
 
@@ -139,6 +140,7 @@ private:
     bool typeMatches(const QModelIndex& source_index, TypeFilter type) const;
     void updateAvailableMaxAmount();
     void invalidatePendingBalance();
+    void refreshDateLabels();
     QString exportTypeLabelForIndex(const QModelIndex& proxy_index) const;
     bool dateMatches(qint64 timestamp) const;
     QString normalizedExportPath(const QString& path) const;
