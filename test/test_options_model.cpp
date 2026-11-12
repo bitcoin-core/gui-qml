@@ -112,6 +112,7 @@ private Q_SLOTS:
     void resetGuiSettingsClearsAndBacksUpSettingsJson();
     void resetGuiSettingsHonorsFinalSourcePrecedence();
     void resetGuiSettingsAllowsUnreadableSettingsProfile();
+    void resetGuiSettingsPreservesMalformedSettingsBackup_data();
     void resetGuiSettingsPreservesMalformedSettingsBackup();
     void resetMalformedSettingsBackupPrecedesGuiReadFailure();
     void resetMalformedSettingsBackupFailurePreservesOriginal();
@@ -155,6 +156,7 @@ private Q_SLOTS:
     void newDataDirPreviewReadsAbsoluteConfig();
     void newDataDirPreviewReadsExternalSettings();
     void missingConfiguredDirectoryIsStartupError();
+    void existingDataDirDoesNotRequireWritableParent();
     void malformedSettingsHonorsChooser();
     void onboardingCreatesNestedSettingsDirectory_data();
     void onboardingCreatesNestedSettingsDirectory();
@@ -206,6 +208,7 @@ private Q_SLOTS:
     void onboardingApplyWritesTouchedConfigOverride();
     void onboardingApplyWritesTouchedParameterInteractionOverride();
     void onboardingApplyRetainsListenChoiceWhenDisablingProxy();
+    void onboardingApplyRetainsListenChoiceWhenEnablingProxy_data();
     void onboardingApplyRetainsListenChoiceWhenEnablingProxy();
     void onboardingApplyRejectsProfileDrift();
     void onboardingFinalizeIgnoresUnusedBootstrapStore();
@@ -1883,8 +1886,16 @@ void OptionsModelTests::resetGuiSettingsAllowsUnreadableSettingsProfile()
     QVERIFY(config_reset_status.should_show_onboarding);
 }
 
+void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup_data()
+{
+    QTest::addColumn<bool>("reset_gui");
+    QTest::newRow("settings-recovery") << false;
+    QTest::newRow("explicit-gui-reset") << true;
+}
+
 void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
 {
+    QFETCH(bool, reset_gui);
     SavedGuiDataDirSettings saved_settings;
     QTemporaryDir data_dir;
     QVERIFY(data_dir.isValid());
@@ -1893,6 +1904,7 @@ void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
     legacy_settings.settings().sync();
     QVERIFY(QDir(data_dir.path()).mkpath(QStringLiteral("regtest")));
 
+    QSettings().setValue(QStringLiteral("unrelatedPreference"), 42);
     const QByteArray malformed_settings{"{not valid json"};
     QFile settings_file{
         QDir(data_dir.path()).filePath(QStringLiteral("regtest/settings.json"))
@@ -1901,7 +1913,8 @@ void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
     QCOMPARE(settings_file.write(malformed_settings), malformed_settings.size());
     settings_file.close();
 
-    const std::vector<std::string> argv{TestArgvWithDataDir(data_dir.path())};
+    auto argv{TestArgvWithDataDir(data_dir.path())};
+    if (reset_gui) argv.emplace_back("-resetguisettings");
     ArgsManager args;
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
@@ -1944,8 +1957,15 @@ void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
     QFile backup_file{QString::fromStdString(fs::PathToString(backup_path))};
     QVERIFY(backup_file.open(QIODevice::ReadOnly));
     QCOMPARE(backup_file.readAll(), malformed_settings);
-    QCOMPARE(QSettings().value(SettingsKeys::DATA_DIR).toString(), data_dir.path());
-    QVERIFY(!legacy_settings.settings().contains(SettingsKeys::DATA_DIR));
+    QCOMPARE(QSettings().value(QStringLiteral("fReset"), false).toBool(), reset_gui);
+    if (reset_gui) {
+        QVERIFY(!QSettings().contains(QStringLiteral("unrelatedPreference")));
+        QCOMPARE(QSettings().value(SettingsKeys::DATA_DIR).toString(), data_dir.path());
+        QVERIFY(!legacy_settings.settings().contains(SettingsKeys::DATA_DIR));
+    } else {
+        QCOMPARE(QSettings().value(QStringLiteral("unrelatedPreference")).toInt(), 42);
+        QCOMPARE(legacy_settings.settings().value(SettingsKeys::DATA_DIR).toString(), data_dir.path());
+    }
 }
 
 void OptionsModelTests::resetLegacyCleanupRollsBackOnWriteFailure()
@@ -5354,6 +5374,7 @@ void OptionsModelTests::resetMalformedSettingsBackupPrecedesGuiReadFailure()
     settings.close();
     ArgsManager args;
     PrepareArgsForDataDir(args, directory.path());
+    args.ForceSetArg("-resetguisettings", "1");
     QmlOnboardingSettings::SettingsFileBackup backup;
     QString error;
     const auto init_error{common::InitConfig(args, [&](const bilingual_str&, const std::vector<std::string>&) {
@@ -5405,12 +5426,14 @@ void OptionsModelTests::newDataDirPreviewReadsAbsoluteConfig_data()
     QTest::addColumn<bool>("no_include");
     QTest::addColumn<bool>("relative_include");
     QTest::addColumn<bool>("config_no_include");
-    QTest::newRow("regtest") << QStringLiteral("regtest") << false << false << false << false << false;
-    QTest::newRow("signet-reset") << QStringLiteral("signet") << true << false << false << false << false;
-    QTest::newRow("included-chain") << QStringLiteral("signet") << false << true << false << false << false;
-    QTest::newRow("noincludeconf") << QStringLiteral("regtest") << false << false << true << false << false;
-    QTest::newRow("relative-include") << QStringLiteral("regtest") << false << false << false << true << false;
-    QTest::newRow("config-include-negation") << QStringLiteral("regtest") << false << false << false << false << true;
+    QTest::addColumn<bool>("relative_config");
+    QTest::newRow("regtest") << QStringLiteral("regtest") << false << false << false << false << false << false;
+    QTest::newRow("signet-reset") << QStringLiteral("signet") << true << false << false << false << false << false;
+    QTest::newRow("included-chain") << QStringLiteral("signet") << false << true << false << false << false << false;
+    QTest::newRow("noincludeconf") << QStringLiteral("regtest") << false << false << true << false << false << false;
+    QTest::newRow("relative-include") << QStringLiteral("regtest") << false << false << false << true << false << false;
+    QTest::newRow("config-include-negation") << QStringLiteral("regtest") << false << false << false << false << true << false;
+    QTest::newRow("relative-config") << QStringLiteral("signet") << true << false << false << true << false << true;
 }
 
 void OptionsModelTests::newDataDirPreviewReadsAbsoluteConfig()
@@ -5421,6 +5444,7 @@ void OptionsModelTests::newDataDirPreviewReadsAbsoluteConfig()
     QFETCH(bool, no_include);
     QFETCH(bool, relative_include);
     QFETCH(bool, config_no_include);
+    QFETCH(bool, relative_config);
     SavedGuiDataDirSettings saved_settings;
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -5442,7 +5466,7 @@ void OptionsModelTests::newDataDirPreviewReadsAbsoluteConfig()
                                      "\n" + include_section + "includeconf=" + include_path + "\n").toUtf8()};
     QVERIFY(config.write(config_contents) > 0);
     config.close();
-    std::vector<std::string> argv{"bitcoinqml", "-conf=" + config.fileName().toStdString()};
+    std::vector<std::string> argv{"bitcoinqml", "-conf=" + (relative_config ? QStringLiteral("../bitcoin.conf") : config.fileName()).toStdString()};
     if (no_include) argv.emplace_back("-noincludeconf");
     const auto preview{QmlOnboardingSettings::Preview(argv, false, new_data_dir)};
     QVERIFY2(preview.ok, qPrintable(preview.error));
@@ -5600,8 +5624,16 @@ void OptionsModelTests::ordinaryStartupSurvivesLegacyCleanupFailure()
 #endif
 }
 
+void OptionsModelTests::onboardingApplyRetainsListenChoiceWhenEnablingProxy_data()
+{
+    QTest::addColumn<bool>("enable_proxy");
+    QTest::newRow("proxy-and-listen-off") << true;
+    QTest::newRow("listen-off-only") << false;
+}
+
 void OptionsModelTests::onboardingApplyRetainsListenChoiceWhenEnablingProxy()
 {
+    QFETCH(bool, enable_proxy);
     SavedGuiDataDirSettings saved_settings;
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -5609,21 +5641,58 @@ void OptionsModelTests::onboardingApplyRetainsListenChoiceWhenEnablingProxy()
     auto preview{QmlOnboardingSettings::Preview(argv, false, directory.path())};
     QVERIFY2(preview.ok, qPrintable(preview.error));
     preview.values.listen = false;
-    preview.values.proxy_enabled = true;
+    preview.values.natpmp = false;
+    preview.values.proxy_enabled = enable_proxy;
     preview.values.proxy_address = QStringLiteral("127.0.0.1:9050");
     ArgsManager args;
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
     PrepareAndFinalizeApply(args,
         {directory.path(), QmlOnboardingSettings::DataDirSource::ExplicitArg}, directory.path(),
-        {QStringLiteral("listen"), QStringLiteral("proxy")}, preview.values);
+        {QStringLiteral("listen"), QStringLiteral("proxy"), QStringLiteral("natpmp")}, preview.values);
     ArgsManager reread;
     ReadSettingsForDataDir(reread, directory.path());
     QCOMPARE(SettingToBool(reread.GetPersistentSetting("listen")), std::optional{false});
+    QCOMPARE(SettingToBool(reread.GetPersistentSetting("natpmp")), std::optional{false});
     // Removing the proxy later must retain the explicitly selected listen-off value.
     QmlCoreSettings::SetRwSetting(reread, QStringLiteral("proxy"), {});
     InitParameterInteraction(reread);
     QVERIFY(!reread.GetBoolArg("-listen", true));
+    QmlCoreSettings::SetRwSetting(reread, QStringLiteral("listen"), common::SettingsValue{true});
+    reread.LockSettings([](common::Settings& settings) { settings.forced_settings.clear(); });
+    InitParameterInteraction(reread);
+    QVERIFY(!reread.GetBoolArg("-natpmp", true));
+}
+
+void OptionsModelTests::existingDataDirDoesNotRequireWritableParent()
+{
+#ifdef Q_OS_WIN
+    QSKIP("This test relies on POSIX directory permissions.");
+#else
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir parent;
+    const QByteArray original_home{qgetenv("HOME")};
+    [[maybe_unused]] const auto restore_home = qScopeGuard([&] { qputenv("HOME", original_home); });
+    QVERIFY(qputenv("HOME", parent.path().toUtf8()));
+    const QString directory{QmlDataDir::DefaultDataDirString()};
+    QVERIFY(QDir().mkpath(directory));
+    ArgsManager args;
+    PrepareArgsForDataDir(args, directory);
+    QVERIFY(args.ReadSettingsFile());
+    QString error;
+    QVERIFY(QmlOnboardingSettings::MarkQmlOnboarded(args, &error));
+    const QString parent_path{QFileInfo(directory).absolutePath()};
+    const auto permissions = QFile::permissions(parent_path);
+    [[maybe_unused]] const auto restore = qScopeGuard([&] { QFile::setPermissions(parent_path, permissions); });
+    QVERIFY(QFile::setPermissions(parent_path, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    if (QFileInfo(parent_path).isWritable()) QSKIP("Cannot make parent unwritable.");
+    QVERIFY(QmlDataDir::ValidateCustomDataDir(directory).isEmpty());
+    QVERIFY(!QmlDataDir::ValidateCustomDataDir(QDir(parent_path).filePath("new")).isEmpty());
+    QSettings().setValue(SettingsKeys::DATA_DIR, directory);
+    const auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus({"bitcoinqml", "-regtest"}, false);
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QVERIFY(!status.should_show_onboarding);
+#endif
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

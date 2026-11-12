@@ -37,6 +37,12 @@ def run_case(binary, case):
         elif case == "missing-configured-directory":
             config.write_text(f"datadir={root / 'missing'}\n", encoding="utf8")
             expected = "does not exist"
+        elif case in ("missing-blocksdir", "file-blocksdir"):
+            blocks = root / "blocks"
+            if case == "file-blocksdir":
+                blocks.touch()
+            args += [f"-datadir={data}", f"-blocksdir={blocks}", "-qml_onboarded=0"]
+            expected = "Specified blocks directory"
         else:
             args += [f"-datadir={data}", "-qml_onboarded=0"]
             expected = "Cannot obtain a lock"
@@ -47,9 +53,10 @@ def run_case(binary, case):
         with (network / ".lock").open("w") as lock:
             if case == "held-directory":
                 fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(args, cwd=root, env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, (case, result.returncode, result.stderr)
         assert "STARTUP_ERROR:" in result.stderr and expected in result.stderr, result.stderr
+        assert not (root / ".lock").exists(), "Startup locked the working directory"
         saved = json.loads(settings.read_text(encoding="utf8"))
         saved.pop("_warning_", None)
         assert saved == original, (case, saved)
@@ -57,5 +64,5 @@ def run_case(binary, case):
 
 
 if __name__ == "__main__":
-    for case in ("command-line-networks", "configured-network", "missing-configured-directory", "held-directory"):
+    for case in ("command-line-networks", "configured-network", "missing-configured-directory", "held-directory", "missing-blocksdir", "file-blocksdir"):
         run_case(sys.argv[1], case)

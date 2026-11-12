@@ -279,14 +279,15 @@ bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QStri
 }
 
 // Core's ReadConfigFiles requires an existing -datadir. Preview must not
-// create a selected directory, but an absolute -conf still applies to it.
+// create a selected directory, but an explicit -conf still applies to it.
 bool ReadConfigForNewDataDir(PreviewArgsManager& args, const QString& data_dir, QString* error)
 {
-    const fs::path config_path{args.GetPathArg("-conf")};
-    if (!config_path.is_absolute()) {
+    if (!args.IsArgSet("-conf")) {
         args.SelectConfigNetwork(args.GetChainTypeString());
         return true;
     }
+
+    const fs::path config_path{(QmlDataDir::QStringToPath(data_dir) / args.GetPathArg("-conf")).lexically_normal()};
 
     const auto read_file = [&](const fs::path& path) {
         if (fs::is_directory(path)) {
@@ -753,6 +754,16 @@ bool ApplyPendingCoreSettings(ArgsManager& args, const QmlOnboardingSettings::Pe
     }
     recompute_interactions();
     settings_written = write_setting(QStringLiteral("natpmp")) && settings_written;
+    // Preserve an explicit port-mapping choice even while listen/proxy
+    // interactions force mapping off for this startup.
+    if (pending.touched_settings.contains(QStringLiteral("natpmp")) &&
+        QmlCoreSettings::CanEditCoreSetting(args, QStringLiteral("natpmp"))) {
+        args.LockSettings([&](common::Settings& settings) {
+            if (settings.forced_settings.contains("natpmp")) {
+                settings.rw_settings["natpmp"] = common::SettingsValue{pending.values.natpmp};
+            }
+        });
+    }
     RestoreForcedSettings(args, original_forced_settings);
 
     if (!settings_written) {
@@ -1241,12 +1252,9 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
 
     if (pending && !ValidatePendingApply(args, *pending, error)) return false;
 
-    // A captured backup means InitConfig recovered from an unreadable
-    // settings file after the user selected Reset. Treat that choice the same
-    // as an explicit -resetguisettings request.
-    const bool reset_gui_settings{
-        args.GetBoolArg("-resetguisettings", false) || settings_file_backup != nullptr
-    };
+    // Recovering settings.json does not reset unrelated GUI preferences.
+    if (settings_file_backup && !BackupSettingsFile(args, settings_file_backup, error)) return false;
+    const bool reset_gui_settings{args.GetBoolArg("-resetguisettings", false)};
     const std::map<std::string, common::SettingsValue> original_rw_settings{SnapshotRwSettings(args)};
 
     const bool gui_settings_needed{pending != nullptr || reset_gui_settings};
