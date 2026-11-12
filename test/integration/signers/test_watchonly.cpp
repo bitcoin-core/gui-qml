@@ -70,7 +70,7 @@ private Q_SLOTS:
         QVERIFY(!wallet->sendTransaction());
         QVERIFY(!wallet->broadcastCurrentTransaction());
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
-        PartiallySignedTransaction psbt{CMutableTransaction{}};
+        PartiallySignedTransaction psbt{CMutableTransaction{}, /*version=*/2};
         QCOMPARE(PsbtQmlModel::LoadPsbtFromFile(path, psbt), QString{});
         QVERIFY(!psbt.inputs.empty());
         for (const auto& input : psbt.inputs) QVERIFY(input.partial_sigs.empty());
