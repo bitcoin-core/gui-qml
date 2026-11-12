@@ -22,6 +22,7 @@ TestCase {
     Component {
         id: fullWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -31,6 +32,7 @@ TestCase {
     Component {
         id: fullPreInitWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             preInit: true
@@ -41,6 +43,7 @@ TestCase {
     Component {
         id: storageLocation
         OnboardingStorageLocation {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -50,6 +53,7 @@ TestCase {
     Component {
         id: storageAmount
         OnboardingStorageAmount {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedBlockchainSize: 610
@@ -88,6 +92,7 @@ TestCase {
     Component {
         id: connection
         OnboardingConnection {
+            settingsModel: optionsModel
             width: 640
             height: 665
         }
@@ -96,6 +101,9 @@ TestCase {
     function init() {
         testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
+        ApplicationModels.setPreInitForTest(true)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, optionsModel)
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false
         optionsModel.prune = true
@@ -105,6 +113,19 @@ TestCase {
 
     function cleanup() {
         Theme.motion.mode = motionMode
+        ApplicationModels.setPreInitForTest(false)
+        compare(ApplicationModels.optionsModel, optionsModel)
+        compare(ApplicationModels.onboardingOptionsModel, null)
+    }
+
+    function test_onboarding_requires_explicit_model() {
+        const component = Qt.createComponent("qrc:/qml/pages/onboarding/OnboardingWizard.qml")
+        compare(component.status, Component.Ready)
+        ignoreWarning(/.*Required property settingsModel was not initialized/)
+        const wizard = component.createObject(this)
+        compare(wizard, null)
+        verify(component.errorString().indexOf("Required property settingsModel was not initialized") !== -1)
+        component.destroy()
     }
 
     function triggerButton(rootItem, objectName) {
@@ -226,22 +247,10 @@ TestCase {
         compare(aboutPage.title, "About Bitcoin Core")
         compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.surfaceDivider)
 
-        findChild(aboutPage, "aboutDeveloperRow").clicked()
-        const developerPage = findChild(popup, "settingsDeveloper")
-        verify(developerPage !== null)
-        const developerSection = findChild(developerPage, "developerSettingsSection")
-        verify(developerSection !== null)
-        compare(developerSection.backgroundColor, Theme.color.surface2)
-        const dbcacheField = findChild(developerPage, "developerDbcacheField")
-        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
-        verify(dbcacheField !== null)
-        verify(scriptThreadsField !== null)
-        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
-        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
-        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
-        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
-        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
-        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+        const developerRow = findChild(aboutPage, "aboutDeveloperRow")
+        compare(developerRow.visible, false)
+        compare(developerRow.enabled, false)
+
     }
 
     function test_normal_onboarding_starts_at_cover() {

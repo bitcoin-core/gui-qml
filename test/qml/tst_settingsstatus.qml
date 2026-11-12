@@ -17,6 +17,7 @@ TestCase {
         id: connectionSettingsComponent
 
         ConnectionSettingsPage {
+            settingsModel: optionsModel
             width: 460
             height: 680
         }
