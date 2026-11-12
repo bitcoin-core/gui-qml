@@ -14,6 +14,7 @@ Item {
     clip: true
     property bool modalView: false
     property bool onboardingEntry: false
+    property bool importErrorEntry: false
     property bool waitForWalletDiscovery: false
     property bool creatingWallet: false
     property bool importingWallet: false
@@ -81,10 +82,18 @@ Item {
         importFileDialog.open()
     }
 
+    // The controller drops an import while busy, without reporting a result.
+    readonly property bool walletWorkerBusy: walletController.walletLoadInProgress
+        || walletController.walletImportInProgress
+
     function importFile(path) {
-        if (!path || root.importingWallet) return
+        if (!path || root.importingWallet || root.walletWorkerBusy) return
         root.importingWallet = true
         walletController.importWallet(walletController.normalizeWalletPath(path))
+        if (root.importingWallet && root.currentItem
+                && root.currentItem.objectName === "walletImportErrorPage") {
+            pages.pop(StackView.Immediate)
+        }
     }
 
     function showImportResult() {
@@ -99,6 +108,7 @@ Item {
     Component.onCompleted: {
         if (!walletController.initialized) nodeModel.startNodeInitializionThread()
         walletController.refreshExternalSignerStatus()
+        if (root.importErrorEntry) root.push(importError, { "modalView": root.modalView }, StackView.Immediate)
     }
 
     AppFileDialog {
@@ -203,7 +213,7 @@ Item {
             maximumContentWidth: 640
             heading: qsTr("Your wallet starts here")
             subheading: qsTr("Create a wallet to manage your keys in this app, or import an existing wallet file.")
-            showCloseButton: !root.importingWallet
+            showCloseButton: true
             primaryButtonText: qsTr("Create wallet")
             secondaryButtonText: qsTr("Import wallet")
             primaryButtonObjectName: "createWalletButton"
@@ -273,6 +283,7 @@ Item {
     Component {
         id: importError
         WalletImportErrorPage {
+            secondaryButtonEnabled: !root.importingWallet && !root.walletWorkerBusy
             onCancel: root.finished(false, null)
             onRetryRequested: root.chooseImportFile()
         }

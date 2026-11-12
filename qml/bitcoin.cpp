@@ -813,6 +813,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         wallet_list_model = std::make_unique<WalletListModel>(*node, nullptr);
         QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
                          wallet_list_model.get(), &WalletListModel::setWalletLoadState);
+        QObject::connect(wallet_controller.get(), &WalletQmlController::walletImportInProgressChanged,
+                         wallet_list_model.get(), [controller = wallet_controller.get(), list_model = wallet_list_model.get()]() {
+                             list_model->setImportingWallet(controller->importingWalletName());
+                         });
         QObject::connect(wallet_controller.get(), &WalletQmlController::walletInfoChanged,
                          wallet_list_model.get(), &WalletListModel::setWalletInfo);
         QObject::connect(wallet_controller.get(), &WalletQmlController::walletDisplayNamesChanged,
@@ -875,6 +879,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     });
     engine->rootContext()->setContextProperty("desktopWindowBehaviorModel", &desktop_window_behavior_model);
     engine->rootContext()->setContextProperty("desktopTrayIconController", &desktop_tray_icon_controller);
+    engine->rootContext()->setContextProperty("quitHandler", &quit_handler);
 
     engine->setInitialProperties({
         {QStringLiteral("walletAvailableForUi"), wallet_enabled},
@@ -913,8 +918,6 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         shutdown_before_startup_return();
         return EXIT_SUCCESS;
     }
-    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested,
-                     &node_model, &NodeModel::requestShutdown);
     const auto exit_main_event_loop = [] {
         QCoreApplication::exit(0);
     };
