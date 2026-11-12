@@ -234,6 +234,21 @@ TestCase {
         }
     }
 
+    function test_backup_scrolls_when_taller_than_the_window() {
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        const popup = openBackup(page, first)
+        popup.errorText = new Array(60).fill("The wallet file could not be written.").join("\n")
+        const body = findChild(popup, "backupWalletBody")
+        tryVerify(function() { return body.contentHeight > body.height })
+        verify(popup.height <= popup.parent.height - 40)
+        const save = findChild(popup, "backupSaveButton")
+        // The sheet's layout settles after its height is capped.
+        tryVerify(function() { return save.mapToItem(popup.parent, 0, save.height).y <= popup.y + popup.height })
+        verify(save.mapToItem(popup.parent, 0, save.height).y <= popup.parent.height)
+        closeBackup(popup)
+    }
+
     function test_backup_saves_full_backup_to_dated_default() {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)
