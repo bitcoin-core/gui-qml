@@ -10,22 +10,31 @@
 #include <QEvent>
 #include <QEventLoop>
 #include <QFont>
+#include <QGuiApplication>
 #include <QHash>
 #include <QIcon>
 #include <QLocale>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlError>
+#include <QQmlIncubationController>
+#include <QQueue>
 #include <QQuickImageProvider>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QTemporaryDir>
+#include <QTest>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -34,6 +43,7 @@
 #include <qml/bitcoinamount.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/qrimageprovider.h>
 
 class MockAppMode : public QObject
 {
@@ -1151,6 +1161,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QObject* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
+    Q_PROPERTY(QString displayName MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(bool available MEMBER m_available NOTIFY availableChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
@@ -1196,6 +1207,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool isEncrypted MEMBER m_is_encrypted NOTIFY securityStateChanged)
     Q_PROPERTY(bool isLocked MEMBER m_is_locked NOTIFY securityStateChanged)
     Q_PROPERTY(QString keyScheme MEMBER m_key_scheme NOTIFY walletInfoChanged)
+    Q_PROPERTY(int keySchemeKind MEMBER m_key_scheme_kind NOTIFY walletInfoChanged)
     Q_PROPERTY(QString privateKeysStatus MEMBER m_private_keys_status NOTIFY walletInfoChanged)
     Q_PROPERTY(QString externalSignerStatus MEMBER m_external_signer_status NOTIFY walletInfoChanged)
     Q_PROPERTY(bool canManagePassphrase MEMBER m_can_manage_passphrase NOTIFY walletInfoChanged)
@@ -1727,6 +1739,7 @@ private:
     bool m_is_encrypted{false};
     bool m_is_locked{false};
     QString m_key_scheme{QStringLiteral("Descriptor")};
+    int m_key_scheme_kind{0};
     QString m_private_keys_status{QStringLiteral("Enabled")};
     QString m_external_signer_status{QStringLiteral("Not used")};
     bool m_can_manage_passphrase{true};
@@ -1755,8 +1768,8 @@ class MockWalletQmlModelTransaction : public QObject
     Q_PROPERTY(QString total MEMBER m_total CONSTANT)
     Q_PROPERTY(QString txid MEMBER m_txid CONSTANT)
     Q_PROPERTY(QVariantList reviewedRecipients MEMBER m_reviewed_recipients NOTIFY reviewedRecipientsChanged)
-    Q_PROPERTY(int reviewTargetBlocks MEMBER m_review_target_blocks)
-    Q_PROPERTY(QString reviewFeeRate MEMBER m_review_fee_rate)
+    Q_PROPERTY(int reviewTargetBlocks MEMBER m_review_target_blocks NOTIFY reviewedRecipientsChanged)
+    Q_PROPERTY(QString reviewFeeRate MEMBER m_review_fee_rate NOTIFY reviewedRecipientsChanged)
     Q_PROPERTY(QObject* amountAmount READ amountAmount CONSTANT)
     Q_PROPERTY(QObject* feeAmount READ feeAmount CONSTANT)
     Q_PROPERTY(QObject* totalAmount READ totalAmount CONSTANT)
@@ -1936,6 +1949,12 @@ public:
         m_open_wallets = wallets;
         Q_EMIT openWalletsChanged();
     }
+    Q_INVOKABLE bool isWalletOpen(const QString& name) const
+    {
+        return std::any_of(m_open_wallets.begin(), m_open_wallets.end(), [&](const QObject* wallet) {
+            return wallet && wallet->property("name").toString() == name;
+        });
+    }
     Q_INVOKABLE void setSelectedWalletObject(QObject* wallet)
     {
         if (m_selected_wallet == wallet) return;
@@ -2078,6 +2097,10 @@ Q_SIGNALS:
     void walletLoadSucceeded(QObject* wallet);
     void walletImportSucceeded(QObject* wallet);
     void walletMigrationSucceeded();
+    void walletLoadStateChanged(const QString& name, int state, const QString& error);
+    void walletMigrationRequired(const QString& wallet_name);
+    void walletMigrationPassphraseRequired(const QString& wallet_name);
+    void walletMigrationFailed();
     void walletLocationOpenErrorChanged();
     void openWalletLocationCallsChanged();
 };
@@ -2975,11 +2998,17 @@ class MockNetworkTrafficTower : public QObject
     Q_PROPERTY(quint64 totalBytesSent MEMBER m_total_bytes_sent NOTIFY totalBytesSentChanged)
     Q_PROPERTY(double maxReceivedRateBps MEMBER m_max_received_rate_bps NOTIFY maxReceivedRateBpsChanged)
     Q_PROPERTY(double maxSentRateBps MEMBER m_max_sent_rate_bps NOTIFY maxSentRateBpsChanged)
-    Q_PROPERTY(QVariantList receivedRateList MEMBER m_received_rate_list NOTIFY receivedRateListChanged)
-    Q_PROPERTY(QVariantList sentRateList MEMBER m_sent_rate_list NOTIFY sentRateListChanged)
+    Q_PROPERTY(QQueue<float> receivedRateList MEMBER m_received_rate_list NOTIFY receivedRateListChanged)
+    Q_PROPERTY(QQueue<float> sentRateList MEMBER m_sent_rate_list NOTIFY sentRateListChanged)
     Q_PROPERTY(int lastFilterWindowSize MEMBER m_last_filter_window_size NOTIFY lastFilterWindowSizeChanged)
 
 public:
+    MockNetworkTrafficTower()
+    {
+        m_received_rate_list << 10.0f << 20.0f << 30.0f;
+        m_sent_rate_list << 15.0f << 25.0f << 35.0f;
+    }
+
     bool active() const { return m_active; }
     void setActive(bool active)
     {
@@ -2993,8 +3022,8 @@ public:
     quint64 m_total_bytes_sent{2'000};
     double m_max_received_rate_bps{100.0};
     double m_max_sent_rate_bps{200.0};
-    QVariantList m_received_rate_list{10.0, 20.0, 30.0};
-    QVariantList m_sent_rate_list{15.0, 25.0, 35.0};
+    QQueue<float> m_received_rate_list;
+    QQueue<float> m_sent_rate_list;
     int m_last_filter_window_size{30};
 
     Q_INVOKABLE void updateFilterWindowSize(const int window_size)
@@ -3704,9 +3733,22 @@ public:
     void setTypeFilter(TypeFilter type) { setTypeFilters(type == TypeAll ? QList<int>{} : QList<int>{type}); }
     void setTypeFilters(const QList<int>& types)
     {
-        if (m_type_filters == types) return;
-        m_type_filters = types;
-        invalidate();
+        QList<int> normalized;
+        for (int type : types) {
+            if (type > TypeAll && type <= Split && !normalized.contains(type)) normalized.append(type);
+        }
+        std::sort(normalized.begin(), normalized.end());
+        if (m_type_filters == normalized) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_type_filters = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
         Q_EMIT typeFilterChanged();
         Q_EMIT typeFiltersChanged();
         Q_EMIT countChanged();
@@ -3726,15 +3768,29 @@ public:
     void setMaxAmount(qint64 value) { setAmountRange(m_min_amount, value); }
     Q_INVOKABLE bool setAmountRange(qint64 minimum, qint64 maximum)
     {
+        // Negative bounds are unset; an inverted range must not hide all activity.
+        minimum = minimum < 0 ? -1 : minimum;
+        maximum = maximum < 0 ? -1 : maximum;
         if (minimum >= 0 && maximum >= 0 && minimum > maximum) return false;
-        m_min_amount = minimum < 0 ? -1 : minimum;
-        m_max_amount = maximum < 0 ? -1 : maximum;
-        invalidate();
-        Q_EMIT minAmountChanged();
-        Q_EMIT maxAmountChanged();
+        const bool min_changed = m_min_amount != minimum;
+        const bool max_changed = m_max_amount != maximum;
+        if (!min_changed && !max_changed) return true;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_min_amount = minimum;
+        m_max_amount = maximum;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        if (min_changed) Q_EMIT minAmountChanged();
+        if (max_changed) Q_EMIT maxAmountChanged();
         Q_EMIT countChanged();
         return true;
     }
+
     qint64 availableMaxAmount() const
     {
         qint64 result{0};
@@ -4230,6 +4286,72 @@ private:
     bool m_file_logging_enabled{true};
 };
 
+class MockDesktopTrayIconController : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool supported READ supported CONSTANT)
+    Q_PROPERTY(bool visible MEMBER m_visible NOTIFY visibleChanged)
+    Q_PROPERTY(bool windowVisible MEMBER m_window_visible NOTIFY windowVisibleChanged)
+
+public:
+    bool supported() const { return false; }
+    Q_INVOKABLE void showMainWindow() { m_window_visible = true; Q_EMIT windowVisibleChanged(); }
+    Q_INVOKABLE void hideMainWindow() { m_window_visible = false; Q_EMIT windowVisibleChanged(); }
+
+Q_SIGNALS:
+    void visibleChanged();
+    void windowVisibleChanged();
+    void showRequested();
+    void hideRequested();
+    void quitRequested();
+
+private:
+    bool m_visible{false};
+    bool m_window_visible{true};
+};
+
+class MockRpcOutputModel : public QAbstractListModel
+{
+    Q_OBJECT
+    Q_PROPERTY(int count READ rowCount CONSTANT)
+
+public:
+    int rowCount(const QModelIndex& = {}) const override { return 0; }
+    QVariant data(const QModelIndex&, int) const override { return {}; }
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {{Qt::UserRole + 1, "timestamp"}, {Qt::UserRole + 2, "content"}, {Qt::UserRole + 3, "category"}};
+    }
+};
+
+class MockRpcConsoleModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool executing READ executing CONSTANT)
+    Q_PROPERTY(QStringList availableCommands READ availableCommands CONSTANT)
+    Q_PROPERTY(QObject* outputModel READ outputModel CONSTANT)
+    Q_PROPERTY(QColor requestColor MEMBER m_request_color)
+    Q_PROPERTY(QColor replyColor MEMBER m_reply_color)
+    Q_PROPERTY(QColor errorColor MEMBER m_error_color)
+    Q_PROPERTY(QColor keyColor MEMBER m_key_color)
+
+public:
+    bool executing() const { return false; }
+    QStringList availableCommands() const { return {}; }
+    QObject* outputModel() { return &m_output; }
+    Q_INVOKABLE bool submitCommand(const QString&, const QString&) { return false; }
+    Q_INVOKABLE QString browseHistory(int, const QString& current) { return current; }
+    Q_INVOKABLE void resetHistoryNavigation() {}
+    Q_INVOKABLE void clear() {}
+
+private:
+    MockRpcOutputModel m_output;
+    QColor m_request_color;
+    QColor m_reply_color;
+    QColor m_error_color;
+    QColor m_key_color;
+};
+
 class TestIconProvider : public QQuickImageProvider
 {
 public:
@@ -4277,10 +4399,36 @@ private:
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool supportsApplicationFonts READ supportsApplicationFonts CONSTANT)
+
+public:
+    bool hadWarnings() const { return m_had_warnings; }
+    // The minimal platform cannot register application fonts. FontLoader
+    // fixtures use the platform's fallback fonts there.
+    bool supportsApplicationFonts() const { return QGuiApplication::platformName() != QStringLiteral("minimal"); }
 
 public Q_SLOTS:
+    void failOnWarnings()
+    {
+        // QTest::failOnWarning() was added in Qt 6.3. Keep this a no-op on Qt 6.2.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+        // The minimal plugin cannot register application fonts or raise windows.
+        // Fatal error tests call raise() to bring the error window forward.
+        // Allow only the two exact plugin messages. Other Qt warnings still fail
+        // this test, and qmlEngineAvailable() rejects all QML engine warnings.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral(
+            "^(?!This plugin does not support (?:application fonts|raise\\(\\))$).*")));
+#endif
+    }
+
     void applicationAvailable()
     {
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinCoreQmlTests"));
+        QCoreApplication::setOrganizationDomain(QStringLiteral("bitcoincore.org"));
+        QCoreApplication::setApplicationName(QStringLiteral("bitcoinqml_qmltests"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, m_settings.path());
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }
@@ -4288,6 +4436,13 @@ public Q_SLOTS:
     void processDeferredDeletes()
     {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
+    int incubatingObjectCount(QObject* object) const
+    {
+        const auto* engine = qmlEngine(object);
+        const auto* controller = engine ? engine->incubationController() : nullptr;
+        return controller ? controller->incubatingObjectCount() : 0;
     }
 
     void cleanupTestCase()
@@ -4301,8 +4456,20 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
-        engine->rootContext()->setContextProperty(QStringLiteral("testEventLoop"), this);
+        // Match failOnWarnings(): Qt 6.2 skips the new component warning policy.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+        // Qt Test's per-function warning policy does not cover QML loading or
+        // engine destruction. Observe both phases so these warnings also fail.
+        connect(engine, &QQmlEngine::warnings, engine, [this](const QList<QQmlError>& warnings) {
+            for (const auto& warning : warnings) {
+                m_had_warnings = true;
+                std::cerr << "Unexpected QML warning: " << warning.toString().toStdString() << '\n';
+            }
+        });
+#endif
+        engine->rootContext()->setContextProperty(QStringLiteral("testSetup"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
+        engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
         static MockBuildInfo build_info;
@@ -4333,6 +4500,8 @@ public Q_SLOTS:
         static MockTransactionActivityModel transaction_activity_model;
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
+        static MockDesktopTrayIconController desktop_tray_icon_controller;
+        static MockRpcConsoleModel rpc_console_model;
         static MockDebugLogModel debug_log_model;
         static MockUrlOpener url_opener;
         recipients_model.setCurrent(&send_recipient);
@@ -4425,11 +4594,23 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testCoinsListModel"), &coins_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("desktopTrayIconController"), &desktop_tray_icon_controller);
+        engine->rootContext()->setContextProperty(QStringLiteral("rpcConsoleModel"), &rpc_console_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
+
+private:
+    QTemporaryDir m_settings;
+    bool m_had_warnings{false};
 };
 
-QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)
+int main(int argc, char* argv[])
+{
+    QmlTestsSetup setup;
+    const int status = quick_test_main_with_setup(argc, argv, "bitcoinqml_qmltests", QUICK_TEST_SOURCE_DIR, &setup);
+    if (status != 0) return status;
+    return setup.hadWarnings() ? EXIT_FAILURE : EXIT_SUCCESS;
+}
 
 #include "qml_tests_main.moc"

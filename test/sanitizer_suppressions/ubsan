@@ -1,0 +1,3 @@
+# Append these to bitcoin/test/sanitizer_suppressions/ubsan for GUI tests.
+# Qt's integer hash deliberately multiplies unsigned values modulo 2^64.
+unsigned-integer-overflow:*/qhashfunctions.h

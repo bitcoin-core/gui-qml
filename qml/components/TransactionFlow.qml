@@ -65,6 +65,11 @@ ColumnLayout {
         // recalculating every ribbon once for each input/output card.
         nodeMeasurements = { inputs: nodeHeights(inputs), outputs: nodeHeights(outputs) }
     }
+    Timer {
+        id: measurementUpdate
+        interval: 0
+        onTriggered: root.updateNodeMeasurements()
+    }
     function nodeHeights(repeater) {
         const result = []
         for (let i = 0; i < repeater.count; ++i) {
@@ -144,12 +149,6 @@ ColumnLayout {
                         y: 36
                         width: root.diagramWidth
                         height: root.geometry.height
-                        Shape {
-                            id: ribbons
-                            objectName: "transactionFlowRibbons"
-                            anchors.fill: parent
-                            data: root.ribbonObjects
-                        }
                         Instantiator {
                             id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
@@ -172,13 +171,22 @@ ColumnLayout {
                                 root.ribbonObjects = root.ribbonObjects.filter(function(item) { return item !== object })
                             }
                         }
+                        // Release the Instantiator's model references before Shape
+                        // destroys the paths it owns. Reversing this declaration
+                        // order leaks the delegate contexts in Qt 6.10.2.
+                        Shape {
+                            id: ribbons
+                            objectName: "transactionFlowRibbons"
+                            anchors.fill: parent
+                            data: root.ribbonObjects
+                        }
                         // Keep the cards alive when unit changes publish new
                         // snapshots, so amount labels retain their previous frame.
                         Repeater {
                             id: inputs
                             model: root.inputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowInput_" + index
@@ -186,7 +194,7 @@ ColumnLayout {
                                 displayUnit: root.displayUnit
                                 input: true
                                 width: root.inputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 y: root.geometry.inputs[index] ? root.geometry.inputs[index].y : 0
                                 walletName: root.walletName
                                 accentColor: root.ownershipColor(entry.ownership)
@@ -196,15 +204,15 @@ ColumnLayout {
                         Repeater {
                             id: outputs
                             model: root.outputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowOutput_" + index
                                 entry: root.outputEntries[index] || ({})
                                 displayUnit: root.displayUnit
                                 width: root.outputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 x: root.geometry.outputX
                                 y: root.geometry.outputs[index] ? root.geometry.outputs[index].y : 0
                                 walletName: root.walletName

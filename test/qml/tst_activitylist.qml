@@ -17,9 +17,10 @@ TestCase {
     width: 1180
     height: 950
 
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
-    FontLoader { source: "qrc:/fonts/robotomono/regular" }
+    // The minimal platform cannot register application fonts; use its fallback fonts.
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/regular" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/semibold" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
 
@@ -95,6 +96,7 @@ TestCase {
         ]
     }
     function init() {
+        testSetup.failOnWarnings()
         Theme.dark = true
         walletController.reset()
         walletController.initialized = true
@@ -111,8 +113,17 @@ TestCase {
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
         verify(page !== null)
-        waitForRendering(page)
+        settleActivityList(page)
         return page
+    }
+    function settleActivityList(page) {
+        const list = findChild(page, "activityListView")
+        verify(list !== null)
+        // Start pending view layout before checking incubation: an idle
+        // controller can still have delegates queued for the next frame.
+        list.forceLayout()
+        waitForRendering(page)
+        tryVerify(function() { return testSetup.incubatingObjectCount(page) === 0 })
     }
     function findRow(page, txid) {
         const list = findChild(page, "activityListView")
@@ -680,6 +691,36 @@ TestCase {
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
     }
 
+    Component { id: modelSignalSpy; SignalSpy {} }
+
+    function test_filter_changes_use_row_notifications() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const layout = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "layoutChanged"})
+        const removed = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "rowsRemoved"})
+        const changed = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "countChanged"})
+        verify(layout.valid && removed.valid && changed.valid)
+        // Match production row removal; layout invalidation can cancel pending delegates.
+        proxy.typeFilters = [ActivityFilterProxyModel.Multiple]
+        compare(layout.count, 0)
+        verify(removed.count > 0)
+        settleActivityList(page)
+        layout.clear()
+        removed.clear()
+        changed.clear()
+        verify(proxy.setAmountRange(-1, -1))
+        compare(layout.count, 0)
+        compare(removed.count, 0)
+        compare(changed.count, 0)
+        verify(proxy.setAmountRange(100000, -1))
+        compare(layout.count, 0)
+        verify(removed.count > 0)
+        settleActivityList(page)
+    }
+
     function test_filter_menus_export_and_wallet_switch() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
@@ -689,6 +730,7 @@ TestCase {
         mouseClick(findChild(types.contentItem, "activityTypeMultiple"))
         compare(proxy.typeFilters, [ActivityFilterProxyModel.Multiple])
         compare(types.opened, true)
+        settleActivityList(page)
         types.close()
         tryCompare(types, "visible", false)
 
@@ -698,7 +740,9 @@ TestCase {
         mouseClick(findChild(dates.contentItem, "activityDateThisMonth"))
         compare(proxy.dateFilter, ActivityFilterProxyModel.ThisMonth)
         tryCompare(dates, "visible", false)
+        settleActivityList(page)
         page.currentItem.clearFilters()
+        settleActivityList(page)
 
         findChild(page, "activityExportPathField").text = "/tmp/activity-list-test.csv"
         openMore(page)
@@ -710,10 +754,14 @@ TestCase {
         tryCompare(result, "visible", false)
 
         proxy.searchText = "Robert"
+        settleActivityList(page)
         page.navigateToTransaction("batch")
         tryCompare(page, "depth", 2)
+        tryCompare(page, "busy", false)
+        settleActivityList(page)
         page.wallet = testSecondWalletModel
         tryCompare(page, "depth", 1)
+        settleActivityList(page)
     }
 
     function test_filter_button_animates_and_reserves_space() {

@@ -8,6 +8,10 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "DropdownButton"
     when: windowShown
     width: 400

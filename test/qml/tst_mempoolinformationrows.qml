@@ -21,6 +21,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         optionsModel.maxMempoolSizeMB = 300
         nodeModel.mempoolTransactionCount = 1234
         nodeModel.mempoolUsageMB = 12.34

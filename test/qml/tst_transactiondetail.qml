@@ -16,9 +16,10 @@ TestCase {
     visible: true
     width: 1180
     height: 1100
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
-    FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
-    FontLoader { source: "qrc:/fonts/robotomono/regular" }
+    // The minimal platform cannot register application fonts; use its fallback fonts.
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/regular" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/semibold" : "" }
+    FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
     Component { id: detailComponent; TransactionDetail { width: 1180; height: 1100; wallet: testWalletModel } }
     Component { id: activityComponent; ActivityList { width: 1180; height: 1100; wallet: testWalletModel } }
     SignalSpy { id: transactionSpy; signalName: "showTransaction" }
@@ -47,6 +48,7 @@ TestCase {
         }, overrides || {})
     }
     function init() {
+        testSetup.failOnWarnings()
         Theme.dark = true
         walletController.reset()
         walletController.initialized = true

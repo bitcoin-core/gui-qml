@@ -133,7 +133,9 @@ SettingsPage {
         property real verticalOffset: 0
         parent: Overlay.overlay
         x: parent ? Math.round((parent.width - width) / 2) : 0
-        y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
+        // Keep the entry animation inside the overlay even at minimum height;
+        // older Qt versions otherwise reposition it while evaluating this binding.
+        y: parent ? Math.max(0, Math.round((parent.height - implicitHeight) / 2) + verticalOffset) : 0
         width: Math.min(640, root.width - 40)
         modal: true
         focus: true
