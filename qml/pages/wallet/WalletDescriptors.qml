@@ -19,6 +19,8 @@ SettingsPage {
     property var exports: []
     // Descriptors that no longer give out addresses but may still hold funds.
     property var inactiveExports: []
+    // Descriptors that importdescriptors can't take without private keys.
+    property int omittedCount: 0
     readonly property var completeExports: exports.concat(inactiveExports)
     readonly property string sharedFingerprint: {
         const fingerprints = new Set(completeExports.map(item => item.fingerprint))
@@ -35,6 +37,7 @@ SettingsPage {
     function refresh() {
         exports = wallet ? wallet.descriptorExports() : []
         inactiveExports = wallet ? wallet.inactiveDescriptorExports() : []
+        omittedCount = wallet ? wallet.descriptorImportOmittedCount() : 0
     }
 
     function shortKey(key) {
@@ -129,6 +132,11 @@ SettingsPage {
         Layout.fillWidth: true
         //: "importdescriptors" is a Bitcoin Core command and is not translated.
         text: qsTr("Copies every descriptor, with when it was created, as JSON for importdescriptors. Import it into a Bitcoin Core wallet without private keys.")
+            + (root.omittedCount === 0 ? ""
+               : " " + (root.omittedCount === 1
+                   ? qsTr("1 older descriptor needs private keys to find its addresses, so it is left out. To keep it, save a watch-only copy from Back up or export wallet.")
+                   //: %1 is a number of descriptors.
+                   : qsTr("%1 older descriptors need private keys to find their addresses, so they are left out. To keep them, save a watch-only copy from Back up or export wallet.").arg(root.omittedCount)))
         textStyle: Theme.text.caption
         color: Theme.color.neutral7
         horizontalAlignment: Text.AlignLeft

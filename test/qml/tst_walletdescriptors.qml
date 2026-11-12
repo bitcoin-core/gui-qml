@@ -94,11 +94,12 @@ TestCase {
         SignalSpy {}
     }
 
-    function makeWallet(exports, inactive) {
+    function makeWallet(exports, inactive, omitted) {
         return {
             name: "watch/wallet",
             descriptorExports: () => exports,
             inactiveDescriptorExports: () => inactive || [],
+            descriptorImportOmittedCount: () => omitted || 0,
             descriptorImportJson: () => JSON.stringify(exports.concat(inactive || []).map(item => ({desc: item.descriptor}))),
         }
     }
@@ -186,6 +187,15 @@ TestCase {
         compare(JSON.parse(copied).map(item => item.desc), [taproot.descriptor, segwit.descriptor, previousSegwit.descriptor])
         compare(button.text, "Copied")
         tryCompare(button, "text", "Copy all for Bitcoin Core")
+    }
+
+    function test_copy_all_note_mentions_left_out_descriptors() {
+        const page = createList([segwit])
+        const note = findChild(page, "descriptorsCopyAllNote")
+        verify(note.text.indexOf("left out") < 0)
+        page.wallet = makeWallet([segwit], [], 2)
+        verify(note.text.indexOf("2 older descriptors") > 0)
+        verify(note.text.indexOf("watch-only copy") > 0)
     }
 
     function test_copy_all_is_hidden_without_descriptors() {

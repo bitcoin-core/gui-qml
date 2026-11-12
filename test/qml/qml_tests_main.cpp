@@ -1348,6 +1348,7 @@ public:
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
     Q_INVOKABLE QVariantList descriptorExports() const { return m_descriptor_exports; }
     Q_INVOKABLE QVariantList inactiveDescriptorExports() const { return m_inactive_descriptor_exports; }
+    Q_INVOKABLE int descriptorImportOmittedCount() const { return 0; }
     Q_INVOKABLE void setDescriptorExportsForTest(const QVariantList& exports, const QVariantList& inactive)
     {
         m_descriptor_exports = exports;

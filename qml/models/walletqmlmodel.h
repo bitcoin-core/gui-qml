@@ -214,6 +214,8 @@ public:
     Q_INVOKABLE QVariantList descriptorExports() const;
     Q_INVOKABLE QVariantList inactiveDescriptorExports() const;
     Q_INVOKABLE QString descriptorImportJson() const;
+    //! Descriptors left out of descriptorImportJson because they need private keys to derive.
+    Q_INVOKABLE int descriptorImportOmittedCount() const;
     Q_INVOKABLE bool exportWatchOnlyWallet(const QString& path, bool replace = false);
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);

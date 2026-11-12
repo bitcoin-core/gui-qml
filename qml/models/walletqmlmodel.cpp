@@ -1443,19 +1443,64 @@ QVariantList WalletQmlModel::inactiveDescriptorExports() const
     return exports;
 }
 
+namespace {
+
+// Hardened derivation after the key, as in a migrated wallet's old HD chain,
+// needs the private key, so importdescriptors rejects the public form.
+bool ExpandsFromPublicKeys(const std::string& descriptor)
+{
+    FlatSigningProvider keys;
+    std::string error;
+    const auto parsed{Parse(descriptor, keys, error, /*require_checksum=*/false)};
+    if (parsed.empty()) return false;
+    return std::ranges::all_of(parsed, [&](const auto& desc) {
+        std::vector<CScript> scripts;
+        FlatSigningProvider out;
+        return desc->Expand(0, keys, scripts, out);
+    });
+}
+
+std::vector<wallet::WalletDescInfo> ImportableDescriptors(const wallet::CWallet& wallet, size_t& omitted)
+{
+    omitted = 0;
+    LOCK(wallet.cs_wallet);
+    auto exported{wallet::ExportDescriptors(wallet, /*export_private=*/false)};
+    if (!exported) return {};
+    std::vector<wallet::WalletDescInfo> importable;
+    for (wallet::WalletDescInfo& info : *exported) {
+        if (ExpandsFromPublicKeys(info.descriptor)) {
+            importable.push_back(std::move(info));
+        } else {
+            ++omitted;
+        }
+    }
+    std::ranges::sort(importable, {}, &wallet::WalletDescInfo::descriptor);
+    return importable;
+}
+
+} // namespace
+
+int WalletQmlModel::descriptorImportOmittedCount() const
+{
+    const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
+    if (!raw_wallet) return 0;
+    size_t omitted{0};
+    ImportableDescriptors(*raw_wallet, omitted);
+    return int(omitted);
+}
+
 // Every descriptor in the same form as listdescriptors, ready for importdescriptors.
 QString WalletQmlModel::descriptorImportJson() const
 {
     const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
     if (!raw_wallet) return {};
 
-    LOCK(raw_wallet->cs_wallet);
-    auto exported{wallet::ExportDescriptors(*raw_wallet, /*export_private=*/false)};
-    if (!exported) return {};
-    std::ranges::sort(*exported, {}, &wallet::WalletDescInfo::descriptor);
+    size_t omitted{0};
+    const std::vector<wallet::WalletDescInfo> exported{ImportableDescriptors(*raw_wallet, omitted)};
+    if (exported.empty()) return {};
 
     UniValue descriptors{UniValue::VARR};
-    for (const wallet::WalletDescInfo& info : *exported) {
+    for (const wallet::WalletDescInfo& info : exported) {
         UniValue item{UniValue::VOBJ};
         item.pushKV("desc", info.descriptor);
         // The import rescans from here, so "now" would miss older transactions.

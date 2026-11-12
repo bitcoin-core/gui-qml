@@ -1138,8 +1138,12 @@ void WalletQmlModelTests::descriptorImportJsonListsEveryPublicDescriptor()
     const std::string new_change{"wpkh(" + OriginDescriptor(new_master, 84) + "/1/*)"};
     LoadActiveDescriptor(raw_wallet, new_receive, OutputType::BECH32);
     LoadActiveDescriptor(raw_wallet, new_change, OutputType::BECH32, /*internal=*/true);
+    // A migrated wallet's old HD chain derives hardened children, which needs the private key.
+    const CKeyID old_id{old_master.key.GetPubKey().GetID()};
+    LoadDescriptor(raw_wallet, "pkh(" + EncodeExtPubKey(old_master.Neuter()) + "/0h/0h/*h)", {{old_id, old_master.key}});
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    QCOMPARE(model->descriptorImportOmittedCount(), 1);
     UniValue parsed;
     QVERIFY(parsed.read(model->descriptorImportJson().toStdString()));
     QVERIFY(parsed.isArray());
