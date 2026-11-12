@@ -3733,9 +3733,22 @@ public:
     void setTypeFilter(TypeFilter type) { setTypeFilters(type == TypeAll ? QList<int>{} : QList<int>{type}); }
     void setTypeFilters(const QList<int>& types)
     {
-        if (m_type_filters == types) return;
-        m_type_filters = types;
-        invalidate();
+        QList<int> normalized;
+        for (int type : types) {
+            if (type > TypeAll && type <= Split && !normalized.contains(type)) normalized.append(type);
+        }
+        std::sort(normalized.begin(), normalized.end());
+        if (m_type_filters == normalized) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_type_filters = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
         Q_EMIT typeFilterChanged();
         Q_EMIT typeFiltersChanged();
         Q_EMIT countChanged();
@@ -3755,15 +3768,29 @@ public:
     void setMaxAmount(qint64 value) { setAmountRange(m_min_amount, value); }
     Q_INVOKABLE bool setAmountRange(qint64 minimum, qint64 maximum)
     {
+        // Negative bounds are unset; an inverted range must not hide all activity.
+        minimum = minimum < 0 ? -1 : minimum;
+        maximum = maximum < 0 ? -1 : maximum;
         if (minimum >= 0 && maximum >= 0 && minimum > maximum) return false;
-        m_min_amount = minimum < 0 ? -1 : minimum;
-        m_max_amount = maximum < 0 ? -1 : maximum;
-        invalidate();
-        Q_EMIT minAmountChanged();
-        Q_EMIT maxAmountChanged();
+        const bool min_changed = m_min_amount != minimum;
+        const bool max_changed = m_max_amount != maximum;
+        if (!min_changed && !max_changed) return true;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_min_amount = minimum;
+        m_max_amount = maximum;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        if (min_changed) Q_EMIT minAmountChanged();
+        if (max_changed) Q_EMIT maxAmountChanged();
         Q_EMIT countChanged();
         return true;
     }
+
     qint64 availableMaxAmount() const
     {
         qint64 result{0};

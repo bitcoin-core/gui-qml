@@ -691,6 +691,36 @@ TestCase {
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
     }
 
+    Component { id: modelSignalSpy; SignalSpy {} }
+
+    function test_filter_changes_use_row_notifications() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const layout = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "layoutChanged"})
+        const removed = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "rowsRemoved"})
+        const changed = createTemporaryObject(modelSignalSpy, this,
+            {target: proxy, signalName: "countChanged"})
+        verify(layout.valid && removed.valid && changed.valid)
+        // Match production row removal; layout invalidation can cancel pending delegates.
+        proxy.typeFilters = [ActivityFilterProxyModel.Multiple]
+        compare(layout.count, 0)
+        verify(removed.count > 0)
+        settleActivityList(page)
+        layout.clear()
+        removed.clear()
+        changed.clear()
+        verify(proxy.setAmountRange(-1, -1))
+        compare(layout.count, 0)
+        compare(removed.count, 0)
+        compare(changed.count, 0)
+        verify(proxy.setAmountRange(100000, -1))
+        compare(layout.count, 0)
+        verify(removed.count > 0)
+        settleActivityList(page)
+    }
+
     function test_filter_menus_export_and_wallet_switch() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
