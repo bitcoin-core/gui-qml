@@ -133,6 +133,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "cancelled password"));
         QVERIFY(qmltest::Click(m_app, "receivePassphraseCancelButton"));
         QTRY_VERIFY(!popup->property("visible").toBool());
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "cancelled password").isEmpty());
         QCOMPARE(qmltest::Find(m_app, "receivePassphraseField")->property("text").toString(), QString{});
         QVERIFY(wallet->receivingAddress()->address().isEmpty());
         QCOMPARE(wallet->receiveRequests()->count(), 0);
@@ -150,6 +151,7 @@ private Q_SLOTS:
         QVERIFY(error->property("text").toString().contains("incorrect"));
         QVERIFY(popup->property("opened").toBool());
         QCOMPARE(qmltest::Find(m_app, "receivePassphraseField")->property("text").toString(), QString{});
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "wrong password").isEmpty());
         QVERIFY(wallet->receivingAddress()->address().isEmpty());
         QVERIFY(wallet->isLocked());
         QCOMPARE(wallet->receiveRequests()->count(), 0);
@@ -159,6 +161,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "receiving password"));
         QVERIFY(qmltest::Click(m_app, "receivePassphraseConfirmButton"));
         QTRY_VERIFY(!popup->property("visible").toBool());
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "receiving password").isEmpty());
         const auto address = wallet->receivingAddress()->address();
         QVERIFY(!address.isEmpty());
         QTRY_VERIFY(qmltest::Find(m_app, "requestPaymentGenerateButton")->property("enabled").toBool());
@@ -177,6 +180,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "receiving password"));
         QVERIFY(qmltest::Click(m_app, "receivePassphraseConfirmButton"));
         QTRY_VERIFY(!popup->property("visible").toBool());
+        QVERIFY(qmltest::SecretTextLocations(m_app.window(), "receiving password").isEmpty());
         QVERIFY(!wallet->receivingAddress()->address().isEmpty());
         QVERIFY(wallet->receivingAddress()->address() != address);
         QVERIFY(wallet->isLocked());
