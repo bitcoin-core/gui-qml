@@ -111,14 +111,12 @@ TestCase {
         compare(ApplicationModels.onboardingOptionsModel, null)
     }
 
-    function test_onboarding_requires_explicit_model() {
-        const component = Qt.createComponent("qrc:/qml/pages/onboarding/OnboardingWizard.qml")
-        compare(component.status, Component.Ready)
-        ignoreWarning(/.*Required property settingsModel was not initialized/)
-        const wizard = component.createObject(this)
-        compare(wizard, null)
-        verify(component.errorString().indexOf("Required property settingsModel was not initialized") !== -1)
-        component.destroy()
+    function test_onboarding_uses_injected_model() {
+        const wizard = createTemporaryObject(fullPreInitWizard, this)
+        verify(wizard !== null)
+        compare(wizard.settingsModel, optionsModel)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, wizard.settingsModel)
     }
 
     function triggerButton(rootItem, objectName) {

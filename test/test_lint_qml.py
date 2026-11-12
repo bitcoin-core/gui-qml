@@ -29,6 +29,8 @@ def main():
             'import QtQuick\nimport "../controls"\n'
             'Base { id: root; states: State { name: "active"; '
             'PropertyChanges { target: root; width: 12 } } }', 0),
+        "required-model-provided": ('import QtQuick\nimport "../controls"\nItem { RequiredModel { settingsModel: ({}) } }', 0),
+        "required-model-missing": ('import QtQuick\nimport "../controls"\nItem { RequiredModel {} }', 1),
         "unknown-name": ('import "../controls"\nBase { width: missingName }', 1),
         "capture-and-unknown-name": (
             'import QtQuick\nimport "../controls"\n'
@@ -45,9 +47,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix="lint-gate-test-", dir=args.build_dir) as temporary:
         tree = Path(temporary)
         (tree / "base.qml").write_text("import QtQuick\nItem {}\n", encoding="utf-8")
+        (tree / "required.qml").write_text(
+            "import QtQuick\nItem { required property var settingsModel }\n", encoding="utf-8")
         resource = tree / "resources.qrc"
         resource.write_text('<RCC><qresource prefix="/qml">'
                             '<file alias="controls/Base.qml">base.qml</file>'
+                            '<file alias="controls/RequiredModel.qml">required.qml</file>'
                             '<file alias="pages/UseBase.qml">use.qml</file>'
                             '</qresource></RCC>', encoding="utf-8")
         for name, (source, expected) in cases.items():
