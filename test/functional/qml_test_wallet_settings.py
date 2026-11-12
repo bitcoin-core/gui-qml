@@ -294,7 +294,8 @@ def case_backup_uses_automation_path(harness, checkpoints):
     gui.wait_for_property("backupReplaceAlert", "opened", True, timeout_ms=5000)
     assert gui.get_property("backupReplaceAlert", "title") == "Replace wallet file?"
     keep_both_name = gui.get_property("backupReplaceKeepBothName", "text")
-    assert re.fullmatch(rf"{wallet_name}-\d{{4}}-\d{{2}}-\d{{2}}-\d{{4}}\.bak", keep_both_name), keep_both_name
+    # The kept copy is named for its own type, not the backup it sits beside.
+    assert re.fullmatch(rf"{wallet_name}-watchonly-\d{{4}}-\d{{2}}-\d{{2}}-\d{{4}}\.dat", keep_both_name), keep_both_name
     gui.click("backupReplaceKeepBoth")
     keep_both_path = os.path.join(backup_dir, keep_both_name)
     gui.wait_for_property(

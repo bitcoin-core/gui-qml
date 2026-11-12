@@ -17,8 +17,8 @@ bool IsWalletDatabaseFile(const QString& path);
 //! File name for a backup or watch-only copy saved on date.
 QString DefaultWalletFileName(const QString& wallet_name, bool watch_only, const QDate& date);
 
-//! First free path next to path, stamped with now.
-QString KeepBothPath(const QString& path, const QDateTime& now);
+//! First free path next to path, stamped with now and named for the file type.
+QString KeepBothPath(const QString& path, bool watch_only, const QDateTime& now);
 
 /**
  * What saving a wallet file to path would do. The map holds status

@@ -77,16 +77,23 @@ QString DefaultWalletFileName(const QString& wallet_name, bool watch_only, const
         : QStringLiteral("%1-%2.bak").arg(name, stamp);
 }
 
-QString KeepBothPath(const QString& path, const QDateTime& now)
+QString KeepBothPath(const QString& path, bool watch_only, const QDateTime& now)
 {
     // A stamp left by an earlier save is replaced, not appended to.
     static const QRegularExpression old_stamp{QStringLiteral("-\\d{4}-\\d{2}-\\d{2}(-\\d{4})?(-\\d+)?$")};
+    static const QRegularExpression watch_only_label{QStringLiteral("-watchonly$"), QRegularExpression::CaseInsensitiveOption};
     const QFileInfo info{path};
     QString base{info.completeBaseName()};
     base.remove(old_stamp);
+    // The existing file can be the other type, so its label and suffix are not kept.
+    base.remove(watch_only_label);
     if (base.isEmpty()) base = QStringLiteral("wallet");
+    if (watch_only) base += QStringLiteral("-watchonly");
     const QString stem{base + '-' + now.toString(QStringLiteral("yyyy-MM-dd-HHmm"))};
-    const QString suffix{info.suffix().isEmpty() ? QString{} : '.' + info.suffix()};
+    const bool known_suffix{info.suffix().compare(QStringLiteral("bak"), Qt::CaseInsensitive) == 0 ||
+                            info.suffix().compare(QStringLiteral("dat"), Qt::CaseInsensitive) == 0};
+    const QString suffix{known_suffix ? (watch_only ? QStringLiteral(".dat") : QStringLiteral(".bak"))
+                         : info.suffix().isEmpty() ? QString{} : '.' + info.suffix()};
     const QDir dir{info.absoluteDir()};
 
     for (int count{1};; ++count) {
@@ -140,7 +147,7 @@ QVariantMap DescribeWalletFileDestination(const QString& path,
         result.insert(QStringLiteral("status"), QStringLiteral("available"));
         return result;
     }
-    const QFileInfo keep_both{KeepBothPath(local, now)};
+    const QFileInfo keep_both{KeepBothPath(local, watch_only, now)};
     result.insert(QStringLiteral("status"), IsWalletDatabaseFile(local) ? QStringLiteral("walletFile") : QStringLiteral("otherFile"));
     result.insert(QStringLiteral("keepBothPath"), QDir::toNativeSeparators(keep_both.absoluteFilePath()));
     result.insert(QStringLiteral("keepBothFileName"), keep_both.fileName());

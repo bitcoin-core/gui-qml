@@ -40,6 +40,7 @@ class WalletFileDestinationTests : public QObject
 private Q_SLOTS:
     void defaultNamesCarryTypeAndDate();
     void keepBothReplacesAnEarlierStamp();
+    void keepBothNamesTheNewFileForItsType();
     void walletDatabasesOfAnyNetworkAreRecognized();
     void missingFileIsAvailable();
     void existingFilesOfferKeepBoth();
@@ -64,10 +65,22 @@ void WalletFileDestinationTests::keepBothReplacesAnEarlierStamp()
     const QString existing{dir.filePath(QStringLiteral("wallet-2026-11-10.bak"))};
     WriteFile(existing, "old");
 
-    QCOMPARE(KeepBothPath(existing, NOW), dir.filePath(QStringLiteral("wallet-2026-11-11-1432.bak")));
+    QCOMPARE(KeepBothPath(existing, false, NOW), dir.filePath(QStringLiteral("wallet-2026-11-11-1432.bak")));
     WriteFile(dir.filePath(QStringLiteral("wallet-2026-11-11-1432.bak")), "taken");
-    QCOMPARE(KeepBothPath(existing, NOW), dir.filePath(QStringLiteral("wallet-2026-11-11-1432-2.bak")));
-    QCOMPARE(KeepBothPath(dir.filePath(QStringLiteral("mine.dat")), NOW), dir.filePath(QStringLiteral("mine-2026-11-11-1432.dat")));
+    QCOMPARE(KeepBothPath(existing, false, NOW), dir.filePath(QStringLiteral("wallet-2026-11-11-1432-2.bak")));
+    QCOMPARE(KeepBothPath(dir.filePath(QStringLiteral("mine.dat")), true, NOW), dir.filePath(QStringLiteral("mine-watchonly-2026-11-11-1432.dat")));
+    QCOMPARE(KeepBothPath(dir.filePath(QStringLiteral("mine.txt")), false, NOW), dir.filePath(QStringLiteral("mine-2026-11-11-1432.txt")));
+}
+
+void WalletFileDestinationTests::keepBothNamesTheNewFileForItsType()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString backup{dir.filePath(QStringLiteral("wallet-2026-11-10.bak"))};
+    const QString watch_only{dir.filePath(QStringLiteral("wallet-watchonly-2026-11-10.dat"))};
+    QCOMPARE(KeepBothPath(backup, true, NOW), dir.filePath(QStringLiteral("wallet-watchonly-2026-11-11-1432.dat")));
+    QCOMPARE(KeepBothPath(watch_only, false, NOW), dir.filePath(QStringLiteral("wallet-2026-11-11-1432.bak")));
+    QCOMPARE(KeepBothPath(watch_only, true, NOW), dir.filePath(QStringLiteral("wallet-watchonly-2026-11-11-1432.dat")));
 }
 
 void WalletFileDestinationTests::walletDatabasesOfAnyNetworkAreRecognized()
@@ -115,14 +128,14 @@ void WalletFileDestinationTests::existingFilesOfferKeepBoth()
     QVariantMap result{DescribeWalletFileDestination(wallet, true, {}, {}, NOW)};
     QCOMPARE(result.value("status").toString(), QStringLiteral("walletFile"));
     QCOMPARE(result.value("folder").toString(), QDir::toNativeSeparators(dir.path()));
-    QCOMPARE(result.value("keepBothFileName").toString(), QStringLiteral("wallet-2026-11-11-1432.bak"));
-    QCOMPARE(result.value("keepBothPath").toString(), QDir::toNativeSeparators(dir.filePath(QStringLiteral("wallet-2026-11-11-1432.bak"))));
+    QCOMPARE(result.value("keepBothFileName").toString(), QStringLiteral("wallet-watchonly-2026-11-11-1432.dat"));
+    QCOMPARE(result.value("keepBothPath").toString(), QDir::toNativeSeparators(dir.filePath(QStringLiteral("wallet-watchonly-2026-11-11-1432.dat"))));
 
     const QString other{dir.filePath(QStringLiteral("notes.dat"))};
     WriteFile(other, "notes");
     result = DescribeWalletFileDestination(other, true, {}, {}, NOW);
     QCOMPARE(result.value("status").toString(), QStringLiteral("otherFile"));
-    QCOMPARE(result.value("keepBothFileName").toString(), QStringLiteral("notes-2026-11-11-1432.dat"));
+    QCOMPARE(result.value("keepBothFileName").toString(), QStringLiteral("notes-watchonly-2026-11-11-1432.dat"));
 }
 
 void WalletFileDestinationTests::folderAndBareNameGetCompleted()
