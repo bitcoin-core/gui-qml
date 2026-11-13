@@ -25,7 +25,7 @@ Control {
     property url selectionIconSource: "image://images/check"
     property int iconSize: 18
     property var labelTextStyle: Theme.text.description
-    property bool embedded: false
+    property int surfaceLevel: 0
     readonly property string currentText: displayText.length > 0 ? displayText : _currentText()
     readonly property bool opened: popup.visible
 
@@ -79,7 +79,7 @@ Control {
         textAlignment: root.textAlignment
         caretSize: root.caretSize
         labelTextStyle: root.labelTextStyle
-        isOnSurface: root.embedded
+        surfaceLevel: root.surfaceLevel
         onClicked: root.opened ? root.close() : root.open()
     }
 
@@ -89,7 +89,7 @@ Control {
         parent: button
         modal: true
         dim: false
-        backgroundColor: root.embedded ? Theme.color.neutral2 : Theme.color.neutral1
+        backgroundColor: Theme.color.surface(root.surfaceLevel + 1)
         minMenuWidth: Math.max(root.minimumMenuWidth, root.width)
         x: button.width - width
         y: button.height + 2

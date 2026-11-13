@@ -21,7 +21,7 @@ Button {
     property string walletType: ""
 
     implicitWidth: 240
-    implicitHeight: 48
+    implicitHeight: Math.max(48, implicitContentHeight + topPadding + bottomPadding)
     leftPadding: 10
     rightPadding: 10
     topPadding: 5
@@ -30,10 +30,10 @@ Button {
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }
 
-    background: Rectangle {
-        radius: 11
-        color: root.hovered || root.checked ? Theme.color.neutral2 : Theme.color.neutral0
-        FocusBorder { visible: root.visualFocus }
+    background: StateBackground {
+        radius: Theme.radius.cardInset
+        stateColor: root.hovered || root.checked ? Theme.color.surfaceHover : "transparent"
+        FocusBorder { visible: root.visualFocus; targetRadius: parent.radius }
     }
 
     contentItem: RowLayout {
@@ -87,7 +87,7 @@ Button {
                 Layout.fillWidth: true
                 text: root.noWalletLoaded
                     ? (root.noWalletsFound ? qsTr("Add wallet") : qsTr("Select wallet")) : root.text
-                font: Theme.text.subheading.font
+                textStyle: Theme.text.subheading
                 color: Theme.color.neutral9
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
@@ -97,13 +97,12 @@ Button {
                 objectName: "walletBadgeBalanceText"
                 Layout.fillWidth: true
                 visible: !root.loading && !root.noWalletLoaded
+                hidesAmount: true
                 amount: root.balance
                 unit: optionsModel.displayUnit === BitcoinAmount.SAT
-                    ? (root.balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel
+                    ? optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : optionsModel.displayUnitLabel
                 color: Theme.color.neutral8
-                font.family: optionsModel.moneyFont.family
-                font.weight: optionsModel.moneyFont.weight
-                font.pixelSize: 13
+                textStyle: Theme.text.amountCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight

@@ -3,423 +3,217 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import "../../controls"
 
-SettingsPage {
+import "../../controls"
+import "designsystem"
+
+DesignSystemPage {
     id: root
     title: qsTr("Design system")
 
-    readonly property var typographyRoles: [
-        {
-            name: "display",
-            group: "Headers"
-        },
-        {
-            name: "headline",
-            group: "Headers"
-        },
-        {
-            name: "title",
-            group: "Headers"
-        },
-        {
-            name: "subtitle",
-            group: "Headers"
-        },
-        {
-            name: "heading",
-            group: "Headers"
-        },
-        {
-            name: "subheading",
-            group: "Headers"
-        },
-        {
-            name: "lead",
-            group: "Body"
-        },
-        {
-            name: "bodyLarge",
-            group: "Body"
-        },
-        {
-            name: "body",
-            group: "Body"
-        },
-        {
-            name: "description",
-            group: "Body"
-        },
-        {
-            name: "caption",
-            group: "Body"
-        },
-        {
-            name: "button",
-            group: "Controls"
-        },
-        {
-            name: "buttonStrong",
-            group: "Controls"
-        },
-        {
-            name: "monoLead",
-            group: "Mono"
-        },
-        {
-            name: "monoBody",
-            group: "Mono"
-        },
-        {
-            name: "monoDescription",
-            group: "Mono"
-        },
-        {
-            name: "monoCaption",
-            group: "Mono"
-        }
+    readonly property var motionModes: ["full", "reduced", "off"]
+    readonly property var devices: ["Desktop", "Mobile"]
+    readonly property var previewWidths: [
+        { text: "Window", value: 0 },
+        { text: "390", value: 390 },
+        { text: "720", value: 720 },
+        { text: "1000", value: 1000 }
     ]
 
-    readonly property var paletteTokens: ["background", "white", "orange", "orangeLight1", "orangeLight2", "red", "green", "blue", "amber", "purple", "neutral0", "neutral1", "neutral2", "neutral3", "neutral4", "neutral5", "neutral6", "neutral7", "neutral8", "neutral9"]
+    readonly property var foundations: [
+        { name: "Colors", id: "Colors", section: colorsSection,
+          description: "Semantic roles by purpose: surfaces, states, text and status." },
+        { name: "Typography", id: "Typography", section: typographySection,
+          description: "Text roles at their real size, with line height and weight." },
+        { name: "Motion", id: "Motion", section: motionSection,
+          description: "Durations, easing curves and the three motion modes." },
+        { name: "Layout", id: "Layout", section: layoutSection,
+          description: "Spacing, corner radii, sizes, focus rings and breakpoints." }
+    ]
+    readonly property var componentGroups: [
+        { name: "Buttons", id: "Buttons", section: buttonsSection,
+          description: "Actions, from the one primary action to icon-only buttons." },
+        { name: "Selection", id: "Selection", section: selectionSection,
+          description: "Controls that pick a value or a range." },
+        { name: "Fields", id: "Fields", section: fieldsSection,
+          description: "Text entry, with labels outside the field." },
+        { name: "Rows and sections", id: "Rows", section: rowsSection,
+          description: "The cards and rows that settings and detail pages are built from." },
+        { name: "Navigation", id: "Navigation", section: navigationSection,
+          description: "Top bars, page headings and tabs." },
+        { name: "Feedback", id: "Feedback", section: feedbackSection,
+          description: "Banners, pills, tooltips and loading indicators." },
+        { name: "Menus and dialogs", id: "Menus", section: menusSection,
+          description: "Menus hold actions on one object; dialogs ask for a short decision." },
+        { name: "Data display", id: "DataDisplay", section: dataDisplaySection,
+          description: "Amounts, addresses, QR codes, transaction parts and log output." }
+    ]
+    readonly property var pages: foundations.concat(componentGroups)
+    // The segmented pickers move under their labels on a narrow page.
+    readonly property bool stacksControls: SizeClass.isCompact(layoutWidth)
 
-    property string exampleLanguage: "en"
-    property string exampleBlockClockMode: "compact"
-    property bool exampleStartupEnabled: true
-    property string exampleBlockStorageLimit: "2"
-    property string exampleProxyAddress: "127.0.0.1:9050"
-    property url lastExampleLink: ""
+    // Subpages keep the mode while they're open; leaving the design system resets it.
+    Component.onDestruction: Theme.motion.resetMode()
 
-    // ── Form controls ───────────────────────────────────────
-    PageHeading {
-        Layout.fillWidth: true
-        title: qsTr("General")
-        description: qsTr("Generic form and navigation components using the active Theme tokens.")
+    function openPage(page) {
+        StackView.view.push(sectionPage, {
+            objectName: "designSystem" + page.id + "Page",
+            title: page.name,
+            section: page.section,
+            previewWidth: root.previewWidth
+        })
     }
 
     FormSection {
-        objectName: "designSystemAppearanceSection"
+        objectName: "designSystemPageControlsSection"
         Layout.fillWidth: true
-        title: qsTr("Appearance")
+        title: "Page controls"
+        description: "Only these pickers change anything. The samples on each page never change a setting or wallet state, and the motion mode resets when you leave the design system."
 
         FormRow {
             objectName: "designSystemThemeRow"
             Layout.fillWidth: true
-            title: qsTr("Theme")
-            description: qsTr("Choose the application appearance.")
-            trailingItem: SegmentedPicker {
-                implicitWidth: 190
-                implicitHeight: 36
-                model: [qsTr("Light"), qsTr("Dark")]
-                currentIndex: Theme.dark ? 1 : 0
-                onSelected: function (index, option) {
-                    Theme.dark = index === 1;
-                }
-            }
-        }
-
-        FormRow {
-            objectName: "designSystemLanguageRow"
-            Layout.fillWidth: true
-            title: qsTr("Language")
-            description: qsTr("Choose the language used throughout the app.")
+            title: "Palette"
+            description: "Switch the palette every sample uses."
             showDivider: false
             trailingItem: PopupPicker {
-                objectName: "designSystemLanguagePicker"
-                embedded: true
-                minimumMenuWidth: 180
-                currentValue: root.exampleLanguage
-                model: [
-                    {
-                        text: qsTr("English"),
-                        value: "en"
-                    },
-                    {
-                        text: qsTr("Deutsch"),
-                        value: "de"
-                    },
-                    {
-                        text: qsTr("Español"),
-                        value: "es"
+                objectName: "designSystemPalettePicker"
+                surfaceLevel: 1
+                subtitleRole: "description"
+                currentValue: Theme.paletteId
+                model: {
+                    const items = []
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        const palette = Theme.palettes[i]
+                        items.push({
+                            text: palette.displayName,
+                            value: palette.paletteId,
+                            description: palette.paletteId + (palette.isDark ? ", dark" : ", light")
+                        })
                     }
-                ]
-                onActivated: function (value) {
-                    root.exampleLanguage = value;
+                    return items
+                }
+                onActivated: function(value) {
+                    Theme.paletteId = value
                 }
             }
         }
-    }
-
-    FormSection {
-        objectName: "designSystemBehaviorSection"
-        Layout.fillWidth: true
-        title: qsTr("Behavior")
-        description: qsTr("Rows can host any existing control without owning its state.")
 
         FormRow {
-            objectName: "designSystemBlockClockRow"
+            objectName: "designSystemMotionModeRow"
             Layout.fillWidth: true
-            title: qsTr("Block status size")
-            description: qsTr("Set the scale used for the block status display.")
+            stacksTrailingItem: root.stacksControls
+            title: "Motion"
+            description: "Starts from the platform and Display settings; off is for tests and makes everything instant."
+            showDivider: false
             trailingItem: SegmentedPicker {
-                implicitWidth: 220
-                implicitHeight: 36
-                model: [
-                    {
-                        text: qsTr("Compact"),
-                        value: "compact"
-                    },
-                    {
-                        text: qsTr("Showcase"),
-                        value: "showcase"
-                    }
-                ]
-                currentIndex: root.exampleBlockClockMode === "compact" ? 0 : 1
-                onSelected: function (index, option) {
-                    root.exampleBlockClockMode = option.value;
-                }
-            }
-        }
-
-        FormRow {
-            objectName: "designSystemStartupRow"
-            Layout.fillWidth: true
-            title: qsTr("Open at login")
-            description: qsTr("Start the app after signing in.")
-            showDivider: false
-            trailingItem: OptionSwitch {
-                objectName: "designSystemStartupSwitch"
-                checked: root.exampleStartupEnabled
-                onToggled: root.exampleStartupEnabled = checked
-            }
-        }
-    }
-
-    FormSection {
-        objectName: "designSystemNavigationSection"
-        Layout.fillWidth: true
-        title: qsTr("Navigation rows")
-        description: qsTr("Use ListRow for destinations and disclosure actions.")
-
-        ListRow {
-            objectName: "designSystemSelectedListRow"
-            Layout.fillWidth: true
-            title: qsTr("Selected destination")
-            description: qsTr("Selection and keyboard focus are independent states.")
-            selected: true
-            showsDisclosureIndicator: true
-            disclosureIndicatorColor: Theme.color.orange
-        }
-
-        ListRow {
-            objectName: "designSystemDisclosureListRow"
-            Layout.fillWidth: true
-            title: qsTr("Advanced options")
-            description: qsTr("Open another page for settings that need more space.")
-            showDivider: false
-            showsDisclosureIndicator: true
-        }
-    }
-
-    FormSection {
-        objectName: "designSystemValueSection"
-        Layout.fillWidth: true
-        title: qsTr("Values and links")
-        description: qsTr("Use value rows for read-only data and link rows for caller-owned navigation.")
-
-        LinkRow {
-            objectName: "designSystemWebsiteRow"
-            Layout.fillWidth: true
-            title: qsTr("Website")
-            value: "bitcoincore.org"
-            link: "https://bitcoincore.org"
-            onActivated: function (link) {
-                root.lastExampleLink = link;
-            }
-        }
-
-        LinkRow {
-            objectName: "designSystemSourceRow"
-            Layout.fillWidth: true
-            title: qsTr("Source code")
-            value: "github.com/bitcoin/bitcoin"
-            link: "https://github.com/bitcoin/bitcoin"
-            onActivated: function (link) {
-                root.lastExampleLink = link;
-            }
-        }
-
-        ValueRow {
-            objectName: "designSystemVersionRow"
-            Layout.fillWidth: true
-            title: qsTr("Version")
-            value: "v31.99.0-unk"
-            showDivider: false
-        }
-    }
-
-    FormSection {
-        objectName: "designSystemFieldSection"
-        Layout.fillWidth: true
-        title: qsTr("Inline fields and details")
-        description: qsTr("Use compact trailing editors for short values and body content for long details.")
-
-        TextFieldRow {
-            objectName: "designSystemBlockStorageRow"
-            fieldObjectName: "designSystemBlockStorageField"
-            Layout.fillWidth: true
-            title: qsTr("Block storage limit (GB)")
-            fieldWidth: 72
-            text: root.exampleBlockStorageLimit
-            validator: IntValidator {
-                bottom: 1
-            }
-            onTextEdited: function (text) {
-                root.exampleBlockStorageLimit = text;
-            }
-        }
-
-        TextFieldRow {
-            objectName: "designSystemProxyLocationRow"
-            fieldObjectName: "designSystemProxyLocationField"
-            Layout.fillWidth: true
-            title: qsTr("Proxy location")
-            fieldWidth: 200
-            text: root.exampleProxyAddress
-            onTextEdited: function (text) {
-                root.exampleProxyAddress = text;
-            }
-        }
-
-        FormRow {
-            objectName: "designSystemDataDirectoryRow"
-            Layout.fillWidth: true
-            title: qsTr("Data directory")
-            supportingText: qsTr("Selected before startup. The data directory cannot be changed while the node is running.")
-            showDivider: false
-            bodyItem: CoreText {
-                objectName: "designSystemDataDirectoryValue"
+                objectName: "designSystemMotionModePicker"
                 Layout.fillWidth: true
-                text: "/Users/example/Bitcoin"
-                color: Theme.color.neutral7
-                font: Theme.text.caption.font
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
-                horizontalAlignment: Text.AlignLeft
-                wrap: true
-            }
-        }
-    }
-
-    // ── Typography ──────────────────────────────────────────
-    Text {
-        Layout.topMargin: 8
-        Layout.fillWidth: true
-        font: Theme.text.title.font
-        color: Theme.color.neutral9
-        text: qsTr("Typography")
-    }
-
-    // Positioners keep changing Repeater delegates out of the Qt 6.4 layout engine.
-    Column {
-        id: typographyColumn
-        Layout.fillWidth: true
-        spacing: root.contentSpacing
-
-        Repeater {
-            model: root.typographyRoles
-            delegate: ColumnLayout {
-                id: typographySample
-                required property var modelData
-                width: typographyColumn.width
-                spacing: 4
-
-                Text {
-                    Layout.fillWidth: true
-                    font: Theme.text[typographySample.modelData.name].font
-                    lineHeight: Theme.text[typographySample.modelData.name].lineHeight
-                    lineHeightMode: Text.FixedHeight
-                    color: Theme.color.neutral9
-                    text: typographySample.modelData.name
-                    elide: Text.ElideRight
-                }
-                Text {
-                    Layout.fillWidth: true
-                    font: Theme.text.caption.font
-                    color: Theme.color.neutral6
-                    text: Theme.text[typographySample.modelData.name].family + " " + Theme.text[typographySample.modelData.name].styleName + " · " + Theme.text[typographySample.modelData.name].pixelSize + "/" + Theme.text[typographySample.modelData.name].lineHeight + " · " + typographySample.modelData.group
-                }
-                Rectangle {
-                    Layout.topMargin: 8
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: Theme.color.neutral3
+                implicitWidth: 260
+                model: root.motionModes
+                currentIndex: Math.max(0, root.motionModes.indexOf(Theme.motion.mode))
+                onSelected: function(index, option) {
+                    Theme.motion.mode = option
                 }
             }
         }
-    }
 
-    // ── Colors ──────────────────────────────────────────────
-    Text {
-        Layout.topMargin: 16
-        Layout.fillWidth: true
-        font: Theme.text.title.font
-        color: Theme.color.neutral9
-        text: qsTr("Colors")
-    }
-    Text {
-        Layout.fillWidth: true
-        font: Theme.text.caption.font
-        color: Theme.color.neutral6
-        text: qsTr("Palette tokens for the active theme. Toggle Theme to compare.")
-        wrapMode: Text.WordWrap
-    }
-
-    Grid {
-        id: paletteGrid
-        Layout.fillWidth: true
-        columns: 2
-        columnSpacing: 12
-        rowSpacing: 8
-
-        Repeater {
-            model: root.paletteTokens
-            delegate: RowLayout {
-                id: paletteSample
-                required property string modelData
-                width: Math.max(0, (paletteGrid.width - paletteGrid.columnSpacing) / paletteGrid.columns)
-                spacing: 10
-
-                Rectangle {
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
-                    radius: 4
-                    color: Theme.color[paletteSample.modelData]
-                    border.color: Theme.color.neutral4
-                    border.width: 1
+        FormRow {
+            objectName: "designSystemTextSizeRow"
+            Layout.fillWidth: true
+            stacksTrailingItem: root.stacksControls
+            title: "Text size"
+            description: "The Display text size setting, to check every role and control at each size."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemTextSizePicker"
+                Layout.fillWidth: true
+                implicitWidth: 360
+                model: Theme.textScales.map(function(scale) { return Math.round(scale * 100) + "%" })
+                currentIndex: Math.max(0, Theme.textScales.indexOf(Theme.textScale))
+                onSelected: function(index, option) {
+                    Theme.textScale = Theme.textScales[index]
                 }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    Text {
-                        Layout.fillWidth: true
-                        font: Theme.text.description.font
-                        color: Theme.color.neutral9
-                        text: paletteSample.modelData
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        font: Theme.text.caption.font
-                        color: Theme.color.neutral6
-                        text: Theme.color[paletteSample.modelData].toString().toUpperCase()
-                    }
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemDeviceRow"
+            Layout.fillWidth: true
+            stacksTrailingItem: root.stacksControls
+            title: "Device"
+            description: "Mobile lowers the window's minimum width to 360 so you can narrow it and check compact layouts, such as the settings split view. It stays on until you switch back."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemDevicePicker"
+                Layout.fillWidth: true
+                implicitWidth: 260
+                model: root.devices
+                currentIndex: SizeClass.mobilePreview ? 1 : 0
+                onSelected: function(index, option) {
+                    SizeClass.mobilePreview = index === 1
+                }
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemPageWidthRow"
+            Layout.fillWidth: true
+            stacksTrailingItem: root.stacksControls
+            title: "Page width"
+            description: "Lay the pages out as on a window this wide, to check compact and regular layouts."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemPageWidthPicker"
+                Layout.fillWidth: true
+                implicitWidth: 260
+                model: root.previewWidths
+                currentIndex: Math.max(0, root.previewWidths.findIndex(function(option) {
+                    return option.value === root.previewWidth
+                }))
+                onSelected: function(index, option) {
+                    root.previewWidth = option.value
                 }
             }
         }
     }
 
-    Item {
-        Layout.preferredHeight: 24
+    DesignSystemPageList {
+        objectName: "designSystemFoundationsSection"
+        title: "Foundations"
+        description: "The tokens every control is built from."
+        pages: root.foundations
+        onOpened: function(page) { root.openPage(page) }
     }
+
+    DesignSystemPageList {
+        objectName: "designSystemComponentsSection"
+        title: "Components"
+        description: "Every shared control in each of its states, grouped by what it's for."
+        pages: root.componentGroups
+        onOpened: function(page) { root.openPage(page) }
+    }
+
+    Component {
+        id: sectionPage
+
+        DesignSystemSectionPage {
+            onBack: root.StackView.view.pop()
+        }
+    }
+
+    Component { id: colorsSection; DesignSystemColors { objectName: "designSystemColorsSection" } }
+    Component { id: typographySection; DesignSystemTypography { objectName: "designSystemTypographySection" } }
+    Component { id: motionSection; DesignSystemMotion { objectName: "designSystemMotionSection" } }
+    Component { id: layoutSection; DesignSystemLayout { objectName: "designSystemLayoutSection" } }
+    Component { id: buttonsSection; DesignSystemButtons { objectName: "designSystemButtonsSection" } }
+    Component { id: selectionSection; DesignSystemSelection { objectName: "designSystemSelectionSection" } }
+    Component { id: fieldsSection; DesignSystemFields { objectName: "designSystemFieldsSection" } }
+    Component { id: rowsSection; DesignSystemRows { objectName: "designSystemRowsSection" } }
+    Component { id: navigationSection; DesignSystemNavigation { objectName: "designSystemNavigationSection" } }
+    Component { id: feedbackSection; DesignSystemFeedback { objectName: "designSystemFeedbackSection" } }
+    Component { id: menusSection; DesignSystemMenus { objectName: "designSystemMenusSection" } }
+    Component { id: dataDisplaySection; DesignSystemDataDisplay { objectName: "designSystemDataDisplaySection" } }
 }

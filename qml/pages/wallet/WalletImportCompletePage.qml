@@ -31,58 +31,25 @@ OnboardingView {
 
     childView: FormSection {
         objectName: "importWalletInfoSection"
-        isOnSurface: true
-        showGradientBorder: false
+        surfaceLevel: 1
         rowSpacing: 0
 
-        KeyValueRow {
+        ValueRow {
             Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            Layout.topMargin: 16
-            Layout.bottomMargin: 12
-            key: CoreText {
-                text: qsTr("Wallet name")
-                color: Theme.color.neutral7
-                font: Theme.text.body.font
-            }
-            value: CoreText {
-                objectName: "importWalletSuccessWalletName"
-                text: walletController.lastImportedWalletName.length > 0
-                    ? walletController.lastImportedWalletName : qsTr("Unknown")
-                color: Theme.color.neutral9
-                font: Theme.text.subheading.font
-                wrap: true
-                horizontalAlignment: Text.AlignRight
-            }
+            title: qsTr("Wallet name")
+            valueObjectName: "importWalletSuccessWalletName"
+            value: walletController.lastImportedWalletName.length > 0
+                ? walletController.lastImportedWalletName : qsTr("Unknown")
+            valueWrap: true
         }
-        Separator {
-            objectName: "importWalletInfoSeparator"
+        ValueRow {
             Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            color: Theme.color.neutral3
-        }
-        KeyValueRow {
-            Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            Layout.topMargin: 12
-            Layout.bottomMargin: 16
-            key: CoreText {
-                text: qsTr("Key scheme")
-                color: Theme.color.neutral7
-                font: Theme.text.body.font
-            }
-            value: CoreText {
-                objectName: "importWalletSuccessKeyScheme"
-                text: walletController.lastImportedWalletKeyScheme.length > 0
-                    ? walletController.lastImportedWalletKeyScheme : qsTr("Unknown")
-                color: Theme.color.neutral9
-                font: Theme.text.subheading.font
-                wrap: true
-                horizontalAlignment: Text.AlignRight
-            }
+            title: qsTr("Key scheme")
+            valueObjectName: "importWalletSuccessKeyScheme"
+            value: walletController.lastImportedWalletKeyScheme.length > 0
+                ? walletController.lastImportedWalletKeyScheme : qsTr("Unknown")
+            valueWrap: true
+            showDivider: false
         }
     }
 }

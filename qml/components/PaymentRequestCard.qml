@@ -49,10 +49,10 @@ Pane {
     implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
     background: Rectangle {
         visible: root.modalView
-        radius: 16
-        color: Theme.color.neutral1
+        radius: Theme.radius.sheet
+        color: Theme.color.surface1
         border.width: 1
-        border.color: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+        border.color: Theme.color.surfaceDivider
         SurfaceGradientBorder {
             anchors.fill: parent
             surfaceColor: parent.color
@@ -160,10 +160,17 @@ Pane {
         clipboard.setText(request.qrPayload)
     }
 
+    // A menu action that fails reports in an alert; the card's
+    // inline error is for its own fields and buttons.
+    function showActionFailure(title, message) {
+        actionFailurePopup.title = title
+        actionFailurePopup.message = message
+        actionFailurePopup.open()
+    }
     function captureQR(callback) {
         if (!sharing || !request.qrPayload) return false
         if (qrImage.status !== Image.Ready) {
-            actionErrorText = qsTr("The QR code is not ready. Please try again.")
+            showActionFailure(qsTr("QR code not ready"), qsTr("The QR code is not ready. Please try again."))
             return false
         }
         const requestId = request.id
@@ -175,7 +182,9 @@ Pane {
     }
     function copyQR() {
         return captureQR(function(result) {
-            if (!root.clipboard.setImage(result.image)) root.actionErrorText = qsTr("The QR code could not be copied. Please try again.")
+            if (!root.clipboard.setImage(result.image)) {
+                root.showActionFailure(qsTr("QR code not copied"), qsTr("The QR code could not be copied. Please try again."))
+            }
         })
     }
     // What the QR save dialog would export right now. The dialog is tied to
@@ -196,20 +205,35 @@ Pane {
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
             if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
-                root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
+                root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
         })
     }
+    // Asks first; the request is deleted once the user confirms.
     function deleteRequest() {
         if (!wallet || !saved) return false
-        const requestId = request.id
-        if (!wallet.removeReceiveRequest(requestId)) {
-            actionErrorText = qsTr("The payment request could not be deleted. Please try again.")
-            return false
-        }
-        // Discard local edits so closing the modal cannot try to save a deleted request.
-        resetFields()
-        deleted(requestId)
+        deleteConfirmation.confirmDelete(wallet, request.id)
         return true
+    }
+
+    AlertPopup {
+        id: actionFailurePopup
+        objectName: "requestPaymentActionFailurePopup"
+        messageObjectName: "requestPaymentActionFailureMessage"
+
+        AlertAction {
+            text: qsTr("OK")
+            buttonObjectName: "requestPaymentActionFailureCloseButton"
+        }
+    }
+
+    PaymentRequestDeleteConfirmation {
+        id: deleteConfirmation
+        objectName: "requestPaymentDeleteConfirmation"
+        onDeleted: function(requestId) {
+            // Discard local edits so closing the modal cannot try to save a deleted request.
+            root.resetFields()
+            root.deleted(requestId)
+        }
     }
 
     BitcoinAmount {
@@ -275,7 +299,7 @@ Pane {
                     model: [
                         { text: qsTr("Amount"), value: "amount", objectName: "requestPaymentShowAmount" },
                         { text: qsTr("Message"), value: "message", objectName: "requestPaymentShowMessage" },
-                        { text: qsTr("Recipient Name"), value: "recipient", objectName: "requestPaymentShowRecipientName" }
+                        { text: qsTr("Recipient name"), value: "recipient", objectName: "requestPaymentShowRecipientName" }
                     ]
                     onActivated: function(value) {
                         if (value === "amount") root.showAmount = !root.showAmount
@@ -293,26 +317,24 @@ Pane {
         CoreText {
             objectName: "requestPaymentNoteRecommendation"
             text: qsTr("Recommended")
-            font: Theme.text.caption.font
-            lineHeight: Theme.text.caption.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.caption
             color: Theme.color.neutral6
             wrap: false
         }
     }
 
     contentItem: ColumnLayout {
-        spacing: 16
+        spacing: Theme.space.l
         RowLayout {
             visible: root.modalView
             Layout.fillWidth: true
-            Layout.bottomMargin: 8
+            Layout.bottomMargin: Theme.space.m
             spacing: 10
             CoreText {
                 objectName: "requestPaymentTitle"
                 Layout.fillWidth: true
                 text: qsTr("Payment request")
-                font: Theme.text.title.font
+                textStyle: Theme.text.subtitle
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
@@ -321,49 +343,27 @@ Pane {
                 objectName: "paymentRequestMoreButton"
                 circular: true
                 size: 30
-                iconSize: 24
                 iconColor: Theme.color.neutral7
                 activeIconColor: Theme.color.neutral8
-                isOnSurface: true
+                surfaceLevel: 1
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
-                ContextMenu {
+                PaymentRequestActionsMenu {
                     id: moreMenu
                     objectName: "paymentRequestMoreMenu"
                     x: moreButton.width - width
                     y: moreButton.height + 8
-                    ContextMenuButton {
-                        objectName: "requestPaymentCopyQRMenuButton"
-                        visible: !root.paymentReceived
-                        enabled: root.sharing
-                        text: qsTr("Copy QR code")
-                        onTriggered: root.copyQR()
-                    }
-                    ContextMenuButton {
-                        objectName: "requestPaymentSaveQRMenuButton"
-                        visible: !root.paymentReceived
-                        enabled: root.sharing
-                        text: qsTr("Save QR code")
-                        onTriggered: root.openSaveQRDialog()
-                    }
-                    ContextMenuDivider { visible: !root.paymentReceived }
-                    ContextMenuButton {
-                        objectName: "requestPaymentAgainMenuButton"
-                        text: qsTr("Request again")
-                        onTriggered: root.requestAgain(root.request.id)
-                    }
-                    ContextMenuDivider {}
-                    ContextMenuButton {
-                        objectName: "requestPaymentDeleteMenuButton"
-                        text: qsTr("Delete payment request")
-                        role: ContextMenuButton.Destructive
-                        onTriggered: root.deleteRequest()
-                    }
+                    showsQrActions: !root.paymentReceived
+                    qrActionsEnabled: root.sharing
+                    showsRequestAgain: true
+                    onCopyQrRequested: root.copyQR()
+                    onSaveQrRequested: root.openSaveQRDialog()
+                    onRequestAgainRequested: root.requestAgain(root.request.id)
+                    onDeleteRequested: root.deleteRequest()
                 }
             }
             CloseButton {
                 objectName: "paymentRequestModalClose"
-                iconColor: Theme.color.neutral7
                 Accessible.name: qsTr("Close payment request")
                 onClicked: root.closeRequested()
             }
@@ -373,14 +373,15 @@ Pane {
             visible: root.modalView
             Layout.fillWidth: true
             Layout.maximumWidth: Infinity
-            spacing: 8
+            spacing: Theme.space.m
             TransactionSummary {
                 objectName: "requestPaymentReceivedSummary"
                 visible: root.paymentReceived
                 Layout.fillWidth: true
                 Layout.maximumWidth: Infinity
-                Layout.bottomMargin: 4
+                Layout.bottomMargin: Theme.space.xs
                 amount: receivedAmount.displayWithUnit
+                hidesAmount: true
                 iconComponent: ActivityIcon {
                     objectName: "requestPaymentReceivedIcon"
                     paymentRequest: true
@@ -396,18 +397,18 @@ Pane {
                 Layout.preferredHeight: 184
                 Layout.alignment: Qt.AlignHCenter
                 radius: 10
-                color: "white"
+                color: Theme.color.qrBackground
                 QRImage {
                     id: qrImage
                     objectName: "requestPaymentQRImage"
                     anchors.fill: parent
-                    anchors.margins: 16
+                    anchors.margins: Theme.space.l
                     visible: root.sharing
                     opacity: root.sharing ? 1 : 0
                     code: root.sharing && root.request ? root.request.qrPayload : ""
-                    backgroundColor: "white"
-                    foregroundColor: "black"
-                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                    backgroundColor: Theme.color.qrBackground
+                    foregroundColor: Theme.color.qrForeground
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
                 }
                 MouseArea {
                     objectName: "requestPaymentQRContextArea"
@@ -431,7 +432,7 @@ Pane {
                     }
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextSave"
-                        text: qsTr("Save QR code")
+                        text: qsTr("Save QR code…")
                         enabled: root.sharing
                         onTriggered: root.openSaveQRDialog()
                     }
@@ -442,52 +443,43 @@ Pane {
                 visible: root.saved && !!root.request.createdIso
                 Layout.fillWidth: true
                 Layout.topMargin: root.sharing ? 4 : 0
-                text: visible ? qsTr("Created %1").arg(Qt.formatDateTime(new Date(root.request.createdIso), "MMM d, h:mm AP")) : ""
-                font: Theme.text.caption.font
+                text: visible ? qsTr("Created %1").arg(new Date(root.request.createdIso).toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }
-            Rectangle {
+            StatusPill {
+                objectName: "paymentRequestStatus"
                 visible: root.saved
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: statusLabel.implicitWidth + 24
-                implicitHeight: 30
-                radius: 15
-                color: Qt.rgba(statusLabel.color.r, statusLabel.color.g, statusLabel.color.b, 0.14)
-                CoreText {
-                    id: statusLabel
-                    objectName: "paymentRequestStatus"
-                    anchors.centerIn: parent
-                    text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
-                    color: root.paymentReceived ? Theme.color.green : Theme.color.lavender
-                    font: Theme.text.captionStrong.font
-                }
+                showDot: false
+                text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
+                accentColor: root.paymentReceived ? Theme.color.success : Theme.color.paymentRequest
             }
             AddressLabel {
                 objectName: "requestPaymentAddressText"
                 Layout.fillWidth: true
-                Layout.topMargin: 8
+                Layout.topMargin: Theme.space.m
                 address: root.request ? root.request.address : ""
                 textStyle: Theme.text.monoDescription
                 interactive: !root.saved || root.sharing
                 clipboard: root.clipboard
-                embedded: true
+                surfaceLevel: 2
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.m
             FormSection {
                 objectName: "requestPaymentFieldsSection"
                 Layout.fillWidth: true
                 //: Heading for the amount, recipient name, and message included in a payment request.
                 title: root.modalView ? "" : qsTr("Payment details")
                 headerTrailingItem: root.modalView ? null : customizationControl
-                isOnSurface: root.modalView
+                surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
-                showGradientBorder: false
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
@@ -496,16 +488,17 @@ Pane {
                         Layout.fillWidth: true
                         title: qsTr("Address type")
                         titleTextStyle: Theme.text.description
-                        titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
-                        valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
+                        titleColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral7
+                        valueColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral9
                         minimumRowHeight: 56
                         value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                         showDivider: true
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                     }
                     PaymentRequestField {
                         id: amountInput
                         objectName: "requestPaymentAmountField"
+                        hidesAmount: root.saved
                         visible: root.modalView || root.showAmount
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
@@ -515,7 +508,7 @@ Pane {
                         fieldObjectName: "requestPaymentAmountInput"
                         editable: !root.paymentReceived
                         showDivider: labelInput.visible || messageInput.visible
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                         fieldTextStyle: Theme.text.monoDescription
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
                         maximumLength: 32
@@ -537,7 +530,7 @@ Pane {
                         Layout.fillWidth: true
                         label: qsTr("Pay to")
                         showDivider: messageInput.visible
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                         value: root.request ? root.request.label : ""
                         placeholderText: qsTr("Your name or business")
                         fieldObjectName: "requestPaymentYourNameInput"
@@ -577,9 +570,9 @@ Pane {
                 objectName: "requestPaymentDetailsFooter"
                 visible: !root.modalView && root.hasPublicFields
                 Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                spacing: 6
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                spacing: Theme.space.s
                 Icon {
                     Layout.preferredWidth: 13
                     Layout.preferredHeight: 13
@@ -591,9 +584,7 @@ Pane {
                     Layout.fillWidth: true
                     //: Footer explaining that the payment details above are shared with the person paying.
                     text: qsTr("These details appear in the payment link and QR code.")
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
@@ -605,22 +596,20 @@ Pane {
             visible: !root.modalView
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            Layout.topMargin: 8
-            Layout.bottomMargin: 8
-            color: Theme.color.neutral2
+            Layout.topMargin: Theme.space.m
+            Layout.bottomMargin: Theme.space.m
         }
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.m
 
             FormSection {
                 objectName: "requestPaymentNoteSection"
                 Layout.fillWidth: true
                 title: root.modalView ? "" : qsTr("Private details")
                 headerTrailingItem: root.modalView ? null : noteRecommendation
-                isOnSurface: root.modalView
+                surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
-                showGradientBorder: false
 
                 PaymentRequestField {
                     id: noteInput
@@ -638,9 +627,9 @@ Pane {
                 objectName: "requestPaymentNoteFooter"
                 visible: !root.modalView
                 Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                spacing: 6
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                spacing: Theme.space.s
 
                 Icon {
                     Layout.preferredWidth: 13
@@ -652,9 +641,7 @@ Pane {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Your note stays in this wallet. Only you can see it.")
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
@@ -666,12 +653,12 @@ Pane {
             visible: root.errorText.length > 0
             Layout.fillWidth: true
             text: root.errorText
-            color: Theme.color.red
-            font: Theme.text.caption.font
+            color: Theme.color.dangerText
+            textStyle: Theme.text.caption
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }
-        TextButton {
+        LinkButton {
             visible: !root.modalView && !!root.wallet && !!root.wallet.receivingAddress
                 && (root.wallet.receivingAddress.address === "" || root.wallet.receivingAddress.paymentReceived)
             Layout.alignment: Qt.AlignHCenter
@@ -679,7 +666,7 @@ Pane {
             text: qsTr("Try again")
             onClicked: root.retryAddressRequested()
         }
-        ContinueButton {
+        PrimaryButton {
             objectName: "requestPaymentGenerateButton"
             visible: !root.saved
             Layout.topMargin: root.modalView ? 0 : 16
@@ -689,7 +676,7 @@ Pane {
             text: qsTr("Create payment request")
             onClicked: root.createRequest()
         }
-        ContinueButton {
+        PrimaryButton {
             objectName: "requestPaymentUpdateButton"
             visible: root.saved && root.modified
             Layout.fillWidth: true
@@ -699,8 +686,9 @@ Pane {
                 ? qsTr("Checking payments…") : qsTr("Update payment request")
             onClicked: root.saveFields()
         }
-        OutlineButton {
+        NeutralButton {
             objectName: "requestPaymentCopyButton"
+            buttonSize: NeutralButton.Large
             visible: root.saved && !root.modified && !root.paymentReceived
             enabled: root.sharing
             Layout.fillWidth: true

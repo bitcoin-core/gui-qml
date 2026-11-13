@@ -16,7 +16,7 @@ Item {
         radius: width / 2
         color: "transparent"
         border.width: 2
-        border.color: Theme.color.green
+        border.color: Theme.color.success
         readonly property real pulse: Math.max(0, (checkCanvas.progress - 0.55) / 0.45)
         scale: 1 + pulse * 0.28
         opacity: Math.sin(pulse * Math.PI) * 0.35
@@ -25,7 +25,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: width / 2
-        color: Theme.color.green
+        color: Theme.color.success
     }
     Canvas {
         id: checkCanvas
@@ -45,7 +45,7 @@ Item {
             // legible throughout rather than collapsing the circle to a point.
             ctx.beginPath()
             ctx.arc(20, 20, 16, -Math.PI / 2 + progress * Math.PI * 2, Math.PI * 1.5)
-            ctx.strokeStyle = Theme.color.white
+            ctx.strokeStyle = Theme.color.accentForeground
             ctx.lineWidth = 3
             ctx.lineCap = "round"
             ctx.globalAlpha = 1 - progress
@@ -63,7 +63,7 @@ Item {
                            start[1] + (end[1] - start[1]) * fraction)
                 remaining -= length
             }
-            ctx.strokeStyle = Theme.color.white
+            ctx.strokeStyle = Theme.color.accentForeground
             ctx.lineWidth = 5
             ctx.lineCap = "round"
             ctx.lineJoin = "round"
@@ -71,8 +71,18 @@ Item {
         }
     }
 
+    // Under reduced motion the badge appears complete, without the staged entrance.
+    Component.onCompleted: {
+        if (Theme.motion.reduced) {
+            opacity = 1
+            checkCanvas.progress = 1
+        } else {
+            entrance.start()
+        }
+    }
+
     SequentialAnimation {
-        running: true
+        id: entrance
         NumberAnimation { target: root; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
         NumberAnimation { target: checkCanvas; property: "progress"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
     }

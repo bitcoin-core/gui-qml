@@ -35,9 +35,6 @@ ColumnLayout {
         return !root.hasStorageResult || root.availableGB >= requiredGB
     }
 
-    ButtonGroup {
-        id: group
-    }
     spacing: 10
     CoreText {
         objectName: "storagePruneCommandLineInfo"
@@ -45,19 +42,18 @@ ColumnLayout {
         visible: !root.storageOptionsEditable && root.pruneSetting.infoText.length > 0
         text: root.pruneSetting.infoText
         color: Theme.color.neutral7
-        font.pixelSize: 15
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
     OptionButton {
         objectName: "storageReduceOption"
         Layout.fillWidth: true
-        ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Reduce storage")
         description: qsTr("Uses about %1GB. For regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
         recommended: root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
-        checked: root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
+        selected: root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
         onClicked: {
             root.storageSelectionChanged(root.showCustomOption, root.effectiveCustomStorageAmount)
             root.pruneSetting.enabled = true
@@ -67,10 +63,9 @@ ColumnLayout {
     OptionButton {
         objectName: "storageFullOption"
         Layout.fillWidth: true
-        ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Store all data")
-        checked: !root.pruneSetting.enabled
+        selected: !root.pruneSetting.enabled
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.fullRequiredGB)
         recommended: root.storageOptionsEditable && root.settingsModel.storageEnoughForFull
@@ -85,9 +80,8 @@ ColumnLayout {
         visible: active
         sourceComponent: OptionButton {
             objectName: "storageCustomOption"
-            ButtonGroup.group: group
-            surfaceSelectionStyle: true
-            checked: root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
+                surfaceSelectionStyle: true
+            selected: root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
             text: qsTr("Custom")
             description: qsTr("Storing recent blocks up to %1 GB.").arg(root.effectiveCustomStorageAmount)
             enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.customRequiredGB)

@@ -26,7 +26,7 @@ OnboardingView {
     readonly property string storageErrorText: root.settingsModel.storageErrorText || ""
     readonly property bool hasStorageResult: root.storageAvailableText.length > 0 && !root.storageCheckPending
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false
@@ -49,8 +49,8 @@ OnboardingView {
             Layout.fillWidth: true
             visible: text.length > 0
             text: root.storageErrorText.length > 0 ? root.storageErrorText : root.storageWarningText
-            color: root.storageErrorText.length > 0 ? Theme.color.red : Theme.color.neutral7
-            font: Theme.text.caption.font
+            color: root.storageErrorText.length > 0 ? Theme.color.dangerText : Theme.color.neutral7
+            textStyle: Theme.text.caption
             wrap: true
             horizontalAlignment: Text.AlignHCenter
         }

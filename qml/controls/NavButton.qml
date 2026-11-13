@@ -10,50 +10,39 @@ import org.bitcoincore.qt 1.0
 
 AbstractButton {
     id: root
-    property int iconHeight: 30
-    property int iconWidth: 30
+    // One back-caret size across top bars.
+    property int iconHeight: Theme.size.icon.xl
+    property int iconWidth: Theme.size.icon.xl
+    property string iconObjectName: ""
+    readonly property bool iconOnly: !text_background.active && button_background.active
     property bool bold: true
     property bool busy: false
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
-    property int textSize: textStyle.pixelSize
-    property int textFontPixelSize: textSize
-    property string textFontStyleName: textStyle.styleName
     property url iconSource: ""
-    property Rectangle iconBackground: null
-    property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.neutral2
-    hoverEnabled: AppMode.isDesktop
-    topPadding: text_background.active ? 7 : 14
-    bottomPadding: text_background.active ? 7 : 14
-    rightPadding: text_background.active ? 22 : 14
-    leftPadding: text_background.active ? 2 : 14
-    background: Rectangle {
+    property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    hoverEnabled: AppMode.isDesktop && !busy
+    // An icon-only button is a square Theme.size.iconButton target.
+    topPadding: text_background.active ? 7 : iconOnly ? (Theme.size.iconButton - iconHeight) / 2 : 14
+    bottomPadding: topPadding
+    rightPadding: text_background.active ? 22 : iconOnly ? (Theme.size.iconButton - iconWidth) / 2 : 14
+    leftPadding: text_background.active ? 2 : iconOnly ? rightPadding : 14
+
+    HoverHandler {
+        enabled: root.enabled && root.hoverEnabled
+        cursorShape: Qt.PointingHandCursor
+    }
+
+    background: StateBackground {
         id: bg
         height: root.height
         width: root.width
-        radius: 5
-        state:"DEFAULT"
-
-        states: [
-            State {
-                name: "DEFAULT"
-                PropertyChanges { target: bg; color: Theme.color.background }
-            },
-            State {
-                name: "HOVER"
-                PropertyChanges { target: bg; color: Theme.color.neutral2 }
-            },
-            State {
-                name: "PRESSED"
-                PropertyChanges { target: bg; color: Theme.color.neutral3 }
-            }
-        ]
+        radius: Theme.radius.s
+        stateColor: root.down ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover
+            : "transparent"
 
         FocusBorder {
             visible: root.visualFocus
-        }
-
-        Behavior on color {
-            ColorAnimation { duration: 150 }
         }
     }
     contentItem: RowLayout {
@@ -65,21 +54,12 @@ AbstractButton {
            id: button_background
            active: root.iconSource.toString().length > 0
            visible: active
-           sourceComponent: Button {
-               id: icon_button
-               padding: 0
-               display: AbstractButton.IconOnly
-               height: root.iconHeight
-               width: root.iconWidth
-               icon.source: root.iconSource
-               icon.color: root.iconColor
-               icon.height: root.iconHeight
+           sourceComponent: Icon {
+               objectName: root.iconObjectName
+               source: root.iconSource
+               color: root.iconColor
+               size: root.iconHeight
                icon.width: root.iconWidth
-               background: root.iconBackground
-
-               Behavior on icon.color {
-                   ColorAnimation { duration: 150 }
-               }
            }
         }
         Item {
@@ -95,38 +75,14 @@ AbstractButton {
             id: text_background
             active: root.text.length > 0 && !root.busy
             visible: active
-            sourceComponent: AbstractButton {
-                id: container
+            sourceComponent: CoreText {
                 topPadding: button_background.active ? 0 : 4
                 bottomPadding: button_background.active ? 0 : 4
-                rightPadding: 0
                 leftPadding: button_background.active ? 0 : 20
-                contentItem: CoreText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    fontStyleName: root.textFontStyleName
-                    font.pixelSize: root.textFontPixelSize
-                    text: root.text
-                }
+                textStyle: root.textStyle
+                text: root.text
+                Accessible.ignored: true
             }
-        }
-    }
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: AppMode.isDesktop && root.enabled && !root.busy
-        enabled: root.enabled && !root.busy
-        cursorShape: root.enabled && root.hoverEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onEntered: {
-            root.background.state = "HOVER"
-        }
-        onExited: {
-            root.background.state = "DEFAULT"
-        }
-        onPressed: {
-            root.background.state = "PRESSED"
-        }
-        onReleased: {
-            root.background.state = "DEFAULT"
-            root.clicked()
         }
     }
 }

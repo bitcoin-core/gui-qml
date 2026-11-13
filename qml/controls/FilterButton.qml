@@ -13,13 +13,13 @@ AbstractButton {
     property bool active: false
     property int count: 0
     property color inactiveIconColor: Theme.color.neutral6
-    property color activeIconColor: Theme.color.white
-    property color activeBackgroundColor: Theme.color.orange
-    property color backgroundColor: Theme.color.neutral1
-    property color hoverBackgroundColor: Theme.color.neutral2
-    property int size: 36
-    property int iconSize: 24
-    property int transitionDuration: 140
+    property color activeIconColor: Theme.color.activeForeground
+    property color activeBackgroundColor: Theme.color.activeFill
+    property color backgroundColor: Theme.color.surface1
+    property color hoverBackgroundColor: Theme.color.surface2
+    property int size: Theme.size.control
+    property int iconSize: Theme.size.icon.xl
+    property int transitionDuration: Theme.motion.normal
     property real minimizedIconScale: 0.72
     readonly property Item iconItem: active ? activeFilterIcon : inactiveFilterIcon
     readonly property alias inactiveIconItem: inactiveFilterIcon
@@ -42,10 +42,10 @@ AbstractButton {
         cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
-    background: Rectangle {
+    background: StateBackground {
         // A disabled button keeps hover tracking, so gate the feedback on
         // enabled like the icon does.
-        color: root.active ? root.activeBackgroundColor
+        stateColor: root.active ? root.activeBackgroundColor
             : root.enabled && (root.hovered || root.down) ? root.hoverBackgroundColor
             : root.backgroundColor
         radius: 6
@@ -53,7 +53,7 @@ AbstractButton {
         FocusBorder {
             objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
-            borderRadius: 9
+            targetRadius: parent.radius
         }
     }
 
@@ -76,7 +76,7 @@ AbstractButton {
     }
 
     contentItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
         Item {
             Layout.leftMargin: (root.size - root.iconSize) / 2
             Layout.preferredWidth: root.iconSize
@@ -89,9 +89,9 @@ AbstractButton {
                 anchors.centerIn: parent
                 property color color: root.enabled
                     ? root.hovered || root.down
-                        ? Theme.color.orange
+                        ? Theme.color.neutral9
                         : root.inactiveIconColor
-                    : Theme.color.neutral4
+                    : Theme.color.disabledContent
                 property int size: root.iconSize
                 width: size
                 height: size
@@ -102,18 +102,21 @@ AbstractButton {
                 scale: root.active ? root.minimizedIconScale : 1
 
                 Behavior on color {
-                    ColorAnimation { duration: 150 }
+                    enabled: Theme.motion.animated
+                    ColorAnimation { duration: Theme.motion.normal }
                 }
                 Behavior on opacity {
+                    enabled: Theme.motion.animated
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
                 Behavior on scale {
+                    enabled: !Theme.motion.reduced
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
             }
@@ -123,7 +126,7 @@ AbstractButton {
                 id: activeFilterIcon
                 objectName: root.objectName.length > 0 ? root.objectName + "ActiveIcon" : ""
                 anchors.centerIn: parent
-                property color color: root.enabled ? root.activeIconColor : Theme.color.neutral4
+                property color color: root.enabled ? root.activeIconColor : Theme.color.disabledContent
                 property int size: root.iconSize
                 width: size
                 height: size
@@ -134,18 +137,21 @@ AbstractButton {
                 scale: root.active ? 1 : root.minimizedIconScale
 
                 Behavior on color {
-                    ColorAnimation { duration: 150 }
+                    enabled: Theme.motion.animated
+                    ColorAnimation { duration: Theme.motion.normal }
                 }
                 Behavior on opacity {
+                    enabled: Theme.motion.animated
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
                 Behavior on scale {
+                    enabled: !Theme.motion.reduced
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
             }
@@ -156,7 +162,7 @@ AbstractButton {
             visible: root.count > 0
             Layout.rightMargin: (root.size - root.iconSize) / 2
             text: root.count
-            font: Theme.text.description.font
+            textStyle: Theme.text.description
             color: root.active ? root.activeIconColor : root.inactiveIconColor
         }
         Item { Layout.fillWidth: true; visible: root.count === 0 }

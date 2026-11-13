@@ -22,15 +22,15 @@ Page {
             color: Theme.color.neutral9
             size: 60
         }
-        Header {
+        PageHeading {
             Layout.alignment: Qt.AlignCenter
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
-            header: qsTr("Saving...")
-            headerBold: true
+            title: qsTr("Saving…")
+            titleAlignment: Text.AlignHCenter
             description: qsTr("Do not shut down the computer until this is done.")
-            descriptionColor: Theme.color.neutral7
+            descriptionTextStyle: Theme.text.body
         }
     }
 }

@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
@@ -112,12 +113,13 @@ SettingsPage {
         titleAlignment: Text.AlignHCenter
     }
 
-    OutlineButton {
+    NeutralButton {
         objectName: "walletSettingsEmptyAction"
+        buttonSize: NeutralButton.Large
         visible: !root.walletLoaded
         Layout.preferredWidth: 220
         Layout.alignment: Qt.AlignHCenter
-        text: root.noWalletsAvailable ? qsTr("Add wallet") : qsTr("Select wallet")
+        text: root.noWalletsAvailable ? qsTr("Add wallet…") : qsTr("Select wallet…")
         onClicked: root.selectWalletRequested()
     }
 

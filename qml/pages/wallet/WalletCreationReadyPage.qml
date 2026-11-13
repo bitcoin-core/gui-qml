@@ -47,17 +47,6 @@ OnboardingView {
         ColumnLayout {
             spacing: 20
 
-            Separator {
-                Layout.fillWidth: true
-            }
-            CoreText {
-                Layout.fillWidth: true
-                text: qsTr("BACKUP")
-                color: Theme.color.neutral6
-                font: Theme.text.captionStrong.font
-                horizontalAlignment: Text.AlignLeft
-            }
-
             FormSection {
                 objectName: "walletCreationBackupSection"
                 Layout.fillWidth: true
@@ -80,8 +69,8 @@ OnboardingView {
                     visible: text.length > 0
                     Layout.fillWidth: true
                     text: walletController.walletLocationOpenError
-                    color: Theme.color.red
-                    font: Theme.text.caption.font
+                    color: Theme.color.dangerText
+                    textStyle: Theme.text.caption
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignLeft
                 }

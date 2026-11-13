@@ -41,21 +41,31 @@ TestCase {
         return button
     }
 
+    Component {
+        id: iconImageComponent
+        Image { width: 16; height: 16 }
+    }
+
     function test_defaultsToIconAndText() {
         const button = createButton()
         const content = findChild(button, "copyButtonContent")
         const iconContainer = findChild(button, "copyButtonIconContainer")
         const copyIcon = findChild(button, "copyButtonCopyIcon")
         const textContainer = findChild(button, "copyButtonTextContainer")
+        const image = createTemporaryObject(iconImageComponent, testWindow.contentItem, {
+            source: button.copyIconSource
+        })
+        tryCompare(image, "status", Image.Ready)
 
         compare(button.displayMode, CopyButton.IconAndText)
         compare(button.text, "Copy")
         compare(button.copied, false)
-        compare(button.iconSize, 16)
+        compare(button.iconSize, 12)
         compare(button.resetInterval, 1000)
-        compare(content.spacing, 0)
-        compare(copyIcon.size, 16)
-        compare(iconContainer.width, 18)
+        compare(content.spacing, Theme.space.xs)
+        compare(copyIcon.size, 12)
+        compare(copyIcon.source.toString(), "qrc:/icons/copy.svg")
+        compare(iconContainer.width, 14)
         compare(iconContainer.visible, true)
         compare(textContainer.visible, true)
     }
@@ -79,17 +89,32 @@ TestCase {
                 displayMode: CopyButton.IconAndText,
                 iconVisible: true,
                 textVisible: true
+            },
+            {
+                tag: "large icon and text",
+                displayMode: CopyButton.IconAndText,
+                iconSize: 24,
+                iconVisible: true,
+                textVisible: true
             }
         ]
     }
 
     function test_displayModes(data) {
-        const button = createButton({ "displayMode": data.displayMode })
+        const button = createButton({ "displayMode": data.displayMode, "iconSize": data.iconSize || 12 })
         const iconContainer = findChild(button, "copyButtonIconContainer")
         const textContainer = findChild(button, "copyButtonTextContainer")
 
         compare(iconContainer.visible, data.iconVisible)
         compare(textContainer.visible, data.textVisible)
+        if (data.iconVisible && data.textVisible) {
+            verify(waitForRendering(button))
+            const icon = findChild(button, "copyButtonCopyIcon")
+            const label = findChild(button, "copyButtonCopyText")
+            const iconCenter = icon.mapToItem(button, 0, icon.height / 2).y
+            const textCenter = label.mapToItem(button, 0, label.height / 2).y
+            verify(Math.abs(iconCenter - textCenter) < 1)
+        }
     }
 
     function test_clickShowsCopiedThenResets() {

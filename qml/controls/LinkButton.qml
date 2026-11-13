@@ -11,14 +11,17 @@ AbstractButton {
     id: root
 
     property url iconSource: ""
-    property int iconSize: 14
+    property int iconSize: Theme.size.icon.s
     property var textStyle: Theme.text.captionStrong
-    property color textColor: enabled ? Theme.color.orange : Theme.color.neutral5
+    property color textColor: !enabled ? Theme.color.disabledContent
+        : down ? Theme.color.accentTextPressed
+        : hovered ? Theme.color.accentTextHover
+        : Theme.color.accentText
 
-    implicitHeight: 28
+    implicitHeight: Theme.size.controlSmall
     implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
-    leftPadding: 4
-    rightPadding: 4
+    leftPadding: Theme.space.xs
+    rightPadding: Theme.space.xs
     hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     Accessible.name: text
@@ -26,7 +29,7 @@ AbstractButton {
     HoverHandler { cursorShape: Qt.PointingHandCursor }
 
     contentItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
         Icon {
             visible: root.iconSource.toString().length > 0
             source: root.iconSource
@@ -36,7 +39,7 @@ AbstractButton {
         CoreText {
             Layout.fillWidth: true
             text: root.text
-            font: root.textStyle.font
+            textStyle: root.textStyle
             color: root.textColor
             horizontalAlignment: Text.AlignHCenter
         }
@@ -47,6 +50,4 @@ AbstractButton {
         borderRadius: 6
     }
 
-    opacity: down ? 0.7 : hovered ? 0.85 : 1
-    Behavior on opacity { NumberAnimation { duration: 100 } }
 }

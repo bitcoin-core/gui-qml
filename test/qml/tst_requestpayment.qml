@@ -37,6 +37,37 @@ TestCase {
         }
     }
 
+    function test_saved_amount_is_concealed_until_edited_data() {
+        return [{ tag: "specified", value: "0.125" }, { tag: "unspecified", value: "" }]
+    }
+
+    function test_saved_amount_is_concealed_until_edited(data) {
+        optionsModel.hideAmounts = true
+        try {
+            const field = createTemporaryObject(paymentFieldComponent, this, {
+                hidesAmount: true, value: data.value, placeholderText: "0"
+            })
+            verify(waitForRendering(field))
+            compare(field.field.placeholderText, "")
+            compare(field.field.echoMode, TextInput.NoEcho)
+            compare(field.field.Accessible.description, "Hidden amount")
+            compare(field.value, data.value)
+            field.field.forceActiveFocus(Qt.TabFocusReason)
+            compare(field.field.echoMode, TextInput.Normal)
+            compare(field.field.placeholderText, "0")
+            compare(field.field.text, data.value)
+            field.field.focus = false
+            compare(field.field.placeholderText, "")
+            compare(field.field.echoMode, TextInput.NoEcho)
+            compare(field.value, data.value)
+            optionsModel.hideAmounts = false
+            compare(field.field.placeholderText, "0")
+            compare(field.value, data.value)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
     function test_paymentFieldImplicitWidthDoesNotDependOnAssignedWidth() {
         const field = createTemporaryObject(paymentFieldComponent, this)
         verify(field !== null)
@@ -218,6 +249,8 @@ TestCase {
         if (!card.hasFields) editField(card, "requestPaymentYourNameInput", "Request")
         card.createRequest()
         tryCompare(page.requestModal, "opened", true)
+        // Without an enter transition the window drops the next press until it renders a frame.
+        waitForRendering(page.requestModal.contentItem, 1000)
         return page.requestModal.card
     }
 
@@ -246,7 +279,7 @@ TestCase {
         verify(amountOption.selected)
         verify(messageOption.selected)
         verify(!recipientOption.selected)
-        compare(recipientOption.text, "Recipient Name")
+        compare(recipientOption.text, "Recipient name")
 
         mouseClick(recipientOption)
         verify(recipient.visible)
@@ -400,7 +433,7 @@ TestCase {
         const menu = findChild(page, "receiveAddressTypeMenu")
         tryCompare(menu, "opened", true)
         const picker = findChild(page, "receiveAddressTypePicker")
-        compare(picker.title, "Address Type")
+        compare(picker.title, "Address type")
         compare(picker.model.length, 4)
         tryVerify(function() { return picker.itemAtIndex(3) !== null })
         for (let i = 0; i < 4; ++i) {
@@ -466,7 +499,7 @@ TestCase {
         mouseClick(findChild(card, "requestPaymentQRContextArea"), 20, 20, Qt.RightButton)
         tryCompare(requestMenu, "opened", true)
         compare(findChild(card, "requestPaymentQRContextCopy").text, "Copy QR code")
-        compare(findChild(card, "requestPaymentQRContextSave").text, "Save QR code")
+        compare(findChild(card, "requestPaymentQRContextSave").text, "Save QR code…")
         card.request.paymentReceived = true
         tryCompare(requestMenu, "visible", false)
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)
@@ -499,6 +532,18 @@ TestCase {
         } finally {
             card.request.address = address
         }
+    }
+
+    function test_failed_qr_menu_action_shows_an_alert() {
+        const page = createPage()
+        const card = createRequest(page)
+        card.clipboard = { setText: function(text) {}, setImage: function(image) { return false } }
+        const popup = findChild(card, "requestPaymentActionFailurePopup")
+        tryVerify(function() { return card.copyQR(null) })
+        tryCompare(popup, "opened", true)
+        compare(popup.title, "QR code not copied")
+        compare(card.errorText, "")
+        verify(!findChild(card, "requestPaymentError").visible)
     }
 
     function test_primary_action_returns_to_copy_after_update() {
@@ -670,9 +715,10 @@ TestCase {
         tryCompare(testWalletModel, "lastTemplateRequestId", requestId)
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
 
+        // The template is applied after the modal has closed (Qt.callLater).
+        tryCompare(findChild(page.draftCard, "requestPaymentMessageInput"), "text", "Lunch split")
         compare(testPaymentRequest.id, "")
         compare(findChild(page.draftCard, "requestPaymentAmountInput").text, "0.00100000")
-        compare(findChild(page.draftCard, "requestPaymentMessageInput").text, "Lunch split")
         compare(findChild(page.draftCard, "requestPaymentYourNameInput").text, "Hal")
         verify(findChild(page.draftCard, "requestPaymentAmountField").visible)
         verify(findChild(page.draftCard, "requestPaymentMessageRow").visible)
@@ -925,8 +971,7 @@ TestCase {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "1").editingFinished()
         const card = createRequest(page)
-        testWalletModel.removeReceiveRequestResult = false
-        verify(!card.deleteRequest())
+        card.actionErrorText = "The changes could not be saved. Please try again."
         const error = card.errorText
         verify(error.length > 0)
         editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
@@ -962,6 +1007,10 @@ TestCase {
         verify(findChild(card, "requestPaymentCopyQRMenuButton").visible)
         verify(findChild(card, "requestPaymentSaveQRMenuButton").visible)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        verify(page.requestModal.opened)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
         tryCompare(page.requestModal, "visible", false)
         compare(testWalletModel.lastRemovedRequestId, requestId)
         compare(card.request.id, "")
@@ -977,10 +1026,13 @@ TestCase {
         findChild(card, "paymentRequestMoreButton").clicked()
         tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(findChild(card, "requestPaymentDeleteConfirmationError"), "opened", true)
         verify(page.requestModal.opened)
         compare(card.request.id, requestId)
         compare(testWalletModel.lastRemovedRequestId, "")
-        verify(card.errorText.length > 0)
     }
 
     function test_history_button_requests_navigation() {

@@ -40,13 +40,13 @@ SettingsPage {
     }
 
     function formatBytes(bytes) {
-        const suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"]
+        const units = [qsTr("%1 Bytes"), qsTr("%1 KB"), qsTr("%1 MB"), qsTr("%1 GB"), qsTr("%1 TB"), qsTr("%1 PB")]
         let index = 0
-        while (bytes >= 1000 && index < suffixes.length - 1) {
+        while (bytes >= 1000 && index < units.length - 1) {
             bytes /= 1000
             index++
         }
-        return bytes.toFixed(0) + " " + suffixes[index]
+        return units[index].arg(Number(bytes).toLocaleString(Qt.locale(), "f", 0))
     }
 
     function updateNetworkTrafficActivity() {
@@ -71,17 +71,18 @@ SettingsPage {
     }
 
     FormSection {
+        id: trafficSection
         objectName: "networkTrafficSection"
         Layout.fillWidth: true
 
         SegmentedPicker {
             objectName: "networkTrafficRangePicker"
+            Accessible.name: qsTr("Time range")
             Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            Layout.topMargin: 16
+            Layout.leftMargin: trafficSection.contentInset
+            Layout.rightMargin: trafficSection.contentInset
+            Layout.topMargin: trafficSection.contentInset
             Layout.bottomMargin: 6
-            implicitHeight: 36
             model: root.scaleOptions
             currentIndex: root.scaleIndex(root.trafficGraphScale)
             onSelected: function(index, option) {
@@ -99,18 +100,14 @@ SettingsPage {
                 implicitWidth: 10
                 implicitHeight: 10
                 radius: width / 2
-                color: Theme.color.green
+                color: Theme.color.trafficReceived
             }
             bodyItem: NetworkTrafficGraph {
                 objectName: "networkTrafficReceivedGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
-                backgroundColor: Theme.color.neutral1
-                borderColor: Theme.color.neutral3
-                fillColor: Theme.color.green
-                lineColor: Theme.color.green
-                markerLineColor: Theme.color.neutral3
-                unitLabelColor: Theme.color.neutral7
+                fillColor: Theme.color.trafficReceived
+                lineColor: Theme.color.trafficReceived
                 maxSamples: root.trafficGraphScale
                 maxValue: networkTrafficTower.maxReceivedRateBps
                 valueList: networkTrafficTower.receivedRateList
@@ -129,18 +126,14 @@ SettingsPage {
                 implicitWidth: 10
                 implicitHeight: 10
                 radius: width / 2
-                color: Theme.color.blue
+                color: Theme.color.trafficSent
             }
             bodyItem: NetworkTrafficGraph {
                 objectName: "networkTrafficSentGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
-                backgroundColor: Theme.color.neutral1
-                borderColor: Theme.color.neutral3
-                fillColor: Theme.color.blue
-                lineColor: Theme.color.blue
-                markerLineColor: Theme.color.neutral3
-                unitLabelColor: Theme.color.neutral7
+                fillColor: Theme.color.trafficSent
+                lineColor: Theme.color.trafficSent
                 maxSamples: root.trafficGraphScale
                 maxValue: networkTrafficTower.maxSentRateBps
                 valueList: networkTrafficTower.sentRateList

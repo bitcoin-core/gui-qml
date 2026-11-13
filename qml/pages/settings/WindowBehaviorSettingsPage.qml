@@ -5,6 +5,7 @@
 import QtQuick.Layouts 1.15
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
@@ -18,42 +19,36 @@ SettingsPage {
         Layout.fillWidth: true
         title: qsTr("Window behavior")
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Show tray icon")
             description: qsTr("Keep the app available in the system tray.")
             enabled: root.windowBehaviorModel.desktopPlatform
-            trailingItem: OptionSwitch {
-                objectName: "showTrayIconSwitch"
-                checked: root.windowBehaviorModel.showTrayIcon
-                onToggled: root.windowBehaviorModel.showTrayIcon = checked
-            }
+            switchObjectName: "showTrayIconSwitch"
+            checked: root.windowBehaviorModel.showTrayIcon
+            onToggled: root.windowBehaviorModel.showTrayIcon = checked
         }
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Minimize to tray")
             description: qsTr("Hide the window in the tray when minimized.")
             enabled: root.windowBehaviorModel.desktopPlatform
                 && root.windowBehaviorModel.showTrayIcon
-            trailingItem: OptionSwitch {
-                objectName: "minimizeToTraySwitch"
-                checked: root.windowBehaviorModel.minimizeToTray
-                onToggled: root.windowBehaviorModel.minimizeToTray = checked
-            }
+            switchObjectName: "minimizeToTraySwitch"
+            checked: root.windowBehaviorModel.minimizeToTray
+            onToggled: root.windowBehaviorModel.minimizeToTray = checked
         }
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Minimize on close")
             description: qsTr("Keep the node running when the window is closed.")
             enabled: root.windowBehaviorModel.desktopPlatform
             showDivider: false
-            trailingItem: OptionSwitch {
-                objectName: "minimizeOnCloseSwitch"
-                checked: root.windowBehaviorModel.minimizeOnClose
-                onToggled: root.windowBehaviorModel.minimizeOnClose = checked
-            }
+            switchObjectName: "minimizeOnCloseSwitch"
+            checked: root.windowBehaviorModel.minimizeOnClose
+            onToggled: root.windowBehaviorModel.minimizeOnClose = checked
         }
     }
 }

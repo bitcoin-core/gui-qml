@@ -7,7 +7,6 @@ import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
 
-import "../../qml/components"
 import "../../qml/controls"
 
 TestCase {
@@ -57,7 +56,7 @@ TestCase {
         compare(searchBar.background.visible, false)
         compare(searchBar.padding, 0)
         compare(searchBar.background.radius, 8)
-        compare(field.background.color, Theme.color.neutral2)
+        compare(field.background.color, Theme.color.surface2)
         compare(field.background.radius, 10)
         compare(field.placeholderText, "Find output")
         compare(searchBar.placeholder, "Find output")
@@ -156,7 +155,7 @@ TestCase {
         compare(searchBar.height, 48)
         compare(searchBar.inputField.height, 40)
         compare(searchBar.background.visible, true)
-        compare(searchBar.background.color, Theme.color.neutral1)
+        compare(searchBar.background.color, Theme.color.surface1)
         compare(searchBar.padding, 4)
         compare(navigation.visible, true)
         compare(navigation.width, 54)
@@ -173,8 +172,8 @@ TestCase {
         compare(nextIcon.height, 14)
         compare(previousIcon.strokeWidth, 2)
         compare(nextIcon.strokeWidth, 2)
-        compare(previousIcon.strokeColor, Theme.color.neutral4)
-        compare(nextIcon.strokeColor, Theme.color.neutral4)
+        compare(previousIcon.strokeColor, Theme.color.disabledContent)
+        compare(nextIcon.strokeColor, Theme.color.disabledContent)
         compare(previousIcon.rotation, -90)
         compare(nextIcon.rotation, 90)
 
@@ -199,12 +198,12 @@ TestCase {
         tryCompare(previousButton, "activeFocus", true)
         // FocusBorder animates visibility, so wait for both showing and hiding.
         tryCompare(previousFocusBorder, "visible", true)
-        compare(previousFocusBorder.border.color, Theme.color.purple)
+        compare(previousFocusBorder.border.color, Theme.color.focus)
         tryCompare(nextFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(nextButton, "activeFocus", true)
         tryCompare(nextFocusBorder, "visible", true)
-        compare(nextFocusBorder.border.color, Theme.color.purple)
+        compare(nextFocusBorder.border.color, Theme.color.focus)
         tryCompare(previousFocusBorder, "visible", false)
 
         // Restore the normal test width before pointer interaction. The

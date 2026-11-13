@@ -73,21 +73,25 @@ Item {
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
         synced: root.synced
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
         renderingActive: root.presentationActive
+        animateDial: Theme.motion.decorativeLoops
 
         Behavior on backgroundColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on timeTickColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on confirmationColors {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -103,20 +107,21 @@ Item {
     Label {
         id: mainText
         anchors.centerIn: dial
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         font.pixelSize: dial.width * (4/25)
         color: Theme.color.neutral9
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
     TextMetrics {
         id: subTextMetrics
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
         text: subText.text
     }
@@ -129,8 +134,8 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
         width: dial.width * (4/5)
         horizontalAlignment: Text.AlignHCenter
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
         readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
         font.pixelSize: subText.desiredTextWidth > subText.width
@@ -140,14 +145,14 @@ Item {
         color: Theme.color.neutral4
 
         Behavior on color {
-            enabled: !subText.estimating
-            ColorAnimation { duration: 150 }
+            enabled: !subText.estimating && Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         SequentialAnimation {
             id: estimatingTime
             objectName: "blockClockEstimatingAnimation"
-            running: root.presentationActive && subText.estimating
+            running: root.presentationActive && subText.estimating && Theme.motion.decorativeLoops
             loops: Animation.Infinite
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }
@@ -195,7 +200,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: Number(root.nodeModelRef !== null ? root.nodeModelRef.blockTipHeight : 0).toLocaleString(Qt.locale(), 'f', 0)
-                subText: "Blocktime"
+                subText: qsTr("Blocktime")
                 estimating: false
             }
         },
@@ -204,7 +209,7 @@ Item {
             name: "PAUSE"; when: paused && !faulted && !offline
             PropertyChanges {
                 target: root
-                header: "Paused"
+                header: qsTr("Paused")
                 headerSize: dial.width * (3/25)
                 subText: ""
                 estimating: false
@@ -223,7 +228,7 @@ Item {
             name: "ERROR"; when: faulted
             PropertyChanges {
                 target: root
-                header: "Error"
+                header: qsTr("Error")
                 headerSize: dial.width * (3/25)
             }
             PropertyChanges {

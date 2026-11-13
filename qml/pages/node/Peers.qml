@@ -16,7 +16,7 @@ Page {
     signal back
     signal peerSelected(PeerDetailsModel peerDetails)
 
-    property bool compact: width <= SizeClass.compactWidthMax
+    property bool compact: SizeClass.isCompact(width)
     property bool showHeader: false
     property bool showBackButton: true
     property Item popupParent: null
@@ -53,22 +53,14 @@ Page {
         { text: qsTr("Received"), value: "received" }
     ]
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "peersBackButton"
-            visible: root.showBackButton
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
-        centerItem: Header {
-            headerBold: true
-            headerSize: 18
-            header: qsTr("Peers")
-        }
+        showBackButton: root.showBackButton
+        backButtonObjectName: "peersBackButton"
+        onBackClicked: root.back()
+        title: qsTr("Peers")
     }
 
     AppSettings {
@@ -219,8 +211,8 @@ Page {
     Item {
         objectName: "peersContentFrame"
         anchors.fill: parent
-        anchors.leftMargin: root.compact ? 14 : 24
-        anchors.rightMargin: root.compact ? 14 : 24
+        anchors.leftMargin: root.compact ? Theme.space.pageCompact : Theme.space.xxl
+        anchors.rightMargin: root.compact ? Theme.space.pageCompact : Theme.space.xxl
         anchors.topMargin: root.compact ? 16 : 28
         anchors.bottomMargin: root.compact ? 16 : 24
 
@@ -237,9 +229,7 @@ Page {
                     CoreText {
                         Layout.fillWidth: true
                         text: qsTr("Peers")
-                        font: Theme.text.headline.font
-                        lineHeight: Theme.text.headline.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.headline
                         horizontalAlignment: Text.AlignLeft
                         color: Theme.color.neutral9
                     }
@@ -247,9 +237,7 @@ Page {
                         objectName: "peersDescriptionLabel"
                         Layout.fillWidth: true
                         text: qsTr("Peers are nodes you exchange transaction data with.")
-                        font: Theme.text.description.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.description
                         horizontalAlignment: Text.AlignLeft
                         color: Theme.color.neutral6
                         wrapMode: Text.WordWrap
@@ -282,33 +270,17 @@ Page {
                     onTextChanged: peerListModelProxy.searchText = text
                 }
 
-                Button {
+                IconButton {
                     id: sortButton
                     objectName: "peerSortButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    hoverEnabled: AppMode.isDesktop
-                    focusPolicy: Qt.StrongFocus
+                    toolbar: true
+                    iconSource: "image://images/flip-vertical"
+                    accessibleName: qsTr("Sort peers")
+                    Layout.preferredWidth: size
+                    Layout.preferredHeight: size
                     KeyNavigation.tab: filterButton.visible ? filterButton : directionFilterButton
                     KeyNavigation.backtab: searchField.inputField
                     KeyNavigation.priority: KeyNavigation.BeforeItem
-                    Accessible.name: qsTr("Sort peers")
-                    background: Rectangle {
-                        radius: 8
-                        color: sortButton.down ? Theme.color.neutral3
-                            : sortButton.hovered ? Theme.color.neutral2 : Theme.color.neutral1
-                        border.width: 0
-                        FocusBorder {
-                            objectName: "peerSortButtonFocusBorder"
-                            visible: sortButton.visualFocus
-                            borderRadius: 12
-                        }
-                    }
-                    contentItem: Icon {
-                        source: "image://images/flip-vertical"
-                        color: Theme.color.neutral9
-                        size: 20
-                    }
                     onClicked: sortMenu.open()
                     ContextMenu {
                         id: sortMenu
@@ -365,7 +337,7 @@ Page {
                     text: qsTr("Direction")
                     active: peerListModelProxy.directionFilters.length > 0
                     opened: directionFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: connectionTypeFilterButton
                     KeyNavigation.backtab: filterButton.visible ? filterButton : sortButton
                     onClicked: directionFilterMenu.opened ? directionFilterMenu.close() : directionFilterMenu.open()
@@ -376,7 +348,7 @@ Page {
                     text: qsTr("Connection")
                     active: peerListModelProxy.connectionTypeFilters.length > 0
                     opened: connectionTypeFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: networkFilterButton
                     KeyNavigation.backtab: directionFilterButton
                     onClicked: connectionTypeFilterMenu.opened ? connectionTypeFilterMenu.close() : connectionTypeFilterMenu.open()
@@ -387,7 +359,7 @@ Page {
                     text: qsTr("Network")
                     active: peerListModelProxy.networkFilters.length > 0
                     opened: networkFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: transportFilterButton
                     KeyNavigation.backtab: connectionTypeFilterButton
                     onClicked: networkFilterMenu.opened ? networkFilterMenu.close() : networkFilterMenu.open()
@@ -398,14 +370,24 @@ Page {
                     text: qsTr("Transport")
                     active: peerListModelProxy.transportFilters.length > 0
                     opened: transportFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
-                    KeyNavigation.tab: listView.count > 0 ? listView.itemAtIndex(0) : null
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.backtab: networkFilterButton
+                    // Resolve the first row on each press: itemAtIndex() is null while
+                    // that row is scrolled out and does not notify when it returns.
+                    Keys.onTabPressed: (event) => {
+                        if (listView.count === 0) {
+                            event.accepted = false
+                            return
+                        }
+                        listView.positionViewAtBeginning()
+                        const first = listView.itemAtIndex(0)
+                        if (first) first.forceActiveFocus(Qt.TabFocusReason)
+                    }
                     onClicked: transportFilterMenu.opened ? transportFilterMenu.close() : transportFilterMenu.open()
                 }
                 add: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
-                    NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: 160 }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
+                    NumberAnimation { property: "scale"; from: Theme.motion.reduced ? 1 : 0.8; to: 1; duration: Theme.motion.travel(Theme.motion.normal); easing.type: Theme.motion.easing.enter }
                 }
             }
 
@@ -414,8 +396,8 @@ Page {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 120
-                color: Theme.color.neutral1
-                radius: 12
+                color: Theme.color.surface1
+                radius: Theme.radius.card
                 border.width: 0
                 clip: true
 
@@ -447,6 +429,10 @@ Page {
                         KeyNavigation.backtab: delegate.index === 0
                             ? transportFilterButton : listView.itemAtIndex(delegate.index - 1)
                         KeyNavigation.priority: KeyNavigation.BeforeItem
+                        Accessible.name: delegate.address
+                        Accessible.description: root.joinedDetails([delegate.direction,
+                            delegate.connectionType === delegate.direction ? "" : delegate.connectionType,
+                            delegate.network, delegate.transport, delegate.subversion])
                         onClicked: root.peerSelected(peerListModelProxy.peerDetailsAt(index))
                         MouseArea {
                             anchors.fill: parent
@@ -457,20 +443,18 @@ Page {
                                 Qt.point(mouse.x, mouse.y))
                         }
                         background: Item {
-                            Rectangle {
+                            StateBackground {
                                 anchors.fill: parent
                                 anchors.margins: 4
-                                radius: 16
-                                color: delegate.down ? Theme.color.neutral3
-                                    : ((!root.compact && root.selectedNodeId === delegate.nodeId) || delegate.hovered)
-                                        ? Theme.color.neutral2 : "transparent"
+                                radius: Theme.radius.listRow
+                                stateColor: delegate.down ? Theme.color.surfacePressed
+                                    : !root.compact && root.selectedNodeId === delegate.nodeId ? Theme.color.surfaceSelected
+                                    : delegate.hovered ? Theme.color.surfaceHover : "transparent"
                             }
-                            Rectangle {
+                            Separator {
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                 anchors.leftMargin: 12; anchors.rightMargin: 12
-                                height: 1
                                 visible: delegate.index < peerListModelProxy.count - 1
-                                color: Theme.color.neutral2
                             }
                             FocusBorder {
                                 objectName: delegate.objectName + "FocusBorder"
@@ -489,14 +473,12 @@ Page {
                                 Layout.preferredWidth: Math.max(42, idText.implicitWidth + 16)
                                 Layout.preferredHeight: 32
                                 radius: 8
-                                color: Theme.color.neutral2
+                                color: Theme.color.surface2
                                 CoreText {
                                     id: idText
                                     anchors.centerIn: parent
                                     text: "#" + delegate.nodeId
-                                    font: Theme.text.description.font
-                                    lineHeight: Theme.text.description.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.description
                                     color: Theme.color.neutral8
                                     wrap: false
                                 }
@@ -508,9 +490,7 @@ Page {
                                 CoreText {
                                     Layout.fillWidth: true
                                     text: delegate.address
-                                    font: Theme.text.monoDescription.font
-                                    lineHeight: Theme.text.monoDescription.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.monoDescription
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral9
                                     elide: Text.ElideMiddle
@@ -521,9 +501,7 @@ Page {
                                     text: root.joinedDetails([delegate.direction,
                                         delegate.connectionType === delegate.direction ? "" : delegate.connectionType,
                                         delegate.network, delegate.transport])
-                                    font: Theme.text.description.font
-                                    lineHeight: Theme.text.description.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.description
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral7
                                     elide: Text.ElideRight
@@ -532,9 +510,7 @@ Page {
                                 CoreText {
                                     Layout.fillWidth: true
                                     text: delegate.subversion
-                                    font: Theme.text.monoCaption.font
-                                    lineHeight: Theme.text.monoCaption.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.monoCaption
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral6
                                     elide: Text.ElideRight
@@ -547,19 +523,15 @@ Page {
                                     CoreText {
                                         objectName: delegate.objectName + "Sent"
                                         text: "↑ " + delegate.sent
-                                        font: Theme.text.monoCaption.font
-                                        lineHeight: Theme.text.monoCaption.lineHeight
-                                        lineHeightMode: Text.FixedHeight
-                                        color: Theme.color.purple
+                                        textStyle: Theme.text.monoCaption
+                                        color: Theme.color.trafficSent
                                         wrap: false
                                     }
                                     CoreText {
                                         objectName: delegate.objectName + "Received"
                                         text: "↓ " + delegate.received
-                                        font: Theme.text.monoCaption.font
-                                        lineHeight: Theme.text.monoCaption.lineHeight
-                                        lineHeightMode: Text.FixedHeight
-                                        color: Theme.color.blue
+                                        textStyle: Theme.text.monoCaption
+                                        color: Theme.color.trafficReceived
                                         wrap: false
                                     }
                                     Item {
@@ -580,9 +552,7 @@ Page {
                     visible: peerListModelProxy.count === 0
                     text: searchField.text.length > 0 || root.filterCount() > 0
                         ? qsTr("No peers match your filters") : qsTr("No peers connected")
-                    font: Theme.text.description.font
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral6
                 }
             }
@@ -595,21 +565,17 @@ Page {
                     objectName: "connectedPeersLabel"
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("%1 connected").arg(nodeModel.numPeers)
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     horizontalAlignment: Text.AlignHCenter
                     color: Theme.color.neutral6
                 }
 
-                TextButton {
+                LinkButton {
                     objectName: "viewBannedPeersButton"
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: banListModel.count > 0
-                    text: qsTr("View %1 banned %2").arg(banListModel.count).arg(
-                        banListModel.count === 1 ? qsTr("peer") : qsTr("peers"))
-                    textSize: 13
-                    bold: false
+                    text: banListModel.count === 1 ? qsTr("View 1 banned peer…")
+                        : qsTr("View %1 banned peers…").arg(banListModel.count.toLocaleString(Qt.locale(), "f", 0))
                     onClicked: bannedPeersPopup.open()
                 }
             }
@@ -786,7 +752,6 @@ Page {
         ContextMenuButton {
             objectName: "peerClearFiltersAction"
             text: qsTr("Clear filters")
-            role: ContextMenuButton.Destructive
             onTriggered: root.clearFilters()
         }
     }
