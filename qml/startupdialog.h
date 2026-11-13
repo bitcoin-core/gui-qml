@@ -7,6 +7,7 @@
 
 #include <qml/quithandler.h>
 
+#include <QDialog>
 #include <QEventLoop>
 #include <QQmlEngine>
 #include <QQuickWindow>
@@ -18,6 +19,12 @@ inline void ExecStartupDialog(QQmlEngine& engine, QQuickWindow& window, QmlQuitH
     QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
     QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
     dialog_loop.exec();
+}
+
+inline int ExecStartupDialog(QDialog& dialog, QmlQuitHandler& quit_handler)
+{
+    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog, &QDialog::reject);
+    return quit_handler.isQuitRequested() ? QDialog::Rejected : dialog.exec();
 }
 
 #endif // BITCOIN_QML_STARTUPDIALOG_H

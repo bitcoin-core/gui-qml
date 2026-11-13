@@ -41,8 +41,8 @@ QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, Separa
     const qint64 n = static_cast<qint64>(amount);
     const qint64 coin = factor(unit);
     const int num_decimals = decimals(unit);
-    const qint64 n_abs = (n > 0 ? n : -n);
-    const qint64 quotient = n_abs / coin;
+    const quint64 n_abs = n < 0 ? static_cast<quint64>(-(n + 1)) + 1 : static_cast<quint64>(n);
+    const quint64 quotient = n_abs / coin;
 
     QString quotient_str = QString::number(quotient);
     QChar thin_sp(THIN_SP_CP);
@@ -70,9 +70,11 @@ QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, Separa
 
 QString QmlBitcoinUnits::formatForDisplay(Unit unit, CAmount amount, bool plussign, const QLocale& locale)
 {
-    const quint64 magnitude = amount == std::numeric_limits<CAmount>::min()
-        ? static_cast<quint64>(std::numeric_limits<CAmount>::max()) + 1
-        : static_cast<quint64>(std::abs(amount));
+    // Split the integer amount before formatting: converting BTC through a
+    // double can round away satoshis. Handle INT64_MIN without signed negation
+    // or unsigned wraparound, so integer sanitizer checks remain useful.
+    const quint64 magnitude = amount < 0 ? static_cast<quint64>(-(amount + 1)) + 1
+                                         : static_cast<quint64>(amount);
     const quint64 divisor = factor(unit);
     QString result = locale.toString(magnitude / divisor);
     const int precision = decimals(unit);
