@@ -52,6 +52,7 @@
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
+#include <qml/models/externalsignermodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/networkstatusmodel.h>
 #include <qml/models/nodemodel.h>
@@ -367,6 +368,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
 #ifdef ENABLE_WALLET
     qmlRegisterUncreatableType<BumpTransactionModel>("org.bitcoincore.qt", 1, 0, "BumpTransactionModel",
                                                       "BumpTransactionModel cannot be instantiated from QML");
+    qmlRegisterUncreatableType<ExternalSignerModel>("org.bitcoincore.qt", 1, 0, "ExternalSignerModel",
+                                                    "ExternalSignerModel cannot be instantiated from QML");
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
                                                "WalletQmlModel cannot be instantiated from QML");
     qmlRegisterUncreatableType<WalletQmlModelTransaction>("org.bitcoincore.qt", 1, 0, "WalletQmlModelTransaction",
@@ -893,6 +896,15 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         wallet_list_model->setDisplayUnit(options_model.displayUnit());
         QObject::connect(&options_model, &OptionsQmlModel::displayUnitChanged,
                          wallet_list_model.get(), &WalletListModel::setDisplayUnit);
+    }
+    // Runs the signer command on its own worker, so it must stop before Core does.
+    std::unique_ptr<ExternalSignerModel> external_signer_model;
+    if (wallet_controller) {
+        external_signer_model = std::make_unique<ExternalSignerModel>(*node, gArgs, options_model);
+        shutdown_coordinator.addBeforeInterruptParticipant(external_signer_model.get(), &ExternalSignerModel::shutdownFinished,
+                                            [&] { external_signer_model->beginShutdown(); });
+        wallet_controller->setExternalSignerModel(external_signer_model.get());
+        engine->rootContext()->setContextProperty("externalSignerModel", external_signer_model.get());
     }
 #endif
     engine->rootContext()->setContextProperty("optionsModel", &options_model);

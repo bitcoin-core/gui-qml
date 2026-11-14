@@ -156,6 +156,7 @@ TestCase {
         nodeModel.resetMempoolInfoPollingTestState()
         optionsModel.clearCoreSettingStatusesForTest()
         walletController.reset()
+        externalSignerModel.reset()
         walletController.setWalletLoaded(true)
         walletController.selectedWallet.isEncrypted = false
         const proxySetting = optionsModel.coreSettings.entry("proxy")
@@ -303,12 +304,13 @@ TestCase {
         }
     }
 
-    function test_signerPendingDoesNotShowStaleConnectedDevice() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerResponding = true
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "Old device"
+    // Validating and saving the path, and the check itself, run in the
+    // model. While they do, the page claims nothing about the path and
+    // offers no second check; a path error shows under the field.
+    function test_signerSectionShowsTheModelsPendingState() {
+        externalSignerModel.draftPath = "/opt/hwi/hwi"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        externalSignerModel.deviceName = "Old device"
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         view.selectSection("external-signer")
         const page = view.pageContainer.currentItem
@@ -317,60 +319,29 @@ TestCase {
         const commandRow = findChild(page, "externalSignerCommandRow")
         const deviceRow = findChild(page, "externalSignerDeviceRow")
         const check = findChild(page, "externalSignerCheckDeviceButton")
+        compare(input.text, "/opt/hwi/hwi")
         verify(section.deviceReady)
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "new-hwi"
-        verify(optionsModel.signerPathValidationPending)
+        compare(check.enabled, true)
+
+        externalSignerModel.holdChecks = true
+        check.clicked()
+        compare(externalSignerModel.checkCalls, 1)
         compare(section.deviceReady, false)
-        compare(commandRow.value, "Not checked")
+        compare(commandRow.value, "Checking…")
         compare(deviceRow.visible, false)
         compare(check.enabled, false)
+        // Another request while one runs is not forwarded twice.
         input.accepted()
-        input.accepted()
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        // Validation completes, then saving the new command completes.
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        compare(optionsModel.externalSignerPath, "new-hwi")
-        compare(section.deviceReady, false)
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        optionsModel.settingsPending = false
-        tryCompare(walletController, "externalSignerRefreshCalls", initialScans + 1)
-        compare(section.checkAfterSave, false)
-        compare(section.checking, false)
-    }
+        compare(externalSignerModel.checkCalls, 1)
+        externalSignerModel.status = ExternalSignerModel.NotChecked
+        externalSignerModel.finishCheckForTest()
+        compare(commandRow.value, "Not checked")
+        compare(check.enabled, true)
 
-    function test_invalidSignerValidationAndFailedSaveDoNotRescan() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerResponding = true
-        walletController.canCreateExternalSignerWallet = true
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        view.selectSection("external-signer")
-        const page = view.pageContainer.currentItem
-        const section = findChild(page, "externalSignerPathSection")
-        const input = findChild(page, "externalSignerPathInput")
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "/missing/hwi"
-        input.accepted()
-        optionsModel.finishSignerPathValidationForTest("Signer does not exist.")
-        compare(section.deviceReady, false)
+        externalSignerModel.pathError = "Signer does not exist."
         compare(section.pathError, "Signer does not exist.")
         compare(input.Accessible.description, "Signer does not exist.")
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        input.text = "new-hwi"
-        input.accepted()
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        optionsModel.settingsError = "Save failed."
-        optionsModel.settingsPending = false
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        compare(section.checkAfterSave, false)
-        compare(section.checking, false)
+        compare(check.enabled, false)
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {
@@ -428,196 +399,163 @@ TestCase {
     // Whether the signer command works and whether a device was found are
     // reported separately, each with text and an icon, not color alone.
     function test_externalSignerSettingsSeparateCommandFromDevice() {
-        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
-        walletController.externalSignerPathConfigured = true
-        try {
-            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-            verify(view !== null)
-            view.selectSection("external-signer", true)
-            tryCompare(view.pageContainer, "depth", 1)
-            const commandRow = findChild(view, "externalSignerCommandRow")
-            const deviceRow = findChild(view, "externalSignerDeviceRow")
-            const pathInput = findChild(view, "externalSignerPathInput")
-            verify(commandRow !== null)
-            verify(deviceRow !== null)
-            verify(pathInput !== null)
+        externalSignerModel.draftPath = "/usr/local/bin/hwi"
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        const commandRow = findChild(view, "externalSignerCommandRow")
+        const deviceRow = findChild(view, "externalSignerDeviceRow")
+        verify(commandRow !== null)
+        verify(deviceRow !== null)
 
-            walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
-            walletController.refreshExternalSignerStatus()
-            compare(commandRow.value, "Not responding")
-            compare(commandRow.valueIconSource, "image://images/cross-circle-filled")
-            compare(commandRow.errorText, walletController.externalSignerError)
-            compare(deviceRow.visible, false)
+        externalSignerModel.error = "The signer command did not return valid output. Check that the path is correct."
+        externalSignerModel.status = ExternalSignerModel.NotResponding
+        compare(commandRow.value, "Not responding")
+        compare(commandRow.valueIconSource, "image://images/cross-circle-filled")
+        compare(commandRow.errorText, externalSignerModel.error)
+        compare(deviceRow.visible, false)
 
-            walletController.externalSignerError = ""
-            walletController.externalSignerResponding = true
-            walletController.refreshExternalSignerStatus()
-            compare(commandRow.value, "Responding")
-            compare(commandRow.valueIconSource, "image://images/check")
-            compare(commandRow.errorText, "")
-            compare(deviceRow.visible, true)
-            // Device states are fixed at the device: guidance and a warning,
-            // never error styling.
-            compare(deviceRow.value, "None found")
-            compare(deviceRow.valueIconSource, "image://images/alert-filled")
-            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
-            compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
-            compare(deviceRow.errorText, "")
+        externalSignerModel.error = ""
+        externalSignerModel.status = ExternalSignerModel.NoDevice
+        compare(commandRow.value, "Responding")
+        compare(commandRow.valueIconSource, "image://images/check")
+        compare(commandRow.errorText, "")
+        compare(deviceRow.visible, true)
+        // Device states are fixed at the device: guidance and a warning,
+        // never error styling.
+        compare(deviceRow.value, "None found")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+        compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
+        compare(deviceRow.errorText, "")
 
-            walletController.externalSignerError = "Your device isn't ready: Device is locked"
-            walletController.refreshExternalSignerStatus()
-            compare(commandRow.value, "Responding")
-            compare(deviceRow.value, "Not ready")
-            compare(deviceRow.valueIconSource, "image://images/alert-filled")
-            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
-            compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
-            compare(deviceRow.errorText, "")
+        externalSignerModel.error = "Your device isn't ready: Device is locked"
+        externalSignerModel.status = ExternalSignerModel.DeviceNotReady
+        compare(commandRow.value, "Responding")
+        compare(deviceRow.value, "Not ready")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+        compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
+        compare(deviceRow.errorText, "")
 
-            // Two connected devices are not "not ready"; the value says what is wrong.
-            walletController.externalSignerCount = 2
-            walletController.externalSignerError = "More than one external signer was found. Connect only one device."
-            walletController.refreshExternalSignerStatus()
-            compare(deviceRow.value, "More than one")
-            compare(deviceRow.valueIconSource, "image://images/alert-filled")
-            compare(deviceRow.supportingText, walletController.externalSignerError)
-            walletController.externalSignerCount = 0
+        // Two connected devices are not "not ready"; the value says what is wrong.
+        externalSignerModel.error = "More than one external signer was found. Connect only one device."
+        externalSignerModel.status = ExternalSignerModel.MultipleDevices
+        compare(deviceRow.value, "More than one")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.supportingText, externalSignerModel.error)
 
-            walletController.externalSignerError = ""
-            walletController.externalSignerName = "trezor_t"
-            walletController.canCreateExternalSignerWallet = true
-            walletController.refreshExternalSignerStatus()
-            compare(deviceRow.value, "trezor_t")
-            compare(deviceRow.valueIconSource, "image://images/check")
-            compare(deviceRow.errorText, "")
-            compare(deviceRow.supportingText, "")
+        externalSignerModel.error = ""
+        externalSignerModel.deviceName = "trezor_t"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        compare(deviceRow.value, "trezor_t")
+        compare(deviceRow.valueIconSource, "image://images/check")
+        compare(deviceRow.errorText, "")
+        compare(deviceRow.supportingText, "")
 
-            // An edited path has not been checked, so nothing is claimed about it.
-            pathInput.text = "/opt/hwi/hwi"
-            compare(commandRow.value, "Not checked")
-            compare(commandRow.valueIconSource, "")
-            compare(deviceRow.visible, false)
-        } finally {
-            optionsModel.externalSignerPath = ""
-        }
+        // A path without a result claims nothing.
+        externalSignerModel.status = ExternalSignerModel.NotChecked
+        compare(commandRow.value, "Not checked")
+        compare(commandRow.valueIconSource, "")
+        compare(deviceRow.visible, false)
+
+        externalSignerModel.draftPath = ""
+        externalSignerModel.status = ExternalSignerModel.NotSet
+        compare(commandRow.value, "Not set")
+        compare(commandRow.valueIconSource, "")
     }
 
     // Browse and leaving the field only fill in a path; checking it, and
     // opening the page, take the Check device button or Return.
     function test_externalSignerChecksOnlyWhenAsked() {
-        optionsModel.externalSignerPath = ""
-        try {
-            const checks = walletController.externalSignerRefreshCalls
-            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-            verify(view !== null)
-            view.selectSection("external-signer", true)
-            tryCompare(view.pageContainer, "depth", 1)
-            compare(walletController.externalSignerRefreshCalls, checks)
-            const browseButton = findChild(view, "externalSignerBrowseButton")
-            const dialog = findChild(view, "externalSignerPathDialog")
-            const pathField = findChild(view, "externalSignerPathInput")
-            const commandRow = findChild(view, "externalSignerCommandRow")
-            const checkButton = findChild(view, "externalSignerCheckDeviceButton")
-            const section = findChild(view, "externalSignerPathSection")
-            verify(browseButton !== null)
-            verify(dialog !== null)
-            compare(browseButton.text, "Browse…")
-            compare(dialog.title, "Select signer executable")
-            compare(dialog.fileMode, 0)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(externalSignerModel.checkCalls, 0)
+        const browseButton = findChild(view, "externalSignerBrowseButton")
+        const dialog = findChild(view, "externalSignerPathDialog")
+        const pathField = findChild(view, "externalSignerPathInput")
+        const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+        verify(browseButton !== null)
+        verify(dialog !== null)
+        compare(browseButton.text, "Browse…")
+        compare(dialog.title, "Select signer executable")
+        compare(dialog.fileMode, 0)
 
-            browseButton.clicked()
-            compare(dialog.openCalls, 1)
-            // Starts next to the current signer, or at home, never the launch folder.
-            compare(dialog.currentFolder.toString(), "file:///signer/folder")
-            dialog.selectAndAccept("/opt/hwi/hwi")
-            compare(pathField.text, "/opt/hwi/hwi")
-            // A path that isn't being edited is shown from its start.
-            compare(pathField.cursorPosition, 0)
-            compare(optionsModel.externalSignerPath, "")
-            compare(commandRow.value, "Not checked")
-            pathField.editingFinished()
-            compare(optionsModel.externalSignerPath, "")
-            compare(walletController.externalSignerRefreshCalls, checks)
+        browseButton.clicked()
+        compare(dialog.openCalls, 1)
+        // Starts next to the current signer, or at home, never the launch folder.
+        compare(dialog.currentFolder.toString(), "file:///signer/folder")
+        dialog.selectAndAccept("/opt/hwi/hwi")
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi")
+        compare(pathField.text, "/opt/hwi/hwi")
+        // A path that isn't being edited is shown from its start.
+        compare(pathField.cursorPosition, 0)
+        pathField.editingFinished()
+        compare(externalSignerModel.checkCalls, 0)
 
-            checkButton.clicked()
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-            compare(commandRow.value, "Checking…")
-            compare(checkButton.text, "Checking…")
-            compare(checkButton.enabled, false)
-            tryCompare(section, "checking", false)
-            compare(checkButton.text, "Check device")
-            compare(walletController.externalSignerRefreshCalls, checks + 1)
+        checkButton.clicked()
+        compare(externalSignerModel.checkCalls, 1)
+        compare(checkButton.text, "Check device")
 
-            // Return in the field checks too.
-            pathField.text = "/opt/hwi/hwi2"
-            pathField.accepted()
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
-            tryCompare(section, "checking", false)
-            compare(walletController.externalSignerRefreshCalls, checks + 2)
+        // Return in the field checks too, with what was typed.
+        pathField.text = "/opt/hwi/hwi2"
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi2")
+        pathField.accepted()
+        compare(externalSignerModel.checkCalls, 2)
 
-            dialog.rejected()
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
-        } finally {
-            optionsModel.externalSignerPath = ""
-        }
+        dialog.rejected()
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi2")
     }
 
     // A path set on the command line can't be changed here, but can still be
     // checked, for example after connecting a device.
     function test_externalSignerCommandLinePathCanStillBeChecked() {
-        optionsModel.externalSignerPath = "/opt/hwi/hwi"
-        optionsModel.setCoreSettingStatusForTest("signer", false, "command_line", "Set on the command line.", false)
-        try {
-            const checks = walletController.externalSignerRefreshCalls
-            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-            verify(view !== null)
-            view.selectSection("external-signer", true)
-            tryCompare(view.pageContainer, "depth", 1)
-            const section = findChild(view, "externalSignerPathSection")
-            const checkButton = findChild(view, "externalSignerCheckDeviceButton")
-            compare(section.editable, false)
-            compare(findChild(view, "externalSignerPathRow").enabled, false)
-            compare(findChild(view, "externalSignerBrowseButton").enabled, false)
-            compare(checkButton.enabled, true)
+        externalSignerModel.setCommandLinePathForTest("/opt/hwi/hwi")
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        const section = findChild(view, "externalSignerPathSection")
+        const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+        compare(findChild(view, "externalSignerPathInput").text, "/opt/hwi/hwi")
+        compare(section.editable, false)
+        compare(findChild(view, "externalSignerPathRow").enabled, false)
+        compare(findChild(view, "externalSignerBrowseButton").enabled, false)
+        compare(checkButton.enabled, true)
 
-            checkButton.clicked()
-            compare(checkButton.text, "Checking…")
-            tryCompare(section, "checking", false)
-            compare(walletController.externalSignerRefreshCalls, checks + 1)
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-        } finally {
-            optionsModel.clearCoreSettingStatusesForTest()
-            optionsModel.externalSignerPath = ""
-        }
+        externalSignerModel.holdChecks = true
+        checkButton.clicked()
+        compare(checkButton.text, "Checking…")
+        compare(externalSignerModel.checkCalls, 1)
+        externalSignerModel.finishCheckForTest()
+        compare(checkButton.text, "Check device")
     }
 
-    // Closing the section while a check is still waiting runs the check, so
-    // the result on file belongs to the path that was saved.
-    function test_externalSignerCheckRunsWhenClosedEarly() {
-        optionsModel.externalSignerPath = ""
-        const motionMode = Theme.motion.mode
-        Theme.motion.mode = "full"
-        try {
-            const checks = walletController.externalSignerRefreshCalls
-            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-            verify(view !== null)
-            view.selectSection("external-signer", true)
-            tryCompare(view.pageContainer, "depth", 1)
-            const section = findChild(view, "externalSignerPathSection")
-            findChild(view, "externalSignerPathInput").text = "/opt/hwi/hwi"
-            findChild(view, "externalSignerCheckDeviceButton").clicked()
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-            compare(section.checking, true)
-            compare(walletController.externalSignerRefreshCalls, checks)
+    // A check belongs to the shared model, not the page that asked for it:
+    // closing the page leaves it running, and the next page shows it.
+    function test_externalSignerCheckOutlivesItsPage() {
+        externalSignerModel.draftPath = "/opt/hwi/hwi"
+        externalSignerModel.holdChecks = true
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        findChild(view, "externalSignerCheckDeviceButton").clicked()
+        compare(externalSignerModel.checking, true)
+        view.destroy()
+        wait(0)
+        compare(externalSignerModel.checking, true)
+        compare(externalSignerModel.checkCalls, 1)
 
-            view.destroy()
-            tryCompare(walletController, "externalSignerRefreshCalls", checks + 1)
-            // And only once.
-            wait(400)
-            compare(walletController.externalSignerRefreshCalls, checks + 1)
-        } finally {
-            Theme.motion.mode = motionMode
-            optionsModel.externalSignerPath = ""
-        }
+        const next = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        next.selectSection("external-signer", true)
+        tryCompare(next.pageContainer, "depth", 1)
+        compare(findChild(next, "externalSignerCommandRow").value, "Checking…")
+        externalSignerModel.status = ExternalSignerModel.NoDevice
+        externalSignerModel.finishCheckForTest()
+        compare(findChild(next, "externalSignerCommandRow").value, "Responding")
     }
 
     Component {

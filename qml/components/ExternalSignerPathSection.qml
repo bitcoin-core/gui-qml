@@ -24,23 +24,16 @@ FormSection {
     // so neither label outgrows its control.
     readonly property int controlHeight: Math.round(Theme.size.control * Math.max(1, Theme.textScale))
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
-    readonly property bool editable: root.signerStatus.canEdit !== false
-    // Validating and saving the path both run off the GUI thread. A check
-    // waits for both, so it runs the command the field shows.
-    readonly property bool pathPending: optionsModel.signerPathValidationPending || optionsModel.settingsPending
-    readonly property string pathText: pathInput.text
-    readonly property string pathError: optionsModel.signerPathError || ""
-    readonly property bool pathChanged: pathInput.text.trim() !== optionsModel.externalSignerPath
-    property bool checkAfterValidation: false
-    property bool checkAfterSave: false
-    // True from a check request until its result is in.
-    property bool checking: false
-    // The status below describes the path in the field.
-    readonly property bool checked: !root.pathChanged && !root.pathPending
-        && walletController.externalSignerPathConfigured
-    readonly property bool commandResponding: root.checked && !root.checking
-        && walletController.externalSignerResponding
-    readonly property bool deviceReady: root.commandResponding && walletController.canCreateExternalSignerWallet
+    // The path and the check results live in externalSignerModel, shared by
+    // every page that shows them; the section binds to it and forwards input.
+    readonly property bool editable: externalSignerModel.canEdit
+    readonly property bool canCheck: externalSignerModel.canCheck
+    readonly property string pathText: externalSignerModel.draftPath
+    readonly property string pathError: externalSignerModel.pathError
+    readonly property bool checking: externalSignerModel.checking
+    readonly property int status: externalSignerModel.status
+    readonly property bool commandResponding: externalSignerModel.commandResponding
+    readonly property bool deviceReady: externalSignerModel.deviceReady
 
     // The status icons' images pad their shapes differently: the cross fills
     // its image, the check and the alert leave a wide margin. Each gets the
@@ -52,44 +45,10 @@ FormSection {
         return root.statusIconSize
     }
 
-    function commitPath() {
-        if (root.pathError.length > 0) return false
-        const path = pathInput.text.trim()
-        if (path !== optionsModel.externalSignerPath) optionsModel.externalSignerPath = path
-        // The model normalizes the path; show what it stored.
-        pathInput.text = optionsModel.externalSignerPath
-        root.showPathStart()
-        return true
-    }
-
-    // Checks only run when asked for. The results clear for a moment first,
-    // so a check that finds the same thing still visibly happened. A path
-    // set on the command line can't be saved, but can still be checked, for
-    // example after connecting a device.
+    // Checks only run when asked for. The model saves an edited path first,
+    // then runs the signer command off the GUI thread.
     function check() {
-        if (root.checking) return
-        if (optionsModel.signerPathValidationPending) {
-            root.checkAfterValidation = true
-            return
-        }
-        root.checkAfterValidation = false
-        if (root.editable && !root.commitPath()) return
-        root.checking = true
-        if (optionsModel.settingsPending) root.checkAfterSave = true
-        else checkTimer.restart()
-    }
-
-    Connections {
-        target: optionsModel
-        function onSignerPathValidationChanged() {
-            if (!optionsModel.signerPathValidationPending && root.checkAfterValidation) root.check()
-        }
-        function onSettingsPendingChanged() {
-            if (optionsModel.settingsPending || !root.checkAfterSave) return
-            root.checkAfterSave = false
-            if (optionsModel.settingsError) root.checking = false
-            else checkTimer.restart()
-        }
+        externalSignerModel.check()
     }
 
     // A long path scrolls to its end after editing; show where it starts
@@ -99,28 +58,26 @@ FormSection {
     }
 
     function choosePath() {
-        pathDialog.currentFolder = optionsModel.externalSignerPathFolder(pathInput.text)
+        pathDialog.currentFolder = optionsModel.externalSignerPathFolder(externalSignerModel.draftPath)
         pathDialog.open()
     }
 
     Component.onCompleted: root.showPathStart()
 
-    Timer {
-        id: checkTimer
-        interval: Theme.motion.animated ? 300 : 0
-        onTriggered: {
-            walletController.refreshExternalSignerStatus()
-            root.checking = false
-        }
-    }
-    // The path is saved when the check starts. A check still waiting when the
-    // section goes away runs now, so the next section doesn't show the old
-    // path's result as the new path's.
-    Component.onDestruction: if (checkTimer.running) walletController.refreshExternalSignerStatus()
-
     Connections {
         target: pathInput.field
         function onActiveFocusChanged() { root.showPathStart() }
+    }
+
+    // The path can change from elsewhere: another page, Browse, or the saved
+    // path loading. Typing into the field replaces its binding, so follow
+    // the model's change signal.
+    Connections {
+        target: externalSignerModel
+        function onDraftPathChanged() {
+            if (pathInput.text !== externalSignerModel.draftPath) pathInput.text = externalSignerModel.draftPath
+            root.showPathStart()
+        }
     }
 
     AppFileDialog {
@@ -131,15 +88,16 @@ FormSection {
         onAccepted: {
             if (selectedFile.toString().length === 0) return
             // A local path, not a file URL. Checking it is a separate step.
-            pathInput.text = walletController.normalizeWalletPath(selectedFile.toString())
-            root.showPathStart()
+            externalSignerModel.draftPath = walletController.normalizeWalletPath(selectedFile.toString())
         }
     }
 
     FormRow {
         objectName: root.namePrefix + "PathRow"
         Layout.fillWidth: true
-        enabled: root.editable
+        // A check saves and runs the path it started with, so the path
+        // stays as it is until the result is in.
+        enabled: root.editable && !root.checking
         bodySpacing: 0
         // Browse sits beside the field it fills, at the same height. A plain
         // row never reflows, so narrowing the page only narrows the field.
@@ -159,7 +117,7 @@ FormSection {
                 fieldHeight: root.controlHeight
                 fieldBackgroundColor: Theme.color.surface(root.surfaceLevel + 2)
                 fieldTextStyle: Theme.text.monoDescription
-                text: optionsModel.externalSignerPath
+                text: externalSignerModel.draftPath
                 // An example path, not an instruction: the section title names the field.
                 placeholderText: Qt.platform.os === "windows"
                     //: Example path shown in the empty signer executable field on Windows. Keep it a file path.
@@ -171,7 +129,7 @@ FormSection {
                         : qsTr("/home/you/Downloads/hwi")
                 errorText: root.pathError
                 supportingText: root.signerStatus.infoText || ""
-                onTextChanged: optionsModel.requestExternalSignerPathValidation(text)
+                onTextChanged: externalSignerModel.draftPath = text
                 onAccepted: root.check()
             }
 
@@ -195,23 +153,24 @@ FormSection {
         //: Title of the row showing whether the configured external signer command (such as HWI) runs and answers.
         title: qsTr("Signer command")
         value: {
+            switch (root.status) {
             //: Signer command status: no signer path is configured.
-            if (optionsModel.externalSignerPath.length === 0 && !root.pathChanged) return qsTr("Not set")
+            case ExternalSignerModel.NotSet: return qsTr("Not set")
             //: Signer command status while the signer command and the device are being checked.
-            if (root.checking) return qsTr("Checking…")
+            case ExternalSignerModel.Checking: return qsTr("Checking…")
             //: Signer command status: the path was edited and has not been checked yet.
-            if (!root.checked) return qsTr("Not checked")
-            //: Signer command status: the command ran and returned a list of devices.
-            if (root.commandResponding) return qsTr("Responding")
+            case ExternalSignerModel.NotChecked: return qsTr("Not checked")
             //: Signer command status: the command could not run or did not return a list of devices.
-            return qsTr("Not responding")
+            case ExternalSignerModel.NotResponding: return qsTr("Not responding")
+            //: Signer command status: the command ran and returned a list of devices.
+            default: return qsTr("Responding")
+            }
         }
-        valueIconSource: !root.checked || root.checking ? ""
-            : root.commandResponding ? "image://images/check" : "image://images/cross-circle-filled"
+        valueIconSource: root.commandResponding ? "image://images/check"
+            : root.status === ExternalSignerModel.NotResponding ? "image://images/cross-circle-filled" : ""
         valueIconSize: root.statusIconBox(valueIconSource.toString())
         valueIconColor: root.commandResponding ? Theme.color.successText : Theme.color.dangerText
-        errorText: root.checked && !root.checking && !root.commandResponding
-            ? walletController.externalSignerError : ""
+        errorText: root.status === ExternalSignerModel.NotResponding ? externalSignerModel.error : ""
     }
 
     ValueRow {
@@ -223,18 +182,19 @@ FormSection {
         //: Title of the row showing which hardware device the external signer command found.
         title: qsTr("Device")
         value: {
-            if (root.deviceReady) {
-                return walletController.externalSignerName.length > 0
-                    ? walletController.externalSignerName
+            switch (root.status) {
+            case ExternalSignerModel.Ready:
+                return externalSignerModel.deviceName.length > 0
+                    ? externalSignerModel.deviceName
                     //: Device status: one device was found, but it did not report a name.
                     : qsTr("Found")
-            }
             //: Device status: more than one hardware device is connected; only one can be used.
-            if (walletController.externalSignerCount > 1) return qsTr("More than one")
+            case ExternalSignerModel.MultipleDevices: return qsTr("More than one")
             //: Device status: a device was found but cannot be used yet, for example because it is locked.
-            if (walletController.externalSignerError.length > 0) return qsTr("Not ready")
+            case ExternalSignerModel.DeviceNotReady: return qsTr("Not ready")
             //: Device status: the signer command works but found no device.
-            return qsTr("None found")
+            default: return qsTr("None found")
+            }
         }
         // A missing, locked or extra device is fixed at the device, not in
         // the path, so it reads as guidance with a warning, not as an error.
@@ -243,7 +203,7 @@ FormSection {
         valueIconColor: root.deviceReady ? Theme.color.successText : Theme.color.warningIcon
         supportingText: {
             if (root.deviceReady) return ""
-            if (walletController.externalSignerError.length > 0) return walletController.externalSignerError
+            if (externalSignerModel.error.length > 0) return externalSignerModel.error
             //: Shown when the external signer command works but no hardware device was found.
             return qsTr("Connect and unlock your device, then check again.")
         }

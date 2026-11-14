@@ -1807,6 +1807,131 @@ Q_SIGNALS:
     void reviewedRecipientsChanged();
 };
 
+// Stands in for ExternalSignerModel: tests set the state the pages show
+// and count the actions the pages forward.
+class MockExternalSignerModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString draftPath READ draftPath WRITE setDraftPath NOTIFY draftPathChanged)
+    Q_PROPERTY(bool canEdit MEMBER m_can_edit NOTIFY stateChanged)
+    Q_PROPERTY(bool canCheck READ canCheck NOTIFY stateChanged)
+    Q_PROPERTY(bool pathPending MEMBER m_path_pending NOTIFY stateChanged)
+    Q_PROPERTY(QString pathError MEMBER m_path_error NOTIFY stateChanged)
+    Q_PROPERTY(bool checking READ checking NOTIFY stateChanged)
+    Q_PROPERTY(Status status READ status WRITE setStatus NOTIFY stateChanged)
+    Q_PROPERTY(bool commandResponding READ commandResponding NOTIFY stateChanged)
+    Q_PROPERTY(bool deviceReady READ deviceReady NOTIFY stateChanged)
+    Q_PROPERTY(QString deviceName MEMBER m_device_name NOTIFY stateChanged)
+    Q_PROPERTY(QString error MEMBER m_error NOTIFY stateChanged)
+    Q_PROPERTY(QString suggestedWalletName MEMBER m_suggested_wallet_name NOTIFY stateChanged)
+    // The saved path that revertDraft() puts back.
+    Q_PROPERTY(QString savedPath MEMBER m_saved_path NOTIFY stateChanged)
+    // With holdChecks, a check stays running until finishCheckForTest().
+    Q_PROPERTY(bool holdChecks MEMBER m_hold_checks NOTIFY stateChanged)
+    Q_PROPERTY(int checkCalls MEMBER m_check_calls NOTIFY stateChanged)
+    Q_PROPERTY(int revertCalls MEMBER m_revert_calls NOTIFY stateChanged)
+
+public:
+    enum class Status { NotSet, NotChecked, Checking, NotResponding, NoDevice, DeviceNotReady, MultipleDevices, Ready };
+    Q_ENUM(Status)
+
+    QString draftPath() const { return m_draft_path; }
+    void setDraftPath(const QString& path)
+    {
+        if (path == m_draft_path) return;
+        m_draft_path = path;
+        Q_EMIT draftPathChanged();
+    }
+    bool canCheck() const { return !m_checking && m_path_error.isEmpty() && (m_can_edit || m_can_check_without_edit); }
+    bool checking() const { return m_checking; }
+    Status status() const { return m_checking ? Status::Checking : m_status; }
+    void setStatus(Status status)
+    {
+        m_status = status;
+        Q_EMIT stateChanged();
+    }
+    bool commandResponding() const
+    {
+        const Status current{status()};
+        return current == Status::NoDevice || current == Status::DeviceNotReady
+            || current == Status::MultipleDevices || current == Status::Ready;
+    }
+    bool deviceReady() const { return status() == Status::Ready; }
+
+    Q_INVOKABLE void check()
+    {
+        if (m_checking) return;
+        ++m_check_calls;
+        if (m_hold_checks) {
+            m_checking = true;
+            Q_EMIT stateChanged();
+            return;
+        }
+        Q_EMIT stateChanged();
+        Q_EMIT checkFinished();
+    }
+    Q_INVOKABLE void finishCheckForTest()
+    {
+        m_checking = false;
+        Q_EMIT stateChanged();
+        Q_EMIT checkFinished();
+    }
+    Q_INVOKABLE void revertDraft()
+    {
+        ++m_revert_calls;
+        setDraftPath(m_saved_path);
+    }
+    // A path set on the command line: not editable, still checkable.
+    Q_INVOKABLE void setCommandLinePathForTest(const QString& path)
+    {
+        m_can_edit = false;
+        m_can_check_without_edit = true;
+        m_saved_path = path;
+        setDraftPath(path);
+        Q_EMIT stateChanged();
+    }
+    Q_INVOKABLE void reset()
+    {
+        m_draft_path.clear();
+        m_saved_path.clear();
+        m_can_edit = true;
+        m_can_check_without_edit = false;
+        m_path_pending = false;
+        m_path_error.clear();
+        m_checking = false;
+        m_hold_checks = false;
+        m_status = Status::NotSet;
+        m_device_name.clear();
+        m_error.clear();
+        m_suggested_wallet_name = QStringLiteral("external_signer");
+        m_check_calls = 0;
+        m_revert_calls = 0;
+        Q_EMIT draftPathChanged();
+        Q_EMIT stateChanged();
+    }
+
+Q_SIGNALS:
+    void draftPathChanged();
+    void stateChanged();
+    void checkFinished();
+
+private:
+    QString m_draft_path;
+    QString m_saved_path;
+    bool m_can_edit{true};
+    bool m_can_check_without_edit{false};
+    bool m_path_pending{false};
+    QString m_path_error;
+    bool m_checking{false};
+    bool m_hold_checks{false};
+    Status m_status{Status::NotSet};
+    QString m_device_name;
+    QString m_error;
+    QString m_suggested_wallet_name{QStringLiteral("external_signer")};
+    int m_check_calls{0};
+    int m_revert_calls{0};
+};
+
 class MockWalletController : public QObject
 {
     Q_OBJECT
@@ -1824,14 +1949,6 @@ class MockWalletController : public QObject
     Q_PROPERTY(QString walletMigrationError MEMBER m_wallet_migration_error NOTIFY walletMigrationErrorChanged)
     Q_PROPERTY(QString lastImportedWalletName MEMBER m_last_imported_wallet_name NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme MEMBER m_last_imported_wallet_key_scheme NOTIFY lastImportedWalletInfoChanged)
-    Q_PROPERTY(bool canCreateExternalSignerWallet MEMBER m_can_create_external_signer_wallet NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(bool externalSignerPathConfigured MEMBER m_external_signer_path_configured NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(bool externalSignerResponding MEMBER m_external_signer_responding NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(int externalSignerCount MEMBER m_external_signer_count NOTIFY externalSignerStatusChanged)
-    // How often the signer was checked, so tests can tell which actions check it.
-    Q_PROPERTY(QString externalSignerName MEMBER m_external_signer_name NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString externalSignerError MEMBER m_external_signer_error NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString suggestedExternalSignerWalletName MEMBER m_suggested_external_signer_wallet_name NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString lastSelectedWalletName READ lastSelectedWalletName NOTIFY lastSelectedWalletNameChanged)
     Q_PROPERTY(QString lastClosedWalletName READ lastClosedWalletName NOTIFY lastClosedWalletNameChanged)
     Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
@@ -1856,13 +1973,6 @@ public:
     QString m_wallet_migration_error;
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
-    bool m_can_create_external_signer_wallet{false};
-    bool m_external_signer_path_configured{false};
-    bool m_external_signer_responding{false};
-    int m_external_signer_count{0};
-    QString m_external_signer_name;
-    QString m_external_signer_error;
-    QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
     QObject* m_selected_wallet{nullptr};
     QList<QObject*> m_open_wallets;
     // The wallet reported by create, import and load success; the selected
@@ -1894,9 +2004,6 @@ public:
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
-    Q_PROPERTY(int externalSignerRefreshCalls MEMBER m_external_signer_refresh_calls NOTIFY externalSignerStatusChanged)
-    int m_external_signer_refresh_calls{0};
-    Q_INVOKABLE void refreshExternalSignerStatus() { ++m_external_signer_refresh_calls; Q_EMIT externalSignerStatusChanged(); }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
         m_wallet_load_error.clear();
@@ -1932,11 +2039,6 @@ public:
     Q_INVOKABLE bool createExternalSignerWallet(const QString&)
     {
         clearWalletLoadStatus();
-        if (!m_can_create_external_signer_wallet) {
-            m_wallet_load_error = QStringLiteral("Connect an external signer and try again.");
-            Q_EMIT walletLoadErrorChanged();
-            return false;
-        }
         Q_EMIT walletLoadSucceeded(reportedWallet());
         return true;
     }
@@ -2018,14 +2120,6 @@ public:
         clearWalletMigrationStatus();
         m_last_imported_wallet_name.clear();
         m_last_imported_wallet_key_scheme.clear();
-        m_external_signer_refresh_calls = 0;
-        m_can_create_external_signer_wallet = false;
-        m_external_signer_path_configured = false;
-        m_external_signer_responding = false;
-        m_external_signer_count = 0;
-        m_external_signer_name.clear();
-        m_external_signer_error.clear();
-        m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
@@ -2033,7 +2127,6 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         Q_EMIT openWalletLocationCallsChanged();
         Q_EMIT lastImportedWalletInfoChanged();
-        Q_EMIT externalSignerStatusChanged();
     }
     Q_INVOKABLE void requestClosePaymentRequestDetail(QObject* wallet)
     {
@@ -2090,7 +2183,6 @@ Q_SIGNALS:
     void walletMigrationInProgressChanged();
     void walletMigrationErrorChanged();
     void lastImportedWalletInfoChanged();
-    void externalSignerStatusChanged();
     void lastSelectedWalletNameChanged();
     void lastClosedWalletNameChanged();
     void closeWalletCallsChanged();
@@ -4455,6 +4547,7 @@ public Q_SLOTS:
         static MockCoinsListModel coins_list_model;
         static MockWalletQmlModel wallet_model;
         static MockWalletController wallet_controller;
+        static MockExternalSignerModel external_signer_model;
         static MockWalletListModel wallet_list_model;
         static MockTransactionActivityModel transaction_activity_model;
         static MockBumpTransactionModel bump_model;
@@ -4511,6 +4604,7 @@ public Q_SLOTS:
         qmlRegisterUncreatableType<MockTransaction>("org.bitcoincore.qt", 1, 0, "Transaction", "Test stub type");
         qmlRegisterUncreatableType<MockSendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "Test stub type");
         qmlRegisterUncreatableType<MockBumpTransactionModel>("org.bitcoincore.qt", 1, 0, "BumpTransactionModel", "Test stub type");
+        qmlRegisterUncreatableType<MockExternalSignerModel>("org.bitcoincore.qt", 1, 0, "ExternalSignerModel", "Test stub type");
         qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Test stub type");
         qmlRegisterUncreatableType<MockWalletListModel>("org.bitcoincore.qt", 1, 0, "WalletListModel", "Test stub type");
         qmlRegisterUncreatableType<MockWalletQmlModelTransaction>(
@@ -4545,6 +4639,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testPeerDetailsModel"), &peer_details_model);
         engine->rootContext()->setContextProperty(QStringLiteral("otherPeerDetailsModel"), &other_peer_details_model);
         engine->rootContext()->setContextProperty(QStringLiteral("walletController"), &wallet_controller);
+        engine->rootContext()->setContextProperty(QStringLiteral("externalSignerModel"), &external_signer_model);
         engine->rootContext()->setContextProperty(QStringLiteral("walletListModel"), &wallet_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testSecondWalletModel"), &second_wallet_model);

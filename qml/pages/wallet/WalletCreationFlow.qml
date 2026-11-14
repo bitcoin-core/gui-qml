@@ -22,6 +22,8 @@ Item {
     property bool completedWatchOnly: false
     property bool completedEncrypted: false
     property bool readyPending: false
+    // External signer was chosen and its check is still running.
+    property bool externalSignerRoutePending: false
     // The wallet just created or imported. The completion pages act on it,
     // even if another wallet is selected meanwhile.
     property QtObject completedWallet: null
@@ -93,7 +95,7 @@ Item {
     function showExternalSignerForm(setupSkipped) {
         walletController.clearWalletLoadStatus()
         root.push(externalWallet, {
-            "defaultWalletName": walletController.suggestedExternalSignerWalletName,
+            "defaultWalletName": externalSignerModel.suggestedWalletName,
             "canChangeSigner": setupSkipped
         })
     }
@@ -125,6 +127,18 @@ Item {
         id: automationPathField
         objectName: "importWalletPathField"
         visible: false
+    }
+
+    // A responding command goes straight to device detection and naming; a
+    // missing or broken one is set up or corrected first.
+    Connections {
+        target: externalSignerModel
+        function onCheckFinished() {
+            if (!root.externalSignerRoutePending) return
+            root.externalSignerRoutePending = false
+            if (externalSignerModel.commandResponding) root.showExternalSignerForm(true)
+            else root.push(externalSetup, { "modalView": root.modalView })
+        }
     }
 
     Connections {
@@ -249,11 +263,12 @@ Item {
             onWatchOnlySelected: root.push(formPage, { "watchOnly": true,
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
-                walletController.refreshExternalSignerStatus()
-                // A responding command goes straight to device detection and
-                // naming; a missing or broken one is set up or corrected first.
-                if (walletController.externalSignerResponding) root.showExternalSignerForm(true)
-                else root.push(externalSetup, { "modalView": root.modalView })
+                if (root.externalSignerRoutePending) return
+                // The saved path is the one to check; an unsaved edit left on
+                // the settings page doesn't decide where this goes.
+                root.externalSignerRoutePending = true
+                externalSignerModel.revertDraft()
+                externalSignerModel.check()
             }
             onImportSelected: root.chooseImportFile()
         }

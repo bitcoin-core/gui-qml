@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 import "../../qml/components"
 
@@ -20,31 +21,26 @@ TestCase {
     function init() {
         motionMode = Theme.motion.mode
         Theme.motion.mode = "full"
-        walletController.reset()
-        optionsModel.externalSignerPath = "/signer/signer.py"
-        setStatus(true, 1, "trezor_t", "")
+        externalSignerModel.reset()
+        externalSignerModel.draftPath = "/signer/signer.py"
+        setStatus(ExternalSignerModel.Ready, "trezor_t", "")
         section = createTemporaryObject(sectionComponent, testCase)
         verify(section !== null)
     }
 
     function cleanup() {
         Theme.motion.mode = motionMode
-        optionsModel.externalSignerPath = ""
-        walletController.reset()
+        externalSignerModel.reset()
     }
 
-    function setStatus(responding, count, name, error) {
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerResponding = responding
-        walletController.externalSignerCount = count
-        walletController.externalSignerName = name
-        walletController.externalSignerError = error
-        walletController.canCreateExternalSignerWallet = responding && count === 1 && error.length === 0
+    function setStatus(status, name, error) {
+        externalSignerModel.deviceName = name
+        externalSignerModel.error = error
+        externalSignerModel.status = status
     }
 
-    // A new section for each test: typing into the path field replaces its
-    // binding to the saved path, so a shared one would carry one test's path
-    // into the next.
+    // A new section for each test, so one test's field doesn't carry into
+    // the next.
     property var section: null
     Component {
         id: sectionComponent
@@ -96,9 +92,12 @@ TestCase {
         // Pick another signer, as Browse does, then check it. The new
         // result arrives while the check runs.
         findChild(section, "testPathInput").text = "/signer/multi_signers.py"
+        externalSignerModel.status = ExternalSignerModel.NotChecked
         wait(400)
+        externalSignerModel.holdChecks = true
         section.check()
-        setStatus(true, 2, "", "More than one external signer was found. Connect only one device.")
+        setStatus(ExternalSignerModel.MultipleDevices, "", "More than one external signer was found. Connect only one device.")
+        externalSignerModel.finishCheckForTest()
         wait(400)
         compareIcon("testCommandRow", Theme.color.successText)
         compareIcon("testDeviceRow", Theme.color.warningIcon)
@@ -202,14 +201,65 @@ TestCase {
 
         findChild(section, "testPathInput").text = "/signer/multi_signers.py"
         section.check()
-        setStatus(true, 2, "", "More than one external signer was found. Connect only one device.")
-        tryCompare(section, "checking", false)
+        setStatus(ExternalSignerModel.MultipleDevices, "", "More than one external signer was found. Connect only one device.")
         compareIconBox("testDeviceRow", "image://images/alert-filled", 30)
 
         findChild(section, "testPathInput").text = "/signer/not_a_signer.py"
         section.check()
-        setStatus(false, 0, "", "The signer command did not return valid output. Check that the path is correct.")
-        tryCompare(section, "checking", false)
+        setStatus(ExternalSignerModel.NotResponding, "", "The signer command did not return valid output. Check that the path is correct.")
         compareIconBox("testCommandRow", "image://images/cross-circle-filled", 18)
+    }
+
+    Component {
+        id: secondSectionComponent
+        ExternalSignerPathSection {
+            width: 600
+            namePrefix: "second"
+        }
+    }
+
+    // Settings and wallet creation can both be open, each with a section.
+    // They show one path: an edit in one, a path chosen with Browse, or one
+    // the model puts back reaches the other field, including a field whose
+    // text was typed.
+    function test_sectionsShareOnePath() {
+        const second = createTemporaryObject(secondSectionComponent, testCase)
+        verify(second !== null)
+        const field = findChild(section, "testPathInput")
+        const secondField = findChild(second, "secondPathInput")
+        compare(secondField.text, "/signer/signer.py")
+
+        field.text = "/opt/hwi/hwi"
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi")
+        compare(secondField.text, "/opt/hwi/hwi")
+
+        secondField.text = "/opt/hwi/hwi2"
+        compare(field.text, "/opt/hwi/hwi2")
+
+        findChild(second, "secondPathDialog").selectAndAccept("/opt/hwi/hwi3")
+        compare(field.text, "/opt/hwi/hwi3")
+        compare(secondField.text, "/opt/hwi/hwi3")
+
+        externalSignerModel.savedPath = "/signer/signer.py"
+        externalSignerModel.revertDraft()
+        compare(field.text, "/signer/signer.py")
+        compare(secondField.text, "/signer/signer.py")
+    }
+
+    // A check saves and runs the path it started with, so neither the field
+    // nor Browse can change the path until the result is in.
+    function test_pathIsLockedWhileChecking() {
+        const field = findChild(section, "testPathInput")
+        const browse = findChild(section, "testBrowseButton")
+        compare(field.enabled, true)
+        compare(browse.enabled, true)
+        externalSignerModel.holdChecks = true
+        section.check()
+        compare(section.checking, true)
+        compare(field.enabled, false)
+        compare(browse.enabled, false)
+        externalSignerModel.finishCheckForTest()
+        compare(field.enabled, true)
+        compare(browse.enabled, true)
     }
 }

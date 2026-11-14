@@ -49,8 +49,8 @@ OnboardingView {
         //: Saves the signer path and checks the signer command and the connected hardware wallet. Same label as on the external signer settings page.
         return qsTr("Check device")
     }
-    primaryButtonEnabled: root.pathSection !== null && !root.pathSection.checking
-        && root.pathSection.pathText.trim().length > 0 && root.pathSection.pathError.length === 0
+    primaryButtonEnabled: root.deviceReady || (root.pathSection !== null && root.pathSection.canCheck
+        && root.pathSection.pathText.trim().length > 0)
     onCloseClicked: root.cancel()
     onPrimaryClicked: {
         if (root.deviceReady) root.ready()

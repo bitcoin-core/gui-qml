@@ -32,20 +32,18 @@ TestCase {
 
     function init() {
         BuildInfo.externalSignerSupported = true
-        optionsModel.externalSignerPath = ""
+        externalSignerModel.reset()
         walletController.reset()
         walletController.initialized = true
     }
 
-    // The controller state after checking a working signer command.
+    // The signer state after checking a working signer command.
     function setSignerResponding(signerName) {
-        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerResponding = true
-        walletController.canCreateExternalSignerWallet = signerName.length > 0
-        walletController.externalSignerName = signerName
-        walletController.suggestedExternalSignerWalletName = signerName.length > 0 ? signerName : "external_signer"
-        walletController.refreshExternalSignerStatus()
+        externalSignerModel.savedPath = "/usr/local/bin/hwi"
+        externalSignerModel.draftPath = "/usr/local/bin/hwi"
+        externalSignerModel.status = signerName.length > 0 ? ExternalSignerModel.Ready : ExternalSignerModel.NoDevice
+        externalSignerModel.deviceName = signerName
+        externalSignerModel.suggestedWalletName = signerName.length > 0 ? signerName : "external_signer"
     }
 
     function createFlow() {
@@ -143,7 +141,7 @@ TestCase {
 
     function test_external_signer_uses_onboarding_form_and_ready_page() {
         setSignerResponding("trezor_t")
-        walletController.suggestedExternalSignerWalletName = "trezor_t2"
+        externalSignerModel.suggestedWalletName = "trezor_t2"
         const flow = createFlow()
         findChild(flow, "walletTypeExternalSigner").clicked()
         tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
@@ -276,29 +274,31 @@ TestCase {
 
         const pathField = findChild(setup, "externalSignerSetupPathInput")
         const commandRow = findChild(setup, "externalSignerSetupCommandRow")
-        const checks = walletController.externalSignerRefreshCalls
+        const checks = externalSignerModel.checkCalls
+        // Typing goes to the shared model, which reports the path as unchecked.
         pathField.text = "/opt/hwi/hwi"
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi")
+        externalSignerModel.status = ExternalSignerModel.NotChecked
         compare(commandRow.value, "Not checked")
-        // Leaving the field saves and checks nothing; that takes the button.
+        // Leaving the field checks nothing; that takes the button.
         pathField.editingFinished()
-        compare(optionsModel.externalSignerPath, "")
-        compare(walletController.externalSignerRefreshCalls, checks)
+        compare(externalSignerModel.checkCalls, checks)
         compare(setup.primaryButton.text, "Check device")
         compare(setup.primaryButton.enabled, true)
+        externalSignerModel.holdChecks = true
         setup.primaryButton.clicked()
-        compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-        // The check shows that it runs before its result is in.
+        compare(externalSignerModel.checkCalls, checks + 1)
+        // The check shows that it runs until its result is in.
         compare(pathSection.checking, true)
         compare(commandRow.value, "Checking…")
         compare(setup.primaryButton.text, "Checking…")
         compare(setup.primaryButton.enabled, false)
-        tryCompare(pathSection, "checking", false)
-        compare(walletController.externalSignerRefreshCalls, checks + 1)
-        compare(findChild(flow, "externalSignerWalletFormPage"), null)
 
         // HWI works but no device is connected yet.
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerResponding = true
+        externalSignerModel.status = ExternalSignerModel.NoDevice
+        externalSignerModel.finishCheckForTest()
+        compare(pathSection.checking, false)
+        compare(findChild(flow, "externalSignerWalletFormPage"), null)
         compare(commandRow.value, "Responding")
         compare(findChild(setup, "externalSignerSetupDeviceRow").value, "None found")
         compare(setup.primaryButton.text, "Check again")
@@ -306,12 +306,12 @@ TestCase {
         // The device turns up while the next check runs. That click only
         // checks; continuing takes another one.
         setup.primaryButton.clicked()
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "trezor_t"
-        walletController.suggestedExternalSignerWalletName = "trezor_t"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        externalSignerModel.deviceName = "trezor_t"
+        externalSignerModel.suggestedWalletName = "trezor_t"
         compare(setup.primaryButton.text, "Checking…")
         compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
-        tryCompare(pathSection, "checking", false)
+        externalSignerModel.finishCheckForTest()
         compare(findChild(flow, "externalSignerWalletFormPage"), null)
         compare(findChild(setup, "externalSignerSetupDeviceRow").value, "trezor_t")
         compare(setup.primaryButton.text, "Use this device")
@@ -353,18 +353,21 @@ TestCase {
 
     // A saved path whose command does not respond is corrected in the flow.
     function test_external_signer_broken_path_opens_setup_with_its_error() {
-        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
-        walletController.externalSignerPathConfigured = true
-        walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
+        externalSignerModel.savedPath = "/usr/local/bin/hwi"
+        externalSignerModel.status = ExternalSignerModel.NotResponding
+        externalSignerModel.error = "The signer command did not return valid output. Check that the path is correct."
         const flow = createFlow()
         findChild(flow, "walletTypeExternalSigner").clicked()
         tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
+        // Choosing the type checks the saved path, not an unsaved edit.
+        compare(externalSignerModel.revertCalls, 1)
+        compare(externalSignerModel.checkCalls, 1)
 
         const setup = findChild(flow, "externalSignerSetupPage")
         compare(findChild(setup, "externalSignerSetupPathInput").text, "/usr/local/bin/hwi")
         const commandRow = findChild(setup, "externalSignerSetupCommandRow")
         compare(commandRow.value, "Not responding")
-        compare(commandRow.errorText, walletController.externalSignerError)
+        compare(commandRow.errorText, externalSignerModel.error)
         compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
         compare(setup.primaryButton.text, "Check device")
     }
@@ -372,28 +375,22 @@ TestCase {
     // A path set on the command line can't be changed in setup, but the step
     // can still check it again instead of only being left.
     function test_external_signer_command_line_path_can_be_checked_in_setup() {
-        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
-        optionsModel.setCoreSettingStatusForTest("signer", false, "command_line", "Set on the command line.", false)
-        try {
-            walletController.externalSignerPathConfigured = true
-            walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
-            const flow = createFlow()
-            findChild(flow, "walletTypeExternalSigner").clicked()
-            tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
+        externalSignerModel.setCommandLinePathForTest("/usr/local/bin/hwi")
+        externalSignerModel.status = ExternalSignerModel.NotResponding
+        externalSignerModel.error = "The signer command did not return valid output. Check that the path is correct."
+        const flow = createFlow()
+        findChild(flow, "walletTypeExternalSigner").clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
 
-            const setup = findChild(flow, "externalSignerSetupPage")
-            const checks = walletController.externalSignerRefreshCalls
-            compare(findChild(setup, "externalSignerSetupPathRow").enabled, false)
-            compare(setup.primaryButton.text, "Check device")
-            compare(setup.primaryButton.enabled, true)
+        const setup = findChild(flow, "externalSignerSetupPage")
+        const checks = externalSignerModel.checkCalls
+        compare(findChild(setup, "externalSignerSetupPathRow").enabled, false)
+        compare(setup.primaryButton.text, "Check device")
+        compare(setup.primaryButton.enabled, true)
 
-            setup.primaryButton.clicked()
-            tryCompare(setup.pathSection, "checking", false)
-            compare(walletController.externalSignerRefreshCalls, checks + 1)
-            compare(optionsModel.externalSignerPath, "/usr/local/bin/hwi")
-        } finally {
-            optionsModel.clearCoreSettingStatusesForTest()
-        }
+        setup.primaryButton.clicked()
+        compare(externalSignerModel.checkCalls, checks + 1)
+        compare(externalSignerModel.draftPath, "/usr/local/bin/hwi")
     }
 
     // A working command skips setup. Without a device the form can check
@@ -402,12 +399,12 @@ TestCase {
         setSignerResponding("")
         // Opening Add wallet checks nothing; choosing the type checks once,
         // and the form it opens doesn't check again.
-        const checks = walletController.externalSignerRefreshCalls
+        const checks = externalSignerModel.checkCalls
         const flow = createFlow()
-        compare(walletController.externalSignerRefreshCalls, checks)
+        compare(externalSignerModel.checkCalls, checks)
         findChild(flow, "walletTypeExternalSigner").clicked()
         tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
-        compare(walletController.externalSignerRefreshCalls, checks + 1)
+        compare(externalSignerModel.checkCalls, checks + 1)
         compare(findChild(flow, "externalSignerSetupPage"), null)
 
         const form = findChild(flow, "externalSignerWalletFormPage")
@@ -416,15 +413,17 @@ TestCase {
         compare(form.secondaryButton, findChild(form, "externalWalletCheckAgainButton"))
         compare(form.secondaryButton.text, "Check again")
 
+        externalSignerModel.holdChecks = true
         form.secondaryButton.clicked()
         compare(form.secondaryButton.text, "Checking…")
         compare(form.secondaryButton.enabled, false)
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "Coldcard Mk4"
-        walletController.suggestedExternalSignerWalletName = "Coldcard_Mk4"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        externalSignerModel.deviceName = "Coldcard Mk4"
+        externalSignerModel.suggestedWalletName = "Coldcard_Mk4"
         compare(form.primaryButton.enabled, false)
-        tryCompare(form, "checking", false)
-        compare(walletController.externalSignerRefreshCalls, checks + 2)
+        externalSignerModel.finishCheckForTest()
+        compare(form.checking, false)
+        compare(externalSignerModel.checkCalls, checks + 2)
         compare(form.subheading, "Connected signer: Coldcard Mk4")
         compare(findChild(form, "externalWalletNameInput").text, "Coldcard_Mk4")
         compare(form.primaryButton.enabled, true)
@@ -466,10 +465,14 @@ TestCase {
         tryCompare(pages, "depth", depth + 1)
         setup = pages.currentItem
         findChild(setup, "externalSignerSetupPathInput").text = "/opt/hwi/hwi"
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi")
+        externalSignerModel.status = ExternalSignerModel.NotChecked
         compare(setup.primaryButton.text, "Check device")
+        externalSignerModel.holdChecks = true
         setup.primaryButton.clicked()
-        compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-        tryCompare(setup.pathSection, "checking", false)
+        compare(setup.pathSection.checking, true)
+        externalSignerModel.status = ExternalSignerModel.Ready
+        externalSignerModel.finishCheckForTest()
         compare(setup.primaryButton.text, "Use this device")
         setup.primaryButton.clicked()
         tryCompare(pages, "depth", depth)
@@ -482,8 +485,7 @@ TestCase {
     // status says, so the other wallet types are all that is offered.
     function test_external_signer_hidden_without_build_support() {
         BuildInfo.externalSignerSupported = false
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "trezor_t"
+        setSignerResponding("trezor_t")
         const flow = createFlow()
         compare(findChild(flow, "walletTypeExternalSigner").visible, false)
         compare(findChild(flow, "walletTypeRegular").visible, true)

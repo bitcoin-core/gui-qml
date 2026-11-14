@@ -21,11 +21,10 @@ OnboardingView {
     // Whether the form offers to go back to the setup step, which it does
     // when that step was skipped on the way here.
     property bool canChangeSigner: false
-    // True from Check again until its result is in.
-    property bool checking: false
+    readonly property bool checking: externalSignerModel.checking
     readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
     readonly property bool canCreate: walletController.initialized
-        && walletController.canCreateExternalSignerWallet
+        && externalSignerModel.deviceReady
         && !creatingWallet && !checking && loadedChildView
         && loadedChildView.walletName.trim().length > 0
 
@@ -44,10 +43,10 @@ OnboardingView {
 
     title: ""
     heading: qsTr("External signer wallet")
-    subheading: walletController.externalSignerError.length > 0
-        ? walletController.externalSignerError
-        : walletController.externalSignerName.length > 0
-          ? qsTr("Connected signer: %1").arg(walletController.externalSignerName)
+    subheading: externalSignerModel.error.length > 0
+        ? externalSignerModel.error
+        : externalSignerModel.deviceName.length > 0
+          ? qsTr("Connected signer: %1").arg(externalSignerModel.deviceName)
           //: Shown on external signer wallet creation while HWI responds but no device is found.
           : qsTr("Connect and unlock your device, then check again.")
     maximumContentWidth: 800
@@ -57,7 +56,7 @@ OnboardingView {
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
     // Only needed until a usable device is found.
-    secondaryButtonText: walletController.canCreateExternalSignerWallet && !checking ? ""
+    secondaryButtonText: externalSignerModel.deviceReady ? ""
         //: Check again button while the hardware wallet is being looked for.
         : checking ? qsTr("Checking…")
         //: Looks for the connected hardware wallet again during external signer wallet creation.
@@ -66,34 +65,23 @@ OnboardingView {
     secondaryButtonEnabled: !creatingWallet && !checking
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
-    // Like the setup step, the button shows that the check ran even when it
-    // finds the same thing.
-    onSecondaryClicked: {
-        if (checking) return
-        checking = true
-        checkTimer.restart()
-    }
+    onSecondaryClicked: externalSignerModel.check()
 
     // The flow checked the signer just before showing this form.
     Component.onCompleted: walletController.clearWalletLoadStatus()
 
-    Timer {
-        id: checkTimer
-        interval: Theme.motion.animated ? 300 : 0
-        onTriggered: {
-            walletController.refreshExternalSignerStatus()
-            root.checking = false
+    // A device found by checking again names the wallet, unless the name
+    // was already typed.
+    Connections {
+        target: externalSignerModel
+        function onCheckFinished() {
+            if (root.nameEdited || root.creatingWallet || !root.loadedChildView) return
+            root.loadedChildView.walletName = externalSignerModel.suggestedWalletName
         }
     }
 
     Connections {
         target: walletController
-        // A device found by checking again names the wallet, unless the
-        // name was already typed.
-        function onExternalSignerStatusChanged() {
-            if (root.nameEdited || root.creatingWallet || !root.loadedChildView) return
-            root.loadedChildView.walletName = walletController.suggestedExternalSignerWalletName
-        }
         function onWalletLoadSucceeded(wallet) {
             if (!root.submitted) return
             root.submitted = false
