@@ -14,6 +14,7 @@
 #include <QByteArray>
 #include <QGuiApplication>
 #include <QJsonObject>
+#include <QLocale>
 #include <QPluginLoader>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -71,6 +72,11 @@ void LogQtInfo()
     for (const QScreen* s : QGuiApplication::screens()) {
         LogInfo("Screen: %s %dx%d, pixel ratio=%.1f\n", s->name().toStdString(), s->size().width(), s->size().height(), s->devicePixelRatio());
     }
+}
+
+QLocale GregorianLocale(const QLocale& locale)
+{
+    return QLocale(locale.language(), locale.script(), locale.territory());
 }
 
 SecureString SecureStringFromQString(const QString& value)

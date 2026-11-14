@@ -4,6 +4,7 @@
 #include <qml/models/coinslistmodel.h>
 #include <qml/bitcoinamount.h>
 #include <qml/models/walletqmlmodel.h>
+#include <qml/util.h>
 #include <key_io.h>
 #include <script/solver.h>
 #include <algorithm>
@@ -28,7 +29,7 @@ int CoinsListModel::rowCount(const QModelIndex& parent) const { return parent.is
 QString CoinsListModel::groupTitle(const Coin& coin) const
 {
     if (m_group == "address") return coin.address;
-    return QLocale().toString(coin.date, m_group == "month" ? "MMMM yyyy" : "MMM d, yyyy");
+    return QmlUtil::GregorianLocale().toString(coin.date, m_group == "month" ? "MMMM yyyy" : "MMM d, yyyy");
 }
 QVariant CoinsListModel::data(const QModelIndex& index, int role) const
 {
