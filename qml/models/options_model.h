@@ -130,6 +130,8 @@ public:
     Q_INVOKABLE bool selectCustomDataDir(const QString& path);
     Q_INVOKABLE void useDefaultDataDir();
     Q_INVOKABLE QString externalSignerPathValidationError(const QString& path) const;
+    // The signer path as it is saved: trimmed, and a file URL as a local path.
+    static QString normalizeSignerPath(const QString& path);
     Q_INVOKABLE QUrl externalSignerPathFolder(const QString& path) const;
     bool proxyEnabled() const { return m_core_settings.values().proxy_enabled; }
     void setProxyEnabled(bool enabled);

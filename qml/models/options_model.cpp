@@ -601,6 +601,11 @@ void OptionsQmlModel::setExternalSignerPath(const QString& path)
     });
 }
 
+QString OptionsQmlModel::normalizeSignerPath(const QString& path)
+{
+    return NormalizeCommandPath(path);
+}
+
 QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) const
 {
     return NormalizeCommandPath(path) == m_validated_signer_path ? m_signer_validation_error : QString{};
