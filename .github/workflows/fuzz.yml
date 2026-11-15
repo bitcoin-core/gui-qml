@@ -1,0 +1,288 @@
+name: Fuzz and Security Audit
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+    inputs:
+      run_asan:
+        description: 'Run AddressSanitizer + UBSan job'
+        required: false
+        default: true
+        type: boolean
+      run_ubsan:
+        description: 'Run UBSan-only job'
+        required: false
+        default: true
+        type: boolean
+      run_tsan:
+        description: 'Run ThreadSanitizer job'
+        required: false
+        default: true
+        type: boolean
+      os:
+        description: 'Operating system(s) to fuzz on'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'macos-14'
+          - 'both'
+      deploy_artifacts:
+        description: 'Push corpus/coverage/crashes to the external repository'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - id: build
+        run: |
+          oses=()
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            oses=("ubuntu-latest")
+          else
+            case "${{ inputs.os }}" in
+              ubuntu-latest) oses=("ubuntu-latest") ;;
+              macos-14) oses=("macos-14") ;;
+              both) oses=("ubuntu-latest" "macos-14") ;;
+              *) oses=("ubuntu-latest") ;;
+            esac
+          fi
+          sanitizers=()
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            sanitizers+=("address,undefined" "undefined" "thread")
+          else
+            [ "${{ inputs.run_asan }}" = "true" ] && sanitizers+=("address,undefined")
+            [ "${{ inputs.run_ubsan }}" = "true" ] && sanitizers+=("undefined")
+            [ "${{ inputs.run_tsan }}" = "true" ] && sanitizers+=("thread")
+          fi
+          if [ ${#sanitizers[@]} -eq 0 ]; then sanitizers+=("address,undefined"); fi
+          # Build matrix entries {sanitizer, os}
+          entries=()
+          for os in "${oses[@]}"; do
+            for san in "${sanitizers[@]}"; do
+              entries+=("{\"sanitizer\":\"$san\",\"os\":\"$os\"}")
+            done
+          done
+          json=$(printf '%s\n' "${entries[@]}" | jq -s -c .)
+          echo "matrix={\"include\":$json}" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    name: Fuzz QML Backend (${{ matrix.sanitizer }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: prepare
+    timeout-minutes: 60
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.sanitizer }}-${{ matrix.os }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            jq \
+            ninja-build \
+            cmake \
+            build-essential \
+            pkg-config \
+            libsqlite3-dev \
+            zlib1g-dev \
+            libboost-all-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-tools-dev \
+            qt6-l10n-tools \
+            qt6-tools-dev-tools \
+            qt6-declarative-dev \
+            qt6-svg-dev \
+            qml6-module-qt-labs-platform \
+            qml6-module-qt-labs-settings \
+            libgl-dev \
+            libqrencode-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install qt llvm cmake ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "Qt6_DIR=$(brew --prefix qt)/lib/cmake/Qt6" >> "$GITHUB_ENV"
+
+      - name: Run QML-C++ static analysis linter
+        run: |
+          python3 test/fuzz/qml_security_lint.py qml
+
+      - name: Configure (CMake)
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++" \
+              -DCMAKE_OSX_SYSROOT="$(xcrun --show-sdk-path)" \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DENABLE_IPC=OFF \
+              -DBUILD_FUZZ_TESTS=ON \
+              -DBUILD_APP_TESTS=OFF \
+              -DFUZZ_SANITIZERS="fuzzer,${{ matrix.sanitizer }}" \
+              -DQt6_DIR="$(brew --prefix qt)/lib/cmake/Qt6"
+          else
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DENABLE_IPC=OFF \
+              -DBUILD_FUZZ_TESTS=ON \
+              -DBUILD_APP_TESTS=OFF \
+              -DFUZZ_SANITIZERS="fuzzer,${{ matrix.sanitizer }}"
+          fi
+
+      - name: Build fuzz targets
+        run: cmake --build build --parallel
+
+      - name: Pull corpus from external repository
+        env:
+          EXTERNAL_REPO_PAT: ${{ secrets.EXTERNAL_REPO_PAT }}
+        run: |
+          if [ -n "${EXTERNAL_REPO_PAT}" ]; then
+            git clone https://x-access-token:${EXTERNAL_REPO_PAT}@github.com/bitcoincore-dev/qa-assets.git fuzzing_repo || true
+          fi
+
+          # Map QML fuzz targets to related upstream Bitcoin Core corpora so
+          # new targets start from a useful seed set rather than from scratch.
+          declare -A CORPUS_SEEDS=(
+            [fuzz_bech32]="bech32_random_decode bech32_roundtrip"
+            [fuzz_bitcoin_address]="base58_encode_decode base58check_encode_decode"
+            [fuzz_bitcoin_address_format]="base58_encode_decode"
+            [fuzz_send_recipient]="base58_encode_decode bech32_random_decode"
+            [fuzz_payment_request]="base58_encode_decode bech32_random_decode"
+            [fuzz_payment_request_deserialization]="base58_encode_decode bech32_random_decode"
+            [fuzz_address_list_model]="base58_encode_decode bech32_random_decode"
+          )
+
+          for f in build/test/fuzz/fuzz_*; do
+            name=$(basename "$f")
+            mkdir -p "build/test/fuzz/corpus/$name"
+            if [ -d "fuzzing_repo/fuzz_corpora/$name" ]; then
+              cp -r "fuzzing_repo/fuzz_corpora/$name/"* "build/test/fuzz/corpus/$name/" 2>/dev/null || true
+            fi
+            for seed in ${CORPUS_SEEDS[$name]}; do
+              if [ -d "fuzzing_repo/fuzz_corpora/$seed" ]; then
+                cp -r "fuzzing_repo/fuzz_corpora/$seed/"* "build/test/fuzz/corpus/$name/" 2>/dev/null || true
+              fi
+            done
+          done
+
+      - name: Run fuzz targets
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/test/sanitizer_suppressions/tsan
+          LLVM_PROFILE_FILE: "build/test/fuzz/fuzz-%p.profraw"
+        run: |
+          for f in build/test/fuzz/fuzz_*; do
+            name=$(basename "$f")
+            mkdir -p "build/test/fuzz/corpus/$name"
+            dict_arg=""
+            if [ -f "test/fuzz/dicts/$name.dict" ]; then
+              dict_arg="-dict=test/fuzz/dicts/$name.dict"
+            fi
+            echo "=== Running $f ==="
+            "$f" "build/test/fuzz/corpus/$name" $dict_arg -max_total_time=30 || true
+          done
+
+      - name: Process coverage data
+        if: matrix.sanitizer == 'address,undefined' && runner.os == 'Linux'
+        run: |
+          mkdir -p build/coverage_report
+          if ls build/test/fuzz/*.profraw >/dev/null 2>&1; then
+            llvm-profdata merge -sparse build/test/fuzz/*.profraw -o build/test/fuzz/fuzz.profdata
+            # Combine coverage from every fuzz binary so the report covers all targets.
+            objects=()
+            for f in build/test/fuzz/fuzz_*; do
+              [ -x "$f" ] || continue
+              [ "$(basename "$f")" = "fuzz_bitcoin_uri" ] && continue
+              objects+=("-object" "$f")
+            done
+            llvm-cov show build/test/fuzz/fuzz_bitcoin_uri \
+              "${objects[@]}" \
+              -instr-profile=build/test/fuzz/fuzz.profdata \
+              -format=html -output-dir=build/coverage_report \
+              -ignore-filename-regex="/usr/|test/|tests/" 2>/dev/null || true
+            llvm-cov export build/test/fuzz/fuzz_bitcoin_uri \
+              "${objects[@]}" \
+              -instr-profile=build/test/fuzz/fuzz.profdata \
+              -format=lcov \
+              -ignore-filename-regex="/usr/|test/|tests/" > build/coverage.lcov 2>/dev/null || true
+          fi
+
+      - name: Push corpus and artifacts to external repository
+        if: matrix.sanitizer == 'address,undefined' && runner.os == 'Linux' && (github.event_name == 'push' && github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.deploy_artifacts == true))
+        env:
+          EXTERNAL_REPO_PAT: ${{ secrets.EXTERNAL_REPO_PAT }}
+        run: |
+          if [ -z "${EXTERNAL_REPO_PAT}" ]; then
+            echo "No EXTERNAL_REPO_PAT; skipping push."
+            exit 0
+          fi
+          git config --global user.name "GitHub Actions CI Bot"
+          git config --global user.email "actions@github.com"
+
+          if [ ! -d fuzzing_repo ]; then
+            if ! git clone https://x-access-token:${EXTERNAL_REPO_PAT}@github.com/bitcoincore-dev/qa-assets.git fuzzing_repo 2>/dev/null; then
+              echo "External fuzzing repository not found or inaccessible; skipping push."
+              exit 0
+            fi
+          fi
+
+          mkdir -p fuzzing_repo/fuzz_corpora fuzzing_repo/fuzz_dicts fuzzing_repo/crashes fuzzing_repo/coverage
+          for d in build/test/fuzz/corpus/fuzz_*; do
+            name=$(basename "$d")
+            mkdir -p "fuzzing_repo/fuzz_corpora/$name"
+            rm -rf "fuzzing_repo/fuzz_corpora/$name"/*
+            cp -r "$d"/* "fuzzing_repo/fuzz_corpora/$name/" 2>/dev/null || true
+          done
+          mkdir -p fuzzing_repo/crashes
+          rm -rf fuzzing_repo/crashes/*
+          find build/test/fuzz -name 'crash-*' -exec cp {} fuzzing_repo/crashes/ \; 2>/dev/null || true
+          cp test/fuzz/dicts/*.dict fuzzing_repo/fuzz_dicts/ 2>/dev/null || true
+          mkdir -p fuzzing_repo/coverage
+          rm -rf fuzzing_repo/coverage/*
+          cp -r build/coverage_report/* fuzzing_repo/coverage/ 2>/dev/null || true
+          cp build/coverage.lcov fuzzing_repo/coverage.lcov 2>/dev/null || true
+          cp build/coverage_report/index.html fuzzing_repo/index.html 2>/dev/null || true
+
+          cd fuzzing_repo
+          git add .
+          if git diff-index --quiet HEAD --; then
+            echo "No changes in fuzzing artifacts to push."
+          else
+            git commit -m "Auto-update fuzzing corpus and artifacts from ${{ github.sha }}"
+            git push origin master
+          fi

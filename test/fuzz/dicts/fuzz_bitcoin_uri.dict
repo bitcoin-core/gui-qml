@@ -1,0 +1,8 @@
+# Bitcoin URI fuzzer dictionary
+kw1="bitcoin:"
+kw2="bitcoin://"
+kw3="?amount="
+kw4="&label="
+kw5="&message="
+kw6="req-"
+kw7="amount="
