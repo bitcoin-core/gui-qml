@@ -92,3 +92,13 @@ function formatRemainingSyncTime(milliseconds) {
         };
     }
 }
+
+// A comma is a decimal point only where the locale writes one, since
+// elsewhere it groups thousands.
+function decimalSeparatorPattern(decimalPoint) {
+    return decimalPoint === "," ? "[.,]" : "\\."
+}
+
+function normalizeDecimalInput(text, decimalPoint) {
+    return decimalPoint === "," ? String(text).replace(",", ".") : String(text)
+}

@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
+import "utils.js" as Utils
 
 ColumnLayout {
     id: root
@@ -23,6 +24,7 @@ ColumnLayout {
     property string placeholderText: root.amount ? root.amountInputPlaceholder(root.amount.unit) : "0.00000000"
     property bool interceptPaste: false
     property bool showLabel: true
+    property string decimalPoint: Qt.locale().decimalPoint
 
     signal inputTextChanged
     signal textEdited
@@ -72,9 +74,10 @@ ColumnLayout {
 
     function amountInputPattern(unit) {
         if (unit === BitcoinAmount.SAT) return /^0*\d{0,16}$/
-        if (unit === BitcoinAmount.MicroBTC) return /^0*\d{0,13}(\.\d{0,2})?$/
-        if (unit === BitcoinAmount.MilliBTC) return /^0*\d{0,10}(\.\d{0,5})?$/
-        return /^0*\d{0,7}(\.\d{0,8})?$/
+        const separator = Utils.decimalSeparatorPattern(root.decimalPoint)
+        if (unit === BitcoinAmount.MicroBTC) return new RegExp("^0*\\d{0,13}(" + separator + "\\d{0,2})?$")
+        if (unit === BitcoinAmount.MilliBTC) return new RegExp("^0*\\d{0,10}(" + separator + "\\d{0,5})?$")
+        return new RegExp("^0*\\d{0,7}(" + separator + "\\d{0,8})?$")
     }
 
     function amountInputMaximumLength(unit) {
@@ -139,8 +142,9 @@ ColumnLayout {
             }
 
             function commitAmountText() {
-                if (root.amount && root.amount.display !== text) {
-                    root.amount.display = text
+                const value = Utils.normalizeDecimalInput(text, root.decimalPoint)
+                if (root.amount && root.amount.display !== value) {
+                    root.amount.display = value
                 }
             }
 
