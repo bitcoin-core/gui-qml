@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <qml/applocale.h>
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/transaction.h>
@@ -11,7 +12,9 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QFile>
+#include <QLocale>
 #include <QScopeGuard>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -190,6 +193,7 @@ private Q_SLOTS:
     void refiltersWhenSourceAmountChanges();
     void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
+    void languageChangeReformatsDateLabels();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
     void exportsCsvEscapesSignedRowsAndHandlesFailures();
@@ -349,6 +353,43 @@ void ActivityFilterProxyModelTests::sortsByTimestampDescending()
     QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"New"});
     QCOMPARE(proxy.index(1, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Middle"});
     QCOMPARE(proxy.index(2, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Old"});
+}
+
+void ActivityFilterProxyModelTests::languageChangeReformatsDateLabels()
+{
+    const QLocale previous_default;
+    QmlTranslations translations;
+    auto restore = qScopeGuard([&] {
+        translations.install(QString{});
+        QLocale::setDefault(previous_default);
+    });
+    const QLocale swiss{QStringLiteral("de_CH")};
+    QLocale::setDefault(swiss);
+    translations.install(QStringLiteral("es"), swiss);
+
+    const QDateTime date(QDate(2026, 1, 15), QTime(14, 30));
+    TestActivityModel source;
+    source.setRows({MakeRow("January", Transaction::RecvWithAddress, date.toSecsSinceEpoch())});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    const auto label = [&](int role) { return proxy.index(0, 0).data(role).toString(); };
+    QCOMPARE(label(ActivityFilterProxyModel::SectionLabelRole), QStringLiteral("enero 2026"));
+    QCOMPARE(label(ActivityFilterProxyModel::DateTimeLabelRole), swiss.toString(date, QLocale::ShortFormat));
+
+    QSignalSpy data_spy(&proxy, &QAbstractItemModel::dataChanged);
+    translations.install(QStringLiteral("en"), swiss);
+    QVERIFY(data_spy.count() > 0);
+    QVERIFY(data_spy.last().at(2).value<QList<int>>().contains(ActivityFilterProxyModel::SectionLabelRole));
+    QCOMPARE(label(ActivityFilterProxyModel::SectionLabelRole), QStringLiteral("January 2026"));
+
+    proxy.setGroupBy(ActivityFilterProxyModel::Day);
+    QCOMPARE(label(ActivityFilterProxyModel::SectionLabelRole), QStringLiteral("Thursday, 15. January 2026"));
+    QCOMPARE(label(ActivityFilterProxyModel::DateTimeLabelRole), QStringLiteral("14:30"));
+
+    QLocale::setDefault(QLocale{QStringLiteral("fr_CA")});
+    QCOMPARE(label(ActivityFilterProxyModel::DateTimeLabelRole), QStringLiteral("14 h 30"));
+    QLocale::setDefault(QLocale{QStringLiteral("ja_JP")});
+    QCOMPARE(label(ActivityFilterProxyModel::SectionLabelRole), QStringLiteral("2026 January 15 Thursday"));
 }
 
 void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()

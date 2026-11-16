@@ -37,6 +37,7 @@
 #include <utility>
 #include <vector>
 
+#include <qml/applocale.h>
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buttonkeyactivation.h>
@@ -4474,6 +4475,9 @@ public Q_SLOTS:
         });
         qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
             return new MotionPreference(QStringLiteral("off"));
+        });
+        qmlRegisterSingletonType<QmlAppLocale>("org.bitcoincore.qt", 1, 0, "AppLocale", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new QmlAppLocale;
         });
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",

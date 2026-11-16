@@ -18,7 +18,7 @@ ColumnLayout {
     readonly property real calendarCellWidth: {
         let width = 36
         for (let day = 1; day <= 7; ++day)
-            width = Math.max(width, weekdayMetrics.advanceWidth(Qt.locale().dayName(day, Locale.ShortFormat)) + Theme.space.m)
+            width = Math.max(width, weekdayMetrics.advanceWidth(root.namesLocale.dayName(day, Locale.ShortFormat)) + Theme.space.m)
         return Math.ceil(width)
     }
     property FontMetrics weekdayMetrics: FontMetrics { font: Theme.text.caption.font }
@@ -65,11 +65,11 @@ ColumnLayout {
 
     // Internal state --------------------------------------------------------
 
-    // Every date the calendar renders goes through toLocaleDateString with a
-    // Locale format rather than an explicit pattern, so the locale decides the
-    // field order as well as the month and weekday names. The chips take the
-    // short form because they are narrow; the day cells take the long form
-    // because they are only ever read aloud.
+    // Dates written with words follow the app language; numeric dates and week start follow Qt.locale().
+    readonly property var namesLocale: Qt.uiLanguage ? Qt.locale(Qt.uiLanguage) : Qt.locale()
+
+    // The chips take the short form because they are narrow; the day cells
+    // take the long form because they are only ever read aloud.
 
     // customFrom and customTo are local Date values (or null). While pickingEnd
     // is true the start is chosen and the next click sets the end; hoverDate
@@ -234,7 +234,7 @@ ColumnLayout {
     // selection state, so the state is announced to a screen reader and not
     // conveyed by color alone.
     function dayCellAccessibleName(cell) {
-        var base = cell.modelData.toLocaleDateString(Qt.locale(), Locale.LongFormat)
+        var base = cell.modelData.toLocaleDateString(root.namesLocale, AppLocale.wordDateFormat(Qt.uiLanguage, false))
         if (cell.endpoint) {
             //: Screen reader label for a chosen start or end day in the Activity custom date range calendar. %1 is the date.
             return qsTr("%1, selected range endpoint").arg(base)
@@ -305,11 +305,8 @@ ColumnLayout {
         CoreText {
             objectName: "calendarMonthLabel"
             Layout.fillWidth: true
-            // The one place a pattern is unavoidable: Locale has no month-and-year
-            // format to ask for. toLocaleDateString still localizes the month name
-            // here (a Qt.formatDate format string would render C-locale English),
-            // so only the field order is fixed.
-            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
+            // toLocaleDateString localizes the month name; a Qt.formatDate format string would render C-locale English.
+            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(root.namesLocale, AppLocale.wordDateFormat(Qt.uiLanguage, true))
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
             textStyle: Theme.text.subheading
@@ -348,7 +345,7 @@ ColumnLayout {
                 readonly property int jsDay: (root.weekStart + index) % 7
                 width: root.calendarCellWidth
                 height: Math.max(22, implicitHeight)
-                text: Qt.locale().dayName(jsDay === 0 ? 7 : jsDay, Locale.ShortFormat)
+                text: root.namesLocale.dayName(jsDay === 0 ? 7 : jsDay, Locale.ShortFormat)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 color: Theme.color.neutral6
@@ -375,7 +372,7 @@ ColumnLayout {
         //: Screen reader name of the day grid in the Activity custom date range calendar.
         Accessible.name: qsTr("Calendar")
         Accessible.description: root.calendarFocusDate
-            ? root.calendarFocusDate.toLocaleDateString(Qt.locale(), Locale.LongFormat) : ""
+            ? root.calendarFocusDate.toLocaleDateString(root.namesLocale, AppLocale.wordDateFormat(Qt.uiLanguage, false)) : ""
         onActiveFocusChanged: {
             if (activeFocus) {
                 root.ensureCalendarFocusDate()
