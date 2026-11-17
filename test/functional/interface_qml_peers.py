@@ -634,6 +634,8 @@ def test_unban_peer(gui, harness):
     gui.wait_for_property("bannedPeersPopup", "opened", True, timeout_ms=8000)
     print("  Opened Banned Peers popup")
 
+    # The ban list is populated after the popup opens; wait for its first row.
+    gui.wait_for_object("unbanButton_0", timeout_ms=PEER_ACTION_TIMEOUT_SECS * 1000)
     gui.click("unbanButton_0")
     harness.wait_for_no_banned()
 
