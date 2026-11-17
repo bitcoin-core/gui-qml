@@ -33,6 +33,7 @@ void ConfiguredQtHandler(QtMsgType type, const QMessageLogContext& context, cons
 }
 
 int RunStartupProfileProbe(const QString& mode);
+int RunLegacyUnitProbe();
 
 int main(int argc, char* argv[])
 {
@@ -47,6 +48,8 @@ int main(int argc, char* argv[])
     // the machine across runs.
     QTemporaryDir settings_sandbox;
     qputenv("XDG_CONFIG_HOME", (settings_sandbox.path() + QStringLiteral("/config")).toUtf8());
+    // Runs before anything registers the legacy BitcoinUnit type.
+    if (qEnvironmentVariableIsSet("BITCOIN_QML_LEGACY_UNIT_CASE")) return RunLegacyUnitProbe();
     if(qEnvironmentVariableIsSet("BITCOIN_QML_STARTUP_PROFILE_CASE"))return RunStartupProfileProbe(qEnvironmentVariable("BITCOIN_QML_STARTUP_PROFILE_CASE"));
     if (qEnvironmentVariableIsSet("BITCOIN_QML_QTLOG_SINK_CASE")) {
         const bool overflow = qgetenv("BITCOIN_QML_QTLOG_SINK_CASE") == "overflow";

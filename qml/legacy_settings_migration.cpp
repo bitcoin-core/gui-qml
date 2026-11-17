@@ -137,6 +137,9 @@ std::unique_ptr<QSettings> OpenSettings(QString org, const QString& app, QSettin
         else if (org == QStringLiteral("Bitcoin")) org = QStringLiteral("bitcoin.org");
     }
 #endif
+    // Any historical store may hold a serialized BitcoinUnit. QSettings parses
+    // the whole store on first read, so every reader needs the type first.
+    RegisterLegacyBitcoinUnitMetaType();
     return std::make_unique<QSettings>(format, QSettings::UserScope, org, app);
 }
 
@@ -444,7 +447,6 @@ bool ReadLegacyGuiReset()
 
 int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback)
 {
-    RegisterLegacyBitcoinUnitMetaType();
     const std::unique_ptr<QSettings> settings = OpenSettings(QString::fromUtf8(QT_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/true));
     if (!settings->contains(SettingsKeys::DISPLAY_UNIT)) {
         return fallback;
@@ -572,7 +574,6 @@ MigrationResult CaptureResetSettings(ArgsManager& args)
     const auto directory_source=OpenLegacyDataDirSettings();
     const auto directory_org=directory_source->organizationName();const auto directory_app=directory_source->applicationName();
     stores.push_back({true,OpenLegacyDataDirSettings()});
-    RegisterLegacyBitcoinUnitMetaType();
     for(auto& store:stores){
         auto& settings=*store.settings;settings.sync();
         if(settings.status()!=QSettings::NoError){result.error=QCoreApplication::translate("ProfileMigration","The legacy reset source could not be read. Its source has been retained.");return result;}

@@ -12,6 +12,8 @@
 #include <QFile>
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
@@ -38,6 +40,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <array>
 #include <deque>
 #include <functional>
@@ -407,6 +410,7 @@ private Q_SLOTS:
     void hideAmountsPersists();
     void displayUnitUsesQtCompatibleSettingsKey();
     void displayUnitUsesLegacyQtFallback();
+    void legacyReadersLoadSerializedUnitsInAFreshProcess();
     void displayUnitPrefersQmlSettingOverLegacyQtFallback();
     void sharedCoreSettingHelpersPreserveExplicitOverrides();
     void parameterInteractionOverridesPersistExplicitValues();
@@ -3432,6 +3436,50 @@ void OptionsModelTests::displayUnitUsesQtCompatibleSettingsKey()
     } else {
         settings.remove(SettingsKeys::DISPLAY_UNIT);
     }
+}
+
+// Every legacy reader opens stores that may hold a serialized BitcoinUnit.
+// Reading one before the type is registered loses the value with a Qt
+// warning, so the probe runs in a process where nothing registered it yet.
+int RunLegacyUnitProbe()
+{
+    static QStringList warnings;
+    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& message) {
+        if (type != QtDebugMsg && type != QtInfoMsg) warnings.append(message);
+    });
+    const auto write_store = [](const QString& application, const QByteArray& body) {
+        const QString path = QSettings{QSettings::defaultFormat(), QSettings::UserScope, QStringLiteral("Bitcoin"), application}.fileName();
+        QFile file{path};
+        return QDir().mkpath(QFileInfo(path).absolutePath()) && file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(body) == body.size();
+    };
+    const QByteArray unit{R"ini(DisplayBitcoinUnit=@Variant(\0\0\0\x7f\0\0\0\fBitcoinUnit\0\x3))ini"};
+    if (!write_store(QStringLiteral("Bitcoin-Qt-regtest"), "[General]\n" + unit + "\n") ||
+        !write_store(QStringLiteral("Bitcoin-Qt"), "[General]\n" + unit + "\nlanguage=de\nstrDataDir=/legacy/data\n")) {
+        std::fputs("LEGACY_UNIT_PROBE setup failed\n", stderr);
+        return 2;
+    }
+    const bool read = QmlLegacySettings::ReadLegacyGuiLanguage(QStringLiteral("regtest")) == QStringLiteral("de") &&
+        QmlLegacySettings::ReadLegacyGuiDataDir() == QStringLiteral("/legacy/data");
+    qInstallMessageHandler(nullptr);
+    for (const auto& warning : warnings) std::fputs(QStringLiteral("LEGACY_UNIT_PROBE warning: %1\n").arg(warning).toUtf8().constData(), stderr);
+    std::fputs(QStringLiteral("LEGACY_UNIT_PROBE read=%1 warnings=%2\n").arg(int(read)).arg(warnings.size()).toUtf8().constData(), stdout);
+    return read && warnings.isEmpty() ? 0 : 1;
+}
+
+void OptionsModelTests::legacyReadersLoadSerializedUnitsInAFreshProcess()
+{
+    // The child's main() gives it a private configuration directory.
+    QProcess child;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("BITCOIN_QML_LEGACY_UNIT_CASE"), QStringLiteral("1"));
+    child.setProcessEnvironment(env);
+    child.start(QCoreApplication::applicationFilePath(), {});
+    QVERIFY(child.waitForStarted());
+    QVERIFY(child.waitForFinished(30000));
+    const auto output = QString::fromUtf8(child.readAllStandardOutput() + child.readAllStandardError());
+    QCOMPARE(child.exitStatus(), QProcess::NormalExit);
+    QVERIFY2(child.exitCode() == 0, qPrintable(output));
+    QVERIFY2(output.contains(QStringLiteral("LEGACY_UNIT_PROBE read=1 warnings=0")), qPrintable(output));
 }
 
 void OptionsModelTests::displayUnitUsesLegacyQtFallback()
