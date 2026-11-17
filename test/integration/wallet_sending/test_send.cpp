@@ -1112,6 +1112,38 @@ private Q_SLOTS:
         QVERIFY(!qmltest::Find(m_app, "sendReviewButton")->property("enabled").toBool());
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), size_t{0});
     }
+    // #1106: a send-all Review prepared in sats follows a global display-unit change made while it is open: its
+    // amount rows and the final "Send all available funds?" warning switch to BTC.
+    void sendAllReviewFollowsAGlobalDisplayUnitChange()
+    {
+        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
+        const auto setup = prepareSweep(false); QVERIFY(setup); auto* wallet = setup->wallet;
+        options->setDisplayUnit(3); QTRY_COMPARE(wallet->displayUnit(), 3);
+        QVERIFY(qmltest::SetText(m_app, "sendAddressInput", setup->address));
+        QVERIFY(qmltest::Click(m_app, "sendUseMaximumButton"));
+        QTRY_COMPARE(wallet->sendRecipientList()->currentRecipient()->amount()->satoshi(), setup->expected_amount);
+        QTRY_VERIFY(!wallet->feeEstimatePending());
+        QTRY_VERIFY_WITH_TIMEOUT(qmltest::Find(m_app, "sendReviewButton")->property("enabled").toBool(), 30'000);
+        QVERIFY(qmltest::Click(m_app, "sendReviewButton"));
+        QVERIFY(qmltest::WaitForVisible(m_app, "sendReviewSweepAlert")); QVERIFY(qmltest::Click(m_app, "sendReviewSweepConfirmButton"));
+        QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
+        auto* review = wallet->currentTransaction(); QVERIFY(review); const auto fee = review->feeAmount()->satoshi();
+        QCOMPARE(review->amountAmount()->satoshi(), setup->expected_amount);
+        const auto btc = [](CAmount amount) { return BitcoinUnits::format(BitcoinUnits::Unit::BTC, amount, false, BitcoinUnits::SeparatorStyle::NEVER) + " BTC"; };
+        auto* fee_row = qmltest::Find(m_app, "sendTransactionReviewFee"); auto* total_row = qmltest::Find(m_app, "sendTransactionReviewTotal");
+        QTRY_VERIFY(fee_row->property("value").toString().endsWith(" sats")); QVERIFY(total_row->property("value").toString().endsWith(" sats"));
+        options->setDisplayUnit(0);
+        QTRY_COMPARE(fee_row->property("value").toString(), btc(fee));
+        QTRY_COMPARE(total_row->property("value").toString(), btc(setup->expected_amount + fee));
+        QVERIFY(qmltest::Click(m_app, "sendTransactionReviewSendButton"));
+        auto* alert = qmltest::WaitForVisible(m_app, "sendSweepAlert"); QVERIFY(alert);
+        const auto message = alert->property("message").toString();
+        QVERIFY2(message.contains("(" + btc(setup->expected_amount) + ")"), qPrintable(message)); QVERIFY2(!message.contains("sat"), qPrintable(message));
+        QVERIFY(qmltest::Click(m_app, "sendSweepCancelButton"));
+        QTRY_VERIFY(!qmltest::Find(m_app, "sendSweepAlert")->property("visible").toBool());
+        QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), size_t{0});
+    }
 
     // #1008: with wallet broadcasting enabled, a transaction the local mempool
     // rejects is never reported as sent and is not left in the wallet.
@@ -1677,6 +1709,7 @@ QString SendPreparedWallet(const QString& selector)
                              "maximumHandoverClearsTheFormerRecipient",
                              "maximumHandoverNamesTheRecipientNeedingAttention",
                              "presetsAndCustomRateMakeNoBlockTargetPromise",
+                             "sendAllReviewFollowsAGlobalDisplayUnitChange",
                              "coinSelectionDialogCommitsOrDiscardsInputsAndRepricesTheMaximum",
                              "maximumAndSweepReviewRespectOwnershipAndSelection",
                              "fixedManualSweepWarnsBeforeUnlockAndBeforeBroadcast",

@@ -146,6 +146,7 @@ private Q_SLOTS:
     void presentationAdmissionKeepsOriginalReview_data();
     void presentationAdmissionKeepsOriginalReview();
     void singleRecipientReviewAmountsInheritRecipientUnit();
+    void settledReviewAmountsFollowADisplayUnitChange();
     void multipleRecipientReviewAmountsInheritSharedUnit();
     void recipientRolesExposeFormattedAddressAndUnitLabel();
     void reviewDisplayStringsUseLocale();
@@ -246,6 +247,24 @@ void WalletQmlModelTransactionTests::manualDisplayUnitProjectionRejectsStalePubl
     QSignalSpy quiet(review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged);
     review->closeAdmission(); fixture.environment.publishAll();
     QCOMPARE(quiet.size(), 0); QVERIFY(!review->presentationPending()); QVERIFY(review->reviewedRecipients().isEmpty());
+}
+
+void WalletQmlModelTransactionTests::settledReviewAmountsFollowADisplayUnitChange()
+{
+    // A unit change while the review is open (and its send-all confirmation)
+    // reformats the reviewed amounts instead of keeping the previous unit.
+    FrozenReview fixture; auto snapshot = AmountSnapshot(1000); snapshot.recipients.append({QStringLiteral("address"), QStringLiteral("note"), 1000, false});
+    auto review = fixture.create(snapshot);
+    QCOMPARE(review->amountAmount()->unit(), BitcoinAmount::Unit::BTC);
+    review->setDisplayUnit(3); fixture.settle();
+    QVERIFY(!review->presentationPending()); QVERIFY(review->presentationError().isEmpty());
+    QCOMPARE(review->amountAmount()->unit(), BitcoinAmount::Unit::SAT);
+    QCOMPARE(review->feeAmount()->unit(), BitcoinAmount::Unit::SAT);
+    QCOMPARE(review->totalAmount()->unit(), BitcoinAmount::Unit::SAT);
+    QVERIFY(review->amountAmount()->displayWithUnit().endsWith(QStringLiteral("sats")));
+    review->setDisplayUnit(0); fixture.settle();
+    QCOMPARE(review->amountAmount()->unit(), BitcoinAmount::Unit::BTC);
+    QVERIFY(review->amountAmount()->displayWithUnit().endsWith(QStringLiteral("BTC")));
 }
 
 void WalletQmlModelTransactionTests::singleRecipientReviewAmountsInheritRecipientUnit()

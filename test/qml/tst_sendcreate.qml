@@ -1522,6 +1522,54 @@ TestCase {
         compare(testWalletModel.sendTransactionCalls, calls)
     }
 
+    function test_sweep_alerts_follow_the_current_amount_unit() {
+        // Both send-all confirmations show the amount in the unit selected
+        // now, including a unit change while the confirmation is open. The
+        // draft follows the display unit; the review follows its reformatted
+        // amounts (see settledReviewAmountsFollowADisplayUnitChange).
+        const recipientAmount = testSendRecipient.amount
+        const reviewedAmount = testWalletTransaction.amountAmount
+        const recipientUnit = recipientAmount.unit
+        const reviewedUnit = reviewedAmount.unit
+        try {
+            const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+            testWalletModel.sendDraftSweepsWallet = true
+            testRecipientsModel.totalAmountSatoshi = 12345678
+            recipientAmount.satoshi = 12345678
+            optionsModel.displayUnit = BitcoinAmount.SAT
+            const draftAlert = findChild(page, "sendReviewSweepAlert")
+            findChild(page, "sendReviewButton").clicked()
+            tryCompare(draftAlert, "opened", true)
+            verify(draftAlert.message.indexOf(recipientAmount.displayWithUnit) >= 0)
+            verify(draftAlert.message.indexOf(" sat") >= 0)
+            optionsModel.displayUnit = BitcoinAmount.BTC
+            tryVerify(function() { return draftAlert.message.indexOf(recipientAmount.displayWithUnit) >= 0 })
+            verify(draftAlert.message.indexOf(" sat") < 0)
+            findChild(draftAlert.contentItem, "sendReviewSweepCancelButton").clicked()
+            tryCompare(draftAlert, "visible", false)
+
+            const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+            testWalletModel.currentTransactionSweepsWallet = true
+            reviewedAmount.unit = BitcoinAmount.SAT
+            const reviewAlert = findChild(review, "sendSweepAlert")
+            findChild(review, "sendTransactionReviewSendButton").clicked()
+            tryCompare(reviewAlert, "opened", true)
+            verify(reviewAlert.message.indexOf(reviewedAmount.displayWithUnit) >= 0)
+            verify(reviewAlert.message.indexOf(" sat") >= 0)
+            reviewedAmount.unit = BitcoinAmount.BTC
+            tryVerify(function() { return reviewAlert.message.indexOf(reviewedAmount.displayWithUnit) >= 0 })
+            verify(reviewAlert.message.indexOf(" sat") < 0)
+            findChild(reviewAlert.contentItem, "sendSweepCancelButton").clicked()
+            tryCompare(reviewAlert, "visible", false)
+        } finally {
+            optionsModel.displayUnit = BitcoinAmount.BTC
+            recipientAmount.unit = recipientUnit
+            reviewedAmount.unit = reviewedUnit
+            testWalletModel.sendDraftSweepsWallet = false
+            testWalletModel.currentTransactionSweepsWallet = false
+        }
+    }
+
     function test_reviewing_partial_send_opens_review_directly() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         findChild(page, "sendReviewButton").clicked()

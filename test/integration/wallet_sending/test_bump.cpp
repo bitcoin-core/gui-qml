@@ -6,10 +6,13 @@
 #include <test/integration/fixture/test_wallet.h>
 #include <test/mocks/messagebumptest.h>
 #include <rpc/util.h>
+#include <qml/models/options_model.h>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <set>
@@ -246,6 +249,44 @@ private Q_SLOTS:
         // Speed Up can be closed and prepared again for the same payment.
         bump->reset(); QCOMPARE(bump->state(), BumpTransactionModel::Idle);
         QVERIFY2(AwaitBumpPreparation(*bump, original, 1), qPrintable(bump->errorText()));
+    }
+    // #1106: with sats selected, Speed Up opened from Activity shows Core's original and replacement fees in sats,
+    // and follows a global display-unit change while it is open.
+    void speedUpFeesFollowTheGlobalDisplayUnit()
+    {
+        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
+        auto* destination = qmltest::CreateWallet(m_app, "unit_destination"); QVERIFY(destination);
+        const auto address = qmltest::NewAddress(m_app, destination->name());
+        auto* wallet = qmltest::CreateWallet(m_app, "unit_sender"); QVERIFY(wallet);
+        QVERIFY(qmltest::FundWallet(m_app, *wallet));
+        const auto original = SendReplaceable(m_app, *wallet, address);
+        const auto old_fee = AmountFromValue(qmltest::Rpc(m_app, "getmempoolentry", qmltest::Json("[\"" + original.toStdString() + "\"]")).find_value("fees").find_value("base"));
+        QVERIFY(old_fee > 0);
+        options->setDisplayUnit(3); QTRY_COMPARE(wallet->displayUnit(), 3);
+        QVERIFY(qmltest::Click(m_app, "activityTabButton"));
+        QVERIFY(qmltest::SetText(m_app, "activitySearchField", original));
+        auto* row = qmltest::WaitForVisible(m_app, qPrintable("activityItem_" + original)); QVERIFY(row);
+        QVERIFY(qmltest::Click(qmltest::Find(row, "activityRowOpenButton")));
+        QVERIFY(qmltest::WaitForVisible(m_app, "activityDetailsPage"));
+        QVERIFY(qmltest::Click(m_app, "speedUpBannerPrimaryButton"));
+        auto* bump = wallet->bumpModel(); QVERIFY(bump);
+        QTRY_COMPARE_WITH_TIMEOUT(bump->state(), BumpTransactionModel::NeedsConfirmation, 10'000);
+        QTRY_VERIFY(qmltest::Find(m_app, "speedUpOverlay")->property("opened").toBool());
+        const auto preparation = bump->preparationOperation()->result(); QVERIFY(preparation && preparation->value && preparation->value->review);
+        const auto& review = *preparation->value->review; QCOMPARE(review.old_fee, old_fee); QVERIFY(review.new_fee > old_fee);
+        const auto sats = [](CAmount amount) { return QLocale().toString(qlonglong{amount}) + " sats"; };
+        const auto btc = [](CAmount amount) { return QStringLiteral("0") + QLocale().decimalPoint() + QString::number(amount).rightJustified(8, '0') + " BTC"; };
+        auto* original_row = qmltest::Find(m_app, "speedUpOriginalFeeRow"); auto* new_row = qmltest::Find(m_app, "speedUpNewFeeRow");
+        QVERIFY(original_row && new_row);
+        QTRY_COMPARE(original_row->property("value").toString(), sats(review.old_fee));
+        QCOMPARE(new_row->property("value").toString(), sats(review.new_fee));
+        options->setDisplayUnit(0);
+        QTRY_COMPARE(original_row->property("value").toString(), btc(review.old_fee));
+        QCOMPARE(new_row->property("value").toString(), btc(review.new_fee));
+        QVERIFY(qmltest::Click(m_app, "speedUpCloseButton"));
+        QTRY_VERIFY(!qmltest::Find(m_app, "speedUpOverlay")->property("visible").toBool());
+        QVERIFY(Mempool(m_app).contains(original.toStdString()));
     }
     void independentConfirmationInvalidatesReviewedReplacement()
     {
