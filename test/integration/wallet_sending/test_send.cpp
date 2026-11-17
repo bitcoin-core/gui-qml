@@ -457,6 +457,35 @@ private Q_SLOTS:
         QCOMPARE(recipient->amount()->satoshi(), CAmount{1234567});
         QVERIFY(!wallet->sendDraftSweepsWallet()); QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), size_t{0});
     }
+    void leavingAnUntouchedAmountFieldKeepsMaximum_data()
+    {
+        QTest::addColumn<bool>("tab_away"); QTest::newRow("click-away") << false; QTest::newRow("tab-away") << true;
+    }
+    void leavingAnUntouchedAmountFieldKeepsMaximum()
+    {
+        // Focusing and leaving the amount field without typing is not an
+        // amount edit: Use maximum must stay active with its computed amount.
+        QFETCH(bool, tab_away); const auto setup = prepareSweep(false); QVERIFY(setup); auto* wallet = setup->wallet;
+        auto* recipient = wallet->sendRecipientList()->currentRecipient();
+        QVERIFY(qmltest::Click(m_app, "sendUseMaximumButton"));
+        QTRY_COMPARE(wallet->maximumRecipient(), recipient);
+        QTRY_VERIFY(recipient->amount()->satoshi() > 0);
+        QTRY_VERIFY(!wallet->feeEstimatePending());
+        const auto maximum = recipient->amount()->satoshi();
+        const auto intent = recipient->amountIntentRevision();
+        auto* input = qmltest::WaitForVisible(m_app, "sendAmountInput"); QVERIFY(input);
+        QTRY_VERIFY(qmltest::Click(m_app, "sendAmountInput") && input->property("activeFocus").toBool());
+        if (tab_away) QTest::keyClick(m_app.window(), Qt::Key_Tab, Qt::NoModifier, 1);
+        else QVERIFY(qmltest::Click(m_app, "sendAddressInput"));
+        QTRY_VERIFY(!input->property("activeFocus").toBool());
+        QCoreApplication::processEvents();
+        QCOMPARE(recipient->amountIntentRevision(), intent);
+        QCOMPARE(wallet->maximumRecipient(), recipient);
+        QCOMPARE(recipient->amountMode(), SendRecipient::AmountMode::Maximum);
+        wallet->scheduleFeeEstimates(); QTRY_VERIFY(!wallet->feeEstimatePending());
+        QCOMPARE(wallet->maximumRecipient(), recipient);
+        QCOMPARE(recipient->amount()->satoshi(), maximum);
+    }
     void maximumHandoverClearsTheFormerRecipient_data()
     {
         QTest::addColumn<bool>("with_address"); QTest::newRow("gross-before-address") << false; QTest::newRow("net-after-address") << true;
@@ -568,6 +597,46 @@ private Q_SLOTS:
         QVERIFY(qmltest::Click(m_app, "sendTransactionReviewCloseButton"));
         QCOMPARE(recipient_amount, CAmount{2'000'000});
     }
+    // #1000: a balance or fee refresh while the untouched amount field has
+    // focus updates the maximum; leaving the field must not write stale text.
+    void refreshedMaximumSurvivesLeavingTheFocusedAmountField_data()
+    {
+        QTest::addColumn<bool>("incoming_coin"); QTest::newRow("incoming-coin") << true; QTest::newRow("fee-rate-change") << false;
+    }
+    void refreshedMaximumSurvivesLeavingTheFocusedAmountField()
+    {
+        QFETCH(bool, incoming_coin); const auto setup = prepareSweep(false, false, true); QVERIFY(setup); auto* wallet = setup->wallet;
+        auto* recipient = wallet->sendRecipientList()->currentRecipient();
+        QVERIFY(qmltest::SetText(m_app, "sendAddressInput", setup->address));
+        QVERIFY(qmltest::Click(m_app, "sendUseMaximumButton")); QTRY_COMPARE(wallet->maximumRecipient(), recipient);
+        QTRY_COMPARE_WITH_TIMEOUT(recipient->amount()->satoshi(), setup->expected_amount, 30'000); QTRY_VERIFY(!wallet->feeEstimatePending());
+        const auto intent = recipient->amountIntentRevision();
+        auto* input = qmltest::WaitForVisible(m_app, "sendAmountInput"); QVERIFY(input);
+        QTRY_VERIFY(qmltest::Click(m_app, "sendAmountInput") && input->property("activeFocus").toBool());
+        const auto stale_text = input->property("text").toString(); QCOMPARE(stale_text, recipient->amount()->inputText());
+        if (incoming_coin) {
+            const auto incoming = qmltest::NewAddress(m_app, wallet->name());
+            qmltest::Rpc(m_app, "sendtoaddress", qmltest::Json("{\"address\":\"" + incoming.toStdString() + "\",\"amount\":0.5,\"fee_rate\":1}"), setup->destination_wallet->name());
+            qmltest::Rpc(m_app, "generatetoaddress", qmltest::Json("[1,\"" + setup->address.toStdString() + "\"]"));
+            QTRY_VERIFY_WITH_TIMEOUT(recipient->amount()->satoshi() > setup->expected_amount, 30'000);
+        } else {
+            wallet->fees()->customRate()->edit("5");
+            QTRY_VERIFY_WITH_TIMEOUT(recipient->amount()->satoshi() < setup->expected_amount && recipient->amount()->satoshi() > 0, 30'000);
+        }
+        QTRY_VERIFY(!wallet->feeEstimatePending() && wallet->fees()->estimateFresh());
+        const auto refreshed = recipient->amount()->satoshi();
+        QVERIFY(input->property("activeFocus").toBool());
+        QTRY_COMPARE(input->property("text").toString(), recipient->amount()->inputText()); QVERIFY(input->property("text").toString() != stale_text);
+        QVERIFY(qmltest::Click(m_app, "sendNoteInput")); QTRY_VERIFY(!input->property("activeFocus").toBool());
+        QCoreApplication::processEvents();
+        QCOMPARE(recipient->amountIntentRevision(), intent); QCOMPARE(wallet->maximumRecipient(), recipient);
+        QCOMPARE(recipient->amountMode(), SendRecipient::AmountMode::Maximum); QCOMPARE(recipient->amount()->satoshi(), refreshed);
+        wallet->scheduleFeeEstimates(); QTRY_VERIFY(!wallet->feeEstimatePending());
+        QCOMPARE(wallet->maximumRecipient(), recipient); QCOMPARE(recipient->amount()->satoshi(), refreshed);
+        QTRY_VERIFY(qmltest::Find(m_app, "sendReviewButton")->property("enabled").toBool());
+        QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), size_t{0});
+    }
+
     // #1001: choosing Manual and selecting nothing shows "No inputs selected";
     // Review stays disabled and preparation refuses to pick wallet inputs.
     void emptyManualChoiceShowsNoInputsAndCannotReview()
@@ -1710,6 +1779,7 @@ QString SendPreparedWallet(const QString& selector)
                              "maximumHandoverNamesTheRecipientNeedingAttention",
                              "presetsAndCustomRateMakeNoBlockTargetPromise",
                              "sendAllReviewFollowsAGlobalDisplayUnitChange",
+                             "leavingAnUntouchedAmountFieldKeepsMaximum",
                              "coinSelectionDialogCommitsOrDiscardsInputsAndRepricesTheMaximum",
                              "maximumAndSweepReviewRespectOwnershipAndSelection",
                              "fixedManualSweepWarnsBeforeUnlockAndBeforeBroadcast",
