@@ -339,7 +339,8 @@ private Q_SLOTS:
             wallet = qmltest::CreateWallet(m_app, "privacy-rpc"); QVERIFY(wallet);
             QVERIFY(wallet->encryptWallet("owned test fixture password"));
             QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
-            QVERIFY(wallet->isLocked());
+            // Success precedes the refreshed lock observation; wait for it.
+            QTRY_VERIFY(wallet->isLocked());
             loaded_before = qmltest::Rpc(m_app, "listwallets");
             QVERIFY(qmltest::SelectSettings(m_app, "rpc-console"));
             QVERIFY(qmltest::WaitForVisible(m_app, "rpcConsole"));
@@ -386,7 +387,7 @@ private Q_SLOTS:
         QTest::keyClick(m_app.window(), Qt::Key_Down, Qt::NoModifier, 1); QTRY_COMPARE(input->property("text").toString(), QString{});
 #ifdef ENABLE_WALLET
         if (wallet_enabled) {
-            QVERIFY(wallet->isLocked());
+            QTRY_VERIFY(wallet->isLocked());
             QCOMPARE(qmltest::Rpc(m_app, "listwallets").write(), loaded_before.write());
         }
 #endif

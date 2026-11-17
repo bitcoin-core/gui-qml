@@ -329,7 +329,7 @@ private Q_SLOTS:
         auto* source = Imports(qmltest::Find(m_app, "walletSendPage"))->operation();
         QVERIFY2(QTest::qWaitFor([&] { return recipient->amount()->satoshi() == 700'000; }, 5000), qPrintable(importDiagnostic(source)));
         QCOMPARE(recipient->paymentRequestLabel(), QStringLiteral("Public")); QCOMPARE(recipient->message(), QStringLiteral("Locked draft"));
-        QCOMPARE(recipient->label(), QStringLiteral("Private locked note")); QVERIFY(m_wallet->isLocked());
+        QCOMPARE(recipient->label(), QStringLiteral("Private locked note")); QTRY_VERIFY(m_wallet->isLocked());
         QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, m_wallet->name()).find_value("unlocked_until").getInt<int64_t>(), 0);
         QVERIFY(!m_wallet->currentTransaction()); QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
     }

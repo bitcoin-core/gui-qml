@@ -601,8 +601,8 @@ private Q_SLOTS:
         QVERIFY(qmltest::Click(m_app, "createWalletReadyDoneButton"));
         auto* wallet = qmltest::WaitForWallet(m_app, "My new wallet");
         QVERIFY(wallet);
-        QVERIFY(wallet->isEncrypted());
-        QVERIFY(wallet->isLocked());
+        QTRY_VERIFY(wallet->isEncrypted());
+        QTRY_VERIFY(wallet->isLocked());
         const auto info = qmltest::Rpc(m_app, "getwalletinfo", {}, wallet->name());
         QVERIFY(info.find_value("private_keys_enabled").get_bool());
         QCOMPARE(info.find_value("unlocked_until").getInt<int64_t>(), 0);
@@ -780,11 +780,11 @@ private Q_SLOTS:
         QVERIFY(wallet->changeWalletPassphrase("wrong password", replacement));
         QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecurityFailed, qmltest::kSecurityStateTimeoutMs);
         QVERIFY(!wallet->settingsError().isEmpty());
-        QVERIFY(wallet->isLocked());
+        QTRY_VERIFY(wallet->isLocked());
         QVERIFY(wallet->changeWalletPassphrase(original, replacement));
         QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
         QVERIFY(wallet->settingsError().isEmpty());
-        QVERIFY(wallet->isLocked());
+        QTRY_VERIFY(wallet->isLocked());
         UniValue unlock{UniValue::VARR};
         unlock.push_back(replacement.toStdString());
         unlock.push_back(10);
@@ -888,7 +888,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::Click(m_app, "walletPasswordSaveButton"));
         QTRY_VERIFY(qmltest::Find(m_app, "walletPasswordErrorText")->property("text").toString().contains("incorrect", Qt::CaseInsensitive));
         QCOMPARE(qmltest::Find(m_app, "walletPasswordCurrentField")->property("text").toString(), QStringLiteral("wrong password"));
-        QVERIFY(wallet->isLocked());
+        QTRY_VERIFY(wallet->isLocked());
     }
 
     // #709: Set password from Settings explains, on the real encryption path,
@@ -1732,12 +1732,12 @@ private Q_SLOTS:
         auto* restored = qmltest::WaitForOpenWallet(m_app, "encrypted_restore");
         QVERIFY(restored);
         QVERIFY(controller->selectWallet(restored));
-        QVERIFY(restored->isEncrypted());
-        QVERIFY(restored->isLocked());
+        QTRY_VERIFY(restored->isEncrypted());
+        QTRY_VERIFY(restored->isLocked());
         auto* signer = restored->signVerifyMessageModel();
         QVERIFY(AwaitMessageSigning(*signer, address, "restored wallet", "backup password"));
         QVERIFY(AwaitMessageVerification(*signer, address, "restored wallet", signer->signature()));
-        QVERIFY(restored->isLocked());
+        QTRY_VERIFY(restored->isLocked());
     }
 
     void completionRetainsItsOriginalResultAndNeverSelectsIt()
