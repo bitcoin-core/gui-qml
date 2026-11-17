@@ -481,6 +481,16 @@ TestCase {
         }
     }
 
+    function test_segmentedPickerWithoutSelectionHasNoText() {
+        const picker = createTemporaryObject(segmentedPickerComponent, testCase)
+        verify(picker !== null)
+        picker.currentIndex = 1
+        compare(picker.currentText, "Dark")
+        // An unselected picker must not assign undefined (and warn).
+        picker.currentIndex = -1
+        compare(picker.currentText, "")
+    }
+
     function test_switchRowFlipsOnceFromRowOrSwitch() {
         const row = createTemporaryObject(switchRowComponent, host)
         verify(row !== null)
