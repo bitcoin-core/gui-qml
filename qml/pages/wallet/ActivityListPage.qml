@@ -502,6 +502,7 @@ Page {
         backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
         itemObjectNamePrefix: "activity"
+        wallet: root.wallet
         rawTransaction: function(txid) {
             return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
         }

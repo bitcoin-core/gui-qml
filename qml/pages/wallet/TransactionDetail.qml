@@ -73,6 +73,7 @@ Page {
             TransactionActionsMenu {
                 id: moreMenu
                 objectName: "transactionDetailMoreMenu"
+                wallet: root.wallet
                 txid: root.txid
                 rawTransaction: function(txid) {
                     return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
