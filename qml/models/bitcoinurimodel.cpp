@@ -14,17 +14,18 @@ namespace {
 QVariantMap BuildBitcoinUriResultMap(const BitcoinUriParseResult& r)
 {
     return {
-        {QStringLiteral("success"),    r.success},
-        {QStringLiteral("error"),      r.error},
-        {QStringLiteral("address"),    r.address},
-        {QStringLiteral("amountSats"), static_cast<qlonglong>(r.amount_sats)},
-        {QStringLiteral("hasAmount"),  r.has_amount},
-        {QStringLiteral("label"),      r.label},
-        {QStringLiteral("hasLabel"),   r.has_label},
+        {QStringLiteral("success"),         r.success},
+        {QStringLiteral("error"),           r.error},
+        {QStringLiteral("address"),         r.address},
+        {QStringLiteral("amountSats"),      static_cast<qlonglong>(r.amount_sats)},
+        {QStringLiteral("hasAmount"),       r.has_amount},
+        {QStringLiteral("label"),           r.label},
+        {QStringLiteral("hasLabel"),        r.has_label},
         // Key is "uriMessage" (not "message") to avoid shadowing the JavaScript
         // built-in Error.message property when this map is used in QML.
-        {QStringLiteral("uriMessage"), r.message},
-        {QStringLiteral("hasMessage"), r.has_message},
+        {QStringLiteral("uriMessage"),      r.message},
+        {QStringLiteral("hasMessage"),      r.has_message},
+        {QStringLiteral("isSilentPayment"), r.is_silent_payment},
     };
 }
 } // namespace

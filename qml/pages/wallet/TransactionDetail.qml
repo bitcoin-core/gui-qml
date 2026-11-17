@@ -209,6 +209,31 @@ Page {
                     message: qsTr("This mining reward will be spendable after %1 more blocks.").arg(root.transactionData.blocksToMaturity || 0)
                 }
 
+                FormRow {
+                    id: silentPaymentAddressRow
+                    objectName: "transactionSilentPaymentAddressRow"
+                    readonly property var addresses: root.transactionData.silentPaymentAddresses || []
+                    Layout.fillWidth: true
+                    implicitWidth: 0
+                    visible: addresses.length > 0
+                    title: addresses.length === 1
+                        //: Label above a stored Silent Payments address in transaction details.
+                        ? qsTr("Silent payment address")
+                        //: Label above the stored Silent Payments addresses of a transaction, which may include a change address.
+                        : qsTr("Silent payment addresses")
+                    bodyItem: Column {
+                        Layout.fillWidth: true
+                        spacing: Theme.space.ml
+                        Repeater {
+                            model: silentPaymentAddressRow.addresses
+                            AddressLabel {
+                                objectName: index === 0 ? "transactionSilentPaymentAddress" : "transactionSilentPaymentAddress_" + index
+                                width: parent.width
+                                address: modelData
+                            }
+                        }
+                    }
+                }
                 TransactionFlow {
                     objectName: "transactionDetailFlow"
                     Layout.fillWidth: true

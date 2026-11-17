@@ -4,8 +4,10 @@
 
 #include <qml/models/bitcoinaddress.h>
 
+#include <bech32.h>
+
 namespace {
-constexpr int MAX_BITCOIN_ADDRESS_LENGTH = 90;
+constexpr int MAX_BITCOIN_ADDRESS_LENGTH = bech32::CharLimit::SILENT_PAYMENTS;
 
 bool IsBitcoinAddressChar(const QChar c)
 {
@@ -63,7 +65,7 @@ int BitcoinAddress::setAddress(const QString& input, int cursorPosition)
         }
     }
 
-    // 2) Build the raw (no-space) address, filtering and capping at 90 chars.
+    // 2) Build the raw (no-space) address, filtering and capping at MAX_BITCOIN_ADDRESS_LENGTH chars.
     QString raw;
     raw.reserve(qMin(input.length(), MAX_BITCOIN_ADDRESS_LENGTH));
     for (QChar c : input) {

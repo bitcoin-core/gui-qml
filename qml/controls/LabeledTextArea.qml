@@ -14,6 +14,7 @@ LabeledField {
     property alias placeholderText: input.placeholderText
     property alias inputObjectName: input.objectName
     property alias readOnly: input.readOnly
+    property alias inputEnabled: input.enabled
     readonly property alias inputActiveFocus: input.activeFocus
     property var textStyle: Theme.text.description
     property bool interceptPaste: false

@@ -529,7 +529,7 @@ PageStack {
         }
 
         function paymentRequestNote(result) {
-            if (!result.hasMessage || result.uriMessage.length === 0) return ""
+            if (result.isSilentPayment || !result.hasMessage || result.uriMessage.length === 0) return ""
             return result.hasLabel && result.label.length > 0
                 ? result.uriMessage + " - " + result.label : result.uriMessage
         }
@@ -740,6 +740,7 @@ PageStack {
         Connections {
             target: root.recipient.amount
             function onAmountChanged() {
+                if (root.wallet && root.wallet.maximumRecipient && root.recipient !== root.wallet.maximumRecipient) root.draftChanged()
                 if (!sendPage.m_applyingUri) sendPage.checkClipboard()
             }
         }
@@ -1039,8 +1040,15 @@ PageStack {
                                 footerText: !root.wallet ? ""
                                     : root.wallet.feeEstimatePending ? qsTr("Estimating…")
                                     : root.wallet.estimatedFeeSatoshi >= 0 ? ""
+                                    : root.wallet.recipients.allValid && root.wallet.maximumRecipient
+                                        //: Shown below Network fee when the maximum send amount cannot be calculated.
+                                        ? qsTr("Unable to calculate the maximum amount.")
+                                    : root.wallet.recipients.allValid && root.wallet.recipients.hasSilentPayments
+                                        //: Explains the deferred fee calculation for a fixed-amount Silent Payments send. The fee is shown on the review screen before sending.
+                                        ? qsTr("For silent payments, the fee is calculated when preparing the transaction for review.")
                                     : root.wallet.recipients.allValid ? qsTr("Fee estimate unavailable")
-                                    : qsTr("Enter a valid recipient address and amount to estimate the fee")
+                                    //: Shown below Network fee when payment details are incomplete or invalid.
+                                    : qsTr("Complete the payment details to estimate the fee")
                                 SendFeeSelection { Layout.fillWidth: true; walletModel: root.wallet; onFeeChanged: root.clearPrepareTransactionError() }
                             }
 
