@@ -11,6 +11,8 @@
 #include <interfaces/handler.h>
 #include <interfaces/wallet.h>
 #include <rpc/protocol.h>
+#include <util/fs.h>
+#include <wallet/walletutil.h>
 
 #include <QApplication>
 #include <QEvent>
@@ -35,6 +37,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <set>
 #include <thread>
 
 #ifndef WIN32
@@ -1073,6 +1076,69 @@ private Q_SLOTS:
         QCOMPARE(row->property("loadState").toInt(), static_cast<int>(WalletListModel::LoadState::LoadError));
     }
 
+    // #1004: a wallet.dat already at the wallet directory root when the GUI
+    // starts (with -nowallet, so it starts closed) is listed with a usable
+    // name, not a blank "Failed to open wallet" row, and opens from the picker.
+    void unnamedWalletPresentAtStartupIsNamedAndOpensFromThePicker()
+    {
+        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* catalog = qmltest::Model<WalletListModel>(m_app, "walletListModel"); QVERIFY(catalog);
+        QVERIFY(QFileInfo::exists(QString::fromStdString(fs::PathToString(wallet::GetWalletDir() / "wallet.dat"))));
+        QCOMPARE(qmltest::Rpc(m_app, "listwallets").size(), 0U);
+        const auto label = [&] { for (int row = 0; row < catalog->rowCount(); ++row) if (catalog->data(catalog->index(row), WalletListModel::NameRole).toString().isEmpty()) return catalog->data(catalog->index(row), WalletListModel::DisplayNameRole).toString(); return QStringLiteral("<missing>"); };
+        QTRY_VERIFY(catalog->walletDirLoaded()); QTRY_COMPARE(label(), QStringLiteral("Default wallet"));
+        QVERIFY(QTest::qWaitFor([&] { return openSelector() && qmltest::Find(m_app, "walletSelectItem_"); }));
+        auto* row = qmltest::Find(m_app, "walletSelectItem_"); QVERIFY(row); QTRY_COMPARE(row->property("loadState").toInt(), int(WalletListModel::LoadState::Closed));
+        QCOMPARE(qmltest::Find(m_app, "walletSelectName_")->property("text").toString(), QStringLiteral("Default wallet"));
+        QVERIFY(qmltest::Find(m_app, "walletSelectStatus_")->property("text").toString().isEmpty());
+        QVERIFY(qmltest::Click(m_app, "walletSelectItem_")); QTRY_VERIFY(controller->isWalletOpen(QString{}));
+        QVERIFY(qmltest::Rpc(m_app, "listwallets")[0].get_str().empty()); QCOMPARE(qmltest::Rpc(m_app, "getwalletinfo", {}, "").find_value("walletname").get_str(), std::string{});
+        QVERIFY(openSelector()); row = qmltest::Find(m_app, "walletSelectItem_"); QVERIFY(row); QTRY_COMPARE(row->property("loadState").toInt(), int(WalletListModel::LoadState::Open));
+        QVERIFY(qmltest::Click(m_app, "walletSelectItem_")); QTRY_VERIFY(controller->selectedWallet() && controller->selectedWallet()->name().isEmpty());
+        QCOMPARE(controller->selectedWallet()->displayName(), QStringLiteral("Default wallet")); QTRY_COMPARE(qmltest::Find(m_app, "walletBadge")->property("text").toString(), QStringLiteral("Default wallet"));
+    }
+
+    void unnamedWalletOpensClosesAndReopensFromThePicker()
+    {
+        // Core lists a wallet.dat at the wallet directory root as the wallet
+        // with an empty name. The picker must open it, close it and open it
+        // again, not report "Failed to open wallet".
+        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* seed = qmltest::CreateWallet(m_app, "unnamed_seed"); QVERIFY(seed);
+        const auto root_file = fs::PathToString(wallet::GetWalletDir() / "wallet.dat");
+        QVERIFY(!QFileInfo::exists(QString::fromStdString(root_file)));
+        UniValue backup{UniValue::VARR}; backup.push_back(root_file);
+        qmltest::Rpc(m_app, "backupwallet", backup, seed->name());
+        QVERIFY(QFileInfo::exists(QString::fromStdString(root_file)));
+        // A picker click loads a closed wallet; completion does not select it
+        // behind a newer choice. The next click on the loaded row selects it.
+        const auto row_state = [&](WalletListModel::LoadState state) {
+            // Rows are rebuilt as the catalog changes; look the row up each time.
+            return QTest::qWaitFor([&] {
+                auto* row = qmltest::Find(m_app, "walletSelectItem_");
+                return row && row->property("enabled").toBool() && row->property("loadState").toInt() == static_cast<int>(state);
+            });
+        };
+        const auto open_from_picker = [&] {
+            if (!openSelector() || !row_state(WalletListModel::LoadState::Closed) || !qmltest::Click(m_app, "walletSelectItem_")) return false;
+            if (!QTest::qWaitFor([&] { return controller->isWalletOpen(QString{}); })) return false;
+            if (!openSelector() || !row_state(WalletListModel::LoadState::Open) || !qmltest::Click(m_app, "walletSelectItem_")) return false;
+            return QTest::qWaitFor([&] { return controller->selectedWallet() && controller->selectedWallet()->name().isEmpty(); });
+        };
+        QVERIFY(QTest::qWaitFor([&] { return openSelector() && qmltest::Find(m_app, "walletSelectItem_"); }));
+        QVERIFY(open_from_picker());
+        // Keep the RPC result alive while iterating its values.
+        const auto loaded = [&] { std::set<std::string> names; const auto result = qmltest::Rpc(m_app, "listwallets"); for (const auto& name : result.getValues()) names.insert(name.get_str()); return names; };
+        QVERIFY(loaded() == (std::set<std::string>{"", "unnamed_seed"}));
+        QVERIFY(openSelector()); QVERIFY(row_state(WalletListModel::LoadState::Open));
+        QVERIFY(qmltest::Click(m_app, "walletSelectActions_"));
+        QVERIFY(qmltest::Click(m_app, "walletSelectClose_"));
+        QVERIFY(qmltest::Click(m_app, "walletCloseConfirmationConfirmButton"));
+        QTRY_VERIFY(!controller->isWalletOpen(QString{}));
+        QTRY_VERIFY(loaded() == (std::set<std::string>{"unnamed_seed"}));
+        QVERIFY(open_from_picker());
+        QVERIFY(loaded() == (std::set<std::string>{"", "unnamed_seed"}));
+    }
     void rpcLoadRacingPickerOpenKeepsTheGuiIntentAndSelection()
     {
         static constexpr auto wallet_a_name = "rpc_race_a";
@@ -1783,12 +1849,16 @@ QStringList WalletTestArguments(const QString& selector)
     if (selector == QLatin1String("restoreSplitKeepsStorageWhenStartupSettingsAreDisabled")) return {QStringLiteral("-nosettings")};
     if (selector == QLatin1String("prunedValidBackupKeepsItsFilesAndReportsTheActualReason")) return {QStringLiteral("-prune=1"), QStringLiteral("-fastprune")};
     if (selector == QLatin1String("trailingSeparatorStartupWalletIsOneOpenRowAndCreationRejectsIt")) return {QStringLiteral("-wallet=trail2/")};
+    if (selector == QLatin1String("unnamedWalletPresentAtStartupIsNamedAndOpensFromThePicker")) return {QStringLiteral("-nowallet")};
     return {};
 }
 
 QString WalletPreparedWallet(const QString& selector)
 {
     if (selector == QLatin1String("trailingSeparatorStartupWalletIsOneOpenRowAndCreationRejectsIt")) return QStringLiteral("trail2");
+    // "." copies the seed's wallet.dat to the wallet directory root, Core's
+    // unnamed-wallet layout, before the GUI starts.
+    if (selector == QLatin1String("unnamedWalletPresentAtStartupIsNamedAndOpensFromThePicker")) return QStringLiteral(".");
     return {};
 }
 
