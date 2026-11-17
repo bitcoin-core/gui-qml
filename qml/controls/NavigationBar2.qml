@@ -46,6 +46,9 @@ Pane {
                     iconObjectName: root.backButtonIconObjectName
                     text: root.backButtonText
                     Accessible.name: root.backButtonAccessibleName
+                    // Keyboard users tab to Back; a click must not take focus
+                    // from an editor first, which would commit its draft.
+                    focusPolicy: Qt.TabFocus
                     onClicked: {
                         if (root.navigationStack) {
                             root.navigationStack.goBack()
