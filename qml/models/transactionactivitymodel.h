@@ -122,12 +122,15 @@ Q_SIGNALS:
 private:
     struct Record {
         TransactionActivity activity;
+        QString silent_payment_address;
+        QStringList silent_payment_addresses;
         QStringList labels;
         int status{Transaction::Unconfirmed};
         int depth{0};
         int blocks_to_maturity{0};
         int block_height{0};
         bool status_known{false};
+        bool rbf_needs_sp_outputs{false};
         CTransactionRef transaction;
         // Compact ownership flags let a detail preview use the cached
         // transaction without another wallet read or address-book scan.

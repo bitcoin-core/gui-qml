@@ -551,6 +551,7 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
     }
 
     QTextStream stream(&file);
+    // TODO: Export known SP addresses in a separate transaction-level column.
     QStringList header{
         tr("Confirmed"),
         tr("Date"),

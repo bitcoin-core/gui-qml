@@ -21,6 +21,7 @@ Page {
     readonly property bool importedPsbt: wallet && wallet.currentTransactionIsImportedPsbt === true
     readonly property bool canSend: wallet && wallet.currentTransactionCanSend
     readonly property bool canBroadcast: wallet && wallet.currentTransactionCanBroadcast
+    readonly property bool canSaveAsPsbt: wallet && wallet.currentTransactionCanSaveAsPsbt
     readonly property bool showBroadcast: importedPsbt && canBroadcast
     readonly property bool showSend: !showBroadcast && canSend
     readonly property string reviewMessage: wallet ? wallet.currentTransactionReviewMessage : ""
@@ -126,6 +127,7 @@ Page {
     }
 
     function startSavePsbt() {
+        if (!canSaveAsPsbt || sending) return
         saveStatus = ""
         saveError = false
         if (savePsbtAutomationPath.text.length) {
@@ -333,7 +335,7 @@ Page {
                 NeutralButton {
                     objectName: "sendTransactionReviewSaveButton"
                     buttonSize: NeutralButton.Large
-                    enabled: !!root.transaction && !root.sending
+                    enabled: root.canSaveAsPsbt && !root.sending
                     width: parent.width < SizeClass.stackColumnsMax || !root.showSend && !root.showBroadcast || externalSignerActions.visible
                         ? parent.width : (parent.width - 12) / 2
                     height: 46
@@ -349,6 +351,17 @@ Page {
                     text: root.showBroadcast ? qsTr("Broadcast transaction") : qsTr("Send transaction")
                     onClicked: root.showBroadcast ? root.commitBroadcast() : root.requestSend()
                 }
+            }
+
+            CoreText {
+                objectName: "sendTransactionReviewSaveUnavailableReason"
+                visible: !!root.transaction && !root.canSaveAsPsbt
+                Layout.fillWidth: true
+                //: Explains the disabled Save transaction button for a prepared Silent Payments transaction. Sending remains available.
+                text: qsTr("Saving silent payments as PSBT is not supported yet.")
+                color: Theme.color.neutral9
+                textStyle: Theme.text.description
+                wrap: true
             }
 
             ToastBanner {

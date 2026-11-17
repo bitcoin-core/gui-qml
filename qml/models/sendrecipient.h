@@ -26,6 +26,7 @@ class SendRecipient : public QObject
     Q_PROPERTY(QString addressError READ addressError NOTIFY addressErrorChanged)
     Q_PROPERTY(QString amountError READ amountError NOTIFY amountErrorChanged)
     Q_PROPERTY(bool isValid READ isValid NOTIFY isValidChanged)
+    Q_PROPERTY(bool isSilentPayment READ isSilentPayment NOTIFY isValidChanged)
 
 public:
     explicit SendRecipient(WalletQmlModel* wallet, QObject* parent = nullptr);
@@ -49,6 +50,7 @@ public:
     CAmount cAmount() const;
 
     bool isValid() const;
+    bool isSilentPayment() const;
 
     QString paymentRequestLabel() const { return m_request_label; }
     bool hasPaymentRequest() const { return !m_request_address.isEmpty(); }

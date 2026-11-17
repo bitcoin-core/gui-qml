@@ -28,6 +28,7 @@
 #include <test/mocks/mocknode.h>
 #include <test/mocks/mockwallet.h>
 #include <txmempool.h>
+#include <util/check.h>
 #include <wallet/coincontrol.h>
 #include <wallet/types.h>
 
@@ -181,7 +182,7 @@ public:
         if (missing_outputs || missing_scripts) {
             CMutableTransaction completed{*result->tx};
             for (size_t i = 0; i < recipients.size(); ++i) {
-                const CScript script{GetScriptForDestination(recipients[i].dest)};
+                const CScript script{*Assert(recipients[i].dest.GetStaticScript())};
                 if (missing_outputs) completed.vout.emplace_back(recipients[i].nAmount, script);
                 else completed.vout[i].scriptPubKey = script;
             }
@@ -486,7 +487,7 @@ public:
         if (missing_outputs || missing_scripts) {
             CMutableTransaction completed{*transaction};
             for (size_t i = 0; i < recipients.size(); ++i) {
-                const CScript script{GetScriptForDestination(recipients[i].dest)};
+                const CScript script{*Assert(recipients[i].dest.GetStaticScript())};
                 if (missing_outputs) completed.vout.emplace_back(recipients[i].nAmount, script);
                 else completed.vout[i].scriptPubKey = script;
             }
@@ -508,7 +509,8 @@ public:
                                std::vector<bilingual_str>&,
                                CAmount& old_fee,
                                CAmount& new_fee,
-                               CMutableTransaction& mtx) override
+                               CMutableTransaction& mtx,
+                               std::vector<bip352::SilentPaymentsDestination>&) override
     {
         ++create_bump_calls;
         old_fee = 100;
@@ -521,7 +523,8 @@ public:
         ++sign_bump_calls;
         return sign_bump_result;
     }
-    bool commitBumpTransaction(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid& bumped_txid) override
+    bool commitBumpTransaction(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid& bumped_txid,
+                               const std::vector<bip352::SilentPaymentsDestination>&) override
     {
         ++commit_bump_calls;
         bumped_txid = Txid::FromUint256(uint256::ONE);
@@ -1489,10 +1492,11 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesDummyPreviewChangeDestination
                                         bool,
                                         int& change_pos,
                                         CAmount& fee) -> util::Result<CTransactionRef> {
-        if (std::get_if<CNoDestination>(&coin_control.destChange)) {
+        if (!coin_control.destChange) {
             saw_missing_change = true;
         }
-        if (!std::get_if<WitnessV0KeyHash>(&coin_control.destChange)) {
+        const auto* change_destination = coin_control.destChange ? coin_control.destChange->GetTxDestination() : nullptr;
+        if (!change_destination || !std::holds_alternative<WitnessV0KeyHash>(*change_destination)) {
             saw_wrong_change_type = true;
         }
         change_pos = -1;

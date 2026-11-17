@@ -1172,6 +1172,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool currentTransactionIsImportedPsbt MEMBER m_current_transaction_is_imported_psbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanSend MEMBER m_current_transaction_can_send NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanBroadcast MEMBER m_current_transaction_can_broadcast NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool currentTransactionCanSaveAsPsbt MEMBER m_current_transaction_can_save_as_psbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString currentTransactionReviewMessage MEMBER m_current_transaction_review_message NOTIFY currentTransactionChanged)
     Q_PROPERTY(QObject* currentPaymentRequest READ currentPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receivingAddress READ receivingAddress CONSTANT)
@@ -1264,6 +1265,7 @@ public:
     QVariantMap m_current_transaction_flow;
     bool m_current_transaction_is_imported_psbt{false};
     bool m_current_transaction_can_broadcast{false};
+    bool m_current_transaction_can_save_as_psbt{true};
     QString m_current_transaction_review_message;
     QString m_last_saved_psbt_path;
 

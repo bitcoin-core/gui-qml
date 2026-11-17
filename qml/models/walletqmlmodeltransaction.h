@@ -5,15 +5,17 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
 
-#include <qml/bitcoinamount.h>
-#include <qml/models/sendrecipientslistmodel.h>
-
+#include <common/bip352.h>
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
+#include <qml/bitcoinamount.h>
+#include <qml/models/sendrecipientslistmodel.h>
 
 #include <QMap>
 #include <QVariantList>
 
+#include <optional>
+#include <utility>
 #include <vector>
 
 class WalletQmlModelTransaction : public QObject
@@ -56,7 +58,9 @@ public:
     CAmount getTotalTransactionAmount() const;
 
     void setDisplayUnit(int unit);
-    bool captureReviewedRecipients(const SendRecipientsListModel& recipients);
+    bool captureReviewedRecipients(const SendRecipientsListModel& recipients, std::optional<unsigned int> change_pos = std::nullopt);
+    const std::vector<bip352::SilentPaymentsDestination>& silentPaymentsRecipients() const { return m_sp_recipients; }
+    void setSilentPaymentsRecipients(std::vector<bip352::SilentPaymentsDestination> recipients) { m_sp_recipients = std::move(recipients); }
     void setReviewFeeDetails(int target_blocks, const QString& fee_rate);
 
     void reassignAmounts(int nChangePosRet); // synchronize review totals with the transaction outputs
@@ -82,6 +86,7 @@ private:
         bool payment_request;
     };
     std::vector<ReviewedRecipient> m_reviewed_recipients;
+    std::vector<bip352::SilentPaymentsDestination> m_sp_recipients;
     int m_review_target_blocks{0};
     QString m_review_fee_rate;
     CAmount m_amount;
