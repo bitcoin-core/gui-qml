@@ -1063,6 +1063,46 @@ private Q_SLOTS:
         QTRY_VERIFY(!popup->property("visible").toBool());
         QCOMPARE(addressNote(wallet->name(), address), choice == "save" ? QStringLiteral("Unfinished private note") : QStringLiteral("Original note"));
     }
+    void createRequestFromAddressDetailsAsksBeforeReplacingADraft_data()
+    {
+        QTest::addColumn<bool>("discard");
+        QTest::newRow("keep-editing") << false;
+        QTest::newRow("discard") << true;
+    }
+    void createRequestFromAddressDetailsAsksBeforeReplacingADraft()
+    {
+        // "Create payment request" in Address details starts a request for
+        // another address. An unsaved Receive draft must not be discarded
+        // without the user's answer.
+        QFETCH(bool, discard); auto* wallet = qmltest::CreateWallet(m_app, "details-request"); QVERIFY(wallet);
+        auto* receive = wallet->receive(); QVERIFY(receive);
+        QTRY_VERIFY(wallet->property("receiveRequestsLoaded").toBool()); QVERIFY(receive->ensureAddress());
+        QTRY_VERIFY(receive->reservation()->available() && receive->editor()->canSave());
+        QPointer<PaymentRequestEditorModel> draft{receive->editor()};
+        draft->message()->edit(QStringLiteral("Unsaved request draft")); QTRY_VERIFY(draft->dirty());
+        const auto drafted_address = draft->address(); QVERIFY(!drafted_address.isEmpty());
+        const auto address = QString::fromStdString(qmltest::Rpc(m_app, "getnewaddress", {}, wallet->name()).get_str());
+        QVERIFY(address != drafted_address);
+        QVERIFY(openAddresses()); QTRY_VERIFY(addressRow(address));
+        QVERIFY(qmltest::Click(qmltest::Find(addressRow(address), "addressRowDetailsButton")));
+        QVERIFY(qmltest::WaitForVisible(m_app, "addressDetailsPopup"));
+        QVERIFY(qmltest::Click(m_app, "addressDetailsCreatePaymentRequestButton"));
+        QTRY_VERIFY(draft && draft->closePrompt());
+        QCOMPARE(receive->editor(), draft.data()); QVERIFY(receive->replacementPending());
+        QCOMPARE(draft->message()->text(), QStringLiteral("Unsaved request draft")); QVERIFY(draft->dirty());
+        if (!discard) {
+            draft->closePrompt()->answer(TextEditClosePrompt::KeepEditing);
+            QTRY_VERIFY(!receive->replacementPending());
+            QCOMPARE(receive->editor(), draft.data()); QVERIFY(!draft->closePrompt());
+            QCOMPARE(draft->address(), drafted_address);
+            QCOMPARE(draft->message()->text(), QStringLiteral("Unsaved request draft"));
+            return;
+        }
+        draft->closePrompt()->answer(TextEditClosePrompt::Discard);
+        QTRY_VERIFY(!receive->replacementPending() && receive->editor() && receive->editor()->address() == address);
+        QVERIFY(!receive->editor()->dirty());
+        QVERIFY(receive->editor()->message()->text().isEmpty());
+    }
     void untouchedRequestPrefillUsesTheLatestPrivateMetadata_data()
     {
         QTest::addColumn<QString>("current"); QTest::addColumn<int>("edit");
