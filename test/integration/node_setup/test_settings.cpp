@@ -21,6 +21,7 @@
 #include <QSettings>
 #include <QDesktopServices>
 #include <QScopeGuard>
+#include <QPointer>
 #include <QUrl>
 
 #include <stdexcept>
@@ -261,6 +262,24 @@ private Q_SLOTS:
         QVERIFY(openProxySettings());QTRY_VERIFY(!settingsEditor()->dirty());
         QCOMPARE(settingsEditor()->entry(QStringLiteral("proxy"))->text(),original);
         QCOMPARE(persistentProxy("proxy"),original);
+    }
+
+    // #1065: clicking Connection again in the sidebar with an unsaved proxy
+    // edit returns to the section's root but must keep the draft.
+    void reselectingConnectionKeepsTheProxyDraft()
+    {
+        QVERIFY(openProxySettings());QPointer<SettingsEditorModel> editor{settingsEditor()};QVERIFY(editor);
+        const auto original=persistentProxy("proxy");
+        QVERIFY(qmltest::SetText(m_app,"proxySettingInput","10.0.0.7:9050"));
+        QTRY_VERIFY(editor->dirty());
+        QVERIFY(qmltest::SelectSettings(m_app,"connection"));
+        QVERIFY(qmltest::WaitForVisible(m_app,"connectionSettingsPage"));QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
+        QCOMPARE(qmltest::Find(m_app,"settingsView")->property("selectedSectionId").toString(),QStringLiteral("connection"));
+        QCOMPARE(settingsEditor(),editor.data());QVERIFY(editor->dirty());QVERIFY(!editor->closeQuestion());
+        QCOMPARE(editor->entry(QStringLiteral("proxy"))->text(),QStringLiteral("10.0.0.7:9050"));
+        QTRY_COMPARE(qmltest::Find(m_app,"proxySettingInput")->property("text").toString(),QStringLiteral("10.0.0.7:9050"));
+        QCOMPARE(persistentProxy("proxy"),original);
+        editor->discard();QTRY_VERIFY(!editor->dirty());QCOMPARE(persistentProxy("proxy"),original);
     }
 
     void readOnlyNetworkProxyKeepsOtherSettingsWritable()

@@ -1567,6 +1567,28 @@ TestCase {
         view.destroy(); wait(0); compare(nodeModel.mempoolInfoPollingActive, false)
     }
 
+    function test_doneAsksBeforeDiscardingAProxyDraft() {
+        // Done leaves Settings; an unsaved proxy edit asks first and Keep
+        // editing preserves it. (The onboarding proxy page's close is
+        // covered by tst_onboarding_datadir's dirty proxy exit test.)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null); view.selectSection("connection"); readyEditor(view)
+        let doneCalls = 0
+        view.doneClicked.connect(() => { doneCalls += 1 })
+        const input = findChild(view, "proxySettingInput")
+        editSetting(view, "proxy", "10.0.0.1:9050")
+        tryCompare(view.settingsEditor, "dirty", true)
+        clickDoneControl(view, true)
+        tryCompare(view.settingsEditor, "closeQuestion", true)
+        compare(doneCalls, 0)
+        compare(view.selectedSectionId, "connection")
+        findChild(view, "settingsCloseKeep").clicked(); tryCompare(view.settingsEditor, "closeQuestion", false)
+        compare(doneCalls, 0)
+        compare(input.text, "10.0.0.1:9050")
+        compare(view.settingsEditor.entry("proxy").text, "10.0.0.1:9050")
+        compare(optionsModel.settingsWritesForTest(), 0)
+    }
+
     function test_connectionProxyPageUsesRedesignedFormAndDraftCommit() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null); view.selectSection("connection"); readyEditor(view)
