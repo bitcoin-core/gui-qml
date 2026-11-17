@@ -10,6 +10,10 @@ import "../../qml/pages"
 import "../../qml/pages/wallet"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     id: testCase
     name: "MainRouting"
     when: windowShown

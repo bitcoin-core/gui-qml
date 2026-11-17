@@ -23,6 +23,12 @@ Page {
     signal done()
     signal viewNewTransaction(string txid)
 
+    function focusInitialControl() {
+        doneButton.forceActiveFocus(Qt.TabFocusReason)
+    }
+
+    StackView.onActivated: root.focusInitialControl()
+
     background: Rectangle { color: Theme.color.background }
 
     Component.onCompleted: {
@@ -143,6 +149,7 @@ Page {
             }
 
             PrimaryButton {
+                id: doneButton
                 objectName: "sendResultDoneButton"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46

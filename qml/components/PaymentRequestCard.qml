@@ -491,7 +491,7 @@ Pane {
                         titleColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral7
                         valueColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral9
                         minimumRowHeight: 56
-                        value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
+                        value: root.request && root.wallet ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                         showDivider: true
                         dividerColor: Theme.color.surfaceDivider
                     }
