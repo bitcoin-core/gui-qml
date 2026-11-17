@@ -14,7 +14,8 @@ TabBar {
     // Set by a hosting FormRow, whose label names the picker.
     property string rowTitle: ""
     property string rowDescription: ""
-    readonly property string currentText: model.length > currentIndex ? optionText(model[currentIndex]) : ""
+    // No selection (currentIndex -1) has no text.
+    readonly property string currentText: currentIndex >= 0 && currentIndex < model.length ? optionText(model[currentIndex]) : ""
 
     signal selected(int index, var option)
 
