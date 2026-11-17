@@ -223,6 +223,9 @@ def legacy_fee_matrix(harness, checkpoint, version, confirmed=True):
                 inputs.append({"txid": funding, "vout": output["n"]})
             if confirmed:
                 rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining])
+            # Wallets learn about the funding transactions asynchronously; legacy
+            # inputs can only be signed once each wallet has the previous transaction.
+            rpc_call(harness.gui_rpc_port, "syncwithvalidationinterfacequeue")
             actual_inputs = sum(Decimal(str(rpc_call(harness.gui_rpc_port, "gettxout", [item["txid"], item["vout"]])["value"])) for item in inputs)
             actual_fee = actual_inputs - Decimal("0.015")
             assert actual_fee == Decimal("0.005")
