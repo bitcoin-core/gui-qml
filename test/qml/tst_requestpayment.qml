@@ -889,9 +889,12 @@ TestCase {
         const card = createRequest(page)
         card.clipboard = { setText: function(text) {}, setImage: function(image) { return false } }
         const popup = findChild(card, "requestPaymentActionFailurePopup")
-        tryVerify(function() { return card.copyQR(null) })
+        // Copy once the QR is ready; an earlier attempt shows the same alert
+        // titled "not ready" before the grab can report its own failure.
+        tryCompare(findChild(card, "requestPaymentQRImage"), "status", Image.Ready)
+        verify(card.copyQR(null))
         tryCompare(popup, "opened", true)
-        compare(popup.title, "QR code not copied")
+        tryCompare(popup, "title", "QR code not copied")
         compare(card.errorText, "")
         verify(!findChild(card, "requestPaymentError").visible)
     }
