@@ -258,6 +258,70 @@ private Q_SLOTS:
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
     }
 
+    // #1070: Send -> Import PSBT never turns duplicate inputs or out-of-range
+    // outputs into an actionable review, and duplicate inputs never reach
+    // signing or a wallet commit that would hide the original coin.
+    void structurallyInvalidImportNeverReachesSigningOrCommit_data()
+    {
+        QTest::addColumn<int>("mutation");
+        QTest::newRow("duplicate-input") << 0;
+        QTest::newRow("int64-max-outputs-wrap-to-two") << 1;
+        QTest::newRow("int64-min-output") << 2;
+    }
+    void structurallyInvalidImportNeverReachesSigningOrCommit()
+    {
+        QFETCH(int, mutation);
+        auto* wallet = qmltest::CreateWallet(m_app, "structure-review"); QVERIFY(wallet);
+        QVERIFY(qmltest::FundWallet(m_app, *wallet));
+        const auto destination = qmltest::NewAddress(m_app, wallet->name());
+        const auto coins = qmltest::Rpc(m_app, "listunspent", {}, wallet->name()); QVERIFY(!coins.empty());
+        const auto txid = coins[0].find_value("txid").get_str(); const auto vout = coins[0].find_value("vout").getInt<uint32_t>();
+        const auto raw = qmltest::Rpc(m_app, "gettransaction", qmltest::Json("[\"" + txid + "\"]"), wallet->name()).find_value("hex").get_str();
+        const auto bytes = qmltest::Call(m_app, [raw, vout, destination, mutation](interfaces::Node*) {
+            CMutableTransaction funding; if (!DecodeHexTx(funding, raw)) throw std::runtime_error("funding decode");
+            const auto parent = MakeTransactionRef(funding);
+            const auto script = GetScriptForDestination(DecodeDestination(destination.toStdString()));
+            CMutableTransaction transaction;
+            transaction.vin.emplace_back(COutPoint{parent->GetHash(), vout});
+            if (mutation == 0) { transaction.vin.push_back(transaction.vin.front()); transaction.vout.emplace_back(parent->vout[vout].nValue - 10'000, script); }
+            for (const CAmount amount : mutation == 1 ? std::vector<CAmount>{INT64_MAX, INT64_MAX, 4} : mutation == 2 ? std::vector<CAmount>{INT64_MIN, INT64_MAX, 2} : std::vector<CAmount>{}) transaction.vout.emplace_back(amount, script);
+            PartiallySignedTransaction document{transaction, 2};
+            // Both duplicate inputs carry their UTXO, as in the issue; the
+            // out-of-range rows omit it so the fee stays unknown.
+            if (mutation == 0) for (auto& input : document.inputs) { input.non_witness_utxo = parent; input.witness_utxo = parent->vout[vout]; }
+            const auto encoded = PsbtQmlModel::SerializePsbtRaw(document);
+            if (!DecodeBase64PSBT(encoded.toBase64().toStdString())) throw std::runtime_error("fixture must decode");
+            return encoded;
+        });
+        QTemporaryDir directory; QVERIFY(directory.isValid());
+        const auto path = directory.filePath("invalid-structure.psbt");
+        QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size()); file.close();
+        const auto history = qmltest::Rpc(m_app, "listtransactions", qmltest::Json("[\"*\",1000]"), wallet->name()).size();
+        QCOMPARE(qmltest::SelectOpenWalletForSetup(m_app, wallet->name()), wallet);
+        QVERIFY(qmltest::Click(m_app, "sendTabButton"));
+        auto* import_path = qmltest::Find(m_app, "psbtImportPathField"); QVERIFY(import_path); QVERIFY(import_path->setProperty("text", path));
+        QVERIFY(qmltest::Click(m_app, "sendOptionsButton")); QVERIFY(qmltest::Click(m_app, "sendImportPsbtFromFileButton"));
+        QTRY_VERIFY(wallet->psbtActionId() != 0 && !wallet->psbtActionBusy());
+        QVERIFY2(!wallet->currentTransactionCanSend() && !wallet->currentTransactionCanSignOnly() && !wallet->currentTransactionCanBroadcast(), qPrintable(wallet->psbtActionError()));
+        if (wallet->currentTransactionIsImportedPsbt()) {
+            const auto amount = wallet->currentTransaction()->amountAmount()->satoshi();
+            QVERIFY2(amount != 2 && amount != 1 && MoneyRange(amount), qPrintable(QString::number(amount)));
+            auto* review = qmltest::Find(m_app, "sendTransactionReviewPage"); auto* send = qmltest::Find(m_app, "sendTransactionReviewSendButton");
+            QVERIFY(!review || !review->property("visible").toBool() || !send || !send->property("enabled").toBool());
+        }
+        // Even a direct request (bypassing the disabled control) must not sign
+        // or commit; the wallet keeps the coin spendable and records nothing.
+        if (wallet->currentTransaction()) {
+            const auto ticket = wallet->requestSendTransaction();
+            if (ticket) QTRY_VERIFY(!wallet->sendBusy());
+            QVERIFY(wallet->sendState() != WalletQmlModel::SendState::SendCommitted && wallet->sendState() != WalletQmlModel::SendState::SendSignedOnly);
+        }
+        QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
+        QCOMPARE(qmltest::Rpc(m_app, "listtransactions", qmltest::Json("[\"*\",1000]"), wallet->name()).size(), history);
+        const auto after = qmltest::Rpc(m_app, "listunspent", {}, wallet->name());
+        QVERIFY(std::any_of(after.getValues().begin(), after.getValues().end(), [&](const UniValue& coin) { return coin.find_value("txid").get_str() == txid && coin.find_value("vout").getInt<uint32_t>() == vout; }));
+    }
+
     void legacySelfTransferReviewAndFinalizedKnownIdentity()
     {
         auto* miner = qmltest::CreateWallet(m_app, "identity-miner"); QVERIFY(miner);

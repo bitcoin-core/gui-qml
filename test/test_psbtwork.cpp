@@ -1346,6 +1346,37 @@ private Q_SLOTS:
         QVERIFY(!outputs.front().toMap().value(QStringLiteral("isChange")).toBool());
     }
 
+    void outputTotalsBeyondMaxMoneyNeverReachReview()
+    {
+        // Each output is a valid amount on its own; together they exceed
+        // MAX_MONEY. The review must reject the document instead of carrying
+        // a wrapped or saturated total into the recipient and fee figures.
+        CMutableTransaction previous;
+        previous.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+        previous.vout.emplace_back(MAX_MONEY, CScript{} << OP_TRUE);
+        const auto parent = MakeTransactionRef(previous);
+        CMutableTransaction transaction;
+        transaction.vin.emplace_back(COutPoint{parent->GetHash(), 0});
+        const auto first = GetScriptForDestination(DecodeDestination("1BoatSLRHtKNngkdXEeobR76b53LETtpyT"));
+        const auto second = GetScriptForDestination(DecodeDestination("1111111111111111111114oLvT2"));
+        transaction.vout.emplace_back(MAX_MONEY / 2 + 1, first);
+        transaction.vout.emplace_back(MAX_MONEY / 2 + 1, second);
+        QVERIFY(MoneyRange(transaction.vout[0].nValue) && MoneyRange(transaction.vout[1].nValue));
+        QVERIFY(transaction.vout[0].nValue + transaction.vout[1].nValue > MAX_MONEY);
+        PartiallySignedTransaction document{transaction, 2};
+        document.inputs[0].non_witness_utxo = parent;
+        document.inputs[0].final_script_sig = CScript{} << std::vector<unsigned char>{};
+        WorkWallet wallet;
+        const auto source = std::make_shared<const PartiallySignedTransaction>(std::move(document));
+        const auto original = Bytes(*source);
+        const auto result = psbtwork::PrepareReview(wallet, source, {});
+        QCOMPARE(Bytes(*source), original);
+        QVERIFY(result.disposition != psbtwork::ImportResult::Disposition::Review);
+        QVERIFY(!result.review);
+        QVERIFY(!result.message.isEmpty());
+        QCOMPARE(wallet.sign_calls, 0);
+    }
+
     void importReviewPreservesAuthorityAndOriginal_data()
     {
         QTest::addColumn<int>("mode");
