@@ -61,6 +61,12 @@ class SendIntegrationTests : public QObject
         if (!wallet || (fund_destination && !qmltest::FundWallet(m_app, *wallet))) return std::nullopt;
         const auto mining_address = qmltest::NewAddress(m_app, wallet->name());
         qmltest::Rpc(m_app, "generatetoaddress", qmltest::Json("[2,\"" + mining_address.toStdString() + "\"]"));
+        // The wallet model observes the new blocks asynchronously. Recipient
+        // validation depends on the balance, so a later observation would
+        // make a review prepared before it stale. getbalances waits for the
+        // wallet to reach the current chain.
+        const auto trusted = AmountFromValue(qmltest::Rpc(m_app, "getbalances", {}, wallet->name()).find_value("mine").find_value("trusted"));
+        if (!QTest::qWaitFor([&] { return wallet->balanceKnown() && wallet->displayedBalanceSatoshi() == trusted; }, 30'000)) return std::nullopt;
         const auto address = self_send ? qmltest::NewAddress(m_app, wallet->name()) : external_address;
         const auto coins = qmltest::Rpc(m_app, "listunspent", {}, wallet->name());
         if (coins.size() != 3) return std::nullopt;
