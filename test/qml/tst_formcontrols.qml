@@ -19,6 +19,7 @@ TestCase {
     property string motionMode: ""
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
     }
 
@@ -480,6 +481,16 @@ TestCase {
         }
     }
 
+    function test_segmentedPickerWithoutSelectionHasNoText() {
+        const picker = createTemporaryObject(segmentedPickerComponent, testCase)
+        verify(picker !== null)
+        picker.currentIndex = 1
+        compare(picker.currentText, "Dark")
+        // An unselected picker must not assign undefined (and warn).
+        picker.currentIndex = -1
+        compare(picker.currentText, "")
+    }
+
     function test_switchRowFlipsOnceFromRowOrSwitch() {
         const row = createTemporaryObject(switchRowComponent, host)
         verify(row !== null)
@@ -775,4 +786,5 @@ TestCase {
         compare(row.loadedBodyItem.text, "/Users/example/Bitcoin")
         verify(row.implicitHeight > row.minimumRowHeight)
     }
+
 }

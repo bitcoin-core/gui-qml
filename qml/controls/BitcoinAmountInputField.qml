@@ -268,7 +268,7 @@ ColumnLayout {
             unit: root.amount ? root.amount.unit : BitcoinAmount.BTC
             onClicked: {
                 amountInput.commitAmountText()
-                optionsModel.displayUnit = root.flippedDisplayUnit(root.amount.unit)
+                ApplicationModels.optionsModel.displayUnit = root.flippedDisplayUnit(root.amount.unit)
             }
         }
     }

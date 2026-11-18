@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 
 import "../controls"
 
@@ -18,7 +19,7 @@ AlertPopup {
         required property string name
         buttonObjectName: "nodeRuntimeDialogButton" + name
         closesPopup: false
-        onTriggered: nodeModel.answerRuntimeDialog(button)
+        onTriggered: ApplicationModels.nodeModel.answerRuntimeDialog(button)
     }
 
     // Cancel-first order. No, Abort and Cancel are Cancel actions, so Escape
@@ -41,7 +42,7 @@ AlertPopup {
     // Not gated on opened: an answer given during the enter transition must
     // still close the popup, and open() and close() are no-ops when settled.
     function syncOpenState() {
-        if (nodeModel.runtimeDialogVisible) {
+        if (ApplicationModels.nodeModel.runtimeDialogVisible) {
             open()
         } else {
             close()
@@ -49,7 +50,7 @@ AlertPopup {
     }
 
     Connections {
-        target: nodeModel
+        target: ApplicationModels.nodeModel
         function onRuntimeDialogChanged() {
             root.syncOpenState()
         }
@@ -57,17 +58,17 @@ AlertPopup {
 
     Component.onCompleted: syncOpenState()
 
-    title: nodeModel.runtimeDialogTitle
-    message: nodeModel.runtimeDialogMessage
+    title: ApplicationModels.nodeModel.runtimeDialogTitle
+    message: ApplicationModels.nodeModel.runtimeDialogMessage
     messageObjectName: "nodeRuntimeDialogMessage"
     messageAlignment: Text.AlignLeft
-    iconSource: nodeModel.runtimeDialogIcon
+    iconSource: ApplicationModels.nodeModel.runtimeDialogIcon
     tone: iconSource.toString().indexOf("error") >= 0 ? AlertPopup.Error
         : iconSource.toString().indexOf("alert") >= 0 ? AlertPopup.Warning
         : AlertPopup.Default
     implicitWidth: Math.max(480, horizontalActionsWidth + 40)
     actionList: {
-        const buttons = nodeModel.runtimeDialogButtons
+        const buttons = ApplicationModels.nodeModel.runtimeDialogButtons
         const actions = []
         for (let i = 0; i < runtimeActions.length; ++i) {
             if (buttons & runtimeActions[i].button) actions.push(runtimeActions[i])

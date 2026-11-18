@@ -14,7 +14,7 @@ OnboardingView {
     signal back()
     signal next()
 
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0
     property bool customStorage: false
@@ -80,7 +80,7 @@ OnboardingView {
         id: storagePopup
         objectName: "onboardingStorageSettingsPopup"
         closeButtonObjectName: "onboardingStorageSettingsCloseButton"
-        onAboutToShow: pageStack.currentItem.resetPruneTarget()
+        onAboutToShow: (pageStack.currentItem as StorageSettingsPage).resetPruneTarget()
         initialPage: StorageSettingsPage {
             settingsModel: root.settingsModel
             onboarding: true

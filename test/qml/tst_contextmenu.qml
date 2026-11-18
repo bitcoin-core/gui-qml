@@ -8,6 +8,15 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
+    property string motionMode: ""
+    function init() {
+        testSetup.failOnWarnings()
+        motionMode = Theme.motion.mode
+    }
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     name: "ContextMenu"
     when: windowShown
     width: 400
@@ -175,6 +184,27 @@ TestCase {
         compare(menu.triggerCount, 1)
         compare(menu.openedWhenTriggered, false)
         tryCompare(menu, "opened", false)
+    }
+
+    function test_closing_menu_ignores_input() {
+        Theme.motion.mode = "full"
+        const menu = openMenu(menuWithButtonComponent)
+
+        // The exit transition keeps the menu drawn; a click on it must not act.
+        menu.close()
+        verify(menu.visible)
+        verify(menu.closing)
+        mouseClick(menu.button, menu.button.width / 2, menu.button.height / 2)
+        compare(menu.triggerCount, 0)
+        tryCompare(menu, "visible", false)
+        compare(menu.closing, false)
+
+        // Reopened, the items take input again.
+        menu.open()
+        tryCompare(menu, "opened", true)
+        compare(menu.closing, false)
+        mouseClick(menu.button, menu.button.width / 2, menu.button.height / 2)
+        compare(menu.triggerCount, 1)
     }
 
     function test_button_can_opt_out_of_closing_menu() {

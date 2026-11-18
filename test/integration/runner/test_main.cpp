@@ -31,6 +31,7 @@ struct RunnerOptions {
     QString profile;
     QString profile_dir;
     QString selector;
+    std::optional<int> stage;
     int timeout_ms{120'000};
     bool discover{false};
     bool list_functions{false};
@@ -63,12 +64,13 @@ QStringList TestFunctions(const QObject& tests)
 
 std::vector<IntegrationCase> TestCases(const IntegrationTestModule* selected_module,
                                      std::optional<WalletMode> wallet_mode, const QString& filter,
-                                     const QString& profile_dir, bool list_functions = false)
+                                     const QString& profile_dir, std::optional<int> stage, bool list_functions = false)
 {
     std::vector<IntegrationCase> cases;
     BitcoinQmlApplication app;
     for (const auto& module : IntegrationTestModules()) {
         if (selected_module && &module != selected_module) continue;
+        if (stage && module.stage != *stage) continue;
         for (const auto mode : module.wallet_modes) {
             if (wallet_mode && mode != *wallet_mode) continue;
             // Constructors and data functions only describe tests. Discovery
@@ -185,7 +187,7 @@ private Q_SLOTS:
     void run_data()
     {
         QTest::addColumn<int>("index");
-        m_cases = TestCases(m_options.module, m_options.wallet_mode, m_options.selector, m_options.profile_dir);
+        m_cases = TestCases(m_options.module, m_options.wallet_mode, m_options.selector, m_options.profile_dir, m_options.stage);
         if (m_cases.empty()) {
             m_cases.push_back({nullptr, WalletMode::Disabled, {},
                                IntegrationTestResult{IntegrationTestStatus::Failed, "No tests match the selected module, wallet mode, and test function/data row"}});
@@ -250,6 +252,13 @@ std::optional<RunnerOptions> ParseOptions(int& argc, char* argv[])
                 std::cerr << "Unknown integration module: " << name << '\n';
                 return std::nullopt;
             }
+        } else if (argument.starts_with("--stage=")) {
+            const auto value = argument.substr(std::string_view{"--stage="}.size());
+            if (options.stage || value.size() != 1 || value[0] < '1' || value[0] > '9') {
+                std::cerr << "Specify --stage=1 through --stage=9 once.\n";
+                return std::nullopt;
+            }
+            options.stage = value[0] - '0';
         } else if (argument.starts_with("--wallet=")) {
             const auto value = argument.substr(std::string_view{"--wallet="}.size());
             if (options.wallet_mode || (value != "disabled" && value != "enabled")) {
@@ -286,6 +295,10 @@ std::optional<RunnerOptions> ParseOptions(int& argc, char* argv[])
         std::cerr << "Module " << options.module->name << " does not support wallets " << WalletModeName(*options.wallet_mode) << '\n';
         return std::nullopt;
     }
+    if (options.stage && options.module && options.module->stage != *options.stage) {
+        std::cerr << "The selected module does not belong to the selected stage\n";
+        return std::nullopt;
+    }
     return options;
 }
 
@@ -293,7 +306,7 @@ void PrintModules(bool help)
 {
     if (help) {
         std::cout << "Run one integration test suite with isolated application processes.\n"
-                     "Options: --module=NAME --wallet=disabled|enabled --list-modules\n"
+                     "Options: --stage=1..9 --module=NAME --wallet=disabled|enabled --list-modules\n"
                      "         --test=FUNCTION[:ROW] (select a function or data row)\n"
                      "         --profile-dir=PATH (retain failed profiles here)\n"
                      "Omitted options select all modules and their supported wallet modes.\n"
@@ -302,7 +315,7 @@ void PrintModules(bool help)
                      "Use -functions to list functions and -datatags to list individual rows.\n";
     }
     for (const auto& entry : IntegrationTestModules()) {
-        std::cout << entry.name << ':';
+        std::cout << entry.name << " (stage " << entry.stage << "):";
         for (const auto mode : entry.wallet_modes) std::cout << ' ' << WalletModeName(mode);
         std::cout << '\n';
     }
@@ -314,7 +327,7 @@ int RunParent(int argc, char* argv[], const RunnerOptions& options)
     QCoreApplication app(argc, argv);
     if (!PrepareReports(app.arguments())) return EXIT_FAILURE;
     if (options.list_functions) {
-        const auto cases = TestCases(options.module, options.wallet_mode, options.selector, options.profile_dir, true);
+        const auto cases = TestCases(options.module, options.wallet_mode, options.selector, options.profile_dir, options.stage, true);
         for (const auto& test : cases) std::cout << CaseName(test).toStdString() << "()\n";
         return cases.empty() ? EXIT_FAILURE : EXIT_SUCCESS;
     }
@@ -361,7 +374,9 @@ int RunChild(int argc, char* argv[], const RunnerOptions& options)
     if (options.discover) return RunDiscovery(argc, argv, options);
 
     TestApplication app{*options.wallet_mode, profile};
-    return app.runTests(argv[0], {"-qml_onboarded=1"}, [&](BitcoinQmlApplication& application) {
+    QStringList startup_arguments{"-qml_onboarded=1"};
+    if (options.module->arguments) startup_arguments.append(options.module->arguments(options.selector));
+    return app.runTests(argv[0], startup_arguments, [&](BitcoinQmlApplication& application) {
         const auto tests = options.module->create(application, *options.wallet_mode);
         return QTest::qExec(tests.get(), QStringList{QString::fromUtf8(argv[0]), options.selector, "-o", "qt-results.xml,xml"} + child_options);
     });

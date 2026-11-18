@@ -4,7 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
-import "../../controls"
+import org.bitcoincore.qt 1.0
 import "../../components"
 
 SettingsPage {
@@ -19,6 +19,6 @@ SettingsPage {
     DeveloperOptions {
         Layout.fillWidth: true
         surfaceLevel: root.onboarding ? 1 : 0
-        showRestartNotice: !root.onboarding && optionsModel.developerSettingsDirty
+        showRestartNotice: !root.onboarding && ApplicationModels.optionsModel.developerSettingsDirty
     }
 }

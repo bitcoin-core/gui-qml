@@ -35,12 +35,12 @@ Page {
     property string selectedSectionId: ""
     property int sidebarWidth: 286
     readonly property bool optionsEditable: typeof optionsModel === "undefined"
-        || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
+        || (ApplicationModels.optionsModel.settingsReady !== false && ApplicationModels.optionsModel.settingsPending !== true)
     // Compact widths show one column: the sidebar is the root list, and
     // choosing a section slides its page over it until Back.
     readonly property bool compact: splitView.isCompact
-    readonly property SettingsSidebar sidebar: splitView.primaryItem ? splitView.primaryItem.sidebar : null
-    readonly property SettingsPageContainer pageContainer: splitView.detailItem
+    readonly property SettingsSidebar sidebar: splitView.primaryItem ? splitView.primaryItem.sidebar : null // qmllint disable missing-property
+    readonly property SettingsPageContainer pageContainer: splitView.detailItem as SettingsPageContainer
     readonly property var groupTitles: ({
         "wallet": qsTr("Wallet"),
         "general": qsTr("General"),
@@ -97,7 +97,7 @@ Page {
             id: "mempool",
             label: qsTr("Mempool information"),
             group: "advanced",
-            visible: nodeModel.mempoolInformationAvailable,
+            visible: ApplicationModels.nodeModel.mempoolInformationAvailable,
             pageComponent: mempoolPage
         },
         {
@@ -198,9 +198,9 @@ Page {
         padding: 16
         wrapMode: Text.WordWrap
         text: typeof optionsModel === "undefined" ? ""
-            : optionsModel.settingsError || (optionsModel.settingsReady === false ? qsTr("Loading settings…")
-            : optionsModel.settingsPending ? qsTr("Saving settings…") : "")
-        color: optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
+            : ApplicationModels.optionsModel.settingsError || (ApplicationModels.optionsModel.settingsReady === false ? qsTr("Loading settings…")
+            : ApplicationModels.optionsModel.settingsPending ? qsTr("Saving settings…") : "")
+        color: ApplicationModels.optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
         textStyle: Theme.text.caption
     }
 
@@ -318,7 +318,7 @@ Page {
             Connections {
                 target: root
                 function onWalletSettingsResetRequested() {
-                    if (ownWalletSettings.item) ownWalletSettings.item.resetToRoot()
+                    if (ownWalletSettings.item) (ownWalletSettings.item as WalletPages.WalletSettingsStack).resetToRoot()
                 }
             }
         }
@@ -341,12 +341,12 @@ Page {
 
     Component {
         id: storagePage
-        SettingsPages.StorageSettingsPage {}
+        SettingsPages.StorageSettingsPage { settingsModel: ApplicationModels.optionsModel }
     }
 
     Component {
         id: connectionPage
-        SettingsPages.ConnectionSettingsPage {}
+        SettingsPages.ConnectionSettingsPage { settingsModel: ApplicationModels.optionsModel }
     }
 
     Component {

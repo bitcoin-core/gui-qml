@@ -13,7 +13,7 @@ DialogPopup {
     id: root
     objectName: "bannedPeersPopup"
 
-    property var model: banListModel
+    property var model: ApplicationModels.banListModel
 
     function unbanPeer(row) {
         if (!root.model.unbanAt(row)) {
@@ -132,7 +132,7 @@ DialogPopup {
     AlertPopup {
         id: unbanActionError
         objectName: "unbanActionErrorPopup"
-        parent: root.parent ? root.parent : root
+        parent: root.parent ? root.parent : root.contentItem
         title: qsTr("Peer action failed")
         messageObjectName: "actionErrorMessage"
 

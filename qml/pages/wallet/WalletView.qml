@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 
 import org.bitcoincore.qt 1.0
 
-import "../../controls"
 
 // The pages of one wallet: Activity, Send, Receive and wallet settings, each
 // with its own navigation stack. The wallet never changes for the lifetime of
@@ -165,10 +164,17 @@ Item {
     }
 
     onActiveChanged: if (!active) root.closeOwnedPopups()
-    Component.onDestruction: root.closeOwnedPopups()
+    Component.onDestruction: {
+        root.closeOwnedPopups()
+        // StackView updates its implicit size when entries are removed. Clear
+        // them while the surrounding layouts and their other items still live.
+        activityPage.clear(StackView.Immediate)
+        sendPage.clear(StackView.Immediate)
+        settingsStack.clear(StackView.Immediate)
+    }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onOpenReceiveRequested(wallet) {
             if (wallet === root.wallet) root.requestTab(WalletView.Receive)
         }

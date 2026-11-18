@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <QDateTime>
 #include <QString>
@@ -109,63 +110,69 @@ void AppendIndent(QString& out, int depth)
     for (int i = 0; i < depth * 2; ++i) out.append(QStringLiteral("&nbsp;"));
 }
 
-void AppendValue(QString& out, const UniValue& v, int depth, const QString& key_color_hex);
-
-void AppendObject(QString& out, const UniValue& obj, int depth, const QString& key_color_hex)
+void AppendValue(QString& out, const UniValue& value, const QString& key_color_hex)
 {
-    if (obj.empty()) { out.append(QStringLiteral("{}")); return; }
-    out.append(QStringLiteral("{<br>"));
-    const std::vector<std::string>& keys = obj.getKeys();
-    const std::vector<UniValue>& vals = obj.getValues();
-    for (size_t i = 0; i < keys.size(); ++i) {
-        AppendIndent(out, depth + 1);
-        out.append(QStringLiteral("<span style='color:"));
-        out.append(key_color_hex);
-        out.append(QStringLiteral("'>\""));
-        out.append(QString::fromStdString(keys[i]).toHtmlEscaped());
-        out.append(QStringLiteral("\"</span>: "));
-        AppendValue(out, vals[i], depth + 1, key_color_hex);
-        if (i + 1 < keys.size()) out.append(QLatin1Char(','));
-        out.append(QStringLiteral("<br>"));
+    struct Frame {
+        const UniValue* value;
+        size_t next{0};
+    };
+    std::vector<Frame> stack{{&value}};
+    while (!stack.empty()) {
+        auto& frame{stack.back()};
+        const auto& current{*frame.value};
+        const bool object{current.isObject()};
+        if (object || current.isArray()) {
+            if (frame.next == 0) {
+                out.append(object ? QLatin1Char('{') : QLatin1Char('['));
+                if (current.empty()) {
+                    out.append(object ? QLatin1Char('}') : QLatin1Char(']'));
+                    stack.pop_back();
+                    continue;
+                }
+                out.append(QStringLiteral("<br>"));
+            } else {
+                if (frame.next < current.size()) out.append(QLatin1Char(','));
+                out.append(QStringLiteral("<br>"));
+            }
+            if (frame.next == current.size()) {
+                AppendIndent(out, static_cast<int>(stack.size() - 1));
+                out.append(object ? QLatin1Char('}') : QLatin1Char(']'));
+                stack.pop_back();
+                continue;
+            }
+            AppendIndent(out, static_cast<int>(stack.size()));
+            if (object) {
+                out.append(QStringLiteral("<span style='color:"));
+                out.append(key_color_hex);
+                out.append(QStringLiteral("'>\""));
+                out.append(QString::fromStdString(current.getKeys()[frame.next]).toHtmlEscaped());
+                out.append(QStringLiteral("\"</span>: "));
+            }
+            const auto* child{&current.getValues()[frame.next++]};
+            stack.push_back({child});
+            continue;
+        }
+        switch (current.getType()) {
+        case UniValue::VSTR:
+            out.append(QLatin1Char('"'));
+            out.append(QString::fromStdString(current.get_str()).toHtmlEscaped());
+            out.append(QLatin1Char('"'));
+            break;
+        case UniValue::VNUM:
+            out.append(QString::fromStdString(current.getValStr()));
+            break;
+        case UniValue::VBOOL:
+            out.append(current.get_bool() ? QStringLiteral("true") : QStringLiteral("false"));
+            break;
+        case UniValue::VNULL:
+            out.append(QStringLiteral("null"));
+            break;
+        case UniValue::VOBJ:
+        case UniValue::VARR:
+            break; // Containers are handled above.
+        }
+        stack.pop_back();
     }
-    AppendIndent(out, depth);
-    out.append(QLatin1Char('}'));
-}
-
-void AppendArray(QString& out, const UniValue& arr, int depth, const QString& key_color_hex)
-{
-    if (arr.empty()) { out.append(QStringLiteral("[]")); return; }
-    out.append(QStringLiteral("[<br>"));
-    for (size_t i = 0; i < arr.size(); ++i) {
-        AppendIndent(out, depth + 1);
-        AppendValue(out, arr[i], depth + 1, key_color_hex);
-        if (i + 1 < arr.size()) out.append(QLatin1Char(','));
-        out.append(QStringLiteral("<br>"));
-    }
-    AppendIndent(out, depth);
-    out.append(QLatin1Char(']'));
-}
-
-void AppendValue(QString& out, const UniValue& v, int depth, const QString& key_color_hex)
-{
-    switch (v.getType()) {
-    case UniValue::VOBJ: AppendObject(out, v, depth, key_color_hex); break;
-    case UniValue::VARR: AppendArray(out, v, depth, key_color_hex); break;
-    case UniValue::VSTR:
-        out.append(QLatin1Char('"'));
-        out.append(QString::fromStdString(v.get_str()).toHtmlEscaped());
-        out.append(QLatin1Char('"'));
-        break;
-    case UniValue::VNUM:
-        out.append(QString::fromStdString(v.getValStr()));
-        break;
-    case UniValue::VBOOL:
-        out.append(v.get_bool() ? QStringLiteral("true") : QStringLiteral("false"));
-        break;
-    case UniValue::VNULL:
-        out.append(QStringLiteral("null"));
-        break;
-    } // no default case, so the compiler can warn about missing cases
 }
 
 // Format an RPC reply body into HTML suitable for RichText rendering.
@@ -181,7 +188,7 @@ QString FormatJsonReply(const std::string& raw, const QString& key_color_hex)
         return EscapeAndConvertWhitespace(QString::fromStdString(raw));
     }
     QString out;
-    AppendValue(out, v, 0, key_color_hex);
+    AppendValue(out, v, key_color_hex);
     return out;
 }
 

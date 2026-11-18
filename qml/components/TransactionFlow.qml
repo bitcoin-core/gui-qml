@@ -65,6 +65,11 @@ FormSection {
         // recalculating every ribbon once for each input/output card.
         nodeMeasurements = { inputs: nodeHeights(inputs), outputs: nodeHeights(outputs) }
     }
+    Timer {
+        id: measurementUpdate
+        interval: 0
+        onTriggered: root.updateNodeMeasurements()
+    }
     function nodeHeights(repeater) {
         const result = []
         for (let i = 0; i < repeater.count; ++i) {
@@ -121,12 +126,6 @@ FormSection {
                         y: 36
                         width: root.diagramWidth
                         height: root.geometry.height
-                        Shape {
-                            id: ribbons
-                            objectName: "transactionFlowRibbons"
-                            anchors.fill: parent
-                            data: root.ribbonObjects
-                        }
                         Instantiator {
                             id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
@@ -149,13 +148,22 @@ FormSection {
                                 root.ribbonObjects = root.ribbonObjects.filter(function(item) { return item !== object })
                             }
                         }
+                        // Release the Instantiator's model references before Shape
+                        // destroys the paths it owns. Reversing this declaration
+                        // order leaks the delegate contexts in Qt 6.10.2.
+                        Shape {
+                            id: ribbons
+                            objectName: "transactionFlowRibbons"
+                            anchors.fill: parent
+                            data: root.ribbonObjects
+                        }
                         // Keep the cards alive when unit changes publish new
                         // snapshots, so amount labels retain their previous frame.
                         Repeater {
                             id: inputs
                             model: root.inputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowInput_" + index
@@ -164,7 +172,7 @@ FormSection {
                                 hidesAmount: root.hidesAmounts
                                 input: true
                                 width: root.inputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 y: root.geometry.inputs[index] ? root.geometry.inputs[index].y : 0
                                 walletName: root.walletName
                                 accentColor: root.ownershipColor(entry.ownership)
@@ -174,8 +182,8 @@ FormSection {
                         Repeater {
                             id: outputs
                             model: root.outputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowOutput_" + index
@@ -183,7 +191,7 @@ FormSection {
                                 displayUnit: root.displayUnit
                                 hidesAmount: root.hidesAmounts
                                 width: root.outputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 x: root.geometry.outputX
                                 y: root.geometry.outputs[index] ? root.geometry.outputs[index].y : 0
                                 walletName: root.walletName
@@ -214,10 +222,11 @@ FormSection {
                     model: [{ label: qsTr("Wallet-owned"), color: root.walletColor },
                         { label: qsTr("Not wallet-owned"), color: root.externalColor }, { label: qsTr("Fee"), color: root.feeColor }]
                     delegate: Row {
+                        id: legendEntry
                         required property var modelData
                         spacing: Theme.space.s
-                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: modelData.color }
-                        CoreText { text: modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
+                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: legendEntry.modelData.color }
+                        CoreText { text: legendEntry.modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
                     }
                 }
             }

@@ -18,7 +18,7 @@ ContextMenu {
     property var rawTransaction: null
     property string itemObjectNamePrefix: "transaction"
     property var clipboard: Clipboard
-    readonly property var explorerLinks: txid.length > 0 ? optionsModel.thirdPartyTransactionLinks(txid) : []
+    readonly property var explorerLinks: txid.length > 0 ? ApplicationModels.optionsModel.thirdPartyTransactionLinks(txid) : []
 
     // Explorer links send the transaction ID to a third party, so the host
     // confirms them.
@@ -36,7 +36,7 @@ ContextMenu {
         text: qsTr("Copy raw transaction hex")
         iconSource: "qrc:/icons/copy.svg"
         onTriggered: {
-            const hex = root.rawTransaction(root.txid)
+            const hex = root.rawTransaction(root.txid) // qmllint disable use-proper-function
             if (hex.length === 0) return
             root.clipboard.setText(hex)
         }

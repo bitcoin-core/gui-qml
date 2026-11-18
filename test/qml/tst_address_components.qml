@@ -22,6 +22,7 @@ TestCase {
 
     // Tests the digit roll and copy feedback, so motion stays on.
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         Theme.motion.mode = "full"
     }

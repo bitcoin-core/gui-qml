@@ -6,7 +6,154 @@ on:
   pull_request:
     branches: [ "**" ]
 
+permissions:
+  contents: read
+
 jobs:
+  lint:
+    name: '${{ matrix.scope }} lint (Core rules)'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [app, core]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Run lint with pinned Core dependencies
+        env:
+          LINT_SCOPE: ${{ matrix.scope }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          base="${PR_BASE:-$PUSH_BASE}"
+          if test -n "$base" && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            export COMMIT_RANGE="$base..HEAD"
+          else
+            export COMMIT_RANGE="HEAD~1..HEAD"
+          fi
+          ./ci/lint.py --scope "$LINT_SCOPE"
+      - name: Check GitHub workflows
+        if: matrix.scope == 'app'
+        run: |
+          version=1.7.12
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          curl --fail --location "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}" --output "$RUNNER_TEMP/$archive"
+          curl --fail --location "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_checksums.txt" --output "$RUNNER_TEMP/actionlint-checksums.txt"
+          (cd "$RUNNER_TEMP" && grep " $archive\$" actionlint-checksums.txt | sha256sum --check)
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          docker run --rm \
+            --volume "$PWD:$PWD" --volume "$RUNNER_TEMP:$RUNNER_TEMP" --workdir "$PWD" \
+            --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env 'GIT_CONFIG_VALUE_0=*' \
+            --entrypoint "$RUNNER_TEMP/actionlint" bitcoinqml-linter -color
+
+  native_checks:
+    name: '${{ matrix.name }}'
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 90
+    container:
+      image: ${{ matrix.container_image }}
+      options: ${{ matrix.container_options }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 'Clang-tidy (Core rules)'
+            mode: tidy
+            image: ubuntu-26.04
+            container_image: mirror.gcr.io/ubuntu:26.04
+            container_options: ''
+          - name: 'Address, leak, undefined and integer sanitizers'
+            mode: asan
+            image: ubuntu-24.04
+            container_image: mirror.gcr.io/ubuntu:24.04
+            container_options: '--cap-add SYS_PTRACE'
+    env:
+      CHECK_MODE: ${{ matrix.mode }}
+      EXPECTED_CI_IMAGE: ${{ matrix.container_image }}
+      DEBIAN_FRONTEND: noninteractive
+      LC_ALL: C.UTF-8
+    steps:
+      - name: Install container build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake curl git ninja-build pkg-config python3
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install Core CI and QML dependencies
+        run: |
+          # shellcheck source=/dev/null
+          source "bitcoin/ci/test/00_setup_env_native_${CHECK_MODE}.sh"
+          test "$CI_IMAGE_NAME_TAG" = "$EXPECTED_CI_IMAGE"
+          source /etc/os-release
+          curl --fail --location https://apt.llvm.org/llvm-snapshot.gpg.key > /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${APT_LLVM_V} main" > "/etc/apt/sources.list.d/llvm-${APT_LLVM_V}.list"
+          apt-get update
+          read -r -a packages <<< "$PACKAGES"
+          apt-get install -y "${packages[@]}" \
+            ninja-build pkg-config libboost-all-dev zlib1g-dev libgl-dev \
+            qt6-declarative-dev qt6-svg-dev qt6-tools-dev-tools \
+            qml6-module-qt-labs-platform qml6-module-qt-labs-settings \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-dialogs \
+            qml6-module-qtquick-shapes qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            qml6-module-qtqml-models qml6-module-qtqml qml6-module-qtqml-workerscript
+          # LLVM can install a newer GCC runtime than the base C++ compiler.
+          gcc_version=$(basename "$(dirname "$("clang++-${APT_LLVM_V}" -print-libgcc-file-name)")")
+          apt-get install -y "libstdc++-${gcc_version}-dev"
+          update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer "/usr/bin/llvm-symbolizer-${APT_LLVM_V}" 100
+          if test -n "${PIP_PACKAGES:-}"; then
+            read -r -a pip_packages <<< "$PIP_PACKAGES"
+            python3 -m pip install "${pip_packages[@]}"
+          fi
+          if test "$CHECK_MODE" = tidy; then
+            apt-get install -y "clang-tidy-${TIDY_LLVM_V}" qml6-module-qtquick-effects qt6-svg-plugins
+          fi
+      - name: Configure app with Core CI options
+        run: python3 ci/configure.py --mode "$CHECK_MODE" --build-dir build-check
+      - name: Build app and tests
+        run: cmake --build build-check --parallel 2
+      - name: Run clang-tidy on all app compilation units
+        if: matrix.mode == 'tidy'
+        run: python3 ci/clang_tidy.py --build-dir build-check --jobs 2
+      - name: Run sanitizer tests and real GUI lifecycle
+        if: matrix.mode == 'asan'
+        env:
+          QT_QUICK_BACKEND: software
+          QML_DISABLE_DISK_CACHE: '1'
+        run: |
+          export BITCOIN_CORE_APP="$PWD/build-check/bin/bitcoin-core-app"
+          export BITCOIND="$PWD/build-check/bin/bitcoind"
+          export LSAN_OPTIONS
+          LSAN_OPTIONS=$(python3 ci/lsan_suppressions.py --build-dir build-check)
+          ulimit -s 512
+          export XDG_RUNTIME_DIR
+          XDG_RUNTIME_DIR=$(mktemp -d /tmp/qml-ci-XXXXXX)
+          trap 'rm -rf -- "$XDG_RUNTIME_DIR"' EXIT
+          python3 build-check/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-check --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
+          python3 build-check/bitcoin/test/with_sanitizer_env.py python3 test/functional/qml_test_shutdown.py
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: app-${{ matrix.mode }}-diagnostics
+          path: |
+            build-check/clang-tidy/
+            build-check/ctest.xml
+            build-check/Testing/Temporary/
+            build-check/test-profiles/
+          if-no-files-found: ignore
+
   linux:
     name: ${{ matrix.job_name }}
     runs-on: ${{ matrix.image }}
@@ -33,10 +180,11 @@ jobs:
             cmake_options: '-DCMAKE_COMPILE_WARNING_AS_ERROR=ON'
           - job_name: 'Ubuntu 26.04, Qt 6.10'
             image: ubuntu-26.04
-            svg_package: 'qt6-svg-dev'
+            qml_lint_packages: 'qt6-declarative-dev-tools qt6-qmllint-plugins'
+            svg_package: 'qt6-svg-dev qt6-svg-plugins'
             effects_package: 'qml6-module-qtquick-effects'
             cmake_env: 'cmake -E env CXXFLAGS="-Wno-error=trailing-whitespace" --'
-            cmake_options: '-DCMAKE_COMPILE_WARNING_AS_ERROR=ON'
+            cmake_options: '-DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DENABLE_QML_LINT=ON'
 
     env:
       BUILD_APP_TESTS: ON
@@ -63,6 +211,7 @@ jobs:
             qt6-l10n-tools \
             qt6-tools-dev-tools \
             qt6-declarative-dev \
+            ${{ matrix.qml_lint_packages }} \
             qml6-module-qt-labs-platform \
             qml6-module-qt-labs-settings \
             qml6-module-qtquick \
@@ -90,6 +239,10 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Check QML warnings
+        if: matrix.image == 'ubuntu-26.04'
+        run: cmake --build build --target qml_lint
+
       - name: Run tests
         if: env.BUILD_APP_TESTS == 'ON'
         run: |
@@ -106,4 +259,5 @@ jobs:
             build/test-reports/
             build/test-profiles/
             build/Testing/Temporary/
+            build/qml-lint/*/qmllint.json
           if-no-files-found: ignore

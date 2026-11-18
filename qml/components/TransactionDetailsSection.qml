@@ -15,7 +15,7 @@ ColumnLayout {
     property bool showBlock: true
     property bool showRawTransaction: true
     property bool hidesAmounts: false
-    readonly property bool amountsHidden: hidesAmounts && optionsModel.hideAmounts
+    readonly property bool amountsHidden: hidesAmounts && ApplicationModels.optionsModel.hideAmounts
     readonly property var flow: details.flow || ({})
     readonly property bool coinbase: !!flow.coinbase
     readonly property string unavailable: qsTr("Unavailable")

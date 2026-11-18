@@ -14,7 +14,7 @@ SettingsPage {
     title: qsTr("Storage")
     showBackButton: false
 
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property bool onboarding: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var pruneSetting: coreSettingsModel.entry("prune")

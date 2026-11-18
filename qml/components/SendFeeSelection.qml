@@ -32,7 +32,7 @@ ColumnLayout {
         return nearest
     }
 
-    BitcoinAmount { id: fee; satoshi: root.walletModel ? Math.max(0, root.walletModel.estimatedFeeSatoshi) : 0; unit: optionsModel.displayUnit }
+    BitcoinAmount { id: fee; satoshi: root.walletModel ? Math.max(0, root.walletModel.estimatedFeeSatoshi) : 0; unit: ApplicationModels.optionsModel.displayUnit }
 
     FormRow {
         Layout.fillWidth: true

@@ -2,9 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
 import "../controls"
 
 ColumnLayout {
@@ -118,7 +116,8 @@ ColumnLayout {
             errorText: root.recipient ? root.recipient.amountError : ""
             interceptPaste: true
             onInputTextChanged: root.edited()
-            onEditingFinished: root.edited()
+            // Text edits already update the draft and fee estimate. Formatting
+            // on focus loss must not disable Review during its mouse press.
             onPasteRequested: root.pasteRequested("amount")
         }
     }

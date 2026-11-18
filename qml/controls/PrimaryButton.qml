@@ -78,8 +78,8 @@ Button {
     background: Rectangle {
         id: bg
         implicitHeight: Theme.size.controlLarge
-        color: backgroundColor
-        border.color: borderColor
+        color: root.backgroundColor
+        border.color: root.borderColor
         radius: root.backgroundRadius
 
         states: [
