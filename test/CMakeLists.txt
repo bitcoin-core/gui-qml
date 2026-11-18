@@ -101,6 +101,7 @@ add_executable(bitcoinqml_unit_tests
   test_runtimepromptworker.cpp
   test_networkcommand.cpp
   test_startupdiagnosticsmodel.cpp
+  test_secretinput.cpp
   test_networkstyle.cpp
   test_networkstatusmodel.cpp
   test_networktraffictower.cpp
