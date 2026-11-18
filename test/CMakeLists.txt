@@ -49,6 +49,7 @@ add_executable(bitcoinqml_unit_tests
   test_unit_tests_main.cpp
   test_persistenteditor.cpp
   test_texteditsessionmodel.cpp
+  test_amountparse.cpp
   test_appmode.cpp
   test_backendexecutor.cpp
   test_backuppolicy.cpp
@@ -333,6 +334,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/uipreferences.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/execution.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/amountparse.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinamount.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/buttonkeyactivation.h
