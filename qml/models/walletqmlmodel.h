@@ -638,7 +638,7 @@ private:
     QString m_name, m_rpc_name;
     bool m_canonical_identity{false};
     bool m_can_get_addresses{false}, m_taproot{false}, m_receive_preference_pending{false};
-    QSet<QString> m_proven_receive_types;
+    QSet<QString> m_proven_receive_types, m_unavailable_receive_types;
     QString m_receive_preference, m_receive_preference_error;
     bool m_metadata_known{false}, m_private_keys_disabled{false}, m_external_signer{false}, m_opening_drained{true};
     std::shared_ptr<BackendExecutor> m_backend_executor{std::make_shared<BackendExecutor>(execution::Options{})};
