@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/components"
 
 TestCase {
@@ -21,13 +22,26 @@ TestCase {
 
         QtObject {
             property int approveCalls: 0
+            property int signerApprovalState: WalletQmlModel.ApprovalInitial
+            property string signerApprovalError: ""
+            property bool signerApprovalSignerNotFound: false
             property string currentTransactionReviewMessage: ""
 
             signal externalSignerApprovalSucceeded()
             signal externalSignerApprovalPartiallySucceeded()
             signal externalSignerApprovalFailed(string message, bool signerNotFound)
+            onExternalSignerApprovalSucceeded: signerApprovalState = WalletQmlModel.ApprovalSigned
+            onExternalSignerApprovalPartiallySucceeded: signerApprovalState = WalletQmlModel.ApprovalPartiallySigned
+            onExternalSignerApprovalFailed: (message, signerNotFound) => {
+                signerApprovalSignerNotFound = signerNotFound
+                signerApprovalError = message
+                signerApprovalState = WalletQmlModel.ApprovalFailed
+            }
 
             function approveExternalSignerTransaction() {
+                if (signerApprovalState === WalletQmlModel.ApprovalWaiting) return
+                signerApprovalSignerNotFound = false
+                signerApprovalState = WalletQmlModel.ApprovalWaiting
                 approveCalls += 1
             }
         }
@@ -106,6 +120,33 @@ TestCase {
         verify(button.enabled)
     }
 
+    function test_uncertain_outcome_blocks_blind_retry() {
+        const wallet = createTemporaryObject(walletComponent, this)
+        const review = createTemporaryObject(reviewComponent, this, {wallet: wallet, canSend: true})
+        verify(review !== null)
+        wallet.signerApprovalError = "Reconcile the PSBT before retrying."
+        wallet.signerApprovalState = WalletQmlModel.ApprovalUncertain
+        compare(review.reviewState, "uncertain")
+        compare(review.statusText, wallet.signerApprovalError)
+        const button = findObjectByName(review, "externalSignerApproveButton")
+        verify(button !== null)
+        verify(!button.enabled)
+        compare(wallet.approveCalls, 0)
+    }
+
+    function test_unverified_result_blocks_approval_and_remains_visible() {
+        const wallet = createTemporaryObject(walletComponent, this)
+        wallet.signerApprovalState = WalletQmlModel.ApprovalUnverified
+        wallet.signerApprovalError = "Export unverified result to reconcile it."
+        const review = createTemporaryObject(reviewComponent, this, {wallet: wallet, canSend: false})
+        compare(review.reviewState, "unverified")
+        compare(review.statusText, wallet.signerApprovalError)
+        const button = findObjectByName(review, "externalSignerApproveButton")
+        verify(!button.enabled)
+        mouseClick(button)
+        compare(wallet.approveCalls, 0)
+    }
+
     function test_partial_success_shows_more_signatures_message() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
@@ -141,7 +182,7 @@ TestCase {
 
         compare(review.reviewState, "error")
         compare(review.statusText, "External signer not found.")
-        compare(review.buttonText, "Retry external signer")
+        compare(review.buttonText, "Retry after connecting signer")
         verify(button.enabled)
 
         review.beginApproval()
@@ -153,7 +194,7 @@ TestCase {
         compare(review.statusText, "Signed on external signer. Ready to send.")
     }
 
-    function test_reset_cancels_pending_approval() {
+    function test_hidden_view_retains_accepted_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
 
@@ -161,16 +202,16 @@ TestCase {
         verify(review !== null)
 
         review.beginApproval()
-        review.reset()
+        review.visible = false
         wait(50)
 
-        compare(wallet.approveCalls, 0)
-        compare(review.reviewState, "initial")
+        compare(wallet.approveCalls, 1)
+        compare(review.reviewState, "waiting")
         compare(review.errorMessage, "")
-        compare(review.statusText, "Approve on external signer to broadcast this transaction.")
+        compare(review.statusText, "Waiting for approval on external signer.")
     }
 
-    function test_destroy_cancels_pending_approval() {
+    function test_destroy_retains_accepted_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
 
@@ -179,12 +220,13 @@ TestCase {
 
         review.beginApproval()
         review.destroy()
-        // destroy() queues deletion. Process it before wait() can dispatch the approval timer.
+        // Destroying the observer cannot withdraw an already accepted effect.
         testSetup.processDeferredDeletes()
         verify(!Qt.isQtObject(review))
         wait(50)
 
-        compare(wallet.approveCalls, 0)
+        compare(wallet.approveCalls, 1)
+        compare(wallet.signerApprovalState, WalletQmlModel.ApprovalWaiting)
     }
 
     function test_rapid_clicks_only_start_one_approval() {

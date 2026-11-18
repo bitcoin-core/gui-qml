@@ -346,7 +346,7 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
     m_current_payment_request = new PaymentRequest(this);
     m_receiving_address = new PaymentRequest(this);
     m_detail_payment_request = new PaymentRequest(this);
-    m_imported_psbt_model = new PsbtQmlModel(m_wallet.get(), m_node, this);
+    m_imported_psbt_model = new PsbtQmlModel(true, m_node, this);
     initializeBackend();
     initializeOpening();
     const QPointer<WalletQmlModel> receipt_observer{this};
@@ -467,7 +467,7 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     m_receiving_address = new PaymentRequest(this);
     m_detail_payment_request = new PaymentRequest(this);
     m_receive_requests = new ReceiveRequestHistoryModel(this);
-    m_imported_psbt_model = new PsbtQmlModel(nullptr, m_node, this);
+    m_imported_psbt_model = new PsbtQmlModel(false, m_node, this);
     initializeBackend();
     initializeFeeEstimator();
     initializePsbtFeeReader();
@@ -1500,7 +1500,7 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
 void WalletQmlModel::createFeeBumps()
 {
     m_fee_bumps = new FeeBumps([this] { return available(); }, [this](QObject* parent) -> FeeBumpOperation* {
-        auto* attempt = new BumpTransactionModel(m_wallet.get(), parent);
+        auto* attempt = new BumpTransactionModel(parent);
         attempt->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
         if (m_opening) {
             attempt->setOpening(m_opening, {m_opening->scheduler(), m_fee_read_services.post}, {psbtpolicy::ReadNode(m_node, nullptr)});
@@ -3145,6 +3145,7 @@ std::shared_ptr<const paymentimport::TargetPort> WalletQmlModel::importTarget(Se
             observer->m_current_transaction->setKeyCanSend(imported->key_can_send);
             observer->m_current_transaction->setCanCommitComplete(imported->can_commit_complete);
             observer->m_current_transaction->setSource(CurrentTransactionSource::ImportedPsbt);
+            observer->m_import_draft_revision = observer->m_send_recipients ? std::optional<quint64>{observer->m_send_recipients->intentRevision()} : std::nullopt;
             observer->m_current_transaction->setCanSend(review->can_send);
             observer->m_current_transaction->setCanBroadcast(imported->key_can_broadcast && review->proof && review->proof->amount.has_value());
             observer->m_current_transaction->setReviewMessage(imported->message);
@@ -3698,6 +3699,7 @@ void WalletQmlModel::publishPsbtAction()
                 m_current_transaction->setRequiresRecheck(false);
                 m_current_transaction->setKeyCanSend(imported.key_can_send); m_current_transaction->setCanCommitComplete(imported.can_commit_complete);
                 m_current_transaction->setSource(CurrentTransactionSource::ImportedPsbt);
+                if (m_psbt_action_kind == PsbtActionKind::Import) m_import_draft_revision = m_send_recipients ? std::optional<quint64>{m_send_recipients->intentRevision()} : std::nullopt;
                 m_current_transaction->setCanSend(imported.review->can_send);
                 m_current_transaction->setCanBroadcast(imported.key_can_broadcast && imported.review->proof->amount.has_value());
                 m_current_transaction->setReviewMessage(imported.message);
@@ -3859,6 +3861,12 @@ void WalletQmlModel::discardCurrentTransaction()
 {
     if (!observationsAllowed()) return;
     const QPointer<WalletQmlModel> observer{this};
+    // #762: the Send draft is shared with an imported review only until the
+    // user changes it. A payment request applied while the review was open is
+    // newer than the review and must survive its close.
+    const bool newer_draft = currentTransactionIsImportedPsbt() && m_import_draft_revision
+        && m_send_recipients && *m_import_draft_revision != m_send_recipients->intentRevision();
+    m_import_draft_revision.reset();
     invalidateImportReview();
     const auto view_epoch = ++m_psbt_view_epoch;
     if (m_current_transaction && m_send_review == m_current_transaction && m_send_consent) m_send_consent->withdraw();
@@ -3893,7 +3901,7 @@ void WalletQmlModel::discardCurrentTransaction()
         if (attempt_changed && observer && observer->observationsAllowed()) Q_EMIT preparationChanged();
         return;
     }
-    m_send_recipients->clear();
+    if (!newer_draft) m_send_recipients->clear();
     if (!observer || !observationsAllowed()) return;
 
     if (had_transaction_state) {

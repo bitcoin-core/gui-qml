@@ -31,13 +31,14 @@ bool WalletPageController::bindWallet(WalletInterface* wallet)
 {
     if (!wallet || m_disabled) return false;
     if (m_wallet == wallet) return true;
-    if (m_wallet) {
+    if (m_bound) {
         qWarning() << metaObject()->className() << "was given a second wallet; it stays disabled until its page is recreated";
         m_disabled = true;
         disconnect(m_wallet_available);
         update();
         return false;
     }
+    m_bound = true;
     m_wallet = wallet;
     m_wallet_available = connect(wallet, &WalletInterface::availableChanged, this, &WalletPageController::update);
     // The wallet's own destruction ends its availability too. Never ask a

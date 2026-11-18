@@ -44,6 +44,7 @@ public:
     explicit SendRecipientsListModel(QObject* parent = nullptr, senddraft::Limits limits = {});
     QString draftId() const { return QString::number(m_identity); }
     QString revision() const { return QString::number(m_intent_revision); }
+    quint64 intentRevision() const { return m_intent_revision; }
     DraftState state() const;
     int maximumRecipients() const { return m_limits.recipients; }
     bool canAddRecipient() const { return !m_closed && !importPending() && count() < maximumRecipients() && m_pending_row_creations < senddraft::Limits::pending_recipients; }

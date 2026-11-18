@@ -369,8 +369,8 @@ public:
     QString securityError() const;
     Q_INVOKABLE bool encryptWallet(const QString& passphrase);
     Q_INVOKABLE bool changeWalletPassphrase(const QString& old_passphrase, const QString& new_passphrase);
-    Q_INVOKABLE ImageExportOperation* savePaymentRequestImage(PaymentRequest* request, const QImage& image, const QUrl& path);
     WalletBackups* backups() const { return m_backups; }
+    Q_INVOKABLE ImageExportOperation* savePaymentRequestImage(PaymentRequest* request, const QImage& image, const QUrl& path);
     FileExportOperationModel* fileExportOperation() const { return m_file_export_operation; }
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE bool setDefaultReceiveAddressType(const QString& address_type);
@@ -695,6 +695,8 @@ private:
     ReceiptReconciliationModel* m_receipt_projection{nullptr};
     void publishReceipts();
     WalletQmlModelTransaction* m_current_transaction{nullptr};
+    // Send draft intent when an imported review opened; a newer draft survives its close (#762).
+    std::optional<quint64> m_import_draft_revision;
     wallet::CCoinControl m_coin_control;
     QPointer<SendRecipient> m_maximum_recipient;
     QMetaObject::Connection m_maximum_recipient_destroyed_connection;

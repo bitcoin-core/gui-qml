@@ -269,6 +269,13 @@ private Q_SLOTS:
         QTest::newRow("known-chain-blocker-precedes-submitted") << 10 << int(psbtpolicy::Admission::Allowed) << int(psbtpolicy::State::Blocked);
         QTest::newRow("unavailable-chain-and-submitted-stay-unknown") << 11 << int(psbtpolicy::Admission::Unknown) << int(psbtpolicy::State::Unknown);
         QTest::newRow("reorg-during-submitted-clears-both-observations") << 12 << int(psbtpolicy::Admission::Unknown) << int(psbtpolicy::State::Unknown);
+        // #1071: an allowed conflict names the unconfirmed transaction it evicts.
+        QTest::newRow("allowed-replacement-names-evicted-transaction") << 13 << int(psbtpolicy::Admission::Allowed) << int(psbtpolicy::State::NoKnownObstacle);
+        // #1071: a failed eviction lookup must not read as "replaces nothing".
+        QTest::newRow("eviction-lookup-exception-is-disclosed") << 14 << int(psbtpolicy::Admission::Allowed) << int(psbtpolicy::State::NoKnownObstacle);
+        QTest::newRow("malformed-eviction-lookup-is-disclosed") << 15 << int(psbtpolicy::Admission::Allowed) << int(psbtpolicy::State::NoKnownObstacle);
+        // Submission refuses a fee above its absolute cap; readiness must agree.
+        QTest::newRow("fee-above-submission-cap-blocks") << 16 << int(psbtpolicy::Admission::Allowed) << int(psbtpolicy::State::Blocked);
     }
     void finalizedTransactionAdmissionUsesExactPublicNodeRpc()
     {
@@ -288,8 +295,19 @@ private Q_SLOTS:
         chain.unavailable_tip = scenario == 11;
         node.change_tip_on_read = scenario == 9 ? 3 : scenario == 12 ? 4 : 0;
         std::string method, uri;
-        UniValue parameters;
+        UniValue parameters, spending_parameters;
+        const auto evicted = uint256::ONE.ToString();
         node.execute_rpc_fn = [&](const std::string& called_method, const UniValue& called_parameters, const std::string& called_uri) {
+            if (called_method == "gettxspendingprevout") {
+                spending_parameters = called_parameters;
+                if (scenario == 14) throw std::runtime_error("gettxspendingprevout unavailable");
+                if (scenario == 15) return UniValue{UniValue::VOBJ};
+                UniValue entry{UniValue::VOBJ};
+                entry.pushKV("txid", outpoint.hash.GetHex()); entry.pushKV("vout", 4);
+                if (scenario == 13) entry.pushKV("spendingtxid", evicted);
+                UniValue response{UniValue::VARR}; response.push_back(std::move(entry));
+                return response;
+            }
             method = called_method; parameters = called_parameters; uri = called_uri;
             if (scenario == 8) throw std::runtime_error("RPC unavailable");
             if (scenario == 2 || scenario == 11) return UniValue{UniValue::VARR};
@@ -339,7 +357,14 @@ private Q_SLOTS:
         QCOMPARE(parameters[1].getValStr(), ValueFromAmount(psbtpolicy::MaxFee()).getValStr()); // Submission's fee-rate cap.
         QCOMPARE(static_cast<int>(facts.admission), expected_admission);
         QCOMPARE(static_cast<int>(psbtpolicy::Evaluate(facts).state), expected_state);
-        QCOMPARE(node.calls.executeRpc.load(), 1);
+        // Only an allowed admission asks which mempool transactions it would evict.
+        const bool allowed_read = scenario == 0 || scenario == 9 || scenario == 10 || scenario == 12 || scenario == 13 || scenario == 14 || scenario == 15 || scenario == 16;
+        QCOMPARE(node.calls.executeRpc.load(), allowed_read ? 2 : 1);
+        if (allowed_read) { QCOMPARE(spending_parameters[0].size(), size_t{1}); QCOMPARE(spending_parameters[0][0].find_value("txid").get_str(), outpoint.hash.GetHex()); QCOMPARE(spending_parameters[0][0].find_value("vout").getInt<int>(), 4); }
+        QCOMPARE(facts.replaces, scenario == 13 ? QStringList{QString::fromStdString(evicted)} : QStringList{});
+        if (scenario == 13) QVERIFY(psbtpolicy::Evaluate(facts).explanation.contains(QString::fromStdString(evicted)));
+        QCOMPARE(facts.replaces_unknown, scenario == 14 || scenario == 15);
+        if (scenario == 0 || scenario == 14 || scenario == 15) QCOMPARE(psbtpolicy::Evaluate(facts).explanation.contains("could not be checked"), scenario != 0);
         QCOMPARE(node.best_hash_reads, scenario == 11 ? 3 : 4);
         if (scenario == 1) QCOMPARE(facts.admission_error.size(), 1024);
         if (scenario == 9) {

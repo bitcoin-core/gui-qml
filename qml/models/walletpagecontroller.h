@@ -57,6 +57,7 @@ private:
     QMetaObject::Connection m_wallet_available;
     bool m_active{false};
     bool m_available{false};
+    bool m_bound{false};
     bool m_disabled{false};
 };
 
