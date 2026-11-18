@@ -7045,8 +7045,8 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{200});
 
-    // A sender-side replacement marker also excludes an unconfirmed original.
-    wallet->setTransactionInMempool(first_payment.tx->GetHash(), true);
+    // A sender-side replaced original is out of the mempool and excluded;
+    // its historical marker alone does not decide that (#1072).
     first_payment.replaced_by_txid.emplace(second_payment.tx->GetHash());
     wallet->setTransactionDetails(first_payment);
     wallet->setWalletTxsFn([first_payment, second_payment] {

@@ -13,5 +13,7 @@ Image {
 
     fillMode: Image.PreserveAspectFit
     smooth: false
-    source: code.length === 0 ? "" : `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
+    // All legal QR payloads fit this bound. Check length before the
+    // presentation binding percent-encodes a potentially large legacy value.
+    source: code.length === 0 || code.length > 32768 ? "" : `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
 }

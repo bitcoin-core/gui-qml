@@ -13,7 +13,11 @@ AlertPopup {
 
     property var wallet: null
     property string requestId: ""
+    // A host that tracks the delete operation itself turns this off and
+    // performs the delete on confirmed().
+    property bool deletesRequest: true
 
+    signal confirmed(string requestId)
     signal deleted(string requestId)
 
     function confirmDelete(requestWallet, id) {
@@ -24,6 +28,10 @@ AlertPopup {
 
     function deleteRequest() {
         const id = requestId
+        if (!deletesRequest) {
+            confirmed(id)
+            return true
+        }
         if (!wallet || !wallet.removeReceiveRequest(id)) {
             failurePopup.open()
             return false

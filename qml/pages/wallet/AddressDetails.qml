@@ -4,6 +4,8 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 
@@ -20,6 +22,7 @@ ColumnLayout {
     property bool used
     property bool hasPaymentRequest: false
     property bool canEditLabel: category !== "change"
+    property TextEditSessionModel editor: null
     property string noteErrorText: ""
 
     signal closeRequested
@@ -27,15 +30,15 @@ ColumnLayout {
     signal editLabelRequested(string address, string label)
 
     function resetNoteEditor() {
-        noteRow.text = root.label
-        if (noteRow.field) noteRow.field.text = root.label
+        if (!root.editor) {
+            noteRow.text = root.label
+        }
         root.noteErrorText = ""
     }
 
     onLabelChanged: {
-        if (noteRow.field && !noteRow.field.activeFocus) {
+        if (!root.editor && noteRow.field && !noteRow.field.activeFocus) {
             noteRow.text = root.label
-            noteRow.field.text = root.label
         }
     }
 
@@ -46,7 +49,7 @@ ColumnLayout {
         Layout.bottomMargin: Theme.space.xl
         title: qsTr("Address details")
         closeButtonObjectName: "addressDetailsCloseButton"
-        onCloseRequested: root.closeRequested()
+        onCloseRequested: root.editor ? root.editor.requestClose() : root.closeRequested()
     }
 
     FormSection {
@@ -96,14 +99,15 @@ ColumnLayout {
             fieldObjectName: "addressDetailsNoteField"
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
+            textInput: root.editor ? root.editor.text : null
             //: Placeholder shown when an address has no private note yet.
             placeholderText: qsTr("Add note…")
             enabled: root.canEditLabel
-            readOnly: !root.canEditLabel
-            errorText: root.noteErrorText
+            readOnly: !root.canEditLabel || (root.editor !== null && !root.editor.available)
+            errorText: root.editor ? root.editor.error.message : root.noteErrorText
             dividerColor: Theme.color.surfaceDivider
             onEditingFinished: {
-                if (text !== root.label) {
+                if (!root.editor && text !== root.label) {
                     root.editLabelRequested(root.address, text)
                 }
             }
@@ -126,6 +130,89 @@ ColumnLayout {
         }
     }
 
+    GridLayout {
+        columns: 2
+        visible: root.editor !== null && (root.editor.dirty || root.editor.conflict)
+        Layout.fillWidth: true
+        NeutralButton {
+            objectName: "addressDetailsDiscardNoteButton"
+            text: qsTr("Discard edits")
+            enabled: root.editor !== null && root.editor.canDiscard
+            onClicked: root.editor.discard()
+        }
+        NeutralButton {
+            objectName: "addressDetailsUseCurrentNoteButton"
+            text: qsTr("Use current note")
+            visible: root.editor !== null && root.editor.conflict
+            onClicked: root.editor.resolveConflict("text", TextEditSessionModel.UseCurrent)
+        }
+        NeutralButton {
+            objectName: "addressDetailsKeepEditedNoteButton"
+            text: qsTr("Keep my edit")
+            visible: root.editor !== null && root.editor.conflict
+            onClicked: root.editor.resolveConflict("text", TextEditSessionModel.KeepEdit)
+        }
+        PrimaryButton {
+            objectName: "addressDetailsSaveNoteButton"
+            text: qsTr("Save note")
+            enabled: root.editor !== null && root.editor.canSave
+            onClicked: root.editor.save()
+        }
+    }
+
+    QtObject {
+        readonly property Dialog dialog: Dialog {
+            id: noteCloseDialog
+            objectName: "addressNoteClosePrompt"
+            parent: root.Overlay.overlay
+            modal: true
+            width: Math.min(620, parent ? parent.width - 40 : 620)
+            x: parent ? (parent.width - width) / 2 : 0
+            y: parent ? (parent.height - height) / 2 : 0
+            closePolicy: Popup.NoAutoClose
+            visible: root.visible && root.editor !== null && root.editor.available && root.editor.closePrompt !== null
+            title: qsTr("Save note edits?")
+            contentItem: GridLayout {
+                columns: noteCloseDialog.width < 480 ? 1 : 3
+                NeutralButton {
+                    id: keepEditingButton
+                    objectName: "addressNoteKeepEditingButton"
+                    Layout.fillWidth: true
+                    enabled: root.editor !== null && !root.editor.busy
+                    property TextEditClosePrompt pressedPrompt: null
+                    onPressed: keepEditingButton.pressedPrompt = root.editor ? root.editor.closePrompt : null
+                    text: qsTr("Keep editing")
+                    onClicked: if (keepEditingButton.pressedPrompt) keepEditingButton.pressedPrompt.answer(TextEditClosePrompt.KeepEditing)
+                }
+                NeutralButton {
+                    id: discardAndCloseButton
+                    objectName: "addressNoteDiscardAndCloseButton"
+                    Layout.fillWidth: true
+                    enabled: root.editor !== null && !root.editor.busy
+                    property TextEditClosePrompt pressedPrompt: null
+                    onPressed: discardAndCloseButton.pressedPrompt = root.editor ? root.editor.closePrompt : null
+                    text: qsTr("Discard")
+                    onClicked: if (discardAndCloseButton.pressedPrompt) discardAndCloseButton.pressedPrompt.answer(TextEditClosePrompt.Discard)
+                }
+                PrimaryButton {
+                    id: saveAndCloseButton
+                    objectName: "addressNoteSaveAndCloseButton"
+                    Layout.fillWidth: true
+                    property TextEditClosePrompt pressedPrompt: null
+                    onPressed: saveAndCloseButton.pressedPrompt = root.editor ? root.editor.closePrompt : null
+                    text: qsTr("Save")
+                    enabled: root.editor !== null && root.editor.valid && !root.editor.conflict && !root.editor.busy
+                    onClicked: if (saveAndCloseButton.pressedPrompt) saveAndCloseButton.pressedPrompt.answer(TextEditClosePrompt.Save)
+                }
+            }
+        }
+    }
+    Keys.onEscapePressed: function(event) {
+        if (root.editor) root.editor.requestClose()
+        else root.closeRequested()
+        event.accepted = true
+    }
+
     PrimaryButton {
         objectName: "addressDetailsCreatePaymentRequestButton"
         Layout.fillWidth: true
@@ -136,6 +223,7 @@ ColumnLayout {
             //: Starts a new payment request for this address
             : qsTr("Create payment request")
         visible: root.category === "single-use" && !root.used
+        enabled: !root.editor || (!root.editor.dirty && !root.editor.busy)
         onClicked: root.createPaymentRequestRequested()
     }
 }

@@ -12,25 +12,41 @@ import "../pages/wallet"
 Pane {
     id: root
     objectName: "paymentRequestCard"
-    property var wallet
-    property var request
+    property WalletQmlModel wallet: null
+    property PaymentRequest request: null
     property bool modalView: false
     property bool showAmount: true
     property bool showMessage: true
     property bool showRecipientName: false
     property var clipboard: Clipboard
+    // Native capture is asynchronous; keep it injectable like the clipboard.
+    property var qrGrabber: qrPanel
+    property ImageExportOperation imageExport: null
+    property string imageExportTarget: ""
+    property int imageExportInterest: -1
+    property int sharingInterest: 0
+    onSharingInterestChanged: {
+        if (imageExport) imageExport.retire()
+    }
+    onVisibleChanged: sharingInterest++
     readonly property int amountUnit: ApplicationModels.optionsModel.displayUnit
-    property string amountErrorText: ""
+    readonly property string amountErrorText: amountDraft.inputError
     property string actionErrorText: ""
+    property ReceiveRequestOperation operation: null
+    property WalletQmlModel operationWallet: null
+    property PaymentRequest operationRequest: null
+    property string operationKind: ""
+    property var operationGeneration: 0
+    property bool operationHandled: false
+    readonly property bool pending: (operation !== null && operation.pending) || (imageExport !== null && imageExport.pending)
     property string addressErrorText: ""
     readonly property string errorText: amountErrorText || actionErrorText || addressErrorText
-    onAmountUnitChanged: {
-        if (amountInput && amountInSatoshis(amountInput.text) >= 0) amountErrorText = ""
-    }
+        || (wallet ? wallet.receiveRequestReconciliationError || wallet.receiveRequestStorageError : "")
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
-    readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
-        && !wallet.receiveRequestReconciliationPending
+    readonly property bool sharing: visible && saved && !paymentReceived && !!wallet && wallet.available
+        && wallet.receiveRequestsLoaded && !wallet.receiveRequestReconciliationPending
+        && request.qrPayload !== ""
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -61,7 +77,6 @@ Pane {
     }
 
     function resetFields() {
-        amountErrorText = ""
         actionErrorText = ""
         amountInput.reset()
         labelInput.reset()
@@ -70,7 +85,7 @@ Pane {
     }
     function clearForm() {
         if (!request || saved) return
-        request.amount.satoshi = 0
+        request.amount.clear()
         request.label = ""
         request.message = ""
         request.noteSelf = ""
@@ -79,9 +94,8 @@ Pane {
     function clearPublicField(name, field) {
         if (!request || saved || modalView || !field) return
         if (name === "amount") {
-            request.amount.satoshi = 0
-            amountErrorText = ""
-        } else request[name] = ""
+            request.amount.clear()
+            } else request[name] = ""
         field.reset()
     }
     function revealTemplateFields() {
@@ -91,72 +105,86 @@ Pane {
         if (request.label.trim() !== "") showRecipientName = true
     }
     onRequestChanged: {
+        sharingInterest++
+        operation = null
         resetFields()
         if (request && request.label.trim() !== "") showRecipientName = true
         revealTemplateFields()
     }
     Component.onCompleted: resetFields()
+    onWalletChanged: { sharingInterest++; operation = null }
 
-    function amountInSatoshis(text) {
-        if (text === "") return 0
-        if (!/^\d*(\.\d*)?$/.test(text) || text === ".") return -1
-        const decimals = amountUnit === BitcoinAmount.SAT ? 0
-            : amountUnit === BitcoinAmount.MilliBTC ? 5 : amountUnit === BitcoinAmount.MicroBTC ? 2 : 8
-        const parts = text.split(".")
-        const fraction = parts.length > 1 ? parts[1] : ""
-        if (fraction.length > decimals) return -1
-        // Build the integer directly to avoid rounding a decimal BTC amount.
-        const sats = Number((parts[0] || "0") + fraction.padEnd(decimals, "0"))
-        return Number.isSafeInteger(sats) && sats <= 2100000000000000 ? sats : -1
-    }
-    function saveField(name, field) {
-        if (!request || saved || !field.modified) return true
-        const value = name === "amount" ? amountInSatoshis(field.text) : field.text
-        if (name === "amount" && value < 0) {
-            amountErrorText = amountUnit === BitcoinAmount.SAT
-                ? qsTr("Enter a whole number of sats, up to 2,100,000,000,000,000.")
-                : qsTr("Enter a valid amount, up to 21,000,000 BTC.")
+    function startOperation(command, kind) {
+        if (!command) {
+            actionErrorText = qsTr("The operation could not be started. Please try again.")
             return false
         }
-        if (name === "amount") request.amount.satoshi = value
-        else request[name] = value
-        field.modified = false
+        operationWallet = wallet
+        operationRequest = request
+        operationKind = kind
+        operationGeneration = request ? request.generation : 0
+        operationHandled = false
+        operation = command
+        actionErrorText = ""
+        finishOperation()
+        return true
+    }
+    function finishOperation() {
+        if (operationHandled || !operation || operation.pending || !wallet || !request || operationWallet !== wallet || operationRequest !== request
+            || operationGeneration !== request.generation) return
+        operationHandled = true
+        actionErrorText = operation.errorText
+        if (operationKind === "delete") {
+            if (operation.erased) { resetFields(); deleted(operation.requestId) }
+        } else if (operation.requestSaved) {
+            resetFields()
+            actionErrorText = operation.errorText
+            if (operationKind === "create") created(operation.requestId)
+        }
+    }
+    Connections {
+        target: root.operation
+        function onChanged() { root.finishOperation() }
+    }
+    Connections {
+        target: root.request
+        function onGenerationChanged() { root.operation = null; root.resetFields() }
+    }
+
+    function saveField(name, field) {
+        if (!request || saved || !field.modified) return true
+        if (name === "amount") {
+            if (!amountDraft.commitTo(request.amount)) return false
+        } else {
+            request[name] = field.text
+            field.acceptEdits()
+        }
         actionErrorText = ""
         return true
     }
     function saveFields() {
+        if (pending) return false
         if (saved) {
-            const amount = paymentReceived ? request.amount.satoshi : amountInSatoshis(amountInput.text)
-            if (amount < 0) { amountErrorText = qsTr("Enter a valid amount."); return false }
-            amountErrorText = ""
-            if (!wallet.updatePaymentRequest(request.id, amount,
+            if (!paymentReceived && !amountDraft.inputAcceptable) return false
+            const amount = paymentReceived ? request.amount.satoshi : amountDraft.satoshi
+            return startOperation(wallet.updatePaymentRequest(request.id, amount,
                 paymentReceived ? request.label : labelInput.text,
-                paymentReceived ? request.message : messageInput.text, noteInput.text)) {
-                actionErrorText = qsTr("The changes could not be saved. Please try again.")
-                return false
-            }
-            resetFields()
-            return true
+                paymentReceived ? request.message : messageInput.text, noteInput.text), "edit")
         }
         return saveField("amount", amountInput) && saveField("label", labelInput)
             && saveField("message", messageInput) && saveField("noteSelf", noteInput)
     }
     function toggleAmountUnit() {
-        if (paymentReceived) return
-        // Preserve a typed draft. An untouched saved amount simply follows
-        // the app's display unit without becoming an edit to the request.
-        if (!saved) amountInput.modified = true
+        if (paymentReceived || !amountDraft.inputAcceptable) return
         ApplicationModels.optionsModel.displayUnit = amountUnit === BitcoinAmount.SAT ? BitcoinAmount.BTC : BitcoinAmount.SAT
-        if (!saved) saveField("amount", amountInput)
     }
     function createRequest() {
         if (!wallet || !request || saved || !saveFields()) return
         actionErrorText = ""
-        if (wallet.commitReceivingPaymentRequest()) created(request.id)
-        else actionErrorText = qsTr("The payment request could not be created. Please try again.")
+        startOperation(wallet.commitReceivingPaymentRequest(), "create")
     }
     function copyRequest() {
-        if (!sharing || !request.qrPayload) return
+        if (!sharing || !wallet || !wallet.available || wallet.receiveRequestReconciliationPending || !request || !request.qrPayload) return
         clipboard.setText(request.qrPayload)
     }
 
@@ -168,15 +196,25 @@ Pane {
         actionFailurePopup.open()
     }
     function captureQR(callback) {
-        if (!sharing || !request.qrPayload) return false
+        if (!sharing || !wallet || !wallet.available || wallet.receiveRequestReconciliationPending || !request || !request.qrPayload) return false
         if (qrImage.status !== Image.Ready) {
             showActionFailure(qsTr("QR code not ready"), qsTr("The QR code is not ready. Please try again."))
             return false
         }
+        const originalWallet = wallet
+        const originalRequest = request
+        const generation = request.generation
+        const revision = request.revision
+        const interest = sharingInterest
         const requestId = request.id
         const payload = request.qrPayload
-        return qrPanel.grabToImage(function(result) {
-            if (root.sharing && root.request.id === requestId && root.request.qrPayload === payload)
+        return qrGrabber.grabToImage(function(result) {
+            // Read the atomic close flag at the native handoff even when its
+            // queued GUI notification has not invalidated sharing yet.
+            if (root.sharing && root.wallet === originalWallet && originalWallet.available && !originalWallet.receiveRequestReconciliationPending
+                && root.request === originalRequest && originalRequest.generation === generation
+                && originalRequest.revision === revision && root.sharingInterest === interest
+                && originalRequest.id === requestId && originalRequest.qrPayload === payload)
                 callback(result)
         }, Qt.size(736, 736))
     }
@@ -193,24 +231,44 @@ Pane {
     readonly property string saveQRTarget: sharing && request.qrPayload
         ? request.id + "\n" + request.qrPayload : ""
     onSaveQRTargetChanged: {
+        if (imageExport && saveQRTarget !== imageExportTarget) imageExport.retire()
         if (saveDialog.visible && saveQRTarget !== saveDialog.target) saveDialog.close()
     }
 
     function openSaveQRDialog() {
-        if (!root.saveQRTarget) return
+        if (!root.saveQRTarget || !wallet || !wallet.available || wallet.receiveRequestReconciliationPending) return
+        saveDialog.originalWallet = wallet
+        saveDialog.originalRequest = request
+        saveDialog.generation = request.generation
+        saveDialog.revision = request.revision
+        saveDialog.interest = sharingInterest
         saveDialog.target = root.saveQRTarget
         saveDialog.open()
     }
 
     function saveQRToFile(fileUrl) {
+        if (pending) return false
         return captureQR(function(result) {
-            if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
-                root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
+            root.imageExportTarget = root.saveQRTarget
+            root.imageExportInterest = root.sharingInterest
+            root.imageExport = root.wallet.savePaymentRequestImage(root.request, result.image, fileUrl)
+            if (!root.imageExport) root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
+            else root.finishImageExport()
         })
     }
+    function finishImageExport() {
+        if (!imageExport || imageExport.pending || sharingInterest !== imageExportInterest
+            || saveQRTarget !== imageExportTarget || !wallet || !wallet.available) return
+        actionErrorText = imageExport.errorText
+    }
+    Connections {
+        target: root.imageExport
+        function onChanged() { root.finishImageExport() }
+    }
+    Component.onDestruction: if (imageExport) imageExport.retire()
     // Asks first; the request is deleted once the user confirms.
     function deleteRequest() {
-        if (!wallet || !saved) return false
+        if (!wallet || !saved || pending) return false
         deleteConfirmation.confirmDelete(wallet, request.id)
         return true
     }
@@ -229,13 +287,33 @@ Pane {
     PaymentRequestDeleteConfirmation {
         id: deleteConfirmation
         objectName: "requestPaymentDeleteConfirmation"
-        onDeleted: function(requestId) {
-            // Discard local edits so closing the modal cannot try to save a deleted request.
-            root.resetFields()
-            root.deleted(requestId)
+        // The delete operation resets the fields and reports deleted() once
+        // the wallet has erased the request.
+        deletesRequest: false
+        onConfirmed: function(requestId) {
+            if (!root.wallet || root.pending) return
+            const operation = root.wallet.removeReceiveRequest(requestId)
+            if (!operation) {
+                deleteConfirmation.failurePopup.open()
+                return
+            }
+            root.startOperation(operation, "delete")
         }
     }
 
+    BitcoinAmount {
+        id: amountDraft
+        objectName: "requestPaymentAmountEntry"
+        zeroIsEmpty: true
+        unit: root.amountUnit
+    }
+    Binding {
+        target: amountDraft
+        property: "satoshi"
+        value: root.request ? root.request.amount.satoshi : 0
+        when: !amountDraft.inputDirty
+        restoreMode: Binding.RestoreNone
+    }
     BitcoinAmount {
         id: displayAmount
         satoshi: root.request ? root.request.amount.satoshi : 0
@@ -258,7 +336,6 @@ Pane {
             amountInput.reset()
             labelInput.reset()
             messageInput.reset()
-            root.amountErrorText = ""
             root.actionErrorText = ""
             saveDialog.close()
             moreMenu.close()
@@ -324,6 +401,7 @@ Pane {
     }
 
     contentItem: ColumnLayout {
+        enabled: !root.pending
         spacing: Theme.space.l
         RowLayout {
             visible: root.modalView
@@ -356,6 +434,7 @@ Pane {
                     showsQrActions: !root.paymentReceived
                     qrActionsEnabled: root.sharing
                     showsRequestAgain: true
+                    requestActionsEnabled: !root.pending
                     onCopyQrRequested: root.copyQR()
                     onSaveQrRequested: root.openSaveQRDialog()
                     onRequestAgainRequested: root.requestAgain(root.request.id)
@@ -506,20 +585,20 @@ Pane {
                         value: root.request && root.request.amount.satoshi > 0 ? displayAmount.display : ""
                         placeholderText: "0"
                         fieldObjectName: "requestPaymentAmountInput"
+                        amountEntry: amountDraft
                         editable: !root.paymentReceived
                         showDivider: labelInput.visible || messageInput.visible
                         dividerColor: Theme.color.surfaceDivider
                         fieldTextStyle: Theme.text.monoDescription
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
-                        maximumLength: 32
-                        validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
-                        onTextChanged: if (root.amountInSatoshis(text) >= 0) root.amountErrorText = ""
+                        maximumLength: 129
                         onEditingFinished: if (!root.saved) root.saveField("amount", this)
                         unitControl: AmountUnitButton {
                             id: unitButton
                             objectName: "requestPaymentAmountUnitToggle"
                             iconObjectName: "requestPaymentAmountUnitIcon"
                             unit: root.amountUnit
+                            enabled: amountDraft.inputAcceptable
                             onClicked: root.toggleAmountUnit()
                         }
                     }
@@ -613,6 +692,7 @@ Pane {
 
                 PaymentRequestField {
                     id: noteInput
+                    enabled: !root.pending
                     objectName: "requestPaymentNoteRow"
                     Layout.fillWidth: true
                     label: qsTr("Note to self")
@@ -658,9 +738,17 @@ Pane {
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }
+        TextButton {
+            objectName: "requestPaymentRetryCheckButton"
+            visible: root.wallet !== null && (root.wallet.receiveRequestReconciliationError.length > 0 || root.wallet.receiveRequestStorageError.length > 0)
+            enabled: root.wallet !== null && root.wallet.available
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("Retry payment check")
+            onClicked: if (root.wallet) root.wallet.reloadReceiveRequests()
+        }
         LinkButton {
             visible: !root.modalView && !!root.wallet && !!root.wallet.receivingAddress
-                && (root.wallet.receivingAddress.address === "" || root.wallet.receivingAddress.paymentReceived)
+                && !root.wallet.receivingAddressPending && !root.wallet.receivingAddressReady
             Layout.alignment: Qt.AlignHCenter
             //: Retry generating the receiving address after a failure.
             text: qsTr("Try again")
@@ -672,6 +760,8 @@ Pane {
             Layout.topMargin: root.modalView ? 0 : 16
             enabled: !!root.wallet && !!root.wallet.receivingAddress
                 && root.wallet.receivingAddress.address !== "" && !root.wallet.receivingAddress.paymentReceived
+                && root.wallet.receivingAddressReady && !root.wallet.receivingAddressPending
+                && root.wallet.receiveRequestsLoaded && !root.wallet.receiveRequestReconciliationPending && !root.pending
             Layout.fillWidth: true
             text: qsTr("Create payment request")
             onClicked: root.createRequest()
@@ -681,7 +771,7 @@ Pane {
             visible: root.saved && root.modified
             Layout.fillWidth: true
             enabled: root.modified && !!root.wallet
-                && !root.wallet.receiveRequestReconciliationPending
+                && root.wallet.receiveRequestsLoaded && !root.wallet.receiveRequestReconciliationPending && !root.pending
             text: root.wallet && root.wallet.receiveRequestReconciliationPending
                 ? qsTr("Checking payments…") : qsTr("Update payment request")
             onClicked: root.saveFields()
@@ -704,10 +794,20 @@ Pane {
         nameFilters: [qsTr("PNG files (*.png)")]
         defaultSuffix: "png"
         property string target: ""
+        property WalletQmlModel originalWallet: null
+        property PaymentRequest originalRequest: null
+        property var generation: 0
+        property var revision: 0
+        property int interest: 0
+        readonly property bool targetCurrent: root.wallet === originalWallet && root.request === originalRequest
+            && originalRequest !== null && originalRequest.generation === generation
+            && originalRequest.revision === revision && root.sharingInterest === interest
+        onTargetCurrentChanged: if (visible && !targetCurrent) close()
         onAccepted: {
             const target = saveDialog.target
             saveDialog.target = ""
-            if (!target || target !== root.saveQRTarget) {
+            if (!target || target !== root.saveQRTarget || !saveDialog.targetCurrent
+                || !root.wallet || !root.wallet.available || root.wallet.receiveRequestReconciliationPending) {
                 //: Shown when a payment request changed, for example was paid, while its QR code save dialog was open.
                 root.actionErrorText = qsTr("The payment request changed before the QR code was saved.")
             } else if (!root.saveQRToFile(selectedFile) && !root.actionErrorText) {
