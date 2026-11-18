@@ -54,11 +54,13 @@ def find_compat_bitcoin_qt():
     return None
 
 
-def process_output(process):
+def process_output(process, output_directory):
     if not process or process.poll() is None:
         return ""
-    stdout = process.stdout.read().decode("utf-8", errors="replace") if process.stdout else ""
-    stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+    stdout_path = Path(output_directory) / "bitcoin-qt.stdout.log"
+    stderr_path = Path(output_directory) / "bitcoin-qt.stderr.log"
+    stdout = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.exists() else ""
+    stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
     if stdout and stderr:
         return f"stdout:\n{stdout}\n\nstderr:\n{stderr}"
     return stdout or stderr
@@ -72,14 +74,14 @@ def debug_log_tail(datadir, lines=200):
         return "".join(log_file.readlines()[-lines:])
 
 
-def wait_for_rpc_or_process_exit(process, port, timeout=45):
+def wait_for_rpc_or_process_exit(process, port, output_directory, timeout=45):
     deadline = time.time() + timeout
     last_error = None
     while time.time() < deadline:
         if process.poll() is not None:
             raise AssertionError(
                 f"bitcoin-qt exited before RPC became ready with code {process.returncode}.\n"
-                f"{process_output(process)}"
+                f"{process_output(process, output_directory)}"
             )
         try:
             rpc_call(port, "getblockcount")
@@ -149,8 +151,20 @@ def launch_bitcoin_qt(bitcoin_qt, harness):
         "-debugexclude=leveldb",
         "-printtoconsole=1",
     ]
+    if Path(command[0]).name == "xvfb-run":
+        # The QML process may intentionally use minimal. Xvfb supplies an X11
+        # display for Widgets, whose application fonts require that backend.
+        env["QT_QPA_PLATFORM"] = "xcb"
     print(f"[qml_wallet_qt_compat] starting bitcoin-qt: {' '.join(command)}")
-    return subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print(f"[qml_wallet_qt_compat] Widgets QPA platform: {env.get('QT_QPA_PLATFORM', 'default')}")
+    # Both streams can exceed pipe capacity during two-wallet startup/RPC.
+    # Preserve full diagnostics on task-backed disk while the process runs;
+    # no output reader or RPC may be responsible for unblocking Core's logger.
+    stdout_path = Path(harness.tmpdir) / "bitcoin-qt.stdout.log"
+    stderr_path = Path(harness.tmpdir) / "bitcoin-qt.stderr.log"
+    print(f"[qml_wallet_qt_compat] output: {stdout_path}, {stderr_path}")
+    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        return subprocess.Popen(command, env=env, stdout=stdout, stderr=stderr)
 
 
 def create_unencrypted_wallet(gui, wallet_name):
@@ -177,9 +191,22 @@ def create_unencrypted_wallet(gui, wallet_name):
 
 def create_full_payment_request(gui):
     gui.click("receiveTabButton")
-    gui.wait_for_page("requestPaymentPage", timeout_ms=10000)
+    gui.wait_for_page("receiveWorkspace", timeout_ms=10000)
+    gui.wait_for_property("receiveAmountInput", "visible", True, timeout_ms=10000)
     create_request(gui, REQUEST_AMOUNT, REQUEST_LABEL, REQUEST_MESSAGE, REQUEST_NOTE_SELF)
-    gui.wait_for_property("requestPaymentTitle", "text", "Payment request", timeout_ms=10000)
+    gui.wait_for_property("paymentRequestModal", "opened", True, timeout_ms=10000)
+    gui.wait_for_property("paymentRequestModal", "openedEditor.busy", False, timeout_ms=10000)
+    request_id = gui.get_property("paymentRequestModal", "openedEditor.requestId")
+    address = gui.get_property("paymentRequestModal", "openedEditor.address")
+    assert request_id and address, "The compatibility check requires the original saved request"
+    assert gui.get_property("paymentRequestModal", "openedWallet.name") == WALLET_NAME
+    assert gui.get_property("paymentRequestModal", "openedEditor.dirty") is False
+    assert gui.get_property("paymentRequestModal", "openedEditor.amount.satoshi") == 100_000
+    assert gui.get_property("paymentRequestModal", "openedEditor.publicLabel.text") == REQUEST_LABEL
+    assert gui.get_property("paymentRequestModal", "openedEditor.message.text") == REQUEST_MESSAGE
+    assert gui.get_property("paymentRequestModal", "openedEditor.privateNote.text") == REQUEST_NOTE_SELF
+    assert gui.get_property("paymentRequestModal", "openedEditor.requestId") == request_id
+    assert gui.get_property("paymentRequestModal", "openedEditor.address") == address
 
 
 def qt_metadata_compatibility():
@@ -214,7 +241,7 @@ def qt_metadata_compatibility():
         print("[qml_wallet_qt_compat] bitcoin-core-app stopped")
 
         qt_process = launch_bitcoin_qt(bitcoin_qt, harness)
-        wait_for_rpc_or_process_exit(qt_process, harness.gui_rpc_port)
+        wait_for_rpc_or_process_exit(qt_process, harness.gui_rpc_port, harness.tmpdir)
         loaded_wallets = rpc_call(harness.gui_rpc_port, "listwallets")
         assert WALLET_NAME in loaded_wallets, f"Expected {WALLET_NAME} to load, got {loaded_wallets}"
         wallet_info = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=WALLET_NAME)
@@ -224,10 +251,13 @@ def qt_metadata_compatibility():
         if qt_process.poll() is not None:
             raise AssertionError(
                 f"bitcoin-qt exited after loading wallet with code {qt_process.returncode}.\n"
-                f"{process_output(qt_process)}"
+                f"{process_output(qt_process, harness.tmpdir)}"
             )
 
         print("[qml_wallet_qt_compat] bitcoin-qt stayed alive after loading QML-created request metadata")
+        stop_bitcoin_qt(qt_process, harness.gui_rpc_port)
+        print(f"[qml_wallet_qt_compat] bitcoin-qt exit={qt_process.returncode}")
+        assert qt_process.returncode == 0, "Qt Widgets must exit cleanly after the metadata compatibility check"
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context
         print(f"\nFAILED [qml_wallet_qt_compat]: {err}", file=sys.stderr)
@@ -235,7 +265,7 @@ def qt_metadata_compatibility():
         traceback.print_exc()
         if harness.driver is not None:
             dump_qml_tree(harness.driver)
-        qt_output = process_output(qt_process)
+        qt_output = process_output(qt_process, harness.tmpdir)
         if qt_output:
             print("\n--- bitcoin-qt process output ---", file=sys.stderr)
             print(qt_output, file=sys.stderr)
@@ -289,22 +319,32 @@ def verify_migrated_wallet(harness, wallet_name, target_wallet_path, *, encrypte
     print(f"[interface_qml_wallet_compat] migrated wallet info: {wallet_info}")
 
 
+def wait_popup_closed(gui, name, timeout_ms=5000):
+    # Immutable prompt delegates may be destroyed after their original closes.
+    # Retain the existing watchdog and accept either genuine teardown form.
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        if not gui.object_exists(name) or not gui.get_property(name, "visible"):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"Original popup {name} did not close")
+
+
 def legacy_restore_and_migration(harness, checkpoint):
     legacy = find_legacy_bitcoind()
     if legacy is None:
         print("SKIPPED: BITCOIND_LEGACY or the official v28 daemon is required")
         raise SystemExit(77)
-    paths = {}
-    # Both wallets are produced by one legacy process, then its files are copied
-    # only after shutdown releases their database handles.
+    paths, backups, addresses = {}, {}, {}
     harness.start_source_node(binary=legacy, extra_args=["-deprecatedrpc=create_bdb"])
-    backup = Path(harness.tmpdir) / "legacy_import.bak"
     for name, encrypted in (("legacy_flow", False), ("legacy_encrypted_flow", True)):
         rpc_call(harness.source_rpc_port, "createwallet", {"wallet_name": name, "descriptors": False})
+        addresses[name] = rpc_call(harness.source_rpc_port, "getnewaddress", [], wallet=name)
         if encrypted:
             rpc_call(harness.source_rpc_port, "encryptwallet", [WALLET_PASSWORD], wallet=name)
-        if not encrypted:
-            rpc_call(harness.source_rpc_port, "backupwallet", [str(backup)], wallet=name)
+        backup = Path(harness.tmpdir) / ("legacy_encrypted_import.bak" if encrypted else "legacy_import.bak")
+        rpc_call(harness.source_rpc_port, "backupwallet", [str(backup)], wallet=name)
+        backups[name] = (backup, backup.read_bytes())
         rpc_call(harness.source_rpc_port, "unloadwallet", [name])
     harness.stop_source_node()
     for name in ("legacy_flow", "legacy_encrypted_flow"):
@@ -312,20 +352,36 @@ def legacy_restore_and_migration(harness, checkpoint):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(Path(harness.source_wallets_path) / name, target)
         paths[name] = str(target)
-    checkpoint("legacy wallet fixtures and backup created")
+    checkpoint("actual plain/encrypted v28 wallets and unchanged backup fixtures created")
     harness.start_gui()
     gui = harness.driver
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
-    harness.open_create_wallet_wizard()
-    gui.set_text("importWalletPathField", str(backup))
-    gui.click("walletTypeImport")
-    gui.wait_for_page("walletImportErrorPage", timeout_ms=30000)
-    gui.wait_for_property("importWalletErrorTitle", "text", "This wallet needs to be migrated")
-    assert not (Path(harness.gui_wallets_path) / "legacy_import").exists()
-    assert rpc_call(harness.gui_rpc_port, "listwallets") == []
-    checkpoint("legacy backup requires migration without leaving a broken wallet")
-    # A fresh GUI process leaves the import wizard and discovers the two closed
-    # legacy wallets through the same startup path used by an actual user.
+    for name, encrypted in (("legacy_flow", False), ("legacy_encrypted_flow", True)):
+        backup, original = backups[name]
+        harness.open_create_wallet_wizard()
+        gui.set_text("importWalletPathField", str(backup))
+        gui.click("walletTypeImport")
+        gui.wait_for_property("walletMigrationPopup", "opened", True, timeout_ms=30000)
+        assert backup.read_bytes() == original
+        assert not (Path(harness.gui_wallets_path) / backup.stem).exists(), "Confirmation must precede copying/migration"
+        gui.click("walletMigrationConfirmButton")
+        if encrypted:
+            gui.wait_for_property("walletMigrationPassphrasePopup", "opened", True)
+            gui.set_text("walletMigrationPassphraseField", WALLET_PASSWORD)
+            gui.wait_for_property("walletMigrationPassphraseConfirmButton", "enabled", True)
+            gui.click("walletMigrationPassphraseConfirmButton")
+        gui.wait_for_page("importWalletSuccessPage", timeout_ms=30000)
+        assert gui.get_property("walletBadge", "text") != backup.stem, "Restore completion must not select the result"
+        verify_migrated_wallet(harness, backup.stem, str(Path(harness.gui_wallets_path) / backup.stem), encrypted=encrypted)
+        assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [addresses[name]], wallet=backup.stem)["ismine"]
+        assert backup.read_bytes() == original, "Migration must preserve the selected backup bytes"
+        gui.click("importWalletSuccessOverviewButton")
+        gui.wait_for_property("walletBadge", "text", backup.stem)
+        # The previous Loader can still exist during its real exit transition.
+        # Wait for that original modal to close before opening a fresh wizard.
+        wait_popup_closed(gui, "walletCreationModal")
+        rpc_call(harness.gui_rpc_port, "unloadwallet", [backup.stem, False])
+        checkpoint(f"{name} backup restored/migrated with explicit original-result selection")
     stop_gui_checked(harness)
     harness.start_gui()
     gui = harness.driver
@@ -334,34 +390,60 @@ def legacy_restore_and_migration(harness, checkpoint):
         verify_legacy_wallet_warning(harness.gui_rpc_port, name)
     select_wallet_for_migration(gui, "legacy_flow")
     gui.click("walletMigrationCancelButton")
-    gui.wait_for_property("walletMigrationPopup", "visible", False)
+    wait_popup_closed(gui, "walletMigrationPopup")
     assert rpc_call(harness.gui_rpc_port, "listwallets") == []
     select_wallet_for_migration(gui, "legacy_flow")
     gui.click("walletMigrationConfirmButton")
-    gui.wait_for_property("walletBadge", "text", "legacy_flow", timeout_ms=30000)
-    gui.wait_for_property("walletMigrationPopup", "visible", False)
+    gui.wait_for_property("walletMigrationResultPopup", "opened", True, timeout_ms=30000)
+    assert gui.get_property("walletBadge", "text") != "legacy_flow"
     verify_migrated_wallet(harness, "legacy_flow", paths["legacy_flow"])
-    checkpoint("unencrypted legacy wallet migrated")
+    assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [addresses["legacy_flow"]], wallet="legacy_flow")["ismine"]
+    assert list(Path(harness.gui_wallets_path).glob("legacy_flow_*.legacy.bak")), "Core recovery backup must remain"
+    gui.click("walletMigrationOpenResultButton")
+    gui.wait_for_property("walletBadge", "text", "legacy_flow")
+    wait_popup_closed(gui, "walletMigrationResultPopup")
+    checkpoint("unencrypted legacy wallet migrated; original recovery and keys retained")
     select_wallet_for_migration(gui, "legacy_encrypted_flow")
     gui.click("walletMigrationConfirmButton")
     gui.wait_for_property("walletMigrationPassphrasePopup", "opened", True)
-    gui.wait_for_property("walletMigrationPopup", "visible", False)
     gui.settle()
     gui.wait_for_property("walletMigrationPassphraseErrorText", "text", "")
     gui.set_text("walletMigrationPassphraseField", "wrong password")
     gui.wait_for_property("walletMigrationPassphraseConfirmButton", "enabled", True)
     gui.click("walletMigrationPassphraseConfirmButton")
-    gui.wait_for_property("walletMigrationPassphraseField", "text", "")
-    # Keep the original migration budget. The old daemon calibrates password
-    # derivation on its own CPU; the instrumented GUI can exceed the default 5s.
+    # Preserve the original 10s password-derivation watchdog and wipe oracle.
     gui.wait_for_property("walletMigrationPassphraseErrorText", "text", lambda text: "passphrase" in text.lower(), timeout_ms=10000)
+    gui.wait_for_property("walletMigrationPassphraseField", "text", "")
     gui.set_text("walletMigrationPassphraseField", WALLET_PASSWORD)
     gui.wait_for_property("walletMigrationPassphraseConfirmButton", "enabled", True)
     gui.click("walletMigrationPassphraseConfirmButton")
-    gui.wait_for_property("walletBadge", "text", "legacy_encrypted_flow", timeout_ms=30000)
-    gui.wait_for_property("walletMigrationPassphrasePopup", "visible", False)
+    gui.wait_for_property("walletMigrationResultPopup", "opened", True, timeout_ms=30000)
+    assert gui.get_property("walletBadge", "text") == "legacy_flow", "A later result must not replace the selected wallet"
     verify_migrated_wallet(harness, "legacy_encrypted_flow", paths["legacy_encrypted_flow"], encrypted=True)
-    checkpoint("encrypted legacy wallet migrated and relocked")
+    assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [addresses["legacy_encrypted_flow"]], wallet="legacy_encrypted_flow")["ismine"]
+    assert list(Path(harness.gui_wallets_path).glob("legacy_encrypted_flow_*.legacy.bak"))
+    gui.click("walletMigrationOpenResultButton")
+    gui.wait_for_property("walletBadge", "text", "legacy_encrypted_flow")
+    checkpoint("encrypted legacy wallet migrated/relocked through a fresh exact prompt")
+    # Representative older-GUI compatibility uses the actual migrated files,
+    # original public addresses and encryption state, not a mock format check.
+    bitcoin_qt = find_compat_bitcoin_qt()
+    if bitcoin_qt is None or not has_bitcoin_qt_runner():
+        raise RuntimeError("Actual Qt Widgets release and runner are required for the R13 migration compatibility control")
+    stop_gui_checked(harness)
+    qt_process = launch_bitcoin_qt(bitcoin_qt, harness)
+    try:
+        wait_for_rpc_or_process_exit(qt_process, harness.gui_rpc_port, harness.tmpdir)
+        for name, encrypted in (("legacy_flow", False), ("legacy_encrypted_flow", True)):
+            verify_migrated_wallet(harness, name, paths[name], encrypted=encrypted)
+            assert rpc_call(harness.gui_rpc_port, "getaddressinfo", [addresses[name]], wallet=name)["ismine"]
+        assert qt_process.poll() is None
+    finally:
+        stop_bitcoin_qt(qt_process, harness.gui_rpc_port)
+        output = process_output(qt_process, harness.tmpdir)
+        print(f"[R13 migrated-wallet Widgets compatibility] exit={qt_process.returncode}\n{output}")
+    assert qt_process.returncode == 0, "Qt Widgets must exit cleanly after opening migrated wallets"
+    checkpoint("actual Qt Widgets release opened both migrated wallets with original keys and encryption state")
 
 
 if __name__ == "__main__":

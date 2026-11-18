@@ -3,13 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import "../controls"
 import "../pages/wallet"
 
 DialogPopup {
     id: root
     objectName: "walletCreationModal"
-    signal finished(bool openActivity, var wallet)
+    signal finished(bool openActivity, WalletQmlModel wallet)
     property bool onboardingEntry: false
 
     function openForOnboarding() {
@@ -27,10 +28,11 @@ DialogPopup {
     horizontalPadding: 0
     closesOnPressOutside: false
     readonly property var flow: creationLoader.item
-    busy: !!flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
+    // Work in progress and result pages close only through their own actions.
+    dismissible: !(!!flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
-            || flow.currentItem.objectName === "externalWalletCreatedPage")))
+            || flow.currentItem.objectName === "externalWalletCreatedPage"))))
 
     contentItem: Loader {
         id: creationLoader

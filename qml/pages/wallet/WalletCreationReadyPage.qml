@@ -17,6 +17,7 @@ OnboardingView {
     property bool modalView: false
     property bool encryptedWallet: false
     // The wallet this page announces, not whichever wallet is selected.
+    property WalletOperationModel operation: null
     property var wallet: null
     navigationBackEnabled: false
     readonly property bool backupRequired: !watchOnly
@@ -41,14 +42,17 @@ OnboardingView {
         objectName: "walletCreationSuccessBadge"
     }
 
-    childView: backupRequired ? backupContent : null
+    childView: backupRequired || (operation && operation.result.warnings.length > 0) ? backupContent : null
 
     Component {
         id: backupContent
         ColumnLayout {
             spacing: 20
 
+            WalletOperationWarnings { Layout.fillWidth: true; operation: root.operation }
+
             FormSection {
+                visible: root.backupRequired
                 objectName: "walletCreationBackupSection"
                 Layout.fillWidth: true
                 showBackground: false

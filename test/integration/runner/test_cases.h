@@ -48,6 +48,7 @@ std::unique_ptr<QObject> CreateWatchOnlyTests(BitcoinQmlApplication& app, Wallet
 std::unique_ptr<QObject> CreatePaymentImportTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 QString SendPreparedWallet(const QString& selector);
 QString PsbtPreparedWallet(const QString& selector);
+QString WalletPreparedWallet(const QString& selector);
 QStringList SettingsTestArguments(const QString& selector);
 QStringList SendTestArguments(const QString& selector);
 QStringList ReceiveTestArguments(const QString& selector);

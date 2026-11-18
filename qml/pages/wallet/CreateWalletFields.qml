@@ -12,9 +12,16 @@ ColumnLayout {
     id: fields
     required property bool watchOnly
     required property string nameError
+    required property bool xpubChecked
     required property bool validXpub
     signal nameEdited()
+    signal nameIntent(string value)
+    signal keyIntent(string value)
+    signal encryptionIntent(bool value)
+    property WalletOperationModel operation: null
+    property string submissionError: ""
     signal submitRequested()
+    property bool showOperationErrorDetails: false
     property alias walletName: nameEntry.text
     property alias xpubText: xpubEntry.text
     property alias encryptWallet: encryptCheck.checked
@@ -39,7 +46,7 @@ ColumnLayout {
         Layout.fillWidth: true
         label: qsTr("Wallet name")
         fieldObjectName: "createWalletNameInput"
-        placeholderText: qsTr("e.g. My bitcoin wallet")
+        placeholderText: qsTr("Eg. My bitcoin wallet...")
         supportingText: qsTr("You cannot change this later.")
         fieldSurface: true
         labelSpacing: 6
@@ -47,80 +54,86 @@ ColumnLayout {
         fieldBackgroundColor: Theme.color.surface2
         onTextEdited: {
             fields.nameEdited()
-            ApplicationModels.walletController.clearWalletCreateStatus()
-            ApplicationModels.walletController.clearWalletLoadStatus()
+            fields.nameIntent(nameEntry.text)
         }
     }
 
-    // Consent in a form is a checkbox; nothing applies until Create.
-    FormSection {
-        objectName: "createWalletSecuritySection"
+    Separator {
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.space.xs
+        Layout.bottomMargin: Theme.space.xs
+    }
+
+    CoreText {
         visible: !fields.watchOnly
         Layout.fillWidth: true
-        Layout.topMargin: 8
-        showBackground: false
-        title: qsTr("Security")
-        rowSpacing: 16
+        text: qsTr("SECURITY")
+        color: Theme.color.neutral6
+        textStyle: Theme.text.captionStrong
+        horizontalAlignment: Text.AlignLeft
+    }
 
-        CheckBox {
-            id: encryptCheck
-            objectName: "createWalletEncryptCheckBox"
-            Layout.fillWidth: true
-            text: qsTr("Encrypt this wallet with a strong password.")
-            description: qsTr("Recommended")
-            checked: true
-            onCheckedChanged: {
-                if (!checked) acknowledgement.checked = false
-                if (checked) unencryptedAcknowledgement.checked = false
-            }
+    CheckBox {
+        id: encryptCheck
+        objectName: "createWalletEncryptCheckBox"
+        visible: !fields.watchOnly
+        Layout.fillWidth: true
+        text: qsTr("Encrypt this wallet with a strong password.")
+        description: qsTr("Recommended")
+        checked: true
+        onCheckedChanged: {
+            fields.encryptionIntent(checked)
+            if (!checked) acknowledgement.checked = false
+            if (checked) unencryptedAcknowledgement.checked = false
         }
+    }
 
-        PasswordTextField {
-            id: passwordEntry
-            objectName: "createWalletPasswordEntry"
-            visible: encryptCheck.checked
-            Layout.fillWidth: true
-            label: qsTr("Password")
-            fieldObjectName: "createWalletPasswordInput"
-            placeholderText: qsTr("Enter password…")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            onTextEdited: ApplicationModels.walletController.clearWalletCreateStatus()
-        }
-        PasswordTextField {
-            id: confirmEntry
-            objectName: "createWalletConfirmPasswordEntry"
-            visible: encryptCheck.checked
-            Layout.fillWidth: true
-            label: qsTr("Confirm password")
-            fieldObjectName: "createWalletPasswordRepeatInput"
-            placeholderText: qsTr("Enter password again…")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            errorText: text.length > 0 && passwordEntry.text !== text
-                ? qsTr("Passwords don't match") : ""
-            onTextEdited: ApplicationModels.walletController.clearWalletCreateStatus()
-        }
+    PasswordTextField {
+        id: passwordEntry
+        objectName: "createWalletPasswordEntry"
+        visible: !fields.watchOnly && encryptCheck.checked
+        Layout.fillWidth: true
+        label: qsTr("Password")
+        fieldObjectName: "createWalletPasswordInput"
+        placeholderText: qsTr("Enter password…")
+        fieldSurface: true
+        labelSpacing: 6
+        messageSpacing: 8
+        fieldBackgroundColor: Theme.color.surface2
 
-        CheckBox {
-            id: acknowledgement
-            objectName: "createWalletPasswordConfirmToggle"
-            visible: encryptCheck.checked
-            Layout.fillWidth: true
-            text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-        }
+    }
+    PasswordTextField {
+        id: confirmEntry
+        objectName: "createWalletConfirmPasswordEntry"
+        visible: !fields.watchOnly && encryptCheck.checked
+        Layout.fillWidth: true
+        label: qsTr("Confirm password")
+        fieldObjectName: "createWalletPasswordRepeatInput"
+        placeholderText: qsTr("Enter password again…")
+        fieldSurface: true
+        labelSpacing: 6
+        messageSpacing: 8
+        fieldBackgroundColor: Theme.color.surface2
+        errorText: text.length > 0 && passwordEntry.text !== text
+            ? qsTr("Passwords don't match") : ""
 
-        CheckBox {
-            id: unencryptedAcknowledgement
-            objectName: "createWalletUnencryptedConfirmToggle"
-            visible: !encryptCheck.checked
-            Layout.fillWidth: true
-            text: qsTr("I understand this wallet will be unencrypted. Anyone with access to its file may be able to spend my bitcoin. I cannot set a password later.")
-        }
+    }
+
+    // Consent in a form is a checkbox.
+    CheckBox {
+        id: acknowledgement
+        objectName: "createWalletPasswordConfirmToggle"
+        visible: !fields.watchOnly && encryptCheck.checked
+        Layout.fillWidth: true
+        text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
+    }
+
+    CheckBox {
+        id: unencryptedAcknowledgement
+        objectName: "createWalletUnencryptedConfirmToggle"
+        visible: !fields.watchOnly && !encryptCheck.checked
+        Layout.fillWidth: true
+        text: qsTr("I understand this wallet will be unencrypted. Anyone with access to its file may be able to spend my bitcoin. I cannot set a password later.")
     }
 
     LabeledTextArea {
@@ -136,9 +149,9 @@ ColumnLayout {
         labelSpacing: 6
         messageSpacing: 8
         fieldBackgroundColor: Theme.color.surface2
-        errorText: text.trim().length > 0 && !fields.validXpub
+        errorText: text.trim().length > 0 && fields.xpubChecked && !fields.validXpub
             ? qsTr("Enter a valid extended public key (xpub)") : ""
-        onTextEdited: ApplicationModels.walletController.clearWalletLoadStatus()
+        onTextEdited: fields.keyIntent(xpubEntry.text)
     }
 
     CoreText {
@@ -146,11 +159,46 @@ ColumnLayout {
         visible: text.length > 0
         Layout.fillWidth: true
         text: fields.nameError.length > 0 ? fields.nameError
-            : fields.watchOnly ? ApplicationModels.walletController.walletLoadError : ApplicationModels.walletController.walletCreateError
+            : fields.submissionError.length > 0 ? fields.submissionError : fields.operation ? fields.operation.error.message
+            : fields.watchOnly ? ApplicationModels.walletController.walletLoadErrorDisplay : ApplicationModels.walletController.walletCreateErrorDisplay
         color: Theme.color.dangerText
         textStyle: Theme.text.caption
         wrapMode: Text.WordWrap
         horizontalAlignment: Text.AlignLeft
+    }
+
+    WalletOperationWarnings {
+        Layout.fillWidth: true
+        operation: fields.operation
+        summaryObjectName: "createWalletFormWarningText"
+    }
+
+    TextButton {
+        objectName: "walletOperationErrorDetailsButton"
+        visible: fields.nameError.length === 0 && operationErrorDetails.count > 0
+        text: fields.showOperationErrorDetails ? qsTr("Hide error details") : qsTr("Show error details")
+        onClicked: fields.showOperationErrorDetails = !fields.showOperationErrorDetails
+    }
+
+    ListView {
+        id: operationErrorDetails
+        objectName: "walletOperationErrorDetails"
+        Layout.fillWidth: true
+        Layout.preferredHeight: visible ? 120 : 0
+        visible: fields.showOperationErrorDetails && fields.nameError.length === 0 && count > 0
+        model: fields.operation ? fields.operation.errorDetails
+            : fields.watchOnly ? ApplicationModels.walletController.walletImportErrorHelpModel : ApplicationModels.walletController.walletCreateErrorHelpModel
+        clip: true
+        reuseItems: true
+        cacheBuffer: 0
+        delegate: CoreText {
+            required property string content
+            width: operationErrorDetails.width
+            text: content
+            textFormat: Text.PlainText
+            textStyle: Theme.text.caption
+            wrapMode: Text.WordWrap
+        }
     }
 
     AlertPopup {

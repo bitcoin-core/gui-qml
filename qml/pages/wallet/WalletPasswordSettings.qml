@@ -17,8 +17,16 @@ SettingsPage {
 
     required property bool updating
     property WalletQmlModel wallet: null
-    property string errorText: ""
-    property string successText: ""
+    readonly property WalletSecurityModel security: wallet ? wallet.security : null
+    property SecurityOperationModel actionOperation: null
+    property string admissionError: ""
+    readonly property bool waitingForSave: actionOperation !== null && actionOperation.busy
+    readonly property bool securityBusy: security !== null && security.activeOperation !== null && security.activeOperation.busy
+    readonly property string errorText: admissionError.length > 0 ? admissionError
+        : actionOperation && (actionOperation.phase === SecurityOperationModel.Failed || actionOperation.phase === SecurityOperationModel.Uncertain)
+            ? actionOperation.error : ""
+    readonly property string successText: actionOperation && actionOperation.phase === SecurityOperationModel.Succeeded
+        && actionOperation.kind === SecurityOperationModel.ChangePassphrase ? qsTr("Password updated successfully.") : ""
     readonly property string resultText: successText.length > 0 ? successText : errorText
     readonly property bool resultSuccess: successText.length > 0
 
@@ -42,28 +50,18 @@ SettingsPage {
     }
 
     function clearResult() {
-        root.errorText = ""
-        root.successText = ""
+        admissionError = ""
+        if (actionOperation && !actionOperation.busy) actionOperation = null
     }
 
-    function handleSaveResult(ok) {
-        if (ok) {
-            root.errorText = ""
-            root.clearPasswordFields()
-            if (root.updating) {
-                root.successText = qsTr("Password updated successfully.")
-            } else {
-                acknowledgement.checked = false
-                root.saved()
-            }
-        } else {
-            root.successText = ""
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
-            if (!root.updating) {
-                root.clearPasswordFields()
-            }
-        }
+    function detachOperation() {
+        if (actionOperation && actionOperation.canCancel) actionOperation.cancel()
+        actionOperation = null
+        admissionError = ""
+        clearPasswordFields()
     }
+
+    onWalletChanged: root.detachOperation()
 
     function focusInitialPasswordField() {
         const entry = root.updating ? currentPassword : newPassword
@@ -71,26 +69,29 @@ SettingsPage {
     }
 
     Component.onCompleted: {
-        if (root.wallet) root.wallet.clearSettingsError()
         root.clearResult()
         Qt.callLater(root.focusInitialPasswordField)
     }
     StackView.onActivated: Qt.callLater(root.focusInitialPasswordField)
-    Component.onDestruction: root.clearPasswordFields()
+    Component.onDestruction: root.detachOperation()
     onVisibleChanged: {
-        if (!visible) {
-            root.clearPasswordFields()
-        } else {
-            Qt.callLater(root.focusInitialPasswordField)
-        }
+        if (!visible) root.detachOperation()
+        else Qt.callLater(root.focusInitialPasswordField)
     }
 
     Connections {
         target: root.wallet
+        function onAvailableChanged() {
+            if (!root.wallet || !root.wallet.available) root.detachOperation()
+        }
+    }
 
-        function onSettingsErrorChanged() {
-            root.successText = ""
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
+    Connections {
+        target: root.actionOperation
+        function onChanged() {
+            if (!root.actionOperation || root.actionOperation.phase !== SecurityOperationModel.Succeeded) return
+            root.clearPasswordFields()
+            if (root.actionOperation.kind === SecurityOperationModel.Encrypt) root.saved()
         }
     }
 
@@ -99,11 +100,12 @@ SettingsPage {
         Layout.fillWidth: true
         description: root.updating
             ? qsTr("Enter your current password, then choose a new password for this wallet.\n\nA secure password consists of ten or more random characters, or eight or more words.")
-            : qsTr("The password encrypts the wallet on your hard drive and helps prevent unwanted access.\n\nA secure password consists of ten or more random characters, or eight or more words.")
+            : qsTr("The password encrypts the wallet on your hard drive and helps prevent unwanted access.\n\nA secure password consists of ten or more random characters, or eight or more words.\n\nSetting a password creates new receiving and change keys. Your earlier backups may not cover later payments. Make a fresh backup afterward and keep your older backups.")
     }
 
     FormSection {
         id: passwordSection
+        enabled: root.wallet !== null && root.wallet.available && !root.securityBusy
         objectName: "walletPasswordFormSection"
         Layout.fillWidth: true
 
@@ -180,6 +182,9 @@ SettingsPage {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.updating ? qsTr("Update password") : qsTr("Set password")
                 enabled: ApplicationModels.walletController.initialized
+                    && root.wallet !== null && root.wallet.available && root.wallet.canManagePassphrase
+                    && root.security !== null && (root.updating ? root.security.canChangePassphrase : root.security.canEncrypt)
+                    && !root.securityBusy
                     && newPassword.text !== ""
                     && confirmPassword.text !== ""
                     && newPassword.text === confirmPassword.text
@@ -188,10 +193,17 @@ SettingsPage {
                         : acknowledgement.checked)
                 onClicked: {
                     root.clearResult()
-                    const ok = root.updating
-                        ? root.wallet.changeWalletPassphrase(currentPassword.text, newPassword.text)
-                        : root.wallet.encryptWallet(newPassword.text)
-                    root.handleSaveResult(ok)
+                    root.actionOperation = root.updating ? root.security.beginPassphraseChange() : root.security.beginEncryption()
+                    if (!root.actionOperation) {
+                        root.admissionError = qsTr("The wallet operation could not be started.")
+                        return
+                    }
+                    const admitted = root.actionOperation.submitCredentials(root.actionOperation.promptId,
+                        currentPassword.text, newPassword.text, confirmPassword.text)
+                    if (!admitted && root.actionOperation.canSubmit) {
+                        root.actionOperation.cancel()
+                        root.admissionError = qsTr("The wallet operation could not be started.")
+                    }
                 }
             }
         }

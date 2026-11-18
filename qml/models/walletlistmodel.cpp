@@ -1,346 +1,217 @@
-// Copyright (c) 2024 The Bitcoin Core developers
+// Copyright (c) 2024-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/walletlistmodel.h>
 
 #include <interfaces/node.h>
+#include <qml/backendexecutor.h>
+#include <qml/guipresentation.h>
+#include <qml/models/walletqmlmodel.h>
 
-#include <qml/bitcoinunits.h>
-
-#include <QSettings>
-
-#include <algorithm>
+#include <QPointer>
 
 namespace {
-QString WalletDisplayName(const QString& path)
+QList<int> RolesFor(unsigned fields)
 {
-    const QString trimmed_path = path.trimmed();
-    if (trimmed_path.isEmpty()) {
-        return {};
-    }
-
-    QSettings settings;
-    const QString display_name = settings.value(QStringLiteral("walletDisplayNames/%1").arg(trimmed_path)).toString().trimmed();
-    return display_name.isEmpty() ? trimmed_path : display_name;
+    QList<int> roles;
+    if (fields & walletcatalog::DisplayName) roles.append({Qt::DisplayRole, WalletListModel::DisplayNameRole});
+    if (fields & walletcatalog::Load) roles.append(WalletListModel::LoadStateRole);
+    if (fields & walletcatalog::Section) roles.append(WalletListModel::WalletSectionRole);
+    if (fields & walletcatalog::Error) roles.append({WalletListModel::ErrorMessageRole, WalletListModel::RowErrorRole});
+    if (fields & walletcatalog::Information) roles.append({WalletListModel::BalanceRole, WalletListModel::BalanceSatoshiRole, WalletListModel::BalanceKnownRole, WalletListModel::KeySchemeKindRole});
+    else if (fields & walletcatalog::BalanceText) roles.append(WalletListModel::BalanceRole);
+    if (fields & walletcatalog::OpenWallet) roles.append(WalletListModel::OpenWalletRole);
+    if (fields & walletcatalog::Operation) roles.append(WalletListModel::OperationIdRole);
+    return roles;
 }
 } // namespace
 
-WalletListModel::WalletListModel(interfaces::Node& node, QObject *parent)
-: QAbstractListModel(parent)
-, m_node(node)
+WalletListModel::WalletListModel(interfaces::Node& node, QObject* parent) : WalletListModel(node, execution::SnapshotServices{}, parent) {}
+WalletListModel::WalletListModel(interfaces::Node& node, execution::SnapshotServices services, QObject* parent)
+    : QAbstractListModel(parent), m_services(std::move(services))
 {
+    if (!m_services.scheduler) { m_owned_executor = std::make_shared<BackendExecutor>(execution::Options{}); m_services.scheduler = m_owned_executor->scheduler(); }
+    if (!m_services.post) {
+        m_bridge = presentation::MakeGuiObject();
+        m_services.post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
+    }
+    const QPointer<WalletListModel> guard{this};
+    m_reader = std::make_shared<walletcatalog::Reader>(m_services.scheduler,
+        [&node] { return node.walletLoader().listWalletDir(); },
+        [guard, post = m_services.post] { post([guard] { if (guard) guard->publishSnapshot(); }); });
+    observe(m_reader->observation());
 }
-
-void WalletListModel::listWalletDir()
+WalletListModel::~WalletListModel() { closeAdmission(); m_reader.reset(); if (m_owned_executor) m_owned_executor->shutdown(); }
+void WalletListModel::closeAdmission()
 {
-    // Preserve per-row info (balance, keyScheme) that was pushed in before the
-    // picker was first opened — it's not derivable from listWalletDir().
-    QHash<QString, Item> previous_items;
-    previous_items.reserve(m_items.size());
-    for (const auto& item : m_items) {
-        previous_items.insert(item.name, item);
-    }
-
-    QList<Item> updated_items;
-    for (const auto& [path, format] : m_node.walletLoader().listWalletDir()) {
-        const QString name = QString::fromStdString(path);
-        Item item{name, QString::fromStdString(format), true, {}, -1};
-        const auto previous = previous_items.constFind(name);
-        if (previous != previous_items.constEnd()) {
-            item.balance = previous->balance;
-            item.keySchemeKind = previous->keySchemeKind;
-        }
-        updated_items.append(std::move(item));
-    }
-
-    for (const QString& wallet_name : m_open_wallet_names) {
-        const bool has_wallet = std::any_of(updated_items.cbegin(), updated_items.cend(), [&](const Item& item) {
-            return item.name == wallet_name;
-        });
-        if (!has_wallet) {
-            Item item{wallet_name, QString(), false, {}, -1};
-            const auto previous = previous_items.constFind(wallet_name);
-            if (previous != previous_items.constEnd()) {
-                item.balance = previous->balance;
-                item.keySchemeKind = previous->keySchemeKind;
-            }
-            updated_items.append(std::move(item));
-        }
-    }
-
-    sortItems(updated_items);
-    applyUpdatedItems(std::move(updated_items));
-    const bool wallet_dir_became_loaded{!m_wallet_dir_loaded};
-    if (wallet_dir_became_loaded) {
-        m_wallet_dir_loaded = true;
-    }
-    Q_EMIT walletListChanged(rowCount() > 0);
-    if (wallet_dir_became_loaded) {
-        Q_EMIT walletDirLoadedChanged();
-    }
+    if (std::exchange(m_stopping, true)) return;
+    m_pending = false;
+    m_reader->close();
+    observe(m_reader->observation());
+    m_visible.reset();
+    Q_EMIT projectionChanged();
 }
-
+void WalletListModel::listWalletDir() { enqueue(walletcatalog::Input{walletcatalog::Input::Kind::Directory}); }
+void WalletListModel::refresh() { listWalletDir(); }
 void WalletListModel::setWalletLoadState(const QString& name, LoadState state, const QString& error)
 {
-    if (name.isEmpty()) {
-        return;
-    }
-
+    walletcatalog::Input input{walletcatalog::Input::Kind::Load}; input.name = name;
     switch (state) {
-    case LoadState::Loading: {
-        bool changed = false;
-        if (!m_load_error.first.isEmpty()) {
-            m_load_error = {};
-            changed = true;
-        }
-        if (m_loading_wallet != name) {
-            m_loading_wallet = name;
-            changed = true;
-        }
-        if (changed) {
-            emitTransientStateChanged();
-        }
-        return;
+    case LoadState::Closed: input.load = walletcatalog::LoadState::Closed; break;
+    case LoadState::Open: input.load = walletcatalog::LoadState::Open; break;
+    case LoadState::Loading: input.load = walletcatalog::LoadState::Loading; break;
+    case LoadState::LoadError: input.load = walletcatalog::LoadState::LoadError; break;
     }
-    case LoadState::LoadError: {
-        bool changed = false;
-        if (!m_loading_wallet.isEmpty()) {
-            m_loading_wallet.clear();
-            changed = true;
-        }
-        if (m_load_error.first != name || m_load_error.second != error) {
-            m_load_error = {name, error};
-            changed = true;
-        }
-        if (changed) {
-            emitTransientStateChanged();
-        }
-        return;
+    input.error = error; enqueue(std::move(input));
+}
+void WalletListModel::setDisplayUnit(int unit) { walletcatalog::Input input{walletcatalog::Input::Kind::Unit}; input.unit = unit; enqueue(std::move(input)); }
+void WalletListModel::setWalletInfo(const QString& name, qint64 balance, int keySchemeKind, bool balanceKnown)
+{
+    walletcatalog::Input input{walletcatalog::Input::Kind::Info}; input.name = name; input.balance = balance; input.scheme = keySchemeKind; input.known = balanceKnown; enqueue(std::move(input));
+}
+void WalletListModel::refreshDisplayNames() { enqueue(walletcatalog::Input{walletcatalog::Input::Kind::Names}); }
+void WalletListModel::setBackendAvailability(BackendAvailability availability)
+{
+    if (m_stopping || availability == m_availability) return;
+    walletcatalog::Input input{walletcatalog::Input::Kind::Availability};
+    switch (availability) {
+    case BackendAvailability::Uninitialized: input.availability = walletcatalog::Availability::Uninitialized; break;
+    case BackendAvailability::Available: input.availability = walletcatalog::Availability::Available; break;
+    case BackendAvailability::Disabled: input.availability = walletcatalog::Availability::Disabled; break;
+    case BackendAvailability::Unavailable: input.availability = walletcatalog::Availability::Unavailable; break;
     }
-    case LoadState::Open:
-    case LoadState::Closed:
-        break;
+    enqueue(std::move(input));
+}
+void WalletListModel::setOpenWallet(const QString& walletId, WalletQmlModel* wallet)
+{
+    if (m_stopping) return;
+    const auto existing = m_open_wallets.constFind(walletId);
+    if (existing != m_open_wallets.cend() && existing->identity == wallet) return;
+    if (existing == m_open_wallets.cend() && !wallet) return;
+    if (existing != m_open_wallets.cend()) disconnect(existing->destroyed);
+    if (!wallet) m_open_wallets.remove(walletId);
+    else {
+        const auto destroyed = connect(wallet, &QObject::destroyed, this, [this, walletId, identity = wallet] {
+            const auto found = m_open_wallets.constFind(walletId);
+            if (found != m_open_wallets.cend() && found->identity == identity) setOpenWallet(walletId, nullptr);
+        });
+        m_open_wallets.insert(walletId, {wallet, wallet, destroyed});
     }
-
-    const bool loaded = (state == LoadState::Open);
-    const bool was_loaded = m_open_wallet_names.contains(name);
-    if (loaded) {
-        m_open_wallet_names.insert(name);
+    walletcatalog::Input input{walletcatalog::Input::Kind::OpenWallet}; input.name = walletId; enqueue(std::move(input));
+}
+void WalletListModel::setOperationId(const QString& walletId, const QString& operationId)
+{
+    walletcatalog::Input input{walletcatalog::Input::Kind::Operation}; input.name = walletId; input.operation = operationId; enqueue(std::move(input));
+}
+void WalletListModel::enqueue(walletcatalog::Input input)
+{
+    if (m_stopping) return;
+    m_reader->request(std::move(input));
+    observe(m_reader->observation());
+    m_pending = m_phase != ReaderPhase::Failed;
+    Q_EMIT projectionChanged();
+}
+void WalletListModel::observe(const walletcatalog::Observation& observation)
+{
+    switch (observation.phase) {
+    case walletcatalog::Phase::Idle: m_phase = ReaderPhase::Idle; break;
+    case walletcatalog::Phase::Scheduled: m_phase = ReaderPhase::Scheduled; break;
+    case walletcatalog::Phase::Reading: m_phase = ReaderPhase::Reading; break;
+    case walletcatalog::Phase::ReadingWithPendingWork: m_phase = ReaderPhase::ReadingWithPendingWork; break;
+    case walletcatalog::Phase::Applying: m_phase = ReaderPhase::Applying; break;
+    case walletcatalog::Phase::Current: m_phase = ReaderPhase::Current; break;
+    case walletcatalog::Phase::Failed: m_phase = ReaderPhase::Failed; break;
+    case walletcatalog::Phase::Stopping: m_phase = ReaderPhase::Stopping; break;
+    case walletcatalog::Phase::Stopped: m_phase = ReaderPhase::Stopped; break;
+    }
+    switch (observation.availability) {
+    case walletcatalog::Availability::Uninitialized: m_availability = BackendAvailability::Uninitialized; break;
+    case walletcatalog::Availability::Available: m_availability = BackendAvailability::Available; break;
+    case walletcatalog::Availability::Disabled: m_availability = BackendAvailability::Disabled; break;
+    case walletcatalog::Availability::Unavailable: m_availability = BackendAvailability::Unavailable; break;
+    }
+    m_error = observation.error; m_fresh = observation.fresh; m_revision = observation.revision;
+}
+void WalletListModel::publishSnapshot()
+{
+    const auto update = m_reader->take();
+    observe(update.observation);
+    const auto next = update.snapshot;
+    if (m_stopping || !next) {
+        if (m_stopping || m_phase == ReaderPhase::Failed || m_phase == ReaderPhase::Idle) m_pending = false;
+        Q_EMIT projectionChanged(); return;
+    }
+    const QPointer<WalletListModel> guard{this};
+    const bool count_changed = rowCount() != int(next->rows.size());
+    const bool reset = next->structure_changed || next->base.lock() != m_visible;
+    if (reset) {
+        beginResetModel(); if (!guard) return;
+        if (m_stopping) { endResetModel(); return; }
+    }
+    m_visible = next;
+    m_reader->published(next);
+    if (reset) { endResetModel(); if (!guard || m_stopping) return; }
+    const bool first = !m_wallet_dir_loaded && next->loaded;
+    m_wallet_dir_loaded = next->loaded;
+    if (next->directory_epoch != m_directory_epoch || first || count_changed) {
+        m_directory_epoch = next->directory_epoch;
+        Q_EMIT walletListChanged(rowCount() > 0); if (!guard || m_stopping) return;
+    }
+    if (first) { Q_EMIT walletDirLoadedChanged(); if (!guard || m_stopping) return; }
+    m_notice = reset ? next->notices.size() : 0;
+    publishNotices(next->revision);
+}
+void WalletListModel::publishNotices(quint64 revision)
+{
+    if (m_stopping || !m_visible || m_visible->revision != revision) return;
+    const auto snapshot = m_visible; const QPointer<WalletListModel> guard{this};
+    for (int budget = 0; budget < 32 && m_notice < snapshot->notices.size(); ++budget) {
+        const auto& [row, fields] = snapshot->notices[m_notice++];
+        const auto roles = RolesFor(fields);
+        Q_EMIT dataChanged(index(row), index(row), roles);
+        if (!guard || m_stopping || m_visible != snapshot) return;
+    }
+    if (m_notice < snapshot->notices.size()) {
+        try { m_services.post([guard, revision] { if (guard) guard->publishNotices(revision); }); }
+        catch (...) { m_error = tr("Wallet catalog presentation could not be delivered. Refresh to retry."); m_pending = false; m_fresh = false; m_phase = ReaderPhase::Failed; Q_EMIT projectionChanged(); }
     } else {
-        m_open_wallet_names.remove(name);
-    }
-
-    bool transient_changed = false;
-    if (m_loading_wallet == name) {
-        m_loading_wallet.clear();
-        transient_changed = true;
-    }
-    if (m_load_error.first == name) {
-        m_load_error = {};
-        transient_changed = true;
-    }
-
-    QList<Item> updated_items{m_items};
-    if (loaded && m_wallet_dir_loaded && rowForName(name) == -1) {
-        updated_items.append({name, QString(), false, {}, -1});
-    } else if (!loaded) {
-        updated_items.erase(std::remove_if(updated_items.begin(), updated_items.end(), [&](const Item& item) {
-            return item.name == name && !item.from_wallet_dir;
-        }), updated_items.end());
-    }
-
-    const bool wallet_count_changed{updated_items.size() != m_items.size()};
-    sortItems(updated_items);
-    if (applyUpdatedItems(std::move(updated_items))) {
-        if (wallet_count_changed) {
-            Q_EMIT walletListChanged(rowCount() > 0);
-        }
-        return;
-    }
-
-    if (was_loaded != loaded) {
-        updateLoadStateForAllRows();
-    } else if (transient_changed) {
-        emitTransientStateChanged();
+        if (revision == m_revision) m_pending = false;
+        Q_EMIT projectionChanged();
     }
 }
-
-void WalletListModel::setDisplayUnit(int unit)
+int WalletListModel::rowCount(const QModelIndex& parent) const { return parent.isValid() || !m_visible ? 0 : int(m_visible->rows.size()); }
+QVariant WalletListModel::data(const QModelIndex& index, int role) const
 {
-    if (m_display_unit == unit) return;
-    m_display_unit = unit;
-    if (!m_items.isEmpty()) {
-        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {BalanceRole});
-    }
-}
-
-void WalletListModel::setWalletInfo(const QString& name, qint64 balance, int keySchemeKind)
-{
-    if (name.isEmpty()) {
-        return;
-    }
-    for (int row = 0; row < m_items.size(); ++row) {
-        auto& item = m_items[row];
-        if (item.name != name) {
-            continue;
-        }
-        bool changed = false;
-        if (item.balance != balance) {
-            item.balance = balance;
-            changed = true;
-        }
-        if (item.keySchemeKind != keySchemeKind) {
-            item.keySchemeKind = keySchemeKind;
-            changed = true;
-        }
-        if (changed) {
-            const QModelIndex idx = index(row, 0);
-            Q_EMIT dataChanged(idx, idx, {BalanceRole, BalanceSatoshiRole, KeySchemeKindRole});
-        }
-        return;
-    }
-}
-
-int WalletListModel::rowCount(const QModelIndex &parent) const
-{
-    Q_UNUSED(parent);
-    return m_items.size();
-}
-
-QVariant WalletListModel::data(const QModelIndex &index, int role) const
-{
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_items.size())
-        return QVariant();
-
-    const auto &item = m_items[index.row()];
+    if (!index.isValid() || index.model() != this || index.row() < 0 || index.row() >= rowCount()) return {};
+    const auto& item = m_visible->rows[index.row()];
     switch (role) {
-    case Qt::DisplayRole:
-    case DisplayNameRole:
-        return WalletDisplayName(item.name);
-    case NameRole:
-        return item.name;
-    case FormatRole:
-        return item.format;
+    case Qt::DisplayRole: case DisplayNameRole: return item.display_name;
+    case NameRole: case WalletIdRole: return item.name;
+    case FormatRole: return item.format;
     case LoadStateRole:
-        if (m_load_error.first == item.name) {
-            return static_cast<int>(LoadState::LoadError);
+        switch (item.load_state) {
+        case walletcatalog::LoadState::Closed: return static_cast<int>(LoadState::Closed);
+        case walletcatalog::LoadState::Open: return static_cast<int>(LoadState::Open);
+        case walletcatalog::LoadState::Loading: return static_cast<int>(LoadState::Loading);
+        case walletcatalog::LoadState::LoadError: return static_cast<int>(LoadState::LoadError);
         }
-        if (m_loading_wallet == item.name) {
-            return static_cast<int>(LoadState::Loading);
-        }
-        return m_open_wallet_names.contains(item.name)
-            ? static_cast<int>(LoadState::Open)
-            : static_cast<int>(LoadState::Closed);
-    case ErrorMessageRole:
-        return (m_load_error.first == item.name) ? m_load_error.second : QString();
-    case BalanceRole:
-        return item.balance ? QmlBitcoinUnits::formatForDisplay(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
-    case BalanceSatoshiRole:
-        return item.balance.value_or(0);
-    case WalletSectionRole:
-        return m_open_wallet_names.contains(item.name) ? QStringLiteral("open") : QStringLiteral("closed");
-    case KeySchemeKindRole:
-        return item.keySchemeKind;
-    default:
-        return QVariant();
+        return {};
+    case ErrorMessageRole: case RowErrorRole: return item.error;
+    case BalanceRole: return item.balance_text;
+    case BalanceSatoshiRole: return item.balance;
+    case BalanceKnownRole: return item.balance_known;
+    case WalletSectionRole: return item.section;
+    case KeySchemeKindRole: return item.key_scheme;
+    case OperationIdRole: return item.operation;
+    case OpenWalletRole: return QVariant::fromValue(m_open_wallets.value(item.name).wallet.data());
     }
+    return {};
 }
-
 QHash<int, QByteArray> WalletListModel::roleNames() const
 {
-    QHash<int, QByteArray> roles;
-    roles[NameRole] = "name";
-    roles[FormatRole] = "format";
-    roles[DisplayNameRole] = "displayName";
-    roles[LoadStateRole] = "loadState";
-    roles[ErrorMessageRole] = "errorMessage";
-    roles[BalanceRole] = "balance";
-    roles[BalanceSatoshiRole] = "balanceSatoshi";
-    roles[KeySchemeKindRole] = "keySchemeKind";
-    roles[WalletSectionRole] = "walletSection";
-    return roles;
-}
-
-bool WalletListModel::itemLess(const Item& a, const Item& b) const
-{
-    const bool a_open{m_open_wallet_names.contains(a.name)};
-    const bool b_open{m_open_wallet_names.contains(b.name)};
-    if (a_open != b_open) return a_open;
-
-    const int name_compare = QString::compare(a.name, b.name, Qt::CaseInsensitive);
-    if (name_compare != 0) return name_compare < 0;
-
-    const int case_compare = QString::compare(a.name, b.name, Qt::CaseSensitive);
-    if (case_compare != 0) return case_compare < 0;
-
-    const int format_compare = QString::compare(a.format, b.format, Qt::CaseInsensitive);
-    if (format_compare != 0) return format_compare < 0;
-
-    return QString::compare(a.format, b.format, Qt::CaseSensitive) < 0;
-}
-
-void WalletListModel::sortItems(QList<Item>& items) const
-{
-    std::stable_sort(items.begin(), items.end(), [this](const Item& a, const Item& b) {
-        return itemLess(a, b);
-    });
-}
-
-bool WalletListModel::applyUpdatedItems(QList<Item>&& updated_items)
-{
-    // Compare only structural fields (name/format/from_wallet_dir). Balance and
-    // keyScheme updates go through setWalletInfo() and emit dataChanged in
-    // place, so they don't justify a model reset.
-    bool unchanged{m_items.size() == updated_items.size()};
-    for (qsizetype i = 0; unchanged && i < m_items.size(); ++i) {
-        unchanged = m_items[i].name == updated_items[i].name &&
-            m_items[i].format == updated_items[i].format &&
-            m_items[i].from_wallet_dir == updated_items[i].from_wallet_dir;
-    }
-    if (unchanged) {
-        return false;
-    }
-
-    beginResetModel();
-    m_items = std::move(updated_items);
-    endResetModel();
-    return true;
-}
-
-void WalletListModel::updateLoadStateForAllRows()
-{
-    if (m_items.isEmpty()) {
-        return;
-    }
-
-    const QModelIndex first = index(0, 0);
-    const QModelIndex last = index(rowCount() - 1, 0);
-    Q_EMIT dataChanged(first, last, {LoadStateRole, ErrorMessageRole, WalletSectionRole});
-}
-
-void WalletListModel::emitTransientStateChanged()
-{
-    updateLoadStateForAllRows();
-}
-
-int WalletListModel::rowForName(const QString& name) const
-{
-    for (int row = 0; row < m_items.size(); ++row) {
-        if (m_items[row].name == name) {
-            return row;
-        }
-    }
-    return -1;
-}
-
-void WalletListModel::refreshDisplayNames()
-{
-    if (m_items.isEmpty()) {
-        return;
-    }
-
-    const QModelIndex first = index(0, 0);
-    const QModelIndex last = index(rowCount() - 1, 0);
-    Q_EMIT dataChanged(first, last, {Qt::DisplayRole, DisplayNameRole});
+    return {{NameRole, "name"}, {FormatRole, "format"}, {DisplayNameRole, "displayName"}, {LoadStateRole, "loadState"},
+        {ErrorMessageRole, "errorMessage"}, {BalanceRole, "balance"}, {BalanceSatoshiRole, "balanceSatoshi"},
+        {BalanceKnownRole, "balanceKnown"}, {KeySchemeKindRole, "keySchemeKind"}, {WalletSectionRole, "walletSection"},
+        {WalletIdRole, "walletId"}, {OpenWalletRole, "openWallet"}, {OperationIdRole, "operationId"}, {RowErrorRole, "rowError"}};
 }
