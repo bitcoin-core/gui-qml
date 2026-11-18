@@ -17,7 +17,7 @@ Item {
     // Shows a fixed mask instead while the Hide amounts setting is on. Off by
     // default: amounts people must check, as on Send, stay visible.
     property bool hidesAmount: false
-    readonly property bool amountHidden: hidesAmount && typeof optionsModel !== "undefined" && ApplicationModels.optionsModel
+    readonly property bool amountHidden: hidesAmount && ApplicationModels.optionsModel !== null
         && ApplicationModels.optionsModel.hideAmounts === true
     readonly property string maskText: "∗∗∗∗∗∗∗∗∗∗"
     readonly property string shownText: amountHidden ? maskText : text
