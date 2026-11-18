@@ -10,12 +10,13 @@ bridge enabled and connects a QmlDriver instance.
 
 import argparse
 import os
+from pathlib import Path
 import shutil
+import tempfile
 import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 
 from qml_driver import QmlDriver, QmlDriverError
@@ -25,26 +26,27 @@ from qml_driver import QmlDriver, QmlDriverError
 GUI_STARTUP_TIMEOUT = 30
 
 
-_OWNED_TEST_DIRECTORIES: set[str] = set()
+_owned_directories: dict[Path, tuple[int, int]] = {}
 
 
-def create_test_directory(prefix, dir=None):
-    """Create and register a directory that this process may remove."""
-    directory = os.path.realpath(tempfile.mkdtemp(prefix=prefix, dir=dir))
-    _OWNED_TEST_DIRECTORIES.add(directory)
-    return directory
+def create_test_directory(*, prefix, dir=None):
+    path = Path(tempfile.mkdtemp(prefix=prefix, dir=dir)).resolve()
+    stat = path.stat()
+    _owned_directories[path] = (stat.st_dev, stat.st_ino)
+    return str(path)
 
 
 def cleanup_test_directory(directory):
-    """Remove only an unchanged directory created by create_test_directory."""
-    directory = os.path.abspath(directory)
-    if directory not in _OWNED_TEST_DIRECTORIES or os.path.realpath(directory) != directory:
-        raise AssertionError(f"Refusing to remove an unowned test directory: {directory}")
-    try:
-        shutil.rmtree(directory)
-    except FileNotFoundError:
-        pass
-    _OWNED_TEST_DIRECTORIES.remove(directory)
+    path = Path(directory)
+    # Never follow a replacement symlink or accept a caller-supplied parent.
+    if path.is_symlink() or path != path.resolve() or path not in _owned_directories:
+        raise AssertionError(f"Refusing cleanup of unowned directory: {path}")
+    if path.exists():
+        stat = path.stat()
+        if (stat.st_dev, stat.st_ino) != _owned_directories[path]:
+            raise AssertionError(f"Refusing cleanup of replaced directory: {path}")
+        shutil.rmtree(path)
+    del _owned_directories[path]
 
 
 def pick_unused_port():
@@ -210,6 +212,7 @@ class QmlTestHarness:
 
         env = dict(os.environ)
         env["QT_QPA_PLATFORM"] = qml_qpa_platform()
+        env.setdefault("BITCOIN_QML_TEST_NO_ANIMATIONS", "1")
         settings_args = []
         if self.config_home:
             settings_args = qsettings_sandbox_args(env, self.config_home)

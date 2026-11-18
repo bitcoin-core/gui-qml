@@ -1,0 +1,25 @@
+{
+  "review": "R00-B01 baseline applicability plus R10 reviewed removal of two obsolete Send/review cycles. Pinned Core definitions remain unchanged.",
+  "boost_includes": [],
+  "existing_cycles": [
+    "qml/models/addresslistmodel -> qml/models/walletqmlmodel -> qml/models/addresslistmodel",
+    "qml/models/coinslistmodel -> qml/models/walletqmlmodel -> qml/models/coinslistmodel",
+    "qml/models/sendrecipient -> qml/models/walletqmlmodel -> qml/models/sendrecipient",
+    "qml/models/sendrecipientslistmodel -> qml/models/walletqmlmodel -> qml/models/sendrecipientslistmodel",
+    "qml/models/transactionactivitymodel -> qml/models/walletqmlmodel -> qml/models/transactionactivitymodel"
+  ],
+  "cycle_owner": "Original consumer orders and R41/R42 architecture audit. Reject unreviewed additions and removals.",
+  "cleanup_exception": {
+    "file": "test/functional/qml_test_harness.py",
+    "reason": "Single boundary for registered allocations, resolved path and inode checks; positive and negative cleanup tests. Mirrors Core cleanup_folder scope exception."
+  },
+  "not_applicable": {
+    "rpc_assert": "No app RPC server handlers; nonempty server scope checked by full Core lint.",
+    "doc_release_note_snippets": "No app release snippets.",
+    "subtree / lint-submodule.py": "App requires the pinned Core gitlink; Core vendor policies run inside Core.",
+    "lint-tests.py": "Core Boost naming; app uses QtTest and QuickTest.",
+    "lint-shell.py / lint-shell-locale.py": "No tracked app shell files. Precondition is checked.",
+    "hidden wallet arguments": "Core DummyWalletInit definitions, covered by Core lint.",
+    "Core Boost and dependency-cycle inventory": "App-specific reviewed inventories above, same Core algorithms/check functions."
+  }
+}

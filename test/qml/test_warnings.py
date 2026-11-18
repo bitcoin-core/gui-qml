@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 
-def check_ctest_console(binary, platform, build_dir, enabled):
+def check_ctest_console(binary, platform, build_dir, enabled, probe):
     # Even --show-only writes CTest's log files. Read a copy of the configured
     # test definitions so this child cannot replace the parent CTest's logs.
     root = Path(build_dir)
@@ -26,8 +26,19 @@ def check_ctest_console(binary, platform, build_dir, enabled):
             ["ctest", "--test-dir", metadata, "--show-only=json-v1"],
             stdout=subprocess.PIPE, text=True, timeout=30, check=True,
         )
-    test = next(test for test in json.loads(configured.stdout)["tests"] if test["name"] == "bitcoinqml_qmltests")
-    properties = {prop["name"]: prop["value"] for prop in test["properties"]}
+    tests = [test for test in json.loads(configured.stdout)["tests"]
+             if test["name"].startswith("bitcoinqml_qml_")]
+    assert tests, "No per-file QML component CTest entries were configured"
+    policies = []
+    for test in tests:
+        properties = {prop["name"]: prop["value"] for prop in test["properties"]}
+        assert ("FAIL_REGULAR_EXPRESSION" in properties) == enabled, test["name"]
+        policies.append({key: properties[key] for key in ("FAIL_REGULAR_EXPRESSION", "ENVIRONMENT")
+                         if key in properties})
+    properties = policies[0]
+    assert all(policy == properties for policy in policies), "QML component warning policies differ"
+    assert "ENVIRONMENT" in properties, "QML component message environment is missing"
+    print(f"Checked warning policy for {len(tests)} QML component files")
     # Use the actual configured policy so deleting either the CTest warning
     # check or its message formatting makes these process probes fail.
     for case, diagnostic in {
@@ -36,7 +47,7 @@ def check_ctest_console(binary, platform, build_dir, enabled):
         "log_startup": "startup-console-log-probe",
     }.items():
         with tempfile.TemporaryDirectory(prefix="warning-probe-", dir=build_dir) as temporary:
-            command = [binary, "-platform", platform, "-input", ":/test/qml/warning_probe.qml", f"WarningProbe::test_{case}"]
+            command = [binary, "-platform", platform, "-input", probe, f"WarningProbe::test_{case}"]
             definition = "add_test(probe " + " ".join(f"[==[{argument}]==]" for argument in command) + ")\n"
             for key in ("FAIL_REGULAR_EXPRESSION", "ENVIRONMENT"):
                 if key in properties:
@@ -56,7 +67,10 @@ def check_ctest_console(binary, platform, build_dir, enabled):
 
 
 def main():
-    binary, qt_version, platform, build_dir = sys.argv[1:]
+    arguments = sys.argv[1:]
+    assert len(arguments) in (4, 5), "Expected binary, Qt version, platform, build directory and optional probe path"
+    binary, qt_version, platform, build_dir = arguments[:4]
+    probe = arguments[4] if len(arguments) == 5 else ":/test/qml/warning_probe.qml"
     enabled = tuple(map(int, qt_version.split(".")[:2])) >= (6, 3)
     cases = {
         "clean": None,
@@ -67,7 +81,7 @@ def main():
     }
     for case, diagnostic in cases.items():
         result = subprocess.run(
-            [binary, "-platform", platform, "-input", ":/test/qml/warning_probe.qml", f"WarningProbe::test_{case}"],
+            [binary, "-platform", platform, "-input", probe, f"WarningProbe::test_{case}"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60, check=False,
         )
         assert "Totals:" in result.stdout, result.stdout
@@ -78,7 +92,7 @@ def main():
         else:
             assert result.returncode == 0, result.stdout
         print(f"{case}: exit={result.returncode}, warning failures {'enabled' if enabled else 'disabled (Qt 6.2)'}")
-    check_ctest_console(binary, platform, build_dir, enabled)
+    check_ctest_console(binary, platform, build_dir, enabled, probe)
 
 
 if __name__ == "__main__":

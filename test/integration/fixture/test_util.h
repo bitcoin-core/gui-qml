@@ -245,15 +245,16 @@ inline bool Click(BitcoinQmlApplication& app, const char* name)
 
 inline bool SetText(BitcoinQmlApplication& app, const char* name, const QString& text)
 {
-    auto* item = qobject_cast<QQuickItem*>(WaitForVisible(app, name));
-    if (!item) return false;
+    QPointer<QQuickItem> item{qobject_cast<QQuickItem*>(WaitForVisible(app, name))};
+    if (!item || !QTest::qWaitFor([&] { return !item || item->isEnabled(); }) || !item) return false;
     item->forceActiveFocus();
-    if (!QMetaObject::invokeMethod(item, "selectAll")) return false;
+    if (!item || !item->hasActiveFocus() || !QMetaObject::invokeMethod(item, "selectAll")) return false;
     QTest::keyClick(item->window(), Qt::Key_Backspace, Qt::NoModifier, 1);
+    if (!item) return false;
     QInputMethodEvent edit;
     edit.setCommitString(text);
-    QCoreApplication::sendEvent(item, &edit);
-    return edit.isAccepted();
+    QCoreApplication::sendEvent(item.data(), &edit);
+    return item && edit.isAccepted();
 }
 
 inline bool SelectSettings(BitcoinQmlApplication& app, const char* section)
@@ -261,14 +262,45 @@ inline bool SelectSettings(BitcoinQmlApplication& app, const char* section)
     auto* settings = qobject_cast<QQuickItem*>(Find(app, "settingsView"));
     if ((!settings || !settings->isVisible()) && !OpenSettings(app)) return false;
     if (!WaitForVisible(app, "settingsView")) return false;
-    auto* sidebar = qobject_cast<QQuickItem*>(Find(app, "settingsSidebarList"));
-    auto* button = qobject_cast<QQuickItem*>(Find(app, qPrintable(QStringLiteral("settingsSidebar_%1").arg(section))));
-    if (!sidebar || !button) return false;
+    QPointer<QQuickItem> sidebar{qobject_cast<QQuickItem*>(Find(app, "settingsSidebarList"))};
+    QPointer<QQuickItem> button{qobject_cast<QQuickItem*>(Find(app, qPrintable(QStringLiteral("settingsSidebar_%1").arg(section))))};
+    QPointer<QQuickWindow> window{app.window()};
+    if (!sidebar || !button || !button->parentItem() || !window) return false;
     const auto position_mode = sidebar->metaObject()->enumerator(sidebar->metaObject()->indexOfEnumerator("PositionMode"));
     const int contain = position_mode.keyToValue("Contain");
-    const int index = button->parentItem()->property("index").toInt();
-    if (contain < 0 || !QMetaObject::invokeMethod(sidebar, "positionViewAtIndex", Q_ARG(int, index), Q_ARG(int, contain))) return false;
-    return QTest::qWaitFor([&] { return sidebar->contains(button->mapToItem(sidebar, button->boundingRect().center())); }) && Click(button);
+    const auto index_value = button->parentItem()->property("index");
+    const int index = index_value.toInt();
+    if (contain < 0 || !index_value.isValid() || index < 0) return false;
+    QPointF previous_center;
+    bool positioned{false};
+    const bool ready = QTest::qWaitFor([&] {
+        if (!sidebar || !button || !window || !WaitForPolish(sidebar) || !sidebar || !button || !window) {
+            positioned = false; return false;
+        }
+        if (!QMetaObject::invokeMethod(sidebar, "positionViewAtIndex", Q_ARG(int, index), Q_ARG(int, contain)) ||
+            !WaitForPolish(button) || !sidebar || !button || !window) {
+            positioned = false; return false;
+        }
+        if (!button->isVisible() || !button->isEnabled() || button->window() != window ||
+            button->width() <= 0 || button->height() <= 0) {
+            positioned = false; return false;
+        }
+        const auto center = button->boundingRect().center();
+        const auto window_center = button->mapToScene(center);
+        bool contained = window->isVisible() && QRectF(0, 0, window->width(), window->height()).contains(window_center) &&
+            window->contentItem()->contains(button->mapToItem(window->contentItem(), center)) &&
+            sidebar->contains(button->mapToItem(sidebar, center));
+        for (auto* parent = button->parentItem(); parent && contained; parent = parent->parentItem())
+            if (parent->clip() && !parent->contains(button->mapToItem(parent, center))) contained = false;
+        // Parent layout/polish can move a previously contained delegate. Keep
+        // positioning the original item until its physical center is stable
+        // inside every clip and the actual window, then use the normal click.
+        const bool stable = contained && positioned && previous_center == window_center;
+        previous_center = window_center;
+        positioned = contained;
+        return stable;
+    });
+    return ready && button && Click(button.data());
 }
 
 inline bool ReturnToNode(BitcoinQmlApplication& app)

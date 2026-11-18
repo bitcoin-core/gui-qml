@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_BACKENDEXECUTOR_H
 #define BITCOIN_QML_BACKENDEXECUTOR_H
 
+#include <qml/execution.h>
+
 #include <QObject>
 #include <QPointer>
 
@@ -16,6 +18,10 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+
+class QThread;
+class BackendExecutorWorker;
+struct BackendExecutionGroup;
 
 class BackendExecutor : public QObject
 {
@@ -32,6 +38,13 @@ public:
     using Outcome = std::variant<std::conditional_t<std::is_void_v<T>, std::monostate, T>, std::exception_ptr, Cancelled>;
 
     explicit BackendExecutor(QObject* parent = nullptr);
+    // One shared Core lane plus independent domain/control/cleanup transports.
+    // Migrated Core effects use one worker. Legacy GUI-completion commands
+    // retain a separate compatibility worker until their callers migrate.
+    // Native adapters may require retirement on the original Core thread.
+    // Control remains independent and cleanup keeps its reserved budget.
+    enum class CleanupAffinity { Independent, Core };
+    explicit BackendExecutor(execution::Options limits, QObject* parent = nullptr, CleanupAffinity cleanup_affinity = CleanupAffinity::Independent);
     ~BackendExecutor() override;
 
     template <typename Work, typename Done>
@@ -93,6 +106,9 @@ public:
     // Drains accepted work without cancelling it, including submitTask completions
     // and worker cleanup. Rejection callbacks are queued independently and do not
     // delay draining.
+    // Copy at composition time; outcomes are consumed on background Domain.
+    std::shared_ptr<execution::Scheduler> scheduler() const { return m_scheduler; }
+
     void shutdown();
     static void shutdownAll(QObject* receiver, std::function<void()> done);
     bool isDrained() const;
@@ -101,6 +117,8 @@ Q_SIGNALS:
     void drained();
 
 private:
+    friend class BackendExecutorTests;
+    std::function<void()> m_shutdown_started_for_testing; // Native phase acknowledgment; unset in production.
     template <typename Work>
     struct Task {
         using Return = std::invoke_result_t<Work>;
@@ -130,8 +148,13 @@ private:
 
     struct ExecutorState;
     TaskId enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion, CancelPolicy policy);
+    BackendExecutor(std::optional<execution::Options> limits, QObject* parent, CleanupAffinity cleanup_affinity);
     bool enqueue(std::function<void()> work, std::function<void()> gui_completion);
     std::shared_ptr<ExecutorState> m_state;
+    std::shared_ptr<execution::TaskQueue> m_scheduler;
+    BackendExecutorWorker* m_worker;
+    QThread* m_thread;
+    std::shared_ptr<BackendExecutionGroup> m_group;
     std::map<quint64, std::function<void()>> m_gui_completions;
     quint64 m_next_task_id{0};
     bool m_stopping{false};

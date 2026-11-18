@@ -2852,4 +2852,16 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
         <translation type="unfinished">&amp;Acerca de Bitcoin Core</translation>
     </message>
 </context>
+<context>
+    <name>SpeedUpComplete</name>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="69"/><source>Replacement transaction update result</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="80"/><source>The replacement transaction is in the wallet&apos;s mempool. The wallet does not report peer relay.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="82"/><source>The replacement transaction is confirmed. The wallet does not report peer relay.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="84"/><source>The replacement is recorded by the wallet but is not currently in its mempool. Peer relay is unknown.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="86"/><source>The wallet reports that the replacement transaction is conflicted.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="88"/><source>The wallet reports that the replacement transaction is abandoned.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="90"/><source>The replacement transaction is saved to the wallet. Its mempool status could not be confirmed, and peer relay is unknown. Check Activity for updates.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="92"/><source>The wallet did not report a matching replacement transaction when checked. Submission and peer relay are unknown. Check Activity before retrying.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="93"/><source>The wallet returned from the fee-bump operation, but its transaction record and submission status could not be confirmed. Peer relay is unknown. Check Activity before retrying.</source><translation type="unfinished"></translation></message>
+</context>
 </TS>

@@ -186,5 +186,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: bitcoin-core-app-${{ matrix.cache-id }}
-          path: ${{ env.BUILD_DIR }}/bin/bitcoin-core-app
+          path: |
+            ${{ env.BUILD_DIR }}/bin/bitcoin-core-app
+            ${{ env.BUILD_DIR }}/bin/bitcoin-core-profile-inspector
           if-no-files-found: error

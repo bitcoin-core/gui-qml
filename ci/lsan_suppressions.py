@@ -7,18 +7,14 @@
 
 import argparse
 from pathlib import Path
-import runpy
 import tempfile
 
+from core_sanitizer_env import core_sanitizer_env
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build-dir", type=Path, required=True)
-    args = parser.parse_args()
+
+def lsan_options(build):
     root = Path(__file__).resolve().parent.parent
-    build = args.build_dir.resolve()
-    wrapper = runpy.run_path(str(build / "bitcoin/test/with_sanitizer_env.py"))
-    options = wrapper["sanitizer_env"]()["LSAN_OPTIONS"].split(":")
+    options = core_sanitizer_env(build)["LSAN_OPTIONS"].split(":")
     paths = [i for i, option in enumerate(options) if option.startswith("suppressions=")]
     if len(paths) != 1:
         raise RuntimeError("Core LSan options changed; review suppression-file handling")
@@ -31,7 +27,14 @@ def main():
         output.write(text)
     Path(output.name).replace(combined)
     options[index] = f"suppressions={combined}"
-    print(":".join(options))
+    return ":".join(options)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--build-dir", type=Path, required=True)
+    args = parser.parse_args()
+    print(lsan_options(args.build_dir.resolve()))
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <test/integration/fixture/test_process.h>
+#include <test/integration/fixture/test_application.h>
 #include <test/integration/runner/test_cases.h>
 #include <util/subprocess.h>
 
@@ -21,6 +22,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -109,6 +111,69 @@ void AppendCapturedOutput(const QString& path, const std::vector<char>& buffer, 
     }
 }
 
+// Copy files, never hard-link them: every child must own its wallet and chain.
+void CopyDirectory(const QDir& source, const QString& destination)
+{
+    std::vector<std::pair<QDir, QString>> pending{{source, destination}};
+    while (!pending.empty()) {
+        auto [directory, target_directory] = std::move(pending.back());
+        pending.pop_back();
+        if (!directory.exists() || !QDir{}.mkpath(target_directory)) {
+            throw std::runtime_error{"Cannot copy fixture directory: " + directory.absolutePath().toStdString()};
+        }
+        for (const auto& entry : directory.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden)) {
+            const auto target = QDir{target_directory}.filePath(entry.fileName());
+            if (entry.isSymLink()) throw std::runtime_error{"Unexpected symlink in prepared wallet"};
+            if (entry.isDir()) {
+                pending.emplace_back(QDir{entry.absoluteFilePath()}, target);
+            } else if (!QFile::copy(entry.absoluteFilePath(), target)) {
+                throw std::runtime_error{"Cannot copy fixture file: " + target.toStdString()};
+            }
+        }
+    }
+}
+
+void PrepareFundedProfile(const QDir& profiles, const QString& profile, const QString& wallet_name)
+{
+    // The parent executes cases serially. Each CTest partition owns its seed;
+    // no cache locking, persistent cache invalidation, or test ordering is needed.
+    static std::unique_ptr<QTemporaryDir> seed;
+    static QString error;
+    if (!seed) {
+        seed = std::make_unique<QTemporaryDir>(profiles.absoluteFilePath("bitcoinqml-funded-seed-XXXXXX"));
+        seed->setAutoRemove(false);
+        try {
+            if (!seed->isValid()) throw std::runtime_error{"Cannot create funded-wallet seed profile"};
+            const std::vector<std::string> arguments{
+                QCoreApplication::applicationFilePath().toStdString(),
+                "--module=send", "--wallet=enabled", "--test-prepare-funded-wallet",
+                "--test-profile=" + seed->path().toStdString(),
+            };
+            subprocess::Popen process{arguments, subprocess::input{subprocess::PIPE},
+                                      subprocess::output{subprocess::PIPE}, subprocess::error{subprocess::PIPE}};
+            const auto [output, errors] = process.communicate();
+            AppendCapturedOutput(seed->filePath("stdout.txt"), output.buf, output.length);
+            AppendCapturedOutput(seed->filePath("stderr.txt"), errors.buf, errors.length);
+            if (process.retcode() != EXIT_SUCCESS) {
+                throw std::runtime_error{"Funded-wallet setup failed; retained profile: " + seed->path().toStdString() +
+                                         "\n" + ReadFile(seed->filePath("stderr.txt")).toStdString()};
+            }
+            // The generator has exited normally, closing wallet and chain databases.
+            seed->setAutoRemove(true);
+        } catch (const std::exception& failure) {
+            error = QString::fromUtf8(failure.what());
+        }
+    }
+    if (!error.isEmpty()) throw std::runtime_error{error.toStdString()};
+    const QDir source{TestApplication::DataDir(seed->path()) + "/regtest"};
+    const QDir destination{TestApplication::DataDir(profile) + "/regtest"};
+    for (const auto* name : {"blocks", "chainstate"}) {
+        CopyDirectory(QDir{source.filePath(name)}, destination.filePath(name));
+    }
+    // Copy only the wallet database directory, not GUI settings or node settings.
+    CopyDirectory(QDir{source.filePath("wallets/funded")}, destination.filePath("wallets/" + wallet_name));
+}
+
 IntegrationTestResult RunChild(const IntegrationTestModule& module, WalletMode mode,
                                const QString& selector, const QString& profile_dir,
                                const QStringList& options, bool discover,
@@ -125,6 +190,10 @@ IntegrationTestResult RunChild(const IntegrationTestModule& module, WalletMode m
     IntegrationTestResult result;
     int exit_status{EXIT_SUCCESS};
     try {
+        if (!discover && module.prepared_wallet) {
+            const auto wallet_name = module.prepared_wallet(selector);
+            if (!wallet_name.isEmpty()) PrepareFundedProfile(profiles, profile.path(), wallet_name);
+        }
         std::vector<std::string> arguments{
             QCoreApplication::applicationFilePath().toStdString(),
             std::string{"--module="} + module.name,

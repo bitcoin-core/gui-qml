@@ -140,8 +140,10 @@ jobs:
           export XDG_RUNTIME_DIR
           XDG_RUNTIME_DIR=$(mktemp -d /tmp/qml-ci-XXXXXX)
           trap 'rm -rf -- "$XDG_RUNTIME_DIR"' EXIT
-          python3 build-check/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-check --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
-          python3 build-check/bitcoin/test/with_sanitizer_env.py python3 test/functional/qml_test_shutdown.py
+          python3 ci/with_sanitizer_env.py --build-dir build-check ctest --test-dir build-check -V --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
+          python3 ci/with_sanitizer_env.py --build-dir build-check python3 test/functional/interface_qml_startup.py
+          python3 ci/with_sanitizer_env.py --build-dir build-check python3 test/functional/interface_qml_shutdown.py
+          python3 ci/with_sanitizer_env.py --build-dir build-check python3 test/functional/interface_qml_backend_guarantees.py
       - name: Upload diagnostics
         uses: actions/upload-artifact@v7
         if: always()
@@ -170,8 +172,7 @@ jobs:
             svg_package: 'libqt6svg6-dev'
             cmake_env: 'cmake -E env CXXFLAGS="-Werror -Wno-error=free-nonheap-object -Wno-error=redundant-move -Wno-error=restrict -Wno-error=stringop-overread -Wno-error=maybe-uninitialized"'
             # Qt 6.2's offscreen plugin cannot capture software-rendered images.
-            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb'
-            test_wrapper: 'xvfb-run -a'
+            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb -DQML_TEST_USE_XVFB=ON'
           - job_name: 'Ubuntu 24.04, Qt 6.4'
             image: ubuntu-24.04
             effects_package: ''
@@ -199,6 +200,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            tzdata \
             cmake \
             ninja-build \
             pkg-config \
@@ -237,18 +239,28 @@ jobs:
             ${{ matrix.cmake_options }}
 
       - name: Build
+        id: build
         run: cmake --build build --parallel
 
       - name: Check QML warnings
         if: matrix.image == 'ubuntu-26.04'
         run: cmake --build build --target qml_lint
 
-      - name: Run tests
+      - name: Run non-integration tests
         if: env.BUILD_APP_TESTS == 'ON'
         run: |
           mkdir -p build/test-reports
-          ${{ matrix.test_wrapper }} ctest --test-dir build --output-on-failure \
+          ctest --test-dir build --parallel 4 --output-on-failure -LE '^integration$' \
             --output-junit "${PWD}/build/test-reports/ctest.xml"
+
+      - name: Run integration tests
+        if: ${{ !cancelled() && env.BUILD_APP_TESTS == 'ON' && steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p build/test-reports
+          test_jobs="$(nproc)"
+          if (( test_jobs > 4 )); then test_jobs=4; fi
+          ctest --test-dir build --output-on-failure -L '^integration$' \
+            --parallel "${test_jobs}" --output-junit "${PWD}/build/test-reports/ctest-integration.xml"
 
       - name: Upload test reports and failed profiles
         uses: actions/upload-artifact@v7

@@ -101,25 +101,25 @@ TestCase {
         verify(secondRow.height > 0)
         verify(thirdRow.height > 0)
         compare(output.currentSearchResultIndex, 0)
-        compare(firstContent.selectedText.toLowerCase(), "alpha")
+        tryVerify(function() { return firstContent.selectedText.toLowerCase() === "alpha" })
 
         output.showNextSearchResult()
         compare(output.currentSearchResultIndex, 1)
-        compare(firstContent.selectedText, "")
-        compare(secondContent.selectedText.toLowerCase(), "alpha")
+        tryCompare(firstContent, "selectedText", "")
+        tryVerify(function() { return secondContent.selectedText.toLowerCase() === "alpha" })
 
         output.showPreviousSearchResult()
         compare(output.currentSearchResultIndex, 0)
-        compare(firstContent.selectedText.toLowerCase(), "alpha")
+        tryVerify(function() { return firstContent.selectedText.toLowerCase() === "alpha" })
 
         output.showPreviousSearchResult()
         compare(output.currentSearchResultIndex, 3)
-        compare(thirdContent.selectedText.toLowerCase(), "alpha")
+        tryVerify(function() { return thirdContent.selectedText.toLowerCase() === "alpha" })
 
         output.searchText = ""
         tryCompare(output, "searchResultCount", 0)
         compare(output.currentSearchResultIndex, -1)
-        compare(thirdContent.selectedText, "")
+        tryCompare(thirdContent, "selectedText", "")
         compare(output.count, 3)
     }
 
@@ -151,7 +151,7 @@ TestCase {
 
         output.searchText = data.query
         tryCompare(output, "searchResultCount", 1)
-        compare(content.selectedText, data.expected)
+        tryCompare(content, "selectedText", data.expected)
         compare(content.selectionStart, data.text.indexOf(data.expected))
         compare(content.selectionEnd, data.text.indexOf(data.expected) + data.expected.length)
     }
@@ -179,26 +179,50 @@ TestCase {
         compare(output.contentY, lastMatchY)
     }
 
-    function test_search_scrolls_to_match_inside_multiline_row() {
+    function test_search_scrolls_to_virtualized_multiline_record() {
         const output = createTemporaryObject(multilineOutputComponent,
                                              testWindow.contentItem)
         verify(output !== null)
-        tryCompare(output, "count", 1)
-        const row = findChild(output, "multilineSearchOutput_row_0")
-        const content = findChild(output, "multilineSearchOutput_content_0")
-        verify(row !== null)
-        verify(content !== null)
-
+        tryCompare(output, "count", 5)
         output.searchText = "omega"
         tryCompare(output, "searchResultCount", 1)
-        compare(content.selectedText, "omega")
-
+        let row = null
+        let content = null
+        tryVerify(function() {
+            row = findChild(output, "multilineSearchOutput_row_4")
+            content = findChild(output, "multilineSearchOutput_content_4")
+            return row !== null && content !== null && content.selectedText === "omega"
+        })
         const matchRect = content.positionToRectangle(content.selectionStart)
         const matchTop = row.y + content.y + matchRect.y
         const matchBottom = matchTop + matchRect.height
-        verify(matchRect.y > output.height)
-        verify(output.contentY > row.y)
-        verify(matchTop >= output.contentY)
+        verify(output.contentY > 0)
+        verify(matchTop >= output.contentY - 0.5)
         verify(matchBottom <= output.contentY + output.height + 0.5)
+    }
+
+    function test_search_finds_offscreen_rows_without_instantiating_them_all() {
+        const model = createTemporaryObject(regressionModelComponent, testWindow.contentItem)
+        verify(model !== null)
+        for (let row = 0; row < 5000; ++row)
+            model.append({content: row === 4999 ? "last needle" : "row " + row})
+        const output = createTemporaryObject(outputComponent, testWindow.contentItem, {listModel: model, height: 60})
+        verify(output !== null)
+        tryCompare(output, "count", 5000)
+        verify(output.instantiatedRowCount < 100)
+        verify(findChild(output, "searchOutput_content_4999") === null)
+        output.searchText = "needle"
+        tryCompare(output, "searchResultCount", 1)
+        tryVerify(function() {
+            const content = findChild(output, "searchOutput_content_4999")
+            return content !== null && content.selectedText === "needle"
+        })
+        verify(output.instantiatedRowCount < 100)
+        output.scrollToTop()
+        output.showNextSearchResult()
+        tryVerify(function() {
+            const content = findChild(output, "searchOutput_content_4999")
+            return content !== null && content.selectedText === "needle"
+        })
     }
 }

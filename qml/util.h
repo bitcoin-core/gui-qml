@@ -8,6 +8,7 @@
 #include <support/allocators/secure.h>
 
 #include <QString>
+#include <QList>
 #include <QtGlobal>
 
 QT_BEGIN_NAMESPACE
@@ -27,9 +28,13 @@ QString GraphicsApi(QQuickWindow* window);
 /**
  * Writes to debug.log short info about the used Qt and the host system.
  */
-void LogQtInfo();
+struct QtScreenInfo { QString name; int width{0}, height{0}; qreal pixel_ratio{1}; };
+struct QtInfo { QString platform, controls_style; QList<QtScreenInfo> screens; };
+// Capture only the necessary GUI-affine platform objects, then log/read host
+// facts on Native. The diagnostic writer never dereferences QScreen objects.
+QtInfo CaptureQtInfo();
+void LogQtInfo(const QtInfo& info);
 
-SecureString SecureStringFromQString(const QString& value);
 void ClearSecureString(SecureString& value);
 
 } // namespace QmlUtil

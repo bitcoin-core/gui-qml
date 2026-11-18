@@ -7,7 +7,7 @@ import QtQuick.Layouts 1.15
 
 RowLayout {
     id: rowRoot
-    signal refreshRequested()
+    signal matchPositionReady(real top, real bottom)
     required property string viewCategoryRole
     required property int viewColumnSpacing
     required property color viewContentColor
@@ -39,16 +39,33 @@ RowLayout {
     required property real measuredLeftWidth
     required property real measuredRightWidth
 
-    // `model` is the Repeater delegate's implicit context
-    // property; marking it required pins the reference so
-    // bracket lookup (model[roleName]) resolves reliably.
-    required property var model
+    required property string content
+    required property string plainContent
+    required property string leftText
+    required property string rightText
+    required property int category
     required property int index
-    readonly property string rowContent: rowRoot.model[rowRoot.viewContentRole] ?? ""
-    onRowContentChanged: rowRoot.refreshRequested()
-    readonly property int rowCategory: rowRoot.viewCategoryRole !== ""
-                                       ? Number(rowRoot.model[rowRoot.viewCategoryRole] ?? -1)
-                                       : -1
+    required property int viewSearchRow
+    required property int viewSearchStart
+    required property int viewSearchEnd
+    readonly property string rowContent: content
+    readonly property int rowCategory: category
+    function scheduleSearchSelection() { selectionTimer.restart() }
+    function applySearchSelection() {
+        if (index !== viewSearchRow || viewSearchStart < 0) { contentTextEditor.deselect(); return }
+        contentTextEditor.select(viewSearchStart, viewSearchEnd)
+        const startRect = contentTextEditor.positionToRectangle(viewSearchStart)
+        const endRect = contentTextEditor.positionToRectangle(Math.max(viewSearchStart, viewSearchEnd - 1))
+        matchPositionReady(y + contentTextEditor.y + startRect.y,
+                           y + contentTextEditor.y + endRect.y + endRect.height)
+    }
+    onViewSearchRowChanged: scheduleSearchSelection()
+    onViewSearchStartChanged: scheduleSearchSelection()
+    onViewSearchEndChanged: scheduleSearchSelection()
+    onIndexChanged: scheduleSearchSelection()
+    Component.onCompleted: scheduleSearchSelection()
+    ListView.onReused: scheduleSearchSelection()
+    Timer { id: selectionTimer; interval: 0; repeat: false; onTriggered: rowRoot.applySearchSelection() }
     readonly property bool useCategoryColors: rowRoot.viewCategoryRole !== ""
     readonly property color effectiveContentColor: !useCategoryColors
                                                   ? rowRoot.viewContentColor
@@ -74,14 +91,13 @@ RowLayout {
     spacing: rowRoot.viewColumnSpacing
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: rowContent
+    Accessible.name: plainContent
 
     // Left column (optional)
     Text {
         objectName: rowRoot.viewObjectName.length > 0 ? rowRoot.viewObjectName + "_left_" + rowRoot.index : ""
         visible: rowRoot.viewLeftColumnRole !== ""
-        text: rowRoot.viewLeftColumnRole !== ""
-              ? (rowRoot.model[rowRoot.viewLeftColumnRole] ?? "") : ""
+        text: rowRoot.leftText
         font.family: rowRoot.viewFontFamily
         font.weight: rowRoot.viewFontWeight
         font.pixelSize: rowRoot.viewFontPixelSize
@@ -95,11 +111,14 @@ RowLayout {
     }
 
     // Main content column: TextEdit for per-row select + copy.
-    SelectableText {
+    TextEdit {
         id: contentTextEditor
-        textStyle: null
         objectName: rowRoot.viewObjectName.length > 0 ? rowRoot.viewObjectName + "_content_" + rowRoot.index : ""
         text: rowRoot.rowContent
+        onTextChanged: rowRoot.scheduleSearchSelection()
+        onWidthChanged: if (rowRoot.index === rowRoot.viewSearchRow) rowRoot.scheduleSearchSelection()
+        readOnly: true
+        selectByMouse: true
         persistentSelection: rowRoot.viewSearchText.length > 0
         textFormat: rowRoot.viewContentTextFormat
         wrapMode: Text.WrapAnywhere
@@ -109,6 +128,7 @@ RowLayout {
         color: rowRoot.effectiveContentColor
         selectionColor: rowRoot.viewSelectionColor
         selectedTextColor: rowRoot.viewSelectedTextColor
+        activeFocusOnPress: true
 
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
@@ -118,8 +138,7 @@ RowLayout {
     Text {
         objectName: rowRoot.viewObjectName.length > 0 ? rowRoot.viewObjectName + "_right_" + rowRoot.index : ""
         visible: rowRoot.viewRightColumnRole !== ""
-        text: rowRoot.viewRightColumnRole !== ""
-              ? (rowRoot.model[rowRoot.viewRightColumnRole] ?? "") : ""
+        text: rowRoot.rightText
         font.family: rowRoot.viewFontFamily
         font.weight: rowRoot.viewFontWeight
         font.pixelSize: rowRoot.viewFontPixelSize

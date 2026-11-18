@@ -102,4 +102,4 @@ BITCOINQML_REGISTER_QT_TEST(SyncProgressTrackerTests)
 #else
 QTEST_MAIN(SyncProgressTrackerTests)
 #endif
-#include "test_syncprogresstracker.moc"
+#include <test_syncprogresstracker.moc>

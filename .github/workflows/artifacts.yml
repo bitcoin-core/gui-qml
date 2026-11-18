@@ -75,4 +75,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: unsecure_${{ matrix.os }}_gui
-          path: build/bin/bitcoin-core-app
+          path: |
+            build/bin/bitcoin-core-app
+            build/bin/bitcoin-core-profile-inspector
+          if-no-files-found: error

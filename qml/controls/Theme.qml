@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+
 import org.bitcoincore.qt 1.0
 
 import "../themes"
@@ -9,7 +10,8 @@ Control {
     id: root
     property string paletteId: "core-dark"
     readonly property bool dark: color.isDark
-    property real blockclocksize: (5 / 12)
+    // Persisted through the asynchronous preference store.
+    property alias blockclocksize: settings.blockclocksize
     // The Display setting. Reduces motion even when the platform doesn't ask to.
     property bool reduceMotion: false
     // The Display text size, one of textScales; 1 is the default in the middle.
@@ -46,11 +48,9 @@ Control {
     property Palette activePalette: coreDark
     property bool settingsLoaded: false
 
-    AppSettings {
+    AppPreferences {
         id: settings
-        // Still written so that builds without palettes open in the same brightness.
-        property bool dark: true
-        property alias blockclocksize: root.blockclocksize
+        onChanged: root.initializeSettings()
     }
 
     // Builds before palettes only stored `dark`, which defaults to true.
@@ -93,7 +93,8 @@ Control {
     }
 
     // The palette is shared by every chain; `dark` stays per chain, where older builds read it.
-    Component.onCompleted: {
+    function initializeSettings() {
+        if (settingsLoaded || !settings.ready) return
         paletteId = migratedPaletteId(String(GlobalSettings.value("palette", "")), settings.dark)
         activePalette = paletteFor(paletteId, settings.dark)
         reduceMotion = String(GlobalSettings.value("reduceMotion", false)) === "true"
@@ -102,6 +103,7 @@ Control {
         GlobalSettings.setValue("palette", paletteId)
         settings.dark = Qt.binding(function() { return root.dark })
     }
+    Component.onCompleted: initializeSettings()
 
     component ImageSet: QtObject {
         required property url blocktime

@@ -35,7 +35,7 @@ def lint_runner(core, target, env):
 def core_lint():
     env = dict(os.environ)
     # Let Core select its own history; the parent's range belongs to the app.
-    env.pop("COMMIT_RANGE", None)
+    env["COMMIT_RANGE"] = os.environ.get("CORE_COMMIT_RANGE", "HEAD~1..HEAD")
     runner = lint_runner(CORE / "test/lint/test_runner", BUILD / "core-target", env)
     return run([runner], cwd=CORE, env=env)
 
@@ -55,12 +55,17 @@ def app_lint():
     (adapted / "src").mkdir(parents=True, exist_ok=True)
     for name in ("Cargo.toml", "Cargo.lock"):
         shutil.copyfile(source / name, adapted / name)
+    # The inherited icon-policy link targets Bitcoin Core's old parent-repo
+    # layout, so it cannot be resolved from this standalone app checkout.
     replacements = {
         '"./cmake/bitcoin-build-config.h.in"': '"bitcoin/cmake/bitcoin-build-config.h.in"',
         '"test/lint/commit-script-check.sh"': '"bitcoin/test/lint/commit-script-check.sh"',
         'test/functional/test_framework/test_framework.py': 'test/functional/qml_test_harness.py',
-        '"./src/"': '"*.cpp", "*.h"',
-        'md_ignore_paths.push("./doc/README_doxygen.md");': 'md_ignore_paths.push("./doc/README_doxygen.md");\n    md_ignore_paths.push("./bitcoin");',
+        '"./src/"': '"*.cpp", "*.h", "*.mm"',
+        'md_ignore_paths.push("./doc/README_doxygen.md");':
+            'md_ignore_paths.push("./doc/README_doxygen.md");\n'
+            '    md_ignore_paths.push("./doc/icon-policy.md");\n'
+            '    md_ignore_paths.push("./bitcoin");',
     }
     counts = {old: 0 for old in replacements}
     for path in (source / "src").glob("*.rs"):
@@ -96,6 +101,7 @@ def app_lint():
         status |= run([sys.executable, CORE / "test/lint/lint-shell.py"])
     else:
         print("ShellCheck: no tracked app shell scripts", flush=True)
+    status |= run([sys.executable, ROOT / "ci/lint/layout_checks.py"])
     status |= run([sys.executable, ROOT / "test/functional/test_qml_test_directories.py"])
     status |= run([sys.executable, ROOT / "test/test_core_lint.py", "--runner", runner,
                    "--core", CORE, "--build-dir", BUILD / "gate-tests"])

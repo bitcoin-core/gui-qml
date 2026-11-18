@@ -4,7 +4,9 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 import "../../qml/components"
 
@@ -23,9 +25,6 @@ TestCase {
         motionMode = Theme.motion.mode
     }
 
-    function cleanup() {
-        Theme.motion.mode = motionMode
-    }
 
     Item {
         id: host
@@ -785,6 +784,542 @@ TestCase {
         compare(row.loadedBodyItem.objectName, "exampleBodyContent")
         compare(row.loadedBodyItem.text, "/Users/example/Bitcoin")
         verify(row.implicitHeight > row.minimumRowHeight)
+    }
+
+    property var formHarnesses: []
+    property bool formClipboardOwned: false
+    property string formClipboardBefore: ""
+
+    Component {
+        id: formFieldHarnessComponent
+        FocusScope {
+            id: frame
+            property alias control: control
+            property alias focusSink: focusSink
+            property int copyCalls: 0
+            property int actionCalls: 0
+            property int editCalls: 0
+            property int acceptedCalls: 0
+            property string lastCopiedText: ""
+            property string lastActionText: ""
+            property string lastEditedText: ""
+            x: 16
+            y: 16
+            width: Math.max(0, Math.min(500, testCase.Window.window.contentItem.width - 32))
+            height: focusSink.y + focusSink.height
+            LabeledTextField {
+                id: control
+                objectName: "r10FormField"
+                width: frame.width
+                height: implicitHeight
+                label: "Original label"
+                supportingText: "Original supporting text"
+                text: "Original text"
+                fieldSurface: true
+                showCopyButton: true
+                actionText: "Inspect"
+                onCopyRequested: {
+                    frame.copyCalls++
+                    frame.lastCopiedText = text
+                    Clipboard.setText(text)
+                }
+                onActionRequested: { frame.actionCalls++; frame.lastActionText = text }
+                onTextEdited: (text) => { frame.editCalls++; frame.lastEditedText = text }
+                onAccepted: frame.acceptedCalls++
+            }
+            NeutralButton {
+                id: focusSink
+                objectName: "r10FormFieldFocusSink"
+                y: control.height + 16
+                width: 200
+                height: 40
+                focusPolicy: Qt.StrongFocus
+                text: "Other control"
+            }
+        }
+    }
+    Component {
+        id: formViewHarnessComponent
+        FocusScope {
+            id: frame
+            property alias control: control
+            property alias focusSink: focusSink
+            property int copyCalls: 0
+            property int actionCalls: 0
+            property int editCalls: 0
+            property string lastCopiedText: ""
+            property string lastActionText: ""
+            property string lastEditedText: ""
+            x: 16
+            y: 16
+            width: Math.max(0, Math.min(500, testCase.Window.window.contentItem.width - 32))
+            height: focusSink.y + focusSink.height
+            LabeledTextView {
+                id: control
+                objectName: "r10FormView"
+                width: frame.width
+                height: implicitHeight
+                fieldHeight: 90
+                label: "Original notes label"
+                supportingText: "Original supporting text"
+                text: "Original text"
+                showCopyButton: true
+                actionText: "Inspect"
+                onCopyRequested: {
+                    frame.copyCalls++
+                    frame.lastCopiedText = text
+                    Clipboard.setText(text)
+                }
+                onActionRequested: { frame.actionCalls++; frame.lastActionText = text }
+                onTextEdited: (text) => { frame.editCalls++; frame.lastEditedText = text }
+            }
+            NeutralButton {
+                id: focusSink
+                objectName: "r10FormViewFocusSink"
+                y: control.height + 16
+                width: 200
+                height: 40
+                focusPolicy: Qt.StrongFocus
+                text: "Other control"
+            }
+        }
+    }
+
+    function cleanup() {
+        for (let i = 0; i < formHarnesses.length; ++i) {
+            const receipt = testSetup.watchDestruction(formHarnesses[i])
+            formHarnesses[i].destroy()
+            tryCompare(receipt, "pending", 0)
+            testSetup.releaseDestructionWatch(receipt)
+        }
+        formHarnesses = []
+        if (formClipboardOwned) Clipboard.currentText = formClipboardBefore
+        formClipboardOwned = false
+        Theme.motion.mode = motionMode
+    }
+
+    function clickFormControl(item, expectedEnabled) {
+        verify(item !== null && item.visible)
+        compare(item.enabled, expectedEnabled === undefined ? true : expectedEnabled)
+        const window = item.Window.window
+        verify(window !== null)
+        compare(window, testCase.Window.window)
+        window.requestActivate()
+        tryCompare(window, "active", true)
+        window.update()
+        verify(waitForRendering(item))
+        verify(item.width > 0 && item.height > 0)
+        for (let ancestor = item; ancestor; ancestor = ancestor.parent) {
+            verify(ancestor.visible)
+            if (!ancestor.clip) continue
+            const point = item.mapToItem(ancestor, item.width / 2, item.height / 2)
+            verify(point.x >= 0 && point.x < ancestor.width)
+            verify(point.y >= 0 && point.y < ancestor.height)
+        }
+        const point = item.mapToItem(window.contentItem, item.width / 2, item.height / 2)
+        verify(point.x >= 0 && point.x < window.contentItem.width)
+        verify(point.y >= 0 && point.y < window.contentItem.height)
+        mouseClick(item, item.width / 2, item.height / 2)
+    }
+
+    function createFormHarness(component) {
+        if (!formClipboardOwned) {
+            formClipboardBefore = Clipboard.currentText
+            formClipboardOwned = true
+        }
+        Clipboard.currentText = "Owned by another control"
+        const frame = createTemporaryObject(component, testCase.Window.window.contentItem)
+        verify(frame !== null)
+        formHarnesses.push(frame)
+        verify(frame.width >= 200)
+        frame.visible = true
+        clickFormControl(frame.focusSink)
+        tryCompare(frame.focusSink, "activeFocus", true)
+        return frame
+    }
+
+    function test_field_surface_tracks_focus_and_return_intent() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        const surface = findChild(control, "r10FormFieldSurface")
+        const border = findChild(control, "r10FormFieldFieldBorder")
+        verify(surface !== null && border !== null)
+        compare(surface.visible, true)
+        compare(surface.radius, control.fieldCornerRadius)
+        compare(control.fieldFocused, false)
+        compare(control.showFieldBorder, false)
+        compare(border.visible, false)
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        clickFormControl(field)
+        tryCompare(field, "activeFocus", true)
+        compare(control.fieldFocused, true)
+        compare(control.showFieldBorder, true)
+        compare(border.visible, true)
+        compare(border.border.color, Qt.rgba(control.focusBorderColor.r, control.focusBorderColor.g, control.focusBorderColor.b, 0.5))
+        // A surface field shows one focus border, not a second one on the input.
+        const fieldRing = findChild(field, field.objectName + "FocusRing")
+        verify(fieldRing === null || !fieldRing.visible)
+        keyClick(Qt.Key_Return)
+        tryCompare(field, "activeFocus", false)
+        compare(frame.acceptedCalls, 1)
+        compare(control.showFieldBorder, false)
+        compare(border.visible, false)
+        compare(control.text, "Original text")
+        compare(frame.editCalls, edits)
+        compare(frame.copyCalls, 0)
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.revision, clipboard)
+    }
+
+    function test_field_surface_error_outlives_focus_and_clears() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        const border = findChild(control, "r10FormFieldFieldBorder")
+        const message = findChild(control, "r10FormFieldMessage")
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        control.errorText = "The caller rejected this value."
+        compare(control.showFieldBorder, true)
+        compare(control.activeBorderColor, control.errorBorderColor)
+        compare(border.border.color, Qt.rgba(control.errorBorderColor.r, control.errorBorderColor.g, control.errorBorderColor.b, 0.5))
+        compare(message.text, control.errorText)
+        tryCompare(message, "color", control.errorTextColor)
+        compare(field.Accessible.description, control.errorText)
+        clickFormControl(field)
+        tryCompare(field, "activeFocus", true)
+        field.cursorPosition = field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        compare(control.errorText, "The caller rejected this value.")
+        clickFormControl(frame.focusSink)
+        tryCompare(field, "activeFocus", false)
+        compare(control.showFieldBorder, true)
+        compare(control.activeBorderColor, control.errorBorderColor)
+        control.errorText = ""
+        compare(control.showFieldBorder, false)
+        compare(border.visible, false)
+        compare(message.text, "Original supporting text")
+        tryCompare(message, "color", Theme.color.neutral7)
+        compare(field.Accessible.description, "Original supporting text")
+        compare(frame.copyCalls, 0)
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.revision, clipboard)
+    }
+
+    function test_text_view_focus_border_preserves_error_accessibility() {
+        const frame = createFormHarness(formViewHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        const ring = findChild(field, field.objectName + "FocusRing")
+        verify(ring !== null)
+        compare(ring.visible, false)
+        clickFormControl(field)
+        tryCompare(field, "activeFocus", true)
+        compare(ring.visible, true)
+        compare(ring.border.color, Qt.rgba(control.focusBorderColor.r, control.focusBorderColor.g, control.focusBorderColor.b, 0.3))
+        field.cursorPosition = field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        control.errorText = "These notes need review."
+        compare(field.Accessible.name, "Original notes label")
+        compare(field.Accessible.description, "These notes need review.")
+        compare(ring.border.color, Qt.rgba(control.errorBorderColor.r, control.errorBorderColor.g, control.errorBorderColor.b, 0.3))
+        clickFormControl(frame.focusSink)
+        tryCompare(field, "activeFocus", false)
+        compare(ring.visible, false)
+        compare(field.Accessible.description, "These notes need review.")
+        control.errorText = ""
+        compare(field.Accessible.description, "Original supporting text")
+        compare(control.text, "Original textx")
+        compare(frame.copyCalls, 0)
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.revision, clipboard)
+    }
+
+    function test_disabled_field_owner_blocks_all_intents_and_reenables() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const copy = findChild(control, "r10FormFieldCopyButton")
+        const action = findChild(control, "r10FormFieldActionButton")
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        control.enabled = false
+        compare(control.labelColor, Theme.color.neutral4)
+        compare(control.supportingTextColor, Theme.color.neutral4)
+        compare(control.field.color, Theme.color.neutral4)
+        compare(control.field.placeholderTextColor, Theme.color.neutral4)
+        clickFormControl(copy, false)
+        clickFormControl(action, false)
+        clickFormControl(control.field, false)
+        keyClick("x")
+        compare(control.text, "Original text")
+        compare(frame.editCalls, edits)
+        compare(frame.copyCalls, 0)
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.revision, clipboard)
+        control.enabled = true
+        compare(control.labelColor, Theme.color.neutral8)
+        compare(control.supportingTextColor, Theme.color.neutral7)
+        compare(control.field.color, Theme.color.neutral9)
+        compare(control.field.placeholderTextColor, Theme.color.neutral6)
+        clickFormControl(copy)
+        compare(frame.copyCalls, 1)
+        compare(frame.lastCopiedText, "Original text")
+        compare(Clipboard.currentText, "Original text")
+        compare(Clipboard.revision, clipboard + 1)
+        clickFormControl(action)
+        compare(frame.actionCalls, 1)
+        compare(frame.lastActionText, "Original text")
+        compare(frame.copyCalls, 1)
+        compare(Clipboard.revision, clipboard + 1)
+    }
+
+    function test_disabled_copy_retains_action_and_editor_intents() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const copy = findChild(control, "r10FormFieldCopyButton")
+        const action = findChild(control, "r10FormFieldActionButton")
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        control.copyButtonEnabled = false
+        clickFormControl(copy, false)
+        compare(frame.copyCalls, 0)
+        compare(Clipboard.revision, clipboard)
+        clickFormControl(action)
+        compare(frame.actionCalls, 1)
+        compare(frame.lastActionText, "Original text")
+        compare(control.text, "Original text")
+        clickFormControl(control.field)
+        tryCompare(control.field, "activeFocus", true)
+        control.field.cursorPosition = control.field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        compare(Clipboard.revision, clipboard)
+        control.copyButtonEnabled = true
+        clickFormControl(copy)
+        compare(frame.copyCalls, 1)
+        compare(frame.lastCopiedText, "Original textx")
+        compare(Clipboard.currentText, "Original textx")
+        compare(Clipboard.revision, clipboard + 1)
+        compare(frame.actionCalls, 1)
+    }
+
+    function test_disabled_action_retains_copy_and_multiline_editor_intents() {
+        const frame = createFormHarness(formViewHarnessComponent)
+        const control = frame.control
+        const copy = findChild(control, "r10FormViewCopyButton")
+        const action = findChild(control, "r10FormViewActionButton")
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        control.enabled = false
+        compare(control.field.color, Theme.color.neutral4)
+        compare(control.field.placeholderTextColor, Theme.color.neutral4)
+        control.actionEnabled = false
+        control.enabled = true
+        compare(control.field.color, Theme.color.neutral9)
+        compare(control.field.placeholderTextColor, Theme.color.neutral6)
+        clickFormControl(action, false)
+        compare(frame.actionCalls, 0)
+        clickFormControl(copy)
+        compare(frame.copyCalls, 1)
+        compare(frame.lastCopiedText, "Original text")
+        compare(Clipboard.revision, clipboard + 1)
+        clickFormControl(control.field)
+        tryCompare(control.field, "activeFocus", true)
+        control.field.cursorPosition = control.field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        compare(Clipboard.currentText, "Original text")
+        control.actionEnabled = true
+        clickFormControl(action)
+        compare(frame.actionCalls, 1)
+        compare(frame.lastActionText, "Original textx")
+        compare(frame.copyCalls, 1)
+        compare(Clipboard.revision, clipboard + 1)
+    }
+
+    function test_copy_only_header_hides_and_reveals_without_losing_editor() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        const copy = findChild(control, "r10FormFieldCopyButton")
+        const header = copy.parent
+        control.label = ""
+        control.actionText = ""
+        control.supportingText = ""
+        control.showCopyButton = false
+        verify(waitForRendering(control))
+        compare(header.visible, false)
+        const withoutHeader = control.implicitHeight
+        const clipboard = Clipboard.revision
+        control.showCopyButton = true
+        tryVerify(function() { return control.implicitHeight > withoutHeader })
+        compare(header.visible, true)
+        clickFormControl(copy)
+        compare(frame.copyCalls, 1)
+        compare(Clipboard.currentText, "Original text")
+        compare(Clipboard.revision, clipboard + 1)
+        control.visible = false
+        compare(header.visible, false)
+        control.visible = true
+        compare(header.visible, true)
+        compare(control.field, field)
+        compare(control.text, "Original text")
+        compare(frame.copyCalls, 1)
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.revision, clipboard + 1)
+        control.showCopyButton = false
+        compare(header.visible, false)
+        tryCompare(control, "implicitHeight", withoutHeader)
+    }
+
+    function test_action_only_header_keeps_intent_separate_from_text() {
+        const frame = createFormHarness(formViewHarnessComponent)
+        const control = frame.control
+        const action = findChild(control, "r10FormViewActionButton")
+        const header = action.parent
+        control.label = ""
+        control.showCopyButton = false
+        control.actionText = ""
+        control.supportingText = ""
+        compare(header.visible, false)
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        control.actionText = "Review note"
+        compare(header.visible, true)
+        clickFormControl(action)
+        compare(frame.actionCalls, 1)
+        compare(frame.lastActionText, "Original text")
+        compare(frame.copyCalls, 0)
+        compare(Clipboard.revision, clipboard)
+        control.actionText = ""
+        compare(header.visible, false)
+        clickFormControl(control.field)
+        tryCompare(control.field, "activeFocus", true)
+        control.field.cursorPosition = control.field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        compare(header.visible, false)
+        compare(frame.actionCalls, 1)
+        compare(frame.copyCalls, 0)
+        compare(Clipboard.currentText, "Owned by another control")
+        compare(Clipboard.revision, clipboard)
+    }
+
+    function test_field_custom_names_keep_editor_and_validation_owned() {
+        const frame = createFormHarness(formFieldHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        const label = findChild(control, "r10FormFieldLabel")
+        const message = findChild(control, "r10FormFieldMessage")
+        const action = findChild(control, "r10FormFieldActionButton")
+        const copy = findChild(control, "r10FormFieldCopyButton")
+        control.labelObjectName = "callerFieldLabel"
+        control.messageObjectName = "callerFieldMessage"
+        control.actionObjectName = "callerFieldAction"
+        control.copyButtonObjectName = "callerFieldCopy"
+        control.fieldObjectName = "callerFieldInput"
+        compare(findChild(control, "callerFieldLabel"), label)
+        compare(findChild(control, "callerFieldMessage"), message)
+        compare(findChild(control, "callerFieldAction"), action)
+        compare(findChild(control, "callerFieldCopy"), copy)
+        compare(findChild(control, "callerFieldInput"), field)
+        compare(findChild(control, "r10FormFieldField"), null)
+        control.label = "Caller-owned label"
+        control.errorText = "The caller still owns validation."
+        compare(label.text, "Caller-owned label")
+        compare(message.text, control.errorText)
+        compare(field.Accessible.name, "Caller-owned label")
+        compare(field.Accessible.description, control.errorText)
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        clickFormControl(field)
+        field.cursorPosition = field.text.length
+        keyClick("x")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "Original textx")
+        clickFormControl(action)
+        compare(frame.actionCalls, 1)
+        compare(frame.lastActionText, "Original textx")
+        clickFormControl(copy)
+        compare(frame.copyCalls, 1)
+        compare(Clipboard.currentText, "Original textx")
+        compare(Clipboard.revision, clipboard + 1)
+        control.objectName = ""
+        compare(field.objectName, "callerFieldInput")
+        compare(label.objectName, "callerFieldLabel")
+        control.fieldObjectName = ""
+        compare(field.objectName, "")
+        control.labelObjectName = ""
+        control.messageObjectName = ""
+        control.actionObjectName = ""
+        control.copyButtonObjectName = ""
+        compare(label.objectName, "")
+        compare(message.objectName, "")
+        compare(action.objectName, "")
+        compare(copy.objectName, "")
+        control.objectName = "renamedFieldOwner"
+        compare(field.objectName, "renamedFieldOwnerField")
+        compare(label.objectName, "renamedFieldOwnerLabel")
+        compare(message.objectName, "renamedFieldOwnerMessage")
+        compare(action.objectName, "renamedFieldOwnerActionButton")
+        compare(copy.objectName, "renamedFieldOwnerCopyButton")
+        compare(control.field, field)
+        compare(control.text, "Original textx")
+        compare(control.errorText, "The caller still owns validation.")
+    }
+
+    function test_text_view_custom_and_fallback_names_preserve_selection_and_edits() {
+        const frame = createFormHarness(formViewHarnessComponent)
+        const control = frame.control
+        const field = control.field
+        control.fieldObjectName = "callerNotesInput"
+        control.labelObjectName = "callerNotesLabel"
+        control.messageObjectName = "callerNotesMessage"
+        compare(findChild(control, "callerNotesInput"), field)
+        compare(findChild(control, "r10FormViewField"), null)
+        control.objectName = ""
+        compare(field.objectName, "callerNotesInput")
+        control.fieldObjectName = ""
+        compare(field.objectName, "")
+        control.objectName = "renamedViewOwner"
+        compare(field.objectName, "renamedViewOwnerField")
+        compare(control.field, field)
+        compare(findChild(control, "callerNotesLabel").text, "Original notes label")
+        control.errorText = "The caller must review these notes."
+        compare(field.Accessible.description, control.errorText)
+        compare(findChild(control, "callerNotesMessage").text, control.errorText)
+        const edits = frame.editCalls
+        const clipboard = Clipboard.revision
+        clickFormControl(field)
+        tryCompare(field, "activeFocus", true)
+        field.selectAll()
+        compare(field.selectedText, "Original text")
+        keyClick("n")
+        compare(control.text, "n")
+        compare(frame.editCalls, edits + 1)
+        compare(frame.lastEditedText, "n")
+        compare(field.selectedText, "")
+        compare(field.cursorPosition, 1)
+        compare(field.Accessible.description, "The caller must review these notes.")
+        control.errorText = ""
+        compare(field.Accessible.description, "Original supporting text")
+        clickFormControl(findChild(control, "renamedViewOwnerCopyButton"))
+        compare(frame.copyCalls, 1)
+        compare(frame.lastCopiedText, "n")
+        compare(frame.actionCalls, 0)
+        compare(Clipboard.currentText, "n")
+        compare(Clipboard.revision, clipboard + 1)
     }
 
 }

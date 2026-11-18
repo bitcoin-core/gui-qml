@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <string>
 
-#include <QByteArray>
 #include <QGuiApplication>
 #include <QJsonObject>
 #include <QPluginLoader>
@@ -44,14 +43,24 @@ QString GraphicsApi(QQuickWindow* window)
     assert(false);
 }
 
-void LogQtInfo()
+QtInfo CaptureQtInfo()
+{
+    QtInfo result; result.platform = QGuiApplication::platformName(); result.controls_style = QQuickStyle::name();
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        const auto size = screen->size();
+        result.screens.push_back({screen->name(), size.width(), size.height(), screen->devicePixelRatio()});
+    }
+    return result;
+}
+
+void LogQtInfo(const QtInfo& info)
 {
 #ifdef QT_STATIC
     const std::string qt_link{"static"};
 #else
     const std::string qt_link{"dynamic"};
 #endif
-    LogInfo("Qt %s (%s), plugin=%s\n", qVersion(), qt_link, QGuiApplication::platformName().toStdString());
+    LogInfo("Qt %s (%s), plugin=%s\n", qVersion(), qt_link, info.platform.toStdString());
 
     const auto static_plugins = QPluginLoader::staticPlugins();
     if (static_plugins.empty()) {
@@ -66,22 +75,11 @@ void LogQtInfo()
         }
     }
 
-    LogInfo("Qt Quick Controls style: %s\n", QQuickStyle::name().toStdString());
+    LogInfo("Qt Quick Controls style: %s\n", info.controls_style.toStdString());
     LogInfo("System: %s, %s\n", QSysInfo::prettyProductName().toStdString(), QSysInfo::buildAbi().toStdString());
-    for (const QScreen* s : QGuiApplication::screens()) {
-        LogInfo("Screen: %s %dx%d, pixel ratio=%.1f\n", s->name().toStdString(), s->size().width(), s->size().height(), s->devicePixelRatio());
+    for (const auto& screen : info.screens) {
+        LogInfo("Screen: %s %dx%d, pixel ratio=%.1f\n", screen.name.toStdString(), screen.width, screen.height, screen.pixel_ratio);
     }
-}
-
-SecureString SecureStringFromQString(const QString& value)
-{
-    QByteArray bytes{value.toUtf8()};
-    SecureString secure;
-    secure.assign(bytes.constData(), bytes.constData() + bytes.size());
-    if (!bytes.isEmpty()) {
-        memory_cleanse(bytes.data(), static_cast<std::size_t>(bytes.size()));
-    }
-    return secure;
 }
 
 void ClearSecureString(SecureString& value)

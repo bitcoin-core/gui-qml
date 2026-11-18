@@ -238,6 +238,7 @@ class WalletFlowHarness:
     def start_gui(self, reset_gui_settings=False, start_onboarded=True, extra_args=None, cwd=None):
         env = dict(os.environ)
         env["QT_QPA_PLATFORM"] = qml_qpa_platform()
+        env.setdefault("BITCOIN_QML_TEST_NO_ANIMATIONS", "1")
         settings_args = qsettings_sandbox_args(env, self.config_home)
         extra_args = extra_args or []
         args = [

@@ -60,6 +60,11 @@ AbstractButton {
                color: root.iconColor
                size: root.iconHeight
                icon.width: root.iconWidth
+
+               Behavior on icon.color {
+                   enabled: Theme.motion.animated
+                   ColorAnimation { duration: 150 }
+               }
            }
         }
         Item {

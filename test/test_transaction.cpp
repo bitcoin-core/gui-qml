@@ -64,6 +64,8 @@ class TransactionTests : public QObject
 
 private Q_SLOTS:
     void initTestCase();
+    void coreApiTypedMetadata_data();
+    void coreApiTypedMetadata();
     void fromWalletTx_hidesSenderChangeOutput();
     void fromWalletTx_mixedDebitKeepsNegativeNetAmount();
     void fromWalletTx_showsIncomingPaymentToChangeAddress();
@@ -198,10 +200,40 @@ void TransactionTests::dateTimeString_localizesMonthNames()
     QVERIFY(localized.contains(QStringLiteral("2000")));
 }
 
+
+void TransactionTests::coreApiTypedMetadata_data()
+{
+    QTest::addColumn<bool>("incoming"); QTest::addColumn<bool>("present");
+    QTest::newRow("sent-metadata") << false << true;
+    QTest::newRow("sent-empty-metadata") << false << false;
+    QTest::newRow("received-metadata") << true << true;
+    QTest::newRow("received-empty-metadata") << true << false;
+}
+void TransactionTests::coreApiTypedMetadata()
+{
+    QFETCH(bool, incoming); QFETCH(bool, present);
+    auto wtx = MakeWalletTx({!incoming}, {1000}, {incoming}, {false}, incoming ? 0 : 2000, incoming ? 1000 : 0);
+    wtx.txout_address[0] = CNoDestination{};
+    wtx.txout_address_is_mine[0] = false;
+    if (present) {
+        wtx.replaces_txid = Txid::FromHex(std::string(64, '1')).value();
+        wtx.replaced_by_txid = Txid::FromHex(std::string(64, '2')).value();
+        wtx.comment_to = "recipient note";
+        wtx.from = "sender note";
+    }
+    const auto rows = Transaction::fromWalletTx(wtx);
+    QCOMPARE(rows.size(), 1);
+    QCOMPARE(rows[0]->type, incoming ? Transaction::RecvFromOther : Transaction::SendToOther);
+    QCOMPARE(rows[0]->address, present ? incoming ? QStringLiteral("sender note") : QStringLiteral("recipient note") : QString{});
+    QCOMPARE(rows[0]->replacesTxid, present ? QString(64, u'1') : QString{});
+    QCOMPARE(rows[0]->replacedByTxid, present ? QString(64, u'2') : QString{});
+    QCOMPARE(rows[0]->netAmount(), CAmount{incoming ? 1000 : -2000});
+}
+
 #ifdef BITCOINQML_NO_TEST_MAIN
 #include <test/qt_test_registry.h>
 BITCOINQML_REGISTER_QT_TEST(TransactionTests)
 #else
 QTEST_MAIN(TransactionTests)
 #endif
-#include "test_transaction.moc"
+#include <test_transaction.moc>
