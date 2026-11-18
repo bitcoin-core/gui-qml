@@ -13,13 +13,12 @@ DialogPopup {
     id: root
     objectName: "nodeInformationPopup"
 
-    property var rows: []
+    property var rows: ApplicationModels.nodeModel.informationRows
     readonly property int informationRowCount: informationRepeater.count
     readonly property string firstInformationValue: rows.length > 0 ? rows[0].value : ""
     readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueLineCount : 0
     readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueWrapMode : Text.NoWrap
 
-    onAboutToShow: rows = ApplicationModels.nodeModel.nodeInformationRows()
 
     title: qsTr("Node information")
     implicitWidth: 760

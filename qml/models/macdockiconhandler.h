@@ -7,6 +7,9 @@
 
 #include <QObject>
 
+// Stock Core Qt also defines a global MacDockIconHandler. Keep this app
+// handoff type and its generated meta-object in an independent namespace.
+namespace appdesktop {
 class MacDockIconHandler : public QObject
 {
     Q_OBJECT
@@ -20,5 +23,7 @@ Q_SIGNALS:
 private:
     MacDockIconHandler();
 };
+
+} // namespace appdesktop
 
 #endif // BITCOIN_QML_MODELS_MACDOCKICONHANDLER_H

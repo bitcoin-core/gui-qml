@@ -213,7 +213,7 @@ private Q_SLOTS:
         PeerListModel peers(node, nullptr);
         BanListModel bans(node);
         auto history = std::make_shared<BlockClockHistory>();
-        BlockClockModel clock(history);
+        BlockClockModel clock(history, {});
         history->initialize({});
         clock.refreshHistory();
         peers.beginShutdown();

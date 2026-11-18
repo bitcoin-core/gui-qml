@@ -20,10 +20,15 @@ Page {
     property bool showHeader: false
     property bool showBackButton: true
     property Item popupParent: null
-    property int selectedNodeId: -1
-    property var contextPeerDetails: null
-    property int pendingContextBanDuration: 3600
-    property string pendingContextBanLabel: qsTr("1 hour")
+    property string selectedConnectionId: ""
+    property PeerDetailsModel contextPeerDetails: null
+    property PeerCommandOperation operation: null
+    readonly property bool confirmationVisible: peerListBanConfirmation.visible || peerListDisconnectConfirmation.visible
+    readonly property bool actionPending: operation !== null && operation.pending
+    readonly property string operationError: operation === null ? ""
+        : operation.queryError.length > 0 ? operation.queryError : operation.errorText
+    readonly property string observationText: operation !== null && operation.resultPresent && operation.result.observationAvailable
+        ? operation.result.targetConnected ? qsTr("The original connection is still connected.") : qsTr("The original connection is no longer connected.") : ""
 
     readonly property var directionOptions: [
         { text: qsTr("Inbound"), value: "inbound" },
@@ -63,81 +68,21 @@ Page {
         title: qsTr("Peers")
     }
 
-    AppSettings {
-        id: settings
-        objectName: "peerFilterSettings"
-        property string peerListSortBy: "nodeId"
-        property bool peerListSortAscending: true
-        property string peerDirectionFilters: ""
-        property string peerConnectionTypeFilters: ""
-        property string peerNetworkFilters: ""
-        property string peerTransportFilters: ""
-    }
+    AppPreferences { id: settings; objectName: "peerFilterSettings" }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "sortBy"; value: settings.peerListSortBy }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "sortAscending"; value: settings.peerListSortAscending }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "directionFilters"; value: settings.peerDirectionFilters }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "connectionTypeFilters"; value: settings.peerConnectionTypeFilters }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "networkFilters"; value: settings.peerNetworkFilters }
+    Binding { target: ApplicationModels.peerListModelProxy; property: "transportFilters"; value: settings.peerTransportFilters }
 
-    function decodeFilter(value, options, singleSelection) {
-        const candidates = value.split(",")
-        const selected = []
-        for (let i = 0; i < candidates.length; ++i) {
-            if (selected.indexOf(candidates[i]) >= 0) continue
-            for (let j = 0; j < options.length; ++j) {
-                if (options[j].value === candidates[i]) {
-                    selected.push(candidates[i])
-                    break
-                }
-            }
-            if (singleSelection && selected.length > 0) return selected
-        }
-        return selected.length === options.length ? [] : selected
-    }
-    function filtersFor(group) {
-        if (group === "direction") return ApplicationModels.peerListModelProxy.directionFilters
-        if (group === "connectionType") return ApplicationModels.peerListModelProxy.connectionTypeFilters
-        if (group === "network") return ApplicationModels.peerListModelProxy.networkFilters
-        return ApplicationModels.peerListModelProxy.transportFilters
-    }
-    function validSort(value) {
-        for (let i = 0; i < sortOptions.length; ++i) {
-            if (sortOptions[i].value === value) return value
-        }
-        return "nodeId"
-    }
-    function setFilters(group, values) {
-        if (group === "direction") ApplicationModels.peerListModelProxy.directionFilters = values
-        else if (group === "connectionType") ApplicationModels.peerListModelProxy.connectionTypeFilters = values
-        else if (group === "network") ApplicationModels.peerListModelProxy.networkFilters = values
-        else if (group === "transport") ApplicationModels.peerListModelProxy.transportFilters = values
-        storeFilters()
-    }
-    function toggleFilter(group, value, options) {
-        const filters = filtersFor(group)
-        const selected = []
-        for (let i = 0; i < filters.length; ++i) selected.push(filters[i])
-        const index = selected.indexOf(value)
-        if (group === "direction") {
-            setFilters(group, index >= 0 ? [] : [value])
-            return
-        }
-        if (index >= 0) selected.splice(index, 1)
-        else selected.push(value)
-        setFilters(group, selected.length === options.length ? [] : selected)
-    }
-    function clearFilters() {
-        ApplicationModels.peerListModelProxy.directionFilters = []
-        ApplicationModels.peerListModelProxy.connectionTypeFilters = []
-        ApplicationModels.peerListModelProxy.networkFilters = []
-        ApplicationModels.peerListModelProxy.transportFilters = []
-        storeFilters()
-    }
+    function clearFilter(group) { settings.clearPeerFilter(group) }
+    function toggleFilter(group, value, options) { settings.togglePeerFilter(group, value) }
+    function clearFilters() { settings.clearPeerFilters() }
     function filterPopupX(button, popup) {
         const anchorX = button.mapToItem(root, 0, 0).x
         return Math.max(12 - anchorX, Math.min(button.width - popup.width,
             root.width - popup.width - anchorX - 12))
-    }
-    function storeFilters() {
-        settings.peerDirectionFilters = ApplicationModels.peerListModelProxy.directionFilters.join(",")
-        settings.peerConnectionTypeFilters = ApplicationModels.peerListModelProxy.connectionTypeFilters.join(",")
-        settings.peerNetworkFilters = ApplicationModels.peerListModelProxy.networkFilters.join(",")
-        settings.peerTransportFilters = ApplicationModels.peerListModelProxy.transportFilters.join(",")
     }
     function filterCount() {
         return (ApplicationModels.peerListModelProxy.directionFilters.length > 0 ? 1 : 0)
@@ -167,46 +112,42 @@ Page {
             root.height - peerRowActionsMenu.height - 12))
         peerRowActionsMenu.open()
     }
+    function replaceOperation(captured) {
+        if (captured === null) return false
+        if (confirmationVisible || (operation !== null && (operation.confirmationRequired || operation.pending))) {
+            captured.retire()
+            return false
+        }
+        if (operation !== null) operation.retire()
+        operation = captured
+        return true
+    }
     function requestContextPeerBan(duration, label) {
-        pendingContextBanDuration = duration
-        pendingContextBanLabel = label
-        peerListBanConfirmation.open()
-    }
-    function confirmContextPeerBan() {
-        if (contextPeerDetails
-                && ApplicationModels.nodeModel.banPeer(contextPeerDetails.rawAddress, pendingContextBanDuration)) {
-            ApplicationModels.peerTableModel.refresh()
-            ApplicationModels.banListModel.refresh()
-        } else {
-            showPeerListActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
+        if (!confirmationVisible && contextPeerDetails !== null && contextPeerDetails.canBan && replaceOperation(contextPeerDetails.prepareBan(duration))) {
+            peerListBanConfirmation.originalOperation = operation
+            peerListBanConfirmation.durationLabel = label
+            peerListBanConfirmation.open()
         }
     }
-    function disconnectContextPeer() {
-        if (contextPeerDetails && ApplicationModels.nodeModel.disconnectPeer(contextPeerDetails.nodeId)) {
-            ApplicationModels.peerTableModel.refresh()
-        } else {
-            showPeerListActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
-        }
-    }
+    function confirmContextPeerBan() { if (peerListBanConfirmation.originalOperation !== null) peerListBanConfirmation.originalOperation.confirm() }
+    function disconnectContextPeer() { if (peerListDisconnectConfirmation.originalOperation !== null) peerListDisconnectConfirmation.originalOperation.confirm() }
     function requestContextPeerDisconnect() {
-        peerListDisconnectConfirmation.open()
+        if (!confirmationVisible && contextPeerDetails !== null && contextPeerDetails.canDisconnect && replaceOperation(contextPeerDetails.prepareDisconnect())) {
+            peerListDisconnectConfirmation.originalOperation = operation
+            peerListDisconnectConfirmation.open()
+        }
     }
-    function showPeerListActionError(message) {
-        peerListActionError.message = message
-        peerListActionError.open()
+    Connections {
+        target: root.operation
+        function onChanged() {
+            if (root.visible && root.operation.resultPresent && !root.operation.pending && root.operationError.length > 0)
+                peerListActionError.open()
+        }
     }
+    Component.onDestruction: if (operation !== null) operation.retire()
 
-    Component.onCompleted: {
-        ApplicationModels.peerListModelProxy.searchText = ""
-        ApplicationModels.peerListModelProxy.sortAscending = settings.peerListSortAscending
-        ApplicationModels.peerListModelProxy.sortBy = validSort(settings.peerListSortBy)
-        settings.peerListSortBy = ApplicationModels.peerListModelProxy.sortBy
-        ApplicationModels.peerListModelProxy.directionFilters = decodeFilter(settings.peerDirectionFilters, directionOptions, true)
-        ApplicationModels.peerListModelProxy.connectionTypeFilters = decodeFilter(settings.peerConnectionTypeFilters, connectionTypeOptions)
-        ApplicationModels.peerListModelProxy.networkFilters = decodeFilter(settings.peerNetworkFilters, networkOptions)
-        ApplicationModels.peerListModelProxy.transportFilters = decodeFilter(settings.peerTransportFilters, transportOptions)
-        storeFilters()
-    }
+    Component.onCompleted: ApplicationModels.peerListModelProxy.searchText = ""
+
 
     Item {
         objectName: "peersContentFrame"
@@ -293,7 +234,6 @@ Page {
                             model: root.sortOptions
                             currentValue: ApplicationModels.peerListModelProxy.sortBy
                             onActivated: (value) => {
-                                ApplicationModels.peerListModelProxy.sortBy = value
                                 settings.peerListSortBy = value
                             }
                         }
@@ -305,7 +245,6 @@ Page {
                             ]
                             currentValue: ApplicationModels.peerListModelProxy.sortAscending
                             onActivated: (value) => {
-                                ApplicationModels.peerListModelProxy.sortAscending = value
                                 settings.peerListSortAscending = value
                             }
                         }
@@ -411,8 +350,9 @@ Page {
                     delegate: ItemDelegate {
                         id: delegate
                         required property int index
-                        objectName: "peerListItem_" + nodeId
-                        required property int nodeId
+                        objectName: "peerListItem_" + nodeIdText
+                        required property string nodeIdText
+                        required property string connectionId
                         required property string address
                         required property string subversion
                         required property string direction
@@ -448,7 +388,7 @@ Page {
                                 anchors.margins: 4
                                 radius: Theme.radius.listRow
                                 stateColor: delegate.down ? Theme.color.surfacePressed
-                                    : !root.compact && root.selectedNodeId === delegate.nodeId ? Theme.color.surfaceSelected
+                                    : !root.compact && root.selectedConnectionId === delegate.connectionId ? Theme.color.surfaceSelected
                                     : delegate.hovered ? Theme.color.surfaceHover : "transparent"
                             }
                             Separator {
@@ -477,7 +417,7 @@ Page {
                                 CoreText {
                                     id: idText
                                     anchors.centerIn: parent
-                                    text: "#" + delegate.nodeId
+                                    text: "#" + delegate.nodeIdText
                                     textStyle: Theme.text.description
                                     color: Theme.color.neutral8
                                     wrap: false
@@ -585,6 +525,8 @@ Page {
     PeerActionsMenu {
         id: peerRowActionsMenu
         objectName: "peerRowActionsMenu"
+        canBan: root.contextPeerDetails !== null && root.contextPeerDetails.canBan && !root.actionPending && !root.confirmationVisible
+        canDisconnect: root.contextPeerDetails !== null && root.contextPeerDetails.canDisconnect && !root.actionPending && !root.confirmationVisible
         onBanRequested: (duration, label) => root.requestContextPeerBan(duration, label)
         onDisconnectRequested: root.requestContextPeerDisconnect()
     }
@@ -592,21 +534,34 @@ Page {
     AlertPopup {
         id: peerListBanConfirmation
         objectName: "peerListBanConfirmationPopup"
+        property PeerCommandOperation originalOperation: null
+        property string durationLabel: qsTr("1 hour")
+        onClosed: {
+            const original = peerListBanConfirmation.originalOperation
+            if (original !== null && original.confirmationRequired) original.cancel()
+        }
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Ban peer?")
-        message: root.contextPeerDetails
-            ? qsTr("Ban %1 for %2?").arg(root.contextPeerDetails.address).arg(root.pendingContextBanLabel)
-            : qsTr("Ban this peer for %1?").arg(root.pendingContextBanLabel)
+        message: peerListBanConfirmation.originalOperation !== null
+            ? qsTr("Ban %1 for %2?").arg(peerListBanConfirmation.originalOperation.address).arg(peerListBanConfirmation.durationLabel)
+            : qsTr("Ban this peer for %1?").arg(peerListBanConfirmation.durationLabel)
         AlertAction {
             text: qsTr("Cancel")
             role: AlertAction.Cancel
             buttonObjectName: "peerListBanCancelButton"
+            onTriggered: if (peerListBanConfirmation.originalOperation !== null) peerListBanConfirmation.originalOperation.cancel()
         }
         AlertAction {
             text: qsTr("Ban")
             role: AlertAction.Destructive
             buttonObjectName: "peerListBanConfirmButton"
-            onTriggered: root.confirmContextPeerBan()
+            enabled: peerListBanConfirmation.originalOperation !== null && peerListBanConfirmation.originalOperation.confirmationRequired
+            // Confirm before closing: closing first would cancel the unconfirmed operation.
+            closesPopup: false
+            onTriggered: {
+                root.confirmContextPeerBan()
+                peerListBanConfirmation.close()
+            }
         }
     }
 
@@ -616,6 +571,14 @@ Page {
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Peer action failed")
         messageObjectName: "peerListActionErrorMessage"
+        message: root.operationError + (root.observationText.length > 0 ? "\n" + root.observationText : "")
+        AlertAction {
+            text: qsTr("Refresh original peer state")
+            buttonObjectName: "peerListCommandReconcileButton"
+            closesPopup: false
+            enabled: root.operation !== null && root.operation.resultPresent && !root.operation.outcomeKnown && !root.operation.pending
+            onTriggered: root.operation.reconcile()
+        }
         AlertAction {
             text: qsTr("OK")
             buttonObjectName: "peerListActionErrorCloseButton"
@@ -625,21 +588,33 @@ Page {
     AlertPopup {
         id: peerListDisconnectConfirmation
         objectName: "peerListDisconnectConfirmationPopup"
+        property PeerCommandOperation originalOperation: null
+        onClosed: {
+            const original = peerListDisconnectConfirmation.originalOperation
+            if (original !== null && original.confirmationRequired) original.cancel()
+        }
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Disconnect peer?")
-        message: root.contextPeerDetails
-            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(root.contextPeerDetails.address)
+        message: peerListDisconnectConfirmation.originalOperation !== null
+            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(peerListDisconnectConfirmation.originalOperation.address)
             : qsTr("Disconnect this peer? The peer may reconnect automatically.")
         AlertAction {
             text: qsTr("Cancel")
             role: AlertAction.Cancel
             buttonObjectName: "peerListDisconnectCancelButton"
+            onTriggered: if (peerListDisconnectConfirmation.originalOperation !== null) peerListDisconnectConfirmation.originalOperation.cancel()
         }
         AlertAction {
             text: qsTr("Disconnect")
             role: AlertAction.Destructive
             buttonObjectName: "peerListDisconnectConfirmButton"
-            onTriggered: root.disconnectContextPeer()
+            enabled: peerListDisconnectConfirmation.originalOperation !== null && peerListDisconnectConfirmation.originalOperation.confirmationRequired
+            // Confirm before closing: closing first would cancel the unconfirmed operation.
+            closesPopup: false
+            onTriggered: {
+                root.disconnectContextPeer()
+                peerListDisconnectConfirmation.close()
+            }
         }
     }
 
@@ -678,7 +653,7 @@ Page {
             objectName: "peerConnectionAllPicker"
             model: [{ text: qsTr("All"), value: "" }]
             currentValue: ApplicationModels.peerListModelProxy.connectionTypeFilters.length === 0 ? "" : undefined
-            onActivated: root.setFilters("connectionType", [])
+            onActivated: root.clearFilter("connectionType")
         }
         ContextMenuDivider { }
         ContextMenuPicker {
@@ -703,7 +678,7 @@ Page {
             objectName: "peerNetworkAllPicker"
             model: [{ text: qsTr("All"), value: "" }]
             currentValue: ApplicationModels.peerListModelProxy.networkFilters.length === 0 ? "" : undefined
-            onActivated: root.setFilters("network", [])
+            onActivated: root.clearFilter("network")
         }
         ContextMenuDivider { }
         ContextMenuPicker {
@@ -728,7 +703,7 @@ Page {
             objectName: "peerTransportAllPicker"
             model: [{ text: qsTr("All"), value: "" }]
             currentValue: ApplicationModels.peerListModelProxy.transportFilters.length === 0 ? "" : undefined
-            onActivated: root.setFilters("transport", [])
+            onActivated: root.clearFilter("transport")
         }
         ContextMenuDivider { }
         ContextMenuPicker {

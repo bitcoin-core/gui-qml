@@ -7,14 +7,24 @@
 
 #include <QObject>
 #include <QQueue>
+#include <qml/snapshotquery.h>
+#include <qml/ownedwork.h>
+#include <functional>
+#include <memory>
 
 namespace interfaces {
 class Node;
 }
 
-class NetworkTrafficWorker;
-class QThread;
-
+class BackendExecutor;
+class TrafficTimer {
+public:
+    virtual ~TrafficTimer()=default;
+    virtual void restart(int interval_ms,std::function<void()> tick)=0;
+    virtual void stop()=0;
+};
+struct TrafficEngine;
+struct TrafficSnapshot;
 class NetworkTrafficTower : public QObject
 {
     Q_OBJECT
@@ -29,18 +39,24 @@ class NetworkTrafficTower : public QObject
     Q_PROPERTY(QQueue<float> sentRateList READ sentRateList NOTIFY sentRateListChanged)
 
 public:
-    explicit NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms = 1000);
+    explicit NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms = 1000,
+                                 execution::SnapshotServices services = {}, std::shared_ptr<TrafficTimer> timer = {});
     ~NetworkTrafficTower() override;
     void startSampling();
     void beginShutdown();
+    void closeAdmission();
+    Q_PROPERTY(bool samplePending READ samplePending NOTIFY sampleStateChanged)
+    Q_PROPERTY(QString readError READ readError NOTIFY sampleStateChanged)
+    bool samplePending() const {return m_inflight;}
+    QString readError() const {return m_error;}
 
     bool active() const { return m_active; }
     quint64 totalBytesReceived() const { return m_total_bytes_received; }
     quint64 totalBytesSent() const { return m_total_bytes_sent; }
     float maxReceivedRateBps() const { return m_max_received_rate_bps; }
     float maxSentRateBps() const { return m_max_sent_rate_bps; }
-    QQueue<float> receivedRateList() const { return m_received_rate_list; }
-    QQueue<float> sentRateList() const { return m_sent_rate_list; }
+    QQueue<float> receivedRateList() const;
+    QQueue<float> sentRateList() const;
 
 public Q_SLOTS:
     void setActive(bool active);
@@ -49,6 +65,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void drained();
+    void sampleStateChanged();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
@@ -58,8 +75,20 @@ Q_SIGNALS:
     void sentRateListChanged();
 
 private:
-    NetworkTrafficWorker* m_worker{nullptr};
-    QThread* m_worker_thread{nullptr};
+    void requestSnapshot(bool sample);
+    void publish(std::shared_ptr<const TrafficSnapshot> snapshot);
+    interfaces::Node& m_node;
+    execution::SnapshotServices m_services;
+    std::unique_ptr<BackendExecutor> m_executor;
+    std::unique_ptr<execution::OwnedWork> m_work;
+    std::shared_ptr<TrafficTimer> m_timer;
+    std::shared_ptr<TrafficEngine> m_engine;
+    std::shared_ptr<const TrafficSnapshot> m_snapshot;
+    execution::ResourceKey m_key;
+    int m_interval;
+    int m_window{30};
+    QString m_error;
+    bool m_inflight{false},m_again{false},m_need_sample{false},m_shutdown_started{false};
     bool m_active{false};
     bool m_stopping{false};
     bool m_sampling_started{false};
@@ -68,8 +97,5 @@ private:
     quint64 m_total_bytes_sent{0};
     float m_max_received_rate_bps{0.0f};
     float m_max_sent_rate_bps{0.0f};
-    QQueue<float> m_received_rate_list;
-    QQueue<float> m_sent_rate_list;
 };
-
 #endif // BITCOIN_QML_MODELS_NETWORKTRAFFICTOWER_H

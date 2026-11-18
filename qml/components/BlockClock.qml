@@ -31,6 +31,7 @@ Item {
 
     width: dial.width
     height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
+        + (renderStatus.visible ? renderStatus.implicitHeight + Theme.space.m : 0)
 
     property alias header: mainText.text
     property alias headerSize: mainText.font.pixelSize
@@ -52,22 +53,18 @@ Item {
     property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property bool offline: root.networkStatusModelRef !== null && root.networkStatusModelRef.networkOffline
 
-    AppSettings {
-        id: settings
-        property alias blockclocksize: dial.scale
-    }
-
     BlockClockDial {
         id: dial
         objectName: "blockClockDial"
+        services: ApplicationModels.presentationServices
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
-                Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
+        width: Math.max(0, Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
+                Math.min(root.parentWidth * dial.scale, root.parentHeight * dial.scale)))
         height: dial.width
         penWidth: dial.width / 50
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
-        blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
+        blockSnapshot: root.blockClockModelRef !== null ? root.blockClockModelRef.blockSnapshot : undefined
         syncProgress: root.syncProgressFraction
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
@@ -182,6 +179,37 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
     }
 
+    Column {
+        id: renderStatus
+        objectName: "blockClockRenderStatus"
+        anchors.top: networkIndicator.visible ? networkIndicator.bottom : dial.bottom
+        anchors.topMargin: Theme.space.m
+        anchors.horizontalCenter: root.horizontalCenter
+        width: dial.width
+        readonly property string error: dial.renderError.length > 0 ? dial.renderError
+            : root.blockClockModelRef !== null ? root.blockClockModelRef.historyError : ""
+        readonly property bool pending: root.synced && ((root.blockClockModelRef !== null && root.blockClockModelRef.historyPending)
+            || (dial.renderPending && !dial.renderAvailable))
+        visible: error.length > 0 || pending
+        CoreText {
+            width: parent.width
+            text: renderStatus.error.length > 0 ? renderStatus.error : qsTr("Preparing block clock…")
+            textStyle: Theme.text.caption
+            color: renderStatus.error.length > 0 ? Theme.color.dangerText : Theme.color.neutral7
+            wrapMode: Text.WordWrap
+        }
+        LinkButton {
+            objectName: "blockClockRetryRendering"
+            visible: renderStatus.error.length > 0
+            text: qsTr("Retry block clock")
+            enabled: !dial.renderPending
+            onClicked: {
+                if (root.blockClockModelRef !== null) root.blockClockModelRef.refreshHistory()
+                dial.retryRendering()
+            }
+        }
+    }
+
     states: [
         State {
             name: "IBD"; when: !root.faulted && !root.offline && !root.synced && !root.paused && root.connected
@@ -204,8 +232,7 @@ Item {
 
         State {
             name: "PAUSE"; when: root.paused && !root.faulted && !root.offline
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 header: qsTr("Paused")
                 headerSize: dial.width * (3/25)
                 subText: ""
@@ -221,8 +248,7 @@ Item {
 
         State {
             name: "ERROR"; when: root.faulted
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 header: qsTr("Error")
                 headerSize: dial.width * (3/25)
             }
