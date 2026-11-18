@@ -40,9 +40,16 @@ class TransactionReviewController : public QObject
     Q_PROPERTY(bool psbtBusy READ psbtBusy NOTIFY psbtChanged)
     Q_PROPERTY(QString psbtError READ psbtError NOTIFY psbtChanged)
     Q_PROPERTY(QString psbtTxid READ psbtTxid NOTIFY psbtChanged)
+    //! The review has an unverified signer result that can be saved.
+    Q_PROPERTY(bool signerResultAvailable READ signerResultAvailable NOTIFY signerResultChanged)
     //! A save is waiting for the user to choose its file.
     Q_PROPERTY(bool savePending READ savePending NOTIFY psbtChanged)
     Q_PROPERTY(bool saveSignerResult READ saveSignerResult NOTIFY psbtChanged)
+    Q_PROPERTY(int signerApprovalState READ signerApprovalState NOTIFY reviewDetailsChanged)
+    Q_PROPERTY(QString signerApprovalError READ signerApprovalError NOTIFY reviewDetailsChanged)
+    Q_PROPERTY(bool signerNotFound READ signerNotFound NOTIFY reviewDetailsChanged)
+    Q_PROPERTY(FileSaveOperation* fileExportOperation READ fileExportOperation NOTIFY reviewDetailsChanged)
+    Q_PROPERTY(QString reviewError READ reviewError NOTIFY reviewDetailsChanged)
 
 public:
     enum class Prompt { None, SweepConsent, Password };
@@ -73,9 +80,17 @@ public:
     QString psbtTxid() const { return m_psbt ? m_psbt->txid() : QString{}; }
     bool savePending() const { return m_save_pending; }
     bool saveSignerResult() const { return m_save_pending && !m_save_signer_result.isEmpty(); }
+    bool signerResultAvailable() const { return m_interface && !m_interface->unverifiedSignerResult().isEmpty(); }
+
+    int signerApprovalState() const { return m_interface ? m_interface->signerApprovalState() : 0; }
+    QString signerApprovalError() const { return m_interface ? m_interface->signerApprovalError() : QString{}; }
+    bool signerNotFound() const { return m_interface && m_interface->signerNotFound(); }
+    FileSaveOperation* fileExportOperation() const { return m_interface ? m_interface->fileExportOperation() : nullptr; }
+    QString reviewError() const { return m_interface ? m_interface->reviewError() : QString{}; }
 
     //! Sends, or only signs, the current review. Ignored while a send runs.
     Q_INVOKABLE void send();
+    Q_INVOKABLE void approveSigner();
     Q_INVOKABLE void signOnlyTransaction();
     //! Answers the current send's prompts.
     Q_INVOKABLE void confirm();
@@ -97,10 +112,11 @@ Q_SIGNALS:
     void activeChanged();
     void sendChanged();
     void psbtChanged();
+    void signerResultChanged();
+    void reviewDetailsChanged();
 
 private:
     void start(bool sign_only);
-    void signerResultChanged();
     //! Answers an open prompt with no and keeps the operation's final state.
     void cancelPrompt();
     void reviewChanged();

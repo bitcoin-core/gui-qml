@@ -262,4 +262,4 @@ BITCOINQML_REGISTER_QT_TEST(BitcoinUriTests)
 #else
 QTEST_MAIN(BitcoinUriTests)
 #endif
-#include "test_bitcoinuri.moc"
+#include <test_bitcoinuri.moc>

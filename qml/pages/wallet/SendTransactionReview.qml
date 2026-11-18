@@ -23,17 +23,18 @@ Page {
         && flowDetails !== null && flowDetails.context === transaction
         && flowDetails.revision === wallet.currentTransactionFlowRevision
     readonly property bool detailsReady: detailsContextValid && !flowDetails.pending && flowDetails.error.length === 0
-    readonly property bool importedPsbt: wallet && wallet.currentTransactionIsImportedPsbt === true
-    readonly property bool canSend: wallet && wallet.currentTransactionCanSend
-        && !wallet.currentTransactionNeedsRevalidation
-    readonly property bool feePending: wallet && wallet.transactionFeePending
-    readonly property bool canBroadcast: wallet && wallet.currentTransactionCanBroadcast
+    readonly property TransactionReviewInterface reviewInterface: sendController.reviewInterface
+    readonly property bool importedPsbt: reviewInterface && reviewInterface.currentTransactionIsImportedPsbt === true
+    readonly property bool canSend: reviewInterface && reviewInterface.currentTransactionCanSend
+        && !reviewInterface.currentTransactionNeedsRevalidation
+    readonly property bool feePending: reviewInterface && reviewInterface.transactionFeePending
+    readonly property bool canBroadcast: reviewInterface && reviewInterface.currentTransactionCanBroadcast
     readonly property bool showBroadcast: importedPsbt && canBroadcast
     readonly property bool showSend: !showBroadcast && canSend
-    readonly property string reviewMessage: wallet && wallet.currentTransactionNeedsRevalidation
+    readonly property string reviewMessage: reviewInterface && reviewInterface.currentTransactionNeedsRevalidation
         ? qsTr("The draft changed after review. Prepare it again before sending.")
-        : wallet ? wallet.currentTransactionReviewMessage : ""
-    readonly property bool showWarning: (wallet && wallet.currentTransactionNeedsRevalidation)
+        : reviewInterface ? reviewInterface.currentTransactionReviewMessage : ""
+    readonly property bool showWarning: (reviewInterface && reviewInterface.currentTransactionNeedsRevalidation)
         || reviewMessage.length > 0 || (wallet && wallet.keySchemeKind === WalletQmlModel.WatchOnly && !canBroadcast)
     readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real reviewContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
@@ -104,7 +105,7 @@ Page {
     }
 
     function signOnly() {
-        if (sending || sendBusy || !wallet || !detailsReady || !wallet.currentTransactionCanSignOnly) return
+        if (sending || sendBusy || !reviewInterface || !detailsReady || !reviewInterface.currentTransactionCanSignOnly) return
         sendController.signOnlyTransaction()
     }
 
@@ -139,8 +140,7 @@ Page {
     }
 
     function startSaveUnverifiedSignerResult() {
-        if (!wallet || !wallet.signerUnverifiedResultToken.length) return
-        const token = wallet.signerUnverifiedResultToken
+        if (!sendController.signerResultAvailable) return
         if (savePsbtAutomationPath.text.length) {
             const path = savePsbtAutomationPath.text
             savePsbtAutomationPath.text = ""
@@ -183,7 +183,7 @@ Page {
     }
 
     Instantiator {
-        model: root.wallet && root.wallet.fileExportOperation ? [root.wallet.fileExportOperation] : []
+        model: sendController.fileExportOperation ? [sendController.fileExportOperation] : []
         delegate: SaveConfirmationPopup {
             required property FileSaveOperation modelData
             objectName: "psbtExportOverwritePopup"
@@ -415,8 +415,12 @@ Page {
                 buttonObjectName: "sendTransactionReviewSignerButton"
                 visible: root.showSend && root.wallet && root.wallet.hasExternalSigner
                 Layout.fillWidth: true
-                wallet: root.wallet
+                approvalState: sendController.signerApprovalState
+                errorMessage: sendController.signerApprovalError
+                signerNotFound: sendController.signerNotFound
+                reviewMessage: root.reviewInterface ? root.reviewInterface.currentTransactionReviewMessage : ""
                 canSend: root.canSend
+                onApprovalRequested: sendController.approveSigner()
                 onSendRequested: root.commitSend()
             }
 
@@ -435,7 +439,7 @@ Page {
                 }
                 NeutralButton {
                     objectName: "sendTransactionReviewExportUnverifiedSignerButton"
-                    visible: root.wallet && root.wallet.signerUnverifiedResultToken.length > 0
+                    visible: sendController.signerResultAvailable
                     enabled: root.wallet && !!root.transaction && !root.sending && !root.sendBusy && !root.wallet.psbtActionBusy
                     buttonSize: NeutralButton.Large
                     width: parent.width
@@ -445,7 +449,7 @@ Page {
                 }
                 NeutralButton {
                     objectName: "sendTransactionReviewSignOnlyButton"
-                    visible: root.wallet && root.wallet.currentTransactionCanSignOnly
+                    visible: root.reviewInterface && root.reviewInterface.currentTransactionCanSignOnly
                     buttonSize: NeutralButton.Large
                     enabled: root.detailsReady && !root.sending && !root.sendBusy
                     width: parent.width < SizeClass.stackColumnsMax ? parent.width : (parent.width - 12) / 2
@@ -506,7 +510,7 @@ Page {
                 shown: text.length > 0
                 Layout.fillWidth: true
                 tone: ToastBanner.Error
-                text: root.wallet ? root.wallet.transactionError : ""
+                text: sendController.reviewError
             }
 
             Item { Layout.preferredHeight: 24 }

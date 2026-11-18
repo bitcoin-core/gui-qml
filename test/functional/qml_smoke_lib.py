@@ -90,7 +90,7 @@ def save_review_psbt(gui, path):
     """Save the review as a PSBT file and wait for its saved receipt."""
     gui.wait_for_property("sendTransactionReviewPage", "detailsReady", True, timeout_ms=30000)
     controller = "sendTransactionReviewController"
-    gui.invoke(controller, "beginPsbtSave", [""])
+    gui.invoke(controller, "beginPsbtSave", [])
     gui.invoke(controller, "choosePsbtSaveFile", [str(path)])
     wait_review_psbt(gui, terminal="Saved")
     assert gui.get_property("sendTransactionReviewPage", "wallet.psbtSavedPath") == str(path)

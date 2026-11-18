@@ -21,7 +21,10 @@ void TransactionReviewController::setReviewInterface(TransactionReviewInterface*
     dropPsbt();
     m_interface = review_interface;
     if (m_interface) {
+        connect(m_interface, &QObject::destroyed, this, &TransactionReviewController::reviewDetailsChanged);
+        connect(m_interface, &TransactionReviewInterface::reviewDetailsChanged, this, &TransactionReviewController::reviewDetailsChanged);
         connect(m_interface, &TransactionReviewInterface::currentReviewChanged, this, &TransactionReviewController::reviewChanged);
+        connect(m_interface, &TransactionReviewInterface::unverifiedSignerResultChanged, this, &TransactionReviewController::signerResultChanged);
         connect(m_interface, &TransactionReviewInterface::availableChanged, this, [this] {
             if (m_interface && !m_interface->available()) {
                 cancelPrompt();
@@ -30,8 +33,9 @@ void TransactionReviewController::setReviewInterface(TransactionReviewInterface*
         });
     }
     Q_EMIT reviewInterfaceChanged();
-}
     Q_EMIT signerResultChanged();
+    Q_EMIT reviewDetailsChanged();
+}
 
 void TransactionReviewController::setActive(bool active)
 {
@@ -55,6 +59,13 @@ TransactionReviewController::Prompt TransactionReviewController::prompt() const
     if (m_send->state() == SendOperation::State::NeedsConfirmation) return Prompt::SweepConsent;
     if (m_send->passwordRequested()) return Prompt::Password;
     return Prompt::None;
+}
+
+void TransactionReviewController::approveSigner()
+{
+    if (m_active && m_interface && m_interface->available() && m_interface->currentReview()) {
+        m_interface->approveSigner();
+    }
 }
 
 void TransactionReviewController::send() { start(false); }
@@ -120,6 +131,8 @@ QString TransactionReviewController::psbtError() const
 void TransactionReviewController::beginPsbtSave(bool signer_result)
 {
     if (!m_interface || !m_active || psbtBusy()) return;
+    const QString result = signer_result ? m_interface->unverifiedSignerResult() : QString{};
+    if (signer_result && result.isEmpty()) return;
     m_save_pending = true;
     m_save_signer_result = result;
     m_save_review = m_interface->currentReview();

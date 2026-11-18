@@ -23,6 +23,7 @@ class SendDraftController : public QObject
     Q_PROPERTY(SendDraftInterface* draftInterface READ draftInterface WRITE setDraftInterface NOTIFY draftInterfaceChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(PreparationOperation::State preparationState READ preparationState NOTIFY preparationChanged)
+    Q_PROPERTY(bool canPrepare READ canPrepare NOTIFY canPrepareChanged)
     Q_PROPERTY(bool preparing READ preparing NOTIFY preparationChanged)
     Q_PROPERTY(bool passwordRequested READ passwordRequested NOTIFY preparationChanged)
     Q_PROPERTY(QString preparationError READ preparationError NOTIFY preparationChanged)
@@ -51,6 +52,9 @@ public:
     int importResult() const { return m_import ? m_import->importResult() : 0; }
     bool sweepConsentRequested() const { return m_sweep_consent; }
 
+    bool canPrepare() const;
+    Q_INVOKABLE void requestPreparation();
+    Q_INVOKABLE bool resetDraft();
     Q_INVOKABLE void prepare();
     //! Answers the preparation's password prompt.
     Q_INVOKABLE void unlock(const QString& passphrase);
@@ -69,6 +73,7 @@ Q_SIGNALS:
     void activeChanged();
     void preparationChanged();
     void importChanged();
+    void canPrepareChanged();
     void sweepConsentChanged();
 
 private:

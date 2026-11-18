@@ -36,6 +36,9 @@ public:
     bool available() const override { return is_available; }
     QString draftRevision() const override { return revision; }
     bool selectionPending() const override { return selection_pending; }
+    bool draftReady() const override { return ready; }
+    bool sweepsWallet() const override { return sweep; }
+    void resetDraft() override { ++resets; }
     PreparationOperation* startPreparation(std::optional<QString> passphrase) override
     {
         ++preparations; last_passphrase = passphrase;
@@ -54,7 +57,8 @@ public:
     bool is_available{true}, selection_pending{false}, refuse{false};
     QString revision{QStringLiteral("1:1")}, last_path;
     std::optional<QString> last_passphrase;
-    int preparations{0};
+    int preparations{0}, resets{0};
+    bool ready{true}, sweep{false};
     QPointer<FakePreparation> last;
     QPointer<FakeImport> last_import;
 };
@@ -123,6 +127,52 @@ private Q_SLOTS:
         QCOMPARE(controller.preparationState(), State::None);
         QCOMPARE(controller.importState(), PsbtOperation::State::None);
         QVERIFY(!controller.sweepConsentRequested());
+    }
+
+    void reviewRequestRequiresAReadyDraftAndSweepConsent()
+    {
+        FakeDraft draft;
+        SendDraftController controller;
+        draft.sweep = true;
+        draft.ready = false;
+        controller.setDraftInterface(&draft);
+        controller.requestPreparation();
+        QVERIFY(!controller.canPrepare());
+        QVERIFY(!controller.sweepConsentRequested());
+
+        draft.ready = true;
+        Q_EMIT draft.draftReadyChanged();
+        QVERIFY(controller.canPrepare());
+        controller.requestPreparation();
+        QVERIFY(controller.sweepConsentRequested());
+        QCOMPARE(draft.preparations, 0);
+        controller.confirmSweepConsent();
+        QCOMPARE(draft.preparations, 1);
+        QVERIFY(!controller.canPrepare());
+        QVERIFY(!controller.resetDraft());
+        QCOMPARE(draft.resets, 0);
+        draft.last->set(State::Ready);
+        QVERIFY(controller.resetDraft());
+        QCOMPARE(draft.resets, 1);
+        controller.importPsbt(QStringLiteral("pending.psbt"));
+        QVERIFY(!controller.resetDraft());
+        QCOMPARE(draft.resets, 1);
+    }
+
+    void refusedReviewKeepsPendingImport()
+    {
+        FakeDraft draft;
+        SendDraftController controller;
+        controller.setDraftInterface(&draft);
+        controller.importPsbt(QStringLiteral("pending.psbt"));
+        const auto pending = draft.last_import;
+        draft.refuse = true;
+        QVERIFY(controller.canPrepare());
+        controller.requestPreparation();
+        QCOMPARE(controller.preparationState(), State::Failed);
+        QVERIFY(controller.importing());
+        QVERIFY(pending);
+        QVERIFY(!controller.resetDraft());
     }
 
     void aSameDraftNoticeKeepsTheResult()

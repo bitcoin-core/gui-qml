@@ -68,9 +68,23 @@ class WalletTransactionReviewInterface final : public TransactionReviewInterface
 public:
     explicit WalletTransactionReviewInterface(WalletQmlModel& wallet);
     QObject* currentReview() const override;
+    bool currentTransactionIsImportedPsbt() const override;
+    bool currentTransactionCanSend() const override;
+    bool currentTransactionCanSignOnly() const override;
+    bool currentTransactionNeedsRevalidation() const override;
+    bool transactionFeePending() const override;
+    bool currentTransactionCanBroadcast() const override;
+    QString currentTransactionReviewMessage() const override;
     bool available() const override;
     SendOperation* startSend(bool sign_only) override;
     PsbtOperation* startPsbt(PsbtOperation::Kind kind, const QString& path, const QString& signer_result) override;
+    QString unverifiedSignerResult() const override;
+    int signerApprovalState() const override;
+    QString signerApprovalError() const override;
+    bool signerNotFound() const override;
+    void approveSigner() override;
+    FileSaveOperation* fileExportOperation() const override;
+    QString reviewError() const override;
 
 private:
     QPointer<WalletQmlModel> m_wallet;

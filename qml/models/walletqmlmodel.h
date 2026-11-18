@@ -201,7 +201,6 @@ private:
     Q_PROPERTY(QString privateKeysStatus READ privateKeysStatus NOTIFY openingMetadataChanged)
     Q_PROPERTY(QString externalSignerStatus READ externalSignerStatus NOTIFY openingMetadataChanged)
     Q_PROPERTY(bool canManagePassphrase READ canManagePassphrase NOTIFY openingMetadataChanged)
-    Q_PROPERTY(QString transactionError READ transactionError NOTIFY transactionErrorChanged)
     Q_PROPERTY(PsbtActionState psbtActionState READ psbtActionState NOTIFY psbtActionChanged)
     Q_PROPERTY(quint64 psbtActionId READ psbtActionId NOTIFY psbtActionChanged)
     Q_PROPERTY(bool psbtActionBusy READ psbtActionBusy NOTIFY psbtActionChanged)
@@ -209,15 +208,9 @@ private:
     Q_PROPERTY(QString psbtActionError READ psbtActionError NOTIFY psbtActionChanged)
     Q_PROPERTY(QString psbtSavedPath READ psbtSavedPath NOTIFY psbtActionChanged)
     Q_PROPERTY(QString psbtSubmittedTxid READ psbtSubmittedTxid NOTIFY psbtActionChanged)
-    Q_PROPERTY(FileSaveOperation* fileExportOperation READ fileExportOperation NOTIFY fileExportOperationChanged)
     Q_PROPERTY(PreparationState preparationState READ preparationState NOTIFY preparationChanged)
     Q_PROPERTY(quint64 preparationId READ preparationId NOTIFY preparationChanged)
     Q_PROPERTY(bool preparationBusy READ preparationBusy NOTIFY preparationChanged)
-    Q_PROPERTY(ApprovalState signerApprovalState READ signerApprovalState NOTIFY signerApprovalChanged)
-    Q_PROPERTY(QString signerUnverifiedResultToken READ signerUnverifiedResultToken NOTIFY unverifiedSigningResultChanged)
-    Q_PROPERTY(quint64 signerApprovalId READ signerApprovalId NOTIFY signerApprovalChanged)
-    Q_PROPERTY(QString signerApprovalError READ signerApprovalError NOTIFY signerApprovalChanged)
-    Q_PROPERTY(bool signerApprovalSignerNotFound READ signerApprovalSignerNotFound NOTIFY signerApprovalChanged)
     Q_PROPERTY(bool sendBusy READ sendBusy NOTIFY sendOperationChanged)
     //! Sends and signs the transaction under review for a TransactionReviewController.
     Q_PROPERTY(TransactionReviewInterface* transactionReview READ transactionReview CONSTANT)
@@ -346,7 +339,7 @@ public:
     bool feeEstimatePending() const { return m_fees && m_fees->estimatePending(); }
     int feeEstimateRevision() const { return m_fee_estimate_revision; }
     Q_INVOKABLE quint64 requestPrepareTransaction();
-    Q_INVOKABLE quint64 approveExternalSignerTransaction();
+    quint64 approveExternalSignerTransaction();
     Q_INVOKABLE quint64 requestPrepareTransactionWithPassphrase(const QString& passphrase);
     quint64 preparationId() const;
     PreparationState preparationState() const;
@@ -788,6 +781,7 @@ private:
     CTransactionRef m_flow_transaction;
     std::shared_ptr<const PartiallySignedTransaction> m_flow_document;
     std::shared_ptr<const psbtfee::Analysis> m_flow_proof;
+    int m_flow_unit{-1};
 /** One "close this wallet?" question. Answering a question the wallet has
  * replaced or closed does nothing. */
 class WalletCloseQuestion final : public QObject
@@ -803,7 +797,6 @@ private:
     const QPointer<WalletQmlModel> m_wallet;
 };
 
-    int m_flow_unit{-1};
     quint64 m_flow_revision{0};
     std::shared_ptr<const void> m_flow_lifetime;
     QVariantMap m_current_flow;

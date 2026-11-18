@@ -8,7 +8,10 @@ import "../controls"
 
 ColumnLayout {
     id: root
-    property WalletQmlModel wallet
+    required property FeeSelectionModel fees
+    required property bool importPending
+    required property bool selectedCoins
+    signal useMaximumRequested()
     property SendRecipient recipient
     property bool clipboardRequest: false
     property string clipboardText: ""
@@ -17,9 +20,8 @@ ColumnLayout {
     property alias addressField: addressField
     property alias noteField: noteField
     property alias amountField: amountField
-    readonly property bool sendingMaximum: root.wallet && root.recipient
+    readonly property bool sendingMaximum: root.recipient
         && root.recipient.amountMode === SendRecipient.Maximum
-    readonly property bool selectedCoins: root.wallet && root.wallet.coinsListModel.selectedCoinsCount > 0
     // A payment URI pasted into one of the fields, or the clipboard's request.
     signal paymentUriPasted(int field, string text)
     signal edited()
@@ -51,7 +53,7 @@ ColumnLayout {
             showErrorMessage: false
             interceptPaste: true
             // An imported payment request replaces the address; typing would be lost.
-            readOnly: !!root.wallet && root.wallet.recipients.importPending
+            readOnly: root.importPending
             textStyle: Theme.text.monoDescription
             address: root.recipient ? root.recipient.address : null
             errorText: root.recipient ? root.recipient.addressError : ""
@@ -104,13 +106,13 @@ ColumnLayout {
         //: Without a selection, it selects all available coins first.
         actionText: root.selectedCoins
             ? qsTr("Use maximum from selected coins") : qsTr("Use maximum")
-        actionEnabled: root.wallet && !root.sendingMaximum
+        actionEnabled: !root.sendingMaximum
         actionObjectName: "sendUseMaximumButton"
         supportingText: !root.sendingMaximum ? ""
-            : root.wallet.fees && !root.wallet.fees.estimatePending && root.wallet.fees.errorText.length > 0
+            : root.fees && !root.fees.estimatePending && root.fees.errorText.length > 0
             ? qsTr("Previous amount; maximum could not be calculated.") : root.selectedCoins
             ? qsTr("Sending maximum from selected coins") : qsTr("Sending maximum available")
-        onActionRequested: root.wallet.useMaximumFor(root.recipient)
+        onActionRequested: root.useMaximumRequested()
         BitcoinAmountInputField {
             id: amountField
             Layout.fillWidth: true
@@ -122,7 +124,7 @@ ColumnLayout {
             amount: root.recipient ? root.recipient.amount : null
             errorText: root.recipient ? root.recipient.inputBudgetError || root.recipient.amountError : ""
             // An imported payment request replaces the amount; typing would be lost.
-            readOnly: !!root.wallet && root.wallet.recipients.importPending
+            readOnly: root.importPending
             interceptPaste: true
             onInputTextChanged: root.edited()
             // Text edits already update the draft and fee estimate. Formatting

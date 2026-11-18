@@ -37,6 +37,13 @@ class FakeReviews : public TransactionReviewInterface
 {
 public:
     QObject* currentReview() const override { return review; }
+    bool currentTransactionIsImportedPsbt() const override { return {}; }
+    bool currentTransactionCanSend() const override { return {}; }
+    bool currentTransactionCanSignOnly() const override { return {}; }
+    bool currentTransactionNeedsRevalidation() const override { return {}; }
+    bool transactionFeePending() const override { return {}; }
+    bool currentTransactionCanBroadcast() const override { return {}; }
+    QString currentTransactionReviewMessage() const override { return {}; }
     bool available() const override { return is_available; }
     SendOperation* startSend(bool sign_only) override
     {
@@ -52,10 +59,20 @@ public:
         last_psbt = new FakePsbt(kind);
         return last_psbt;
     }
+    QString unverifiedSignerResult() const override { return signer_result; }
+    int signerApprovalState() const override { return 0; }
+    QString signerApprovalError() const override { return {}; }
+    bool signerNotFound() const override { return false; }
+    void approveSigner() override { ++approvals; }
+    FileSaveOperation* fileExportOperation() const override { return nullptr; }
+    QString reviewError() const override { return review_error; }
+    int approvals{0};
+    QString review_error;
+    void setSignerResult(QString value) { signer_result = std::move(value); Q_EMIT unverifiedSignerResultChanged(); }
     void replaceReview(QObject* next) { review = next; Q_EMIT currentReviewChanged(); }
+    QString signer_result;
     void setAvailable(bool available) { is_available = available; Q_EMIT availableChanged(); }
     QObject* review{nullptr};
-    QString signer_result;
     bool is_available{true}, refuse{false};
     int starts{0}, psbt_starts{0};
     bool refuse_psbt{false};
@@ -69,6 +86,32 @@ class TransactionReviewControllerTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void signerApprovalNeedsTheVisibleAvailableReview()
+    {
+        FakeReviews wallet;
+        QObject review;
+        TransactionReviewController controller;
+        controller.setReviewInterface(&wallet);
+        controller.approveSigner();
+        QCOMPARE(wallet.approvals, 0);
+        wallet.replaceReview(&review);
+        controller.approveSigner();
+        QCOMPARE(wallet.approvals, 1);
+        controller.setActive(false);
+        controller.approveSigner();
+        QCOMPARE(wallet.approvals, 1);
+        wallet.setAvailable(false);
+        controller.setActive(true);
+        controller.approveSigner();
+        QCOMPARE(wallet.approvals, 1);
+
+        QSignalSpy changed{&controller, &TransactionReviewController::reviewDetailsChanged};
+        wallet.review_error = QStringLiteral("Original review error");
+        Q_EMIT wallet.reviewDetailsChanged();
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(controller.reviewError(), wallet.review_error);
+    }
+
     void startsOneSendAndReplacesItOnlyAfterItFinishes()
     {
         QObject review; FakeReviews reviews; reviews.review = &review;
@@ -164,7 +207,14 @@ private Q_SLOTS:
     {
         QObject review, other; FakeReviews reviews; reviews.review = &review;
         TransactionReviewController controller; controller.setReviewInterface(&reviews);
-        controller.beginPsbtSave(QStringLiteral("local:1:1"));
+        // Without an unverified signer result there is nothing to export.
+        QVERIFY(!controller.signerResultAvailable()); controller.beginPsbtSave(true); QVERIFY(!controller.savePending());
+        QSignalSpy available{&controller, &TransactionReviewController::signerResultChanged};
+        reviews.setSignerResult(QStringLiteral("local:1:1"));
+        QCOMPARE(available.count(), 1); QVERIFY(controller.signerResultAvailable());
+        controller.beginPsbtSave(true);
+        // The save keeps the result it started with.
+        reviews.setSignerResult({});
         QVERIFY(controller.savePending()); QVERIFY(controller.saveSignerResult());
         controller.choosePsbtSaveFile(QStringLiteral("/tmp/a.psbt"));
         QCOMPARE(reviews.psbt_starts, 1); QCOMPARE(reviews.last_path, QStringLiteral("/tmp/a.psbt"));

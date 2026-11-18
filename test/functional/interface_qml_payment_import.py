@@ -14,7 +14,7 @@ from qml_scenarios import (
     run_scenarios,
     scenario,
 )
-from qml_smoke_lib import wallet_scenario
+from qml_smoke_lib import select_wallet, wallet_scenario
 from qml_test_harness import (
     TEST_MOTION_ARGS,
     QmlTestHarness,
@@ -143,7 +143,7 @@ def uri_smoke(harness, checkpoint):
     gui = harness.driver
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
     rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": "uri_smoke"})
-    gui.wait_for_property("walletBadge", "text", "uri_smoke", timeout_ms=30000)
+    select_wallet(gui, "uri_smoke")
     address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="uri_smoke")
     gui.click("sendTabButton")
     gui.wait_for_page("sendPage")
@@ -160,6 +160,9 @@ def uri_smoke(harness, checkpoint):
     gui.wait_for_property("sendUriImportPopup", "opened", True)
     gui.set_text("sendUriImportInput", f"bitcoin:{address}?amount=0.02&label=Manual")
     gui.click("sendUriImportApplyButton")
+    gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", True)
+    gui.click("sendPaymentUriOverwriteConfirmButton")
+    gui.wait_for_property("sendPaymentUriOverwritePopup", "visible", False)
     gui.wait_for_property("sendPaymentRequestPayTo", "value", "Manual")
     checkpoint("manual payment request imported")
 
@@ -167,6 +170,9 @@ def uri_smoke(harness, checkpoint):
     path.write_text(f"bitcoin:{address}?amount=0.03&label=File", encoding="utf8")
     gui.set_text("sendImportPaymentRequestFilePathInput", str(path))
     gui.click("sendApplyPaymentRequestFilePathButton")
+    gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", True)
+    gui.click("sendPaymentUriOverwriteConfirmButton")
+    gui.wait_for_property("sendPaymentUriOverwritePopup", "visible", False)
     gui.wait_for_property("sendPaymentRequestPayTo", "value", "File")
     checkpoint("payment request file imported")
 

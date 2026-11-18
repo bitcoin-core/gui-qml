@@ -9,7 +9,13 @@ TestCase {
     when: windowShown
     visible: true
     width: 900; height: 700
-    Component { id: factory; SendFeeSelection { walletModel: testWalletModel; width: 800 } }
+    Component { id: factory; SendFeeSelection {
+        fees: testWalletModel.fees
+        estimatedFeeSatoshi: testWalletModel.estimatedFeeSatoshi
+        estimatedFeeRate: testWalletModel.estimatedFeeRate
+        feeEstimatePending: testWalletModel.feeEstimatePending
+        width: 800
+    } }
     function init() {
         testSetup.failOnWarnings()
         testWalletModel.minimumCustomFeeRate = 0.1

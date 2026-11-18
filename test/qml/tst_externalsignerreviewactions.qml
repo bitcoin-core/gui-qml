@@ -51,6 +51,12 @@ TestCase {
         id: reviewComponent
 
         ExternalSignerReviewActions {
+            required property QtObject wallet
+            approvalState: wallet ? wallet.signerApprovalState : 0
+            errorMessage: wallet ? wallet.signerApprovalError : ""
+            signerNotFound: wallet && wallet.signerApprovalSignerNotFound
+            reviewMessage: wallet ? wallet.currentTransactionReviewMessage : ""
+            onApprovalRequested: wallet.approveExternalSignerTransaction()
             width: 420
             buttonObjectName: "externalSignerApproveButton"
             statusObjectName: "externalSignerStatusText"

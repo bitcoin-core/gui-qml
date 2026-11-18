@@ -39,6 +39,9 @@ public:
     bool available() const override;
     QString draftRevision() const override;
     bool selectionPending() const override;
+    bool draftReady() const override;
+    bool sweepsWallet() const override;
+    void resetDraft() override;
     PreparationOperation* startPreparation(std::optional<QString> passphrase) override;
     PsbtOperation* startImport(const QString& path) override;
 

@@ -10,7 +10,7 @@ import org.bitcoincore.qt 1.0
 ColumnLayout {
     id: root
 
-    property var address
+    property BitcoinAddress address: null
     property string errorText: ""
     property bool showErrorMessage: true
     property string labelText: qsTr("Send to")
@@ -23,42 +23,33 @@ ColumnLayout {
     property bool interceptPaste: false
     property alias inputText: addressInput.text
     property alias placeholderText: addressInput.placeholderText
-    property alias readOnly: addressInput.readOnly
+    property bool readOnly: false
     readonly property alias field: addressInput
+    readonly property alias contextMenu: editMenu.menu
 
     signal textChanged()
     signal editingFinished()
-    signal pasteRequested()
+    // A pasted payment URI. With interceptPaste it is imported, not inserted.
+    signal paymentUriPasted(string text)
 
-    function paymentUri(text) {
-        const trimmedText = String(text).trim()
-        return root.interceptPaste && trimmedText.toLowerCase().startsWith("bitcoin:")
-            ? trimmedText
-            : ""
-    }
-
-    function pastedPaymentUri(previousText, currentText) {
-        const clipboardText = Clipboard.text()
-        const uri = paymentUri(clipboardText)
-        if (uri.length === 0 || previousText === currentText) return ""
-        return String(currentText).indexOf(clipboardText) === -1 ? "" : uri
-    }
-
-    function paste() {
-        const clipboardText = Clipboard.text()
-        if (!clipboardText.length || !addressInput.enabled || addressInput.readOnly) return
-        const selected = addressInput.selectedText.length > 0
-        const start = selected ? addressInput.selectionStart : addressInput.cursorPosition
-        const end = selected ? addressInput.selectionEnd : start
-        const nextText = addressInput.text.slice(0, start) + clipboardText + addressInput.text.slice(end)
-        const cursor = start + clipboardText.length
-        if (root.address) {
-            addressInput.cursorPosition = root.address.setAddress(nextText, cursor)
-            addressInput.syncFromAddress()
-        } else {
-            addressInput.text = nextText
-            addressInput.cursorPosition = cursor
+    function paste(primary) {
+        const text = primary ? Clipboard.selectionText() : Clipboard.text()
+        if (!text.length || !root.enabled || root.readOnly || !root.address) return
+        if (root.interceptPaste && BitcoinUri.isPaymentUri(text)) {
+            root.paymentUriPasted(text)
+            return
         }
+        const cursor = root.address.pasteAddress(text, Math.min(addressInput.selectionStart, addressInput.selectionEnd),
+            Math.max(addressInput.selectionStart, addressInput.selectionEnd))
+        if (cursor >= 0) { addressInput.syncFromAddress(); addressInput.cursorPosition = cursor }
+    }
+
+    TextEditMenu {
+        id: editMenu
+        textEdit: addressInput
+        pasteEnabled: root.enabled && !root.readOnly && !!root.address
+        menuObjectName: root.inputObjectName + "ContextMenu"
+        onPasteRequested: (primary) => root.paste(primary)
     }
 
     function syncFromAddress() {
@@ -89,6 +80,7 @@ ColumnLayout {
         TextArea {
             id: addressInput
             property bool syncingFromAddress: false
+            readOnly: root.readOnly
 
             function syncFromAddress() {
                 const formattedAddress = root.address ? root.address.formattedAddress : ""
@@ -98,13 +90,13 @@ ColumnLayout {
                 syncingFromAddress = false
             }
 
+            // A native paste (such as a platform menu) of a payment URI.
             function handlePaymentUriInput() {
-                const previousText = root.address ? root.address.formattedAddress : ""
-                const uri = root.pastedPaymentUri(previousText, text)
-                if (uri.length === 0) return false
+                if (!root.interceptPaste) return false
+                const uri = BitcoinUri.pastedPaymentUri(root.address ? root.address.formattedAddress : "", text, Clipboard.text())
+                if (!uri.length) return false
                 syncFromAddress()
-                root.pasteRequested()
-                syncFromAddress()
+                root.paymentUriPasted(uri)
                 return true
             }
             anchors.left: label.right
@@ -141,7 +133,7 @@ ColumnLayout {
 
             Keys.onPressed: (event) => {
                 if (root.interceptPaste && event.matches(StandardKey.Paste)) {
-                    root.pasteRequested()
+                    root.paste(false)
                     event.accepted = true
                 }
             }
@@ -161,7 +153,8 @@ ColumnLayout {
                 }
                 if (handlePaymentUriInput()) return
                 if (root.address) {
-                    cursorPosition = root.address.setAddress(text, cursorPosition)
+                    const cursor = root.address.setAddress(text, cursorPosition)
+                    if (cursor >= 0) cursorPosition = cursor
                 }
                 root.textChanged()
             }
@@ -179,10 +172,17 @@ ColumnLayout {
                 }
             }
 
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton | Qt.MiddleButton
+                onPressed: (mouse) => editMenu.pointerPressed(mouse)
+            }
+
             Connections {
                 target: root.address ? root.address : null
                 function onFormattedAddressChanged() {
                     addressInput.syncFromAddress()
+                    if (root.address) addressInput.cursorPosition = root.address.normalizedCursor
                 }
             }
         }

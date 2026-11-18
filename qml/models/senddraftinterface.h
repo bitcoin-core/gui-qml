@@ -27,6 +27,9 @@ public:
     virtual QString draftRevision() const = 0;
     //! A coin selection change is still being applied.
     virtual bool selectionPending() const = 0;
+    virtual bool draftReady() const = 0;
+    virtual bool sweepsWallet() const = 0;
+    virtual void resetDraft() = 0;
     //! Prepares the draft for review, with the wallet password if given.
     //! Returns null while another wallet action runs; the caller owns it.
     virtual PreparationOperation* startPreparation(std::optional<QString> passphrase) = 0;
@@ -36,6 +39,7 @@ public:
 
 Q_SIGNALS:
     void draftChanged();
+    void draftReadyChanged();
 };
 
 #endif // BITCOIN_QML_MODELS_SENDDRAFTINTERFACE_H

@@ -27,6 +27,17 @@
 #include <QCryptographicHash>
 #include <test/mocks/manualexecutionenvironment.h>
 #include <test/mocks/receiveqmlfixture.h>
+#include <qml/models/sendimportmodel.h>
+#include <qml/models/preparationoperation.h>
+#include <qml/models/psbtoperation.h>
+#include <qml/models/requestviewcontroller.h>
+#include <qml/models/senddraftcontroller.h>
+#include <qml/models/walletpasswordcontroller.h>
+#include <qml/models/walletsecurityinterface.h>
+#include <qml/models/senddraftinterface.h>
+#include <qml/models/sendoperation.h>
+#include <qml/models/transactionreviewcontroller.h>
+#include <qml/models/transactionreviewinterface.h>
 #include <QDir>
 
 #include <QAbstractListModel>
@@ -1948,6 +1959,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(int sendTransactionCalls READ sendTransactionCalls NOTIFY sendTransactionCallsChanged)
     Q_PROPERTY(int signOnlyTransactionCalls READ signOnlyTransactionCalls NOTIFY sendOperationChanged)
     Q_PROPERTY(int sendState READ sendState NOTIFY sendOperationChanged)
+    Q_PROPERTY(TransactionReviewInterface* transactionReview READ transactionReview CONSTANT)
+    Q_PROPERTY(SendDraftInterface* sendDraft READ sendDraft CONSTANT)
     Q_PROPERTY(bool sendSignOnly MEMBER m_send_sign_only NOTIFY sendOperationChanged)
     Q_PROPERTY(quint64 sendOperationId MEMBER m_send_operation_id NOTIFY sendOperationChanged)
     Q_PROPERTY(int signerApprovalState MEMBER m_approval_state NOTIFY signerApprovalChanged)
@@ -1956,8 +1969,6 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool signerApprovalSignerNotFound MEMBER m_approval_signer_not_found NOTIFY signerApprovalChanged)
     Q_PROPERTY(bool sendBusy READ sendBusy NOTIFY sendOperationChanged)
     Q_PROPERTY(QString sendResultTxid READ sendResultTxid NOTIFY sendOperationChanged)
-    Q_PROPERTY(TransactionReviewInterface* transactionReview READ transactionReview CONSTANT)
-    Q_PROPERTY(SendDraftInterface* sendDraft READ sendDraft CONSTANT)
     Q_PROPERTY(int sendSubmission MEMBER m_send_submission NOTIFY sendOperationChanged)
     Q_PROPERTY(int sendRecordState MEMBER m_send_record_state NOTIFY sendOperationChanged)
     Q_PROPERTY(bool holdSendForTest MEMBER m_hold_send)
@@ -2110,6 +2121,7 @@ public:
     int m_preparation_state{PreparationIdle};
     bool m_hold_preparation{false}, m_pending_preparation_success{false};
     quint64 m_preparation_ticket{0};
+    bool feeEstimatePending() const { return m_fee_estimate_pending; }
     bool preparationBusy() const { return m_preparation_state == PreparationPending; }
     bool customFeeTargetPending() const { return false; }
     bool coinSelectionPending() const { return false; }
@@ -2166,6 +2178,12 @@ public:
     QPointer<QObject> m_send_review;
     int sendState() const { return m_send_state; }
     bool sendBusy() const { return m_send_state == SendPending || m_send_state == SendNeedsConfirmation; }
+    TransactionReviewInterface* transactionReview();
+    TransactionReviewInterface* m_transaction_review{nullptr};
+    SendDraftInterface* sendDraft();
+    SendDraftInterface* m_send_draft{nullptr};
+    QString transactionError() const { return m_transaction_error; }
+    FileSaveOperation* fileExportOperation() const { return m_file_export_operation; }
     QString sendResultTxid() const { return m_current_transaction ? m_current_transaction->property("txid").toString() : QString{}; }
     Q_INVOKABLE void resetSendForTest() { resetPsbtForTest();m_hold_send = false; m_send_sign_only = false; m_send_transaction_calls = 0; m_sign_only_transaction_calls = 0; m_send_state = SendIdle; m_send_submission = SubmissionMempool; m_send_review.clear(); Q_EMIT sendOperationChanged(); }
     Q_INVOKABLE void finishSendForTest() {
@@ -2181,11 +2199,6 @@ public:
         Q_EMIT sendOperationChanged();
     }
     Q_INVOKABLE quint64 requestSendTransaction() {
-    TransactionReviewInterface* transactionReview();
-    TransactionReviewInterface* m_transaction_review{nullptr};
-    SendDraftInterface* sendDraft();
-    SendDraftInterface* m_send_draft{nullptr};
-    QString transactionError() const { return m_transaction_error; }
         if (sendBusy() || psbtActionBusy()) return 0;
         ++m_send_operation_id; m_send_review = m_current_transaction; m_send_draft_revision = m_recipients ? m_recipients->property("revision").toString() : QString{};
         if (m_current_transaction_sweeps_wallet) m_send_state = SendNeedsConfirmation;
@@ -2839,8 +2852,10 @@ void MockWalletCloseQuestion::answer(bool accept)
         request->setProperty("noteSelf", note);
         auto* operation = new MockReceiveRequestOperation(this); operation->m_saved = true; operation->m_id = id;
         return operation;
+        connect(&wallet, &MockWalletQmlModel::signerApprovalChanged, this, &TransactionReviewInterface::unverifiedSignerResultChanged);
     }
     Q_INVOKABLE bool commitPaymentRequestWithPassphrase(const QString&)
+    QString unverifiedSignerResult() const override { return m_wallet ? m_wallet->m_unverified_signer_token : QString{}; }
     {
         return commitPaymentRequest();
     }
@@ -3073,6 +3088,727 @@ public:
 
 Q_SIGNALS:
     void reviewedRecipientsChanged();
+};
+
+//! Follows the mock wallet's send simulation the way WalletSendOperation
+//! follows its walletsend::Operation.
+class MockSendOperation final : public SendOperation
+{
+    Q_OBJECT
+public:
+    MockSendOperation(MockWalletQmlModel& wallet, quint64 id, bool sign_only)
+        : SendOperation(sign_only, nullptr), m_wallet{&wallet}, m_id{id}
+    {
+        connect(&wallet, &MockWalletQmlModel::sendOperationChanged, this, &MockSendOperation::follow);
+        follow();
+    }
+    void confirm() override
+    {
+        if (m_wallet && state() == State::NeedsConfirmation) m_wallet->confirmSendTransaction(m_id);
+    }
+    void unlock(const QString& passphrase) override
+    {
+        if (m_wallet && state() == State::NeedsUnlock && m_wallet->m_send_operation_id == m_id) m_wallet->requestSendTransactionWithPassphrase(passphrase);
+    }
+    void cancel() override
+    {
+        if (finished()) return;
+        const bool prompt = state() == State::NeedsConfirmation || state() == State::NeedsUnlock;
+        publish(State::Cancelled);
+        if (m_wallet && prompt) m_wallet->cancelSendTransaction(m_id);
+    }
+
+private:
+    static State StateOf(int state)
+    {
+        switch (state) {
+        case MockWalletQmlModel::SendNeedsConfirmation: return State::NeedsConfirmation;
+        case MockWalletQmlModel::SendNeedsUnlock: return State::NeedsUnlock;
+        case MockWalletQmlModel::SendFailed: return State::Failed;
+        case MockWalletQmlModel::SendCommitted: return State::Committed;
+        case MockWalletQmlModel::SendUncertain: return State::Uncertain;
+        case MockWalletQmlModel::SendClosed: return State::Cancelled;
+        case MockWalletQmlModel::SendSignedOnly: return State::SignedOnly;
+        case MockWalletQmlModel::SendPartiallySigned: return State::PartiallySigned;
+        default: return State::Pending;
+        }
+    }
+    void follow()
+    {
+        if (finished()) return;
+        if (!m_wallet || m_wallet->m_send_operation_id != m_id) {
+            publish(State::Cancelled);
+            return;
+        }
+        publish(StateOf(m_wallet->m_send_state), m_wallet->transactionError(), m_wallet->sendResultTxid(),
+                m_wallet->m_send_submission, m_wallet->m_send_record_state);
+    }
+    QPointer<MockWalletQmlModel> m_wallet;
+    const quint64 m_id;
+};
+
+//! Follows the mock wallet's PSBT action slot the way WalletPsbtOperation
+//! follows WalletQmlModel's.
+class MockPsbtOperation final : public PsbtOperation
+{
+    Q_OBJECT
+public:
+    MockPsbtOperation(MockWalletQmlModel& wallet, Kind kind, quint64 id)
+        : PsbtOperation(kind, nullptr), m_wallet{&wallet}, m_id{id}
+    {
+        connect(&wallet, &MockWalletQmlModel::psbtActionChanged, this, &MockPsbtOperation::follow);
+        follow();
+    }
+    void cancel() override
+    {
+        if (m_wallet) disconnect(m_wallet, nullptr, this, nullptr);
+        publish(State::Cancelled);
+    }
+
+private:
+    void follow()
+    {
+        if (!m_wallet || finished()) return;
+        if (m_wallet->psbtActionId() != m_id) { publish(State::Stale); return; }
+        using A = MockWalletQmlModel::PsbtActionState;
+        switch (m_wallet->psbtActionState()) {
+        case A::PsbtIdle:
+        case A::PsbtPending: return;
+        case A::PsbtImported: publish(State::Imported, {}, {}, {}, int(m_wallet->psbtImportResult())); return;
+        case A::PsbtKnown: publish(State::Known, {}, {}, {}, int(m_wallet->psbtImportResult())); return;
+        case A::PsbtSaved: publish(State::Saved, {}, m_wallet->psbtSavedPath()); return;
+        case A::PsbtSubmitted: publish(State::Submitted, {}, {}, m_wallet->psbtSubmittedTxid()); return;
+        case A::PsbtFailed: publish(State::Failed, m_wallet->psbtActionError(), {}, {}, int(m_wallet->psbtImportResult())); return;
+        case A::PsbtUncertain: publish(State::Uncertain, m_wallet->psbtActionError()); return;
+        case A::PsbtStale:
+        case A::PsbtClosed: publish(State::Stale); return;
+        }
+    }
+    QPointer<MockWalletQmlModel> m_wallet;
+    const quint64 m_id;
+};
+
+//! The mock wallet's TransactionReviewInterface.
+class MockTransactionReviewInterface final : public TransactionReviewInterface
+{
+    Q_OBJECT
+public:
+    explicit MockTransactionReviewInterface(MockWalletQmlModel& wallet) : TransactionReviewInterface(&wallet), m_wallet{&wallet}
+    {
+        connect(&wallet, &MockWalletQmlModel::preparationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+        connect(&wallet, &MockWalletQmlModel::currentTransactionChanged, this, &TransactionReviewInterface::currentReviewChanged);
+        connect(&wallet, &MockWalletQmlModel::availableChanged, this, &TransactionReviewInterface::availableChanged);
+        connect(&wallet, &MockWalletQmlModel::signerApprovalChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+        connect(&wallet, &MockWalletQmlModel::psbtActionChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+        connect(&wallet, &MockWalletQmlModel::transactionErrorChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    }
+    QObject* currentReview() const override { return m_wallet ? m_wallet->m_current_transaction : nullptr; }
+    bool currentTransactionIsImportedPsbt() const override { return m_wallet && m_wallet->m_current_transaction_is_imported_psbt; }
+    bool currentTransactionCanSend() const override { return m_wallet && m_wallet->m_current_transaction_can_send; }
+    bool currentTransactionCanSignOnly() const override { return m_wallet && m_wallet->m_current_transaction_can_sign_only; }
+    bool currentTransactionNeedsRevalidation() const override { return m_wallet && m_wallet->m_current_transaction_needs_revalidation; }
+    bool transactionFeePending() const override { return m_wallet && m_wallet->m_transaction_fee_pending; }
+    bool currentTransactionCanBroadcast() const override { return m_wallet && m_wallet->m_current_transaction_can_broadcast; }
+    QString currentTransactionReviewMessage() const override { return m_wallet ? m_wallet->m_current_transaction_review_message : QString{}; }
+    bool available() const override { return m_wallet && m_wallet->m_available; }
+    SendOperation* startSend(bool sign_only) override
+    {
+        if (!m_wallet) return nullptr;
+        const auto id = sign_only ? m_wallet->requestSignOnlyTransaction() : m_wallet->requestSendTransaction();
+        return id ? new MockSendOperation(*m_wallet, id, sign_only) : nullptr;
+    }
+    PsbtOperation* startPsbt(PsbtOperation::Kind kind, const QString& path, const QString& signer_result) override
+    {
+        if (!m_wallet) return nullptr;
+        using Kind = PsbtOperation::Kind;
+        const quint64 id = kind == Kind::Save ? (signer_result.isEmpty() ? m_wallet->requestSaveCurrentTransactionAsPsbt(path)
+                                                                         : m_wallet->requestSaveUnverifiedSignerResult(signer_result, path))
+            : kind == Kind::Broadcast ? m_wallet->requestBroadcastCurrentTransaction()
+            : kind == Kind::Recheck ? m_wallet->requestRecheckCurrentTransaction()
+            : m_wallet->requestImportPsbtFromFile(path);
+        return id ? new MockPsbtOperation(*m_wallet, kind, id) : nullptr;
+    }
+
+    int signerApprovalState() const override { return m_wallet ? m_wallet->m_approval_state : 0; }
+    QString signerApprovalError() const override { return m_wallet ? m_wallet->m_approval_error : QString{}; }
+    bool signerNotFound() const override { return m_wallet && m_wallet->m_approval_signer_not_found; }
+    void approveSigner() override { if (m_wallet) m_wallet->approveExternalSignerTransaction(); }
+    FileSaveOperation* fileExportOperation() const override { return m_wallet ? m_wallet->fileExportOperation() : nullptr; }
+    QString reviewError() const override { return m_wallet ? m_wallet->transactionError() : QString{}; }
+
+private:
+    QPointer<MockWalletQmlModel> m_wallet;
+};
+
+//! Follows the mock wallet's preparation the way WalletPreparationOperation
+//! follows WalletQmlModel's.
+class MockPreparationOperation final : public PreparationOperation
+{
+    Q_OBJECT
+public:
+    explicit MockPreparationOperation(MockWalletQmlModel& wallet) : PreparationOperation(nullptr), m_wallet{&wallet}
+    {
+        connect(&wallet, &MockWalletQmlModel::preparationChanged, this, &MockPreparationOperation::follow);
+    }
+    bool start(std::optional<QString> passphrase)
+    {
+        if (!m_wallet) return false;
+        m_id = 0;
+        const auto id = passphrase ? m_wallet->requestPrepareTransactionWithPassphrase(*passphrase) : m_wallet->requestPrepareTransaction();
+        if (!id) return false;
+        m_id = id;
+        if (passphrase) markPasswordRequested();
+        publish(State::Pending);
+        follow();
+        return true;
+    }
+    void unlock(const QString& passphrase) override
+    {
+        if (state() == State::NeedsUnlock) start(passphrase);
+    }
+    void cancel() override
+    {
+        if (m_wallet) disconnect(m_wallet, nullptr, this, nullptr);
+        publish(State::Cancelled);
+    }
+
+private:
+    void follow()
+    {
+        if (!m_wallet || finished() || !m_id) return;
+        if (m_wallet->m_preparation_ticket != m_id) { publish(State::Cancelled); return; }
+        if (m_wallet->preparationBusy()) return;
+        switch (m_wallet->m_preparation_state) {
+        case MockWalletQmlModel::PreparationReady: publish(State::Ready); return;
+        case MockWalletQmlModel::PreparationNeedsUnlock: publish(State::NeedsUnlock, m_wallet->transactionError()); return;
+        case MockWalletQmlModel::PreparationStale: publish(State::Stale); return;
+        case MockWalletQmlModel::PreparationClosed: publish(State::Cancelled); return;
+        case MockWalletQmlModel::PreparationFailed:
+        case MockWalletQmlModel::PreparationUncertain: publish(State::Failed, m_wallet->transactionError()); return;
+        default: return;
+        }
+    }
+    QPointer<MockWalletQmlModel> m_wallet;
+    quint64 m_id{0};
+};
+
+//! The mock wallet's SendDraftInterface.
+class MockSendDraftInterface final : public SendDraftInterface
+{
+    Q_OBJECT
+public:
+    explicit MockSendDraftInterface(MockWalletQmlModel& wallet) : SendDraftInterface(&wallet), m_wallet{&wallet}
+    {
+        connect(&wallet, &MockWalletQmlModel::availableChanged, this, &SendDraftInterface::availableChanged);
+        connect(&wallet, &MockWalletQmlModel::feeEstimatePendingChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::preparationChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::coinSelectionChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::sendAmountExhaustsBalanceChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::maximumRecipientChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::customFeeEnabledChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::customFeeRateValidChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::psbtActionChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(wallet.fees(), &FeeSelectionModel::policyChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(wallet.fees(), &FeeSelectionModel::estimateChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(&wallet, &MockWalletQmlModel::coinSelectionChanged, this, &SendDraftInterface::draftChanged);
+        if (auto* recipients = qobject_cast<MockRecipientsModel*>(wallet.m_recipients)) {
+            connect(recipients, &MockRecipientsModel::revisionChanged, this, &SendDraftInterface::draftChanged);
+            connect(recipients, &MockRecipientsModel::validationChanged, this, &SendDraftInterface::draftReadyChanged);
+        }
+    }
+    bool available() const override { return m_wallet && m_wallet->m_available; }
+    QString draftRevision() const override
+    {
+        if (!m_wallet) return {};
+        const auto* recipients = qobject_cast<MockRecipientsModel*>(m_wallet->m_recipients);
+        const auto* coins = qobject_cast<MockCoinsListModel*>(m_wallet->m_coins_list_model);
+        return (recipients ? recipients->revision() : QString{}) + QLatin1Char(':') + (coins ? coins->selectionToken() : QString{});
+    }
+    bool selectionPending() const override
+    {
+        const auto* coins = m_wallet ? qobject_cast<MockCoinsListModel*>(m_wallet->m_coins_list_model) : nullptr;
+        return coins && coins->property("selectionPending").toBool();
+    }
+    bool draftReady() const override
+    {
+        if (!m_wallet) return false;
+        const auto* recipients = qobject_cast<MockRecipientsModel*>(m_wallet->m_recipients);
+        const auto* fees = m_wallet->fees();
+        return recipients && recipients->allValid() && !fees->policyPending() &&
+            !m_wallet->feeEstimatePending() && !m_wallet->preparationBusy() &&
+            !m_wallet->customFeeTargetPending() && !m_wallet->coinSelectionPending() && !m_wallet->coinSelectionBlocked() &&
+            !m_wallet->sendAmountExhaustsBalance() && (!m_wallet->maximumRecipient() || fees->errorText().isEmpty()) &&
+            (!m_wallet->customFeeEnabled() || m_wallet->customFeeRateValid());
+    }
+    bool sweepsWallet() const override { return m_wallet && m_wallet->m_send_draft_sweeps_wallet; }
+    void resetDraft() override
+    {
+        if (!available() || m_wallet->preparationBusy() || m_wallet->psbtActionBusy()) return;
+        if (auto* recipients = qobject_cast<MockRecipientsModel*>(m_wallet->m_recipients)) recipients->clear();
+        if (auto* coins = qobject_cast<MockCoinsListModel*>(m_wallet->m_coins_list_model)) {
+            coins->setManualInputSelection(false);
+            coins->update();
+        }
+    }
+    PreparationOperation* startPreparation(std::optional<QString> passphrase) override
+    {
+        if (!m_wallet) return nullptr;
+        auto operation = std::make_unique<MockPreparationOperation>(*m_wallet);
+        if (!operation->start(std::move(passphrase))) return nullptr;
+        return operation.release();
+    }
+    PsbtOperation* startImport(const QString& path) override
+    {
+        if (!m_wallet) return nullptr;
+        const auto id = m_wallet->requestImportPsbtFromFile(path);
+        return id ? new MockPsbtOperation(*m_wallet, PsbtOperation::Kind::Import, id) : nullptr;
+    }
+
+private:
+    QPointer<MockWalletQmlModel> m_wallet;
+};
+
+SendDraftInterface* MockWalletQmlModel::sendDraft()
+{
+    if (!m_send_draft) m_send_draft = new MockSendDraftInterface(*this);
+    return m_send_draft;
+}
+
+TransactionReviewInterface* MockWalletQmlModel::transactionReview()
+{
+    if (!m_transaction_review) m_transaction_review = new MockTransactionReviewInterface(*this);
+    return m_transaction_review;
+}
+
+class MockBitcoinUri;
+
+/** Fixture for PaymentImportOperation: the fixture parser's outcome applied
+ * to the mock recipient. Native ownership and exact receipts are exercised
+ * with the real classes in the C++ unit and integration tests. */
+class MockPaymentImportOperation : public ImportOperation
+{
+    Q_OBJECT
+    Q_PROPERTY(quint64 requestId MEMBER m_request_id CONSTANT)
+    Q_PROPERTY(MockPaymentImportOperation::State state READ state NOTIFY changed)
+    Q_PROPERTY(MockPaymentImportOperation::SourceKind sourceKind READ sourceKind NOTIFY changed)
+    Q_PROPERTY(bool pending READ pending NOTIFY changed)
+    Q_PROPERTY(bool canApply MEMBER m_can_apply NOTIFY changed)
+    Q_PROPERTY(bool canReview MEMBER m_can_review NOTIFY changed)
+    Q_PROPERTY(quint64 promptToken READ promptToken NOTIFY changed)
+    Q_PROPERTY(QString resultToken READ resultToken NOTIFY changed)
+    Q_PROPERTY(QString error READ error NOTIFY changed)
+    Q_PROPERTY(QString address MEMBER m_address NOTIFY changed)
+    Q_PROPERTY(QString publicLabel MEMBER m_label NOTIFY changed)
+    Q_PROPERTY(QString message READ message NOTIFY changed)
+    Q_PROPERTY(bool hasAmount MEMBER m_has_amount NOTIFY changed)
+    Q_PROPERTY(qint64 amount MEMBER m_amount NOTIFY changed)
+    Q_PROPERTY(bool matchesExistingRequest READ matchesExistingRequest NOTIFY changed)
+    Q_PROPERTY(QString selectedPath MEMBER m_selected_path NOTIFY changed)
+    Q_PROPERTY(QObject* originalWallet READ originalWallet NOTIFY changed)
+
+public:
+    enum class State { Empty, Reading, Analyzing, Inspecting, AwaitingReplacement, Applying, CreatingReview, Reconciling, Applied, ReviewOpened, Failed, Closing, Closed };
+    Q_ENUM(State)
+    enum class SourceKind { UnknownSource, PaymentSource, PsbtSource };
+    Q_ENUM(SourceKind)
+
+    MockPaymentImportOperation(quint64 id, MockBitcoinUri* uri, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+        : ImportOperation(owner), m_request_id{id}, m_uri{uri}, m_wallet{wallet}, m_recipient{recipient},
+          m_revision{wallet ? recipientsOf(wallet)->revision() : QString{}} {}
+
+    State state() const { return m_state; }
+    SourceKind sourceKind() const
+    {
+        return m_candidate.value("psbt").toBool() ? SourceKind::PsbtSource
+            : m_candidate.value("success").toBool() ? SourceKind::PaymentSource : SourceKind::UnknownSource;
+    }
+    QObject* originalWallet() const { return m_wallet; }
+    bool matchesExistingRequest() const
+    {
+        return m_recipient && m_recipient->m_address.address() == m_address
+            && (!m_has_amount || (m_recipient->m_amount_mode == MockSendRecipient::Fixed && m_recipient->m_amount.satoshi() == m_amount))
+            && m_recipient->m_request_label == m_label && m_recipient->m_message == m_message;
+    }
+
+    bool pending() const override { return m_pending; }
+    bool applied() const override { return m_state == State::Applied; }
+    bool reviewOpened() const override { return m_state == State::ReviewOpened; }
+    bool offersPayment() const override
+    {
+        return m_state == State::Inspecting && sourceKind() == SourceKind::PaymentSource && m_can_apply && !matchesExistingRequest();
+    }
+    quint64 promptToken() const override { return m_prompt; }
+    QString resultToken() const override { return m_result_id ? QString::number(m_request_id) + QLatin1Char(':') + QString::number(m_result_id) : QString{}; }
+    QString error() const override { return m_error; }
+    QString message() const override { return m_message; }
+
+    void prepare(QVariantMap outcome, bool held)
+    {
+        m_candidate = std::move(outcome);
+        if (!held) QMetaObject::invokeMethod(this, &MockPaymentImportOperation::retryPublication, Qt::QueuedConnection);
+    }
+    void startEmpty() { m_state = State::Empty; m_pending = false; m_input_started = false; }
+    Q_INVOKABLE void retryPublication()
+    {
+        if (m_closed || m_ready) return;
+        m_ready = true;
+        m_pending = false;
+        const bool success = m_candidate.value("success").toBool();
+        const bool psbt = m_candidate.value("psbt").toBool();
+        m_address = m_candidate.value("address").toString();
+        m_label = m_candidate.value("label").toString();
+        m_message = m_candidate.value("uriMessage").toString();
+        m_has_amount = m_candidate.value("hasAmount").toBool();
+        m_amount = m_candidate.value("amountSats").toLongLong();
+        m_error = success ? QString{} : m_candidate.value("error").toString();
+        m_state = success ? State::Inspecting : State::Failed;
+        m_can_apply = success && !psbt && walletAvailable();
+        m_can_review = psbt && walletAvailable();
+        if (m_requested) use();
+        Q_EMIT changed();
+    }
+    Q_INVOKABLE void chooseTarget(MockWalletQmlModel* wallet, MockSendRecipient* recipient)
+    {
+        if (m_closed) return;
+        m_wallet = wallet;
+        m_recipient = recipient;
+        m_revision = wallet ? recipientsOf(wallet)->revision() : QString{};
+        if (m_ready && !m_pending) {
+            m_can_apply = m_candidate.value("success").toBool() && !m_candidate.value("psbt").toBool() && walletAvailable();
+            m_can_review = m_candidate.value("psbt").toBool() && walletAvailable();
+        }
+    }
+    Q_INVOKABLE void use() override
+    {
+        m_requested = true;
+        if (!m_ready) return;
+        if (m_can_apply) apply();
+        else if (m_can_review) openReview();
+    }
+    Q_INVOKABLE bool requestFile(const QUrl& file) override;
+    Q_INVOKABLE void apply()
+    {
+        if (m_closed || !m_can_apply || !walletAvailable() || !m_recipient) return;
+        if (recipientsOf(m_wallet)->revision() != m_revision) { cancel(); return; }
+        const int field = m_candidate.value("field", -1).toInt();
+        const bool conflicts = (field != 0 && !m_recipient->m_address.address().isEmpty() && m_recipient->m_address.address() != m_address)
+            || (m_has_amount && (m_recipient->m_amount_mode == MockSendRecipient::Maximum
+                || (field != 1 && m_recipient->m_amount.satoshi() > 0 && m_recipient->m_amount.satoshi() != m_amount)));
+        if (conflicts) {
+            m_prompt = m_request_id;
+            m_state = State::AwaitingReplacement;
+            Q_EMIT changed();
+            return;
+        }
+        applyNow();
+    }
+    Q_INVOKABLE void replace(quint64 prompt) override
+    {
+        if (m_closed || prompt == 0 || prompt != m_prompt || !walletAvailable()) return;
+        m_prompt = 0;
+        applyNow();
+    }
+    Q_INVOKABLE void keepDraft(quint64 prompt)
+    {
+        if (prompt != m_prompt) return;
+        m_prompt = 0;
+        m_state = State::Inspecting;
+        Q_EMIT changed();
+    }
+    Q_INVOKABLE void openReview()
+    {
+        if (m_closed || !m_can_review || !walletAvailable() || recipientsOf(m_wallet)->revision() != m_revision) return;
+        m_can_review = false;
+        m_result_id = m_request_id;
+        m_wallet->adoptImportReviewForTest(m_request_id, m_result_id);
+        m_state = State::ReviewOpened;
+        Q_EMIT changed();
+    }
+    Q_INVOKABLE void reconcile() {}
+    Q_INVOKABLE void cancel() override
+    {
+        m_closed = true;
+        m_pending = false;
+        m_can_apply = false;
+        m_prompt = 0;
+        m_state = State::Closed;
+        Q_EMIT changed();
+    }
+
+private:
+    static MockRecipientsModel* recipientsOf(MockWalletQmlModel* wallet) { return qobject_cast<MockRecipientsModel*>(wallet->recipients()); }
+    bool walletAvailable() const { return m_wallet && m_wallet->m_available; }
+    void applyNow()
+    {
+        m_can_apply = false;
+        m_state = State::Applying;
+        auto fields = m_candidate;
+        fields.insert(QStringLiteral("privateNote"), QString{});
+        const QPointer<MockWalletQmlModel> wallet{m_wallet};
+        auto* recipients = recipientsOf(wallet);
+        recipients->setProperty("importPending", true);
+        m_recipient->applyParsedPaymentRequest(fields, false);
+        if (!m_closed && wallet) {
+            if (m_has_amount) wallet->clearMaximum();
+            wallet->scheduleFeeEstimates();
+        }
+        if (wallet) recipients->setProperty("importPending", false);
+        if (m_closed) return;
+        m_result_id = m_request_id;
+        m_state = State::Applied;
+        Q_EMIT changed();
+    }
+
+    const quint64 m_request_id;
+    QPointer<MockBitcoinUri> m_uri;
+    QPointer<MockWalletQmlModel> m_wallet;
+    QPointer<MockSendRecipient> m_recipient;
+    QString m_revision;
+    QVariantMap m_candidate;
+    State m_state{State::Reading};
+    bool m_pending{true}, m_can_apply{false}, m_can_review{false}, m_has_amount{false};
+    bool m_closed{false}, m_requested{false}, m_ready{false}, m_input_started{true};
+    quint64 m_prompt{0}, m_result_id{0};
+    QString m_error, m_address, m_label, m_message, m_selected_path;
+    qint64 m_amount{0};
+};
+
+/** Fixture for the BitcoinUri singleton: a simplified parser that accepts
+ * fixture addresses, and test controls to hold and release publications. */
+class MockBitcoinUri : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool holdPublications MEMBER m_hold NOTIFY controlsChanged)
+    Q_PROPERTY(bool admitRequestsForTest MEMBER m_admit NOTIFY controlsChanged)
+    Q_PROPERTY(QString probeErrorForTest MEMBER m_probe_error NOTIFY controlsChanged)
+    Q_PROPERTY(int requestCallsForTest MEMBER m_request_calls NOTIFY controlsChanged)
+
+public:
+    enum class InputField { AddressField, AmountField, PrivateNoteField };
+    Q_ENUM(InputField)
+
+    bool holdingPublications() const { return m_hold; }
+    void hold(MockPaymentImportOperation* operation) { m_held.emplace_back(operation); }
+
+    Q_INVOKABLE void resetRequestControlsForTest()
+    {
+        m_admit = true;
+        m_probe_error.clear();
+        m_request_calls = 0;
+        Q_EMIT controlsChanged();
+    }
+    Q_INVOKABLE void releasePublications()
+    {
+        m_hold = false;
+        Q_EMIT controlsChanged();
+        for (const auto& operation : std::exchange(m_held, {})) if (operation) operation->retryPublication();
+    }
+    Q_INVOKABLE bool isPaymentUri(const QString& text) const { return text.trimmed().startsWith(QLatin1String{"bitcoin:"}, Qt::CaseInsensitive); }
+    Q_INVOKABLE QString pastedPaymentUri(const QString& previous, const QString& current, const QString& clipboard) const
+    {
+        if (!isPaymentUri(clipboard) || previous == current || current.size() < clipboard.size()) return {};
+        const auto unchanged = current.size() - clipboard.size();
+        if (unchanged > previous.size()) return {};
+        qsizetype prefix{0}, suffix{0};
+        while (prefix < std::min(previous.size(), current.size()) && previous[prefix] == current[prefix]) ++prefix;
+        while (suffix < std::min(previous.size(), current.size()) && previous[previous.size() - suffix - 1] == current[current.size() - suffix - 1]) ++suffix;
+        const auto low = std::max<qsizetype>(0, unchanged - suffix), high = std::min(prefix, unchanged);
+        const auto found = current.indexOf(clipboard, low);
+        return low <= high && found >= 0 && found <= high ? clipboard.trimmed() : QString{};
+    }
+    Q_INVOKABLE MockPaymentImportOperation* requestImportText(const QString& text, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        return request(Parse(text), wallet, recipient, owner);
+    }
+    Q_INVOKABLE MockPaymentImportOperation* requestImportFile(const QString&, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        return request(Error(QStringLiteral("File parsing is unavailable in QML unit tests.")), wallet, recipient, owner);
+    }
+    Q_INVOKABLE MockPaymentImportOperation* requestImportDrop(int count, const QUrl& first_url, const QString& text, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        const auto value = count == 1 ? first_url.toString() : text;
+        if (count > 1) return request(Error(QStringLiteral("Drop one payment request or PSBT at a time.")), wallet, recipient, owner);
+        return count == 1 && value.startsWith(QLatin1String{"file:"}, Qt::CaseInsensitive)
+            ? requestImportFile(value, wallet, recipient, owner) : requestImportText(value, wallet, recipient, owner);
+    }
+    Q_INVOKABLE MockPaymentImportOperation* requestImportPaste(const QString& text, int field, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        auto outcome = Parse(text);
+        outcome.insert(QStringLiteral("field"), field);
+        if (!m_probe_error.isEmpty()) { outcome.insert(QStringLiteral("error"), m_probe_error); outcome.insert(QStringLiteral("success"), false); }
+        return request(std::move(outcome), wallet, recipient, owner);
+    }
+    Q_INVOKABLE MockPaymentImportOperation* captureImport(MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        ++m_request_calls;
+        Q_EMIT controlsChanged();
+        if (!owner || !m_admit) return nullptr;
+        auto* operation = new MockPaymentImportOperation(++m_sequence, this, wallet, recipient, owner);
+        operation->startEmpty();
+        return operation;
+    }
+
+Q_SIGNALS:
+    void controlsChanged();
+
+private:
+    static QVariantMap Error(const QString& error) { return {{QStringLiteral("success"), false}, {QStringLiteral("error"), error}}; }
+    static QVariantMap Parse(QString text)
+    {
+        text = text.trimmed();
+        const auto invalid = QStringLiteral("Not a valid Bitcoin payment URI.");
+        if (!text.startsWith(QLatin1String{"bitcoin:"}, Qt::CaseInsensitive)) return Error(invalid);
+        if (text.startsWith(QLatin1String{"bitcoin://"}, Qt::CaseInsensitive)) return Error(QStringLiteral("'bitcoin://' is not a valid URI. Use 'bitcoin:' instead."));
+        const auto payload = text.mid(8);
+        const auto separator = payload.indexOf(QLatin1Char('?'));
+        const auto address = separator < 0 ? payload : payload.left(separator);
+        if (address.isEmpty()) return Error(invalid);
+        QVariantMap result{{QStringLiteral("success"), true}, {QStringLiteral("error"), QString{}}, {QStringLiteral("address"), address},
+            {QStringLiteral("amountSats"), qint64{0}}, {QStringLiteral("hasAmount"), false}, {QStringLiteral("label"), QString{}},
+            {QStringLiteral("hasLabel"), false}, {QStringLiteral("uriMessage"), QString{}}, {QStringLiteral("hasMessage"), false}};
+        for (const auto& item : (separator < 0 ? QString{} : payload.mid(separator + 1)).split(QLatin1Char('&'), Qt::SkipEmptyParts)) {
+            const auto equals = item.indexOf(QLatin1Char('='));
+            const auto key = QUrl::fromPercentEncoding(item.left(equals < 0 ? item.size() : equals).toUtf8());
+            const auto value = equals < 0 ? QString{} : QUrl::fromPercentEncoding(item.mid(equals + 1).toUtf8());
+            if (key == QLatin1String{"amount"}) {
+                const auto pieces = value.split(QLatin1Char('.'));
+                const auto fraction = (pieces.size() > 1 ? pieces[1] : QString{}).left(8).leftJustified(8, QLatin1Char('0'));
+                result.insert(QStringLiteral("amountSats"), pieces[0].toLongLong() * 100'000'000 + fraction.toLongLong());
+                result.insert(QStringLiteral("hasAmount"), true);
+            } else if (key == QLatin1String{"label"}) {
+                result.insert(QStringLiteral("label"), value);
+                result.insert(QStringLiteral("hasLabel"), true);
+            } else if (key == QLatin1String{"message"}) {
+                result.insert(QStringLiteral("uriMessage"), value);
+                result.insert(QStringLiteral("hasMessage"), true);
+            }
+        }
+        return result;
+    }
+    MockPaymentImportOperation* request(QVariantMap outcome, MockWalletQmlModel* wallet, MockSendRecipient* recipient, QObject* owner)
+    {
+        ++m_request_calls;
+        Q_EMIT controlsChanged();
+        if (!owner || !m_admit) return nullptr;
+        auto* operation = new MockPaymentImportOperation(++m_sequence, this, wallet, recipient, owner);
+        operation->prepare(std::move(outcome), m_hold);
+        if (m_hold) hold(operation);
+        return operation;
+    }
+
+    bool m_hold{false}, m_admit{true};
+    QString m_probe_error;
+    int m_request_calls{0};
+    quint64 m_sequence{0};
+    std::vector<QPointer<MockPaymentImportOperation>> m_held;
+};
+
+bool MockPaymentImportOperation::requestFile(const QUrl& file)
+{
+    if (m_closed || m_input_started) return false;
+    m_input_started = true;
+    m_selected_path = file.toString();
+    m_state = State::Reading;
+    m_pending = true;
+    const bool held = m_uri && m_uri->holdingPublications();
+    prepare({{QStringLiteral("success"), true}, {QStringLiteral("psbt"), true}}, held);
+    if (held) m_uri->hold(this);
+    Q_EMIT changed();
+    return true;
+}
+
+/** The wallet fixture's send draft as an ImportTarget, registered as
+ * WalletImportTarget so SendCreate runs the real SendImportModel. */
+class MockWalletImportTarget : public ImportTarget
+{
+    Q_OBJECT
+    Q_PROPERTY(MockWalletQmlModel* wallet READ wallet WRITE setWallet NOTIFY walletChanged)
+    Q_PROPERTY(MockBitcoinUri* uri READ uri WRITE setUri NOTIFY uriChanged)
+
+public:
+    using ImportTarget::ImportTarget;
+    MockWalletQmlModel* wallet() const { return m_wallet; }
+    void setWallet(MockWalletQmlModel* wallet)
+    {
+        if (m_wallet == wallet) return;
+        if (m_wallet) { disconnect(m_wallet, nullptr, this, nullptr); if (recipients()) disconnect(recipients(), nullptr, this, nullptr); }
+        m_wallet = wallet;
+        if (wallet) {
+            connect(wallet, &MockWalletQmlModel::availableChanged, this, &ImportTarget::availableChanged);
+            connect(wallet, &MockWalletQmlModel::currentTransactionChanged, this, &ImportTarget::importedReviewChanged);
+            if (auto* list = recipients()) {
+                connect(list, &MockRecipientsModel::revisionChanged, this, &ImportTarget::draftRevisionChanged);
+                connect(list, &MockRecipientsModel::validationChanged, this, &ImportTarget::importPendingChanged);
+                connect(list, &MockRecipientsModel::currentRecipientChanged, this, [this] { watchRecipient(); Q_EMIT currentRecipientChanged(); });
+            }
+        }
+        watchRecipient();
+        Q_EMIT walletChanged();
+        Q_EMIT currentRecipientChanged();
+        Q_EMIT availableChanged();
+    }
+    MockBitcoinUri* uri() const { return m_uri; }
+    void setUri(MockBitcoinUri* uri) { if (m_uri == uri) return; m_uri = uri; Q_EMIT uriChanged(); Q_EMIT availableChanged(); }
+
+    bool available() const override { return m_wallet && m_uri && m_wallet->m_available; }
+    QString draftRevision() const override { return recipients() ? recipients()->revision() : QString{}; }
+    bool importPending() const override { return recipients() && recipients()->m_import_pending; }
+    bool recipientAddressEmpty() const override { return !current() || current()->m_address.address().isEmpty(); }
+    QString importedReviewToken() const override { return m_wallet ? m_wallet->m_imported_review_token : QString{}; }
+    ImportOperation* importText(const QString& text, QObject* owner) override
+    {
+        return m_uri && m_wallet && current() ? m_uri->requestImportText(text, m_wallet, current(), owner) : nullptr;
+    }
+    ImportOperation* importPaste(const QString& text, int field, QObject* recipient, QObject* owner) override
+    {
+        auto* target = recipient ? qobject_cast<MockSendRecipient*>(recipient) : current();
+        return m_uri && m_wallet && target ? m_uri->requestImportPaste(text, field, m_wallet, target, owner) : nullptr;
+    }
+    ImportOperation* importFile(const QString& path, QObject* owner) override
+    {
+        return m_uri && m_wallet ? m_uri->requestImportFile(path, m_wallet, current(), owner) : nullptr;
+    }
+    ImportOperation* importDrop(int url_count, const QUrl& first_url, const QString& text, QObject* owner) override
+    {
+        return m_uri && m_wallet ? m_uri->requestImportDrop(url_count, first_url, text, m_wallet, current(), owner) : nullptr;
+    }
+    ImportOperation* captureFile(QObject* owner) override
+    {
+        return m_uri && m_wallet ? m_uri->captureImport(m_wallet, current(), owner) : nullptr;
+    }
+    bool adopt(ImportOperation* operation) override
+    {
+        auto* original = qobject_cast<MockPaymentImportOperation*>(operation);
+        if (!original || !current() || !available()) return false;
+        original->chooseTarget(m_wallet, current());
+        return true;
+    }
+
+Q_SIGNALS:
+    void walletChanged();
+    void uriChanged();
+
+private:
+    MockRecipientsModel* recipients() const { return m_wallet ? qobject_cast<MockRecipientsModel*>(m_wallet->recipients()) : nullptr; }
+    MockSendRecipient* current() const { return recipients() ? qobject_cast<MockSendRecipient*>(recipients()->current()) : nullptr; }
+    void watchRecipient()
+    {
+        for (const auto& connection : std::as_const(m_recipient_connections)) disconnect(connection);
+        m_recipient_connections.clear();
+        auto* recipient = current();
+        if (!recipient) return;
+        const auto edited = [this] { Q_EMIT recipientEdited(); };
+        m_recipient_connections = {
+            connect(&recipient->m_address, &MockBitcoinAddress::addressChanged, this, edited),
+            connect(&recipient->m_amount, &BitcoinAmount::amountChanged, this, edited),
+            connect(recipient, &MockSendRecipient::labelChanged, this, edited),
+            connect(recipient, &MockSendRecipient::paymentRequestChanged, this, edited),
+        };
+    }
+
+    QPointer<MockWalletQmlModel> m_wallet;
+    QPointer<MockBitcoinUri> m_uri;
+    QList<QMetaObject::Connection> m_recipient_connections;
 };
 
 class MockWalletProvisioningCheck : public QObject
@@ -7302,6 +8038,7 @@ public Q_SLOTS:
     }
     QString entryFieldText(QObject* object, const QString& field) const {
         const auto* model = qobject_cast<QAbstractItemModel*>(object); QString text;
+        qmlRegisterUncreatableType<MockWalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Test stub type");
         if (model) for (int row = 0; row < model->rowCount(); ++row) {
             const auto entry = model->data(model->index(row, 0), Qt::UserRole).toMap();
             if (entry.value("field").toString() == field) text += entry.value("content").toString();
@@ -7499,6 +8236,7 @@ public Q_SLOTS:
         engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider{m_qr_executor->scheduler(), QRImageProvider::RenderImage, engine});
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
+        static MockBitcoinUri bitcoin_uri;
         static TestAccessibility test_accessibility;
         static TestImage test_image;
         static TestResources test_resources;
@@ -7618,6 +8356,8 @@ public Q_SLOTS:
         qmlRegisterUncreatableType<MockReceiveRequestOperation>("org.bitcoincore.qt", 1, 0, "ReceiveRequestOperation", "Test fixture");
         qmlRegisterUncreatableType<MockTransaction>("org.bitcoincore.qt", 1, 0, "Transaction", "Test stub type");
         qmlRegisterUncreatableType<MockSendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "Test stub type");
+        qmlRegisterUncreatableType<MockRecipientsModel>("org.bitcoincore.qt", 1, 0, "SendRecipientsListModel", "Test fixture");
+        qmlRegisterUncreatableType<MockCoinsListModel>("org.bitcoincore.qt", 1, 0, "CoinsListModel", "Test fixture");
         qmlRegisterUncreatableType<FeeBumpOperation>("org.bitcoincore.qt", 1, 0, "FeeBumpOperation", "Opened by a FeeBumpController");
         qmlRegisterUncreatableType<FeeBumpInterface>("org.bitcoincore.qt", 1, 0, "FeeBumpInterface", "A wallet");
         qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
@@ -7629,6 +8369,20 @@ public Q_SLOTS:
         qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
         qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
         qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Test stub type");
+        qmlRegisterSingletonInstance<MockBitcoinUri>("org.bitcoincore.qt", 1, 0, "BitcoinUri", &bitcoin_uri);
+        qmlRegisterUncreatableType<ImportOperation>("org.bitcoincore.qt", 1, 0, "ImportOperation", "Test stub type");
+        qmlRegisterUncreatableType<SendOperation>("org.bitcoincore.qt", 1, 0, "SendOperation", "Started by a wallet");
+        qmlRegisterUncreatableType<PsbtOperation>("org.bitcoincore.qt", 1, 0, "PsbtOperation", "Started by a wallet");
+        qmlRegisterUncreatableType<PreparationOperation>("org.bitcoincore.qt", 1, 0, "PreparationOperation", "Started by a wallet");
+        qmlRegisterUncreatableType<SendDraftInterface>("org.bitcoincore.qt", 1, 0, "SendDraftInterface", "A wallet");
+        qmlRegisterType<SendDraftController>("org.bitcoincore.qt", 1, 0, "SendDraftController");
+        qmlRegisterType<RequestViewController>("org.bitcoincore.qt", 1, 0, "RequestViewController");
+        qmlRegisterUncreatableType<TransactionReviewInterface>("org.bitcoincore.qt", 1, 0, "TransactionReviewInterface", "A wallet");
+        qmlRegisterType<TransactionReviewController>("org.bitcoincore.qt", 1, 0, "TransactionReviewController");
+        qmlRegisterUncreatableType<ImportTarget>("org.bitcoincore.qt", 1, 0, "ImportTarget", "Test stub type");
+        qmlRegisterUncreatableType<MockPaymentImportOperation>("org.bitcoincore.qt", 1, 0, "PaymentImportOperation", "Test stub type");
+        qmlRegisterType<MockWalletImportTarget>("org.bitcoincore.qt", 1, 0, "WalletImportTarget");
+        qmlRegisterType<SendImportModel>("org.bitcoincore.qt", 1, 0, "SendImportModel");
         qmlRegisterType<MockWalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel");
         qmlRegisterUncreatableType<MockWalletCreationText>("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Test creation input");
         qmlRegisterUncreatableType<SignerDiscoveryModel>("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Actual controlled signer projection");

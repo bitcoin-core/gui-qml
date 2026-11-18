@@ -12,7 +12,11 @@ Pane {
     id: recipientCard
     required property int index
     required property SendRecipient recipientObject
-    required property WalletQmlModel wallet
+    required property SendRecipientsListModel recipients
+    required property FeeSelectionModel fees
+    required property bool selectedCoins
+    required property bool available
+    signal useMaximumRequested()
     required property bool expanded
     property bool clipboardRequest: false
     property string clipboardText: ""
@@ -32,7 +36,7 @@ Pane {
     contentItem: ColumnLayout {
         spacing: 12
         RowLayout {
-            visible: recipientCard.wallet.recipients.count > 1
+            visible: recipientCard.recipients.count > 1
             Layout.fillWidth: true; spacing: 10
             AbstractButton {
                 id: recipientToggle
@@ -77,15 +81,19 @@ Pane {
         }
         Loader {
             id: editorLoader
-            active: recipientCard.expanded || recipientCard.wallet.recipients.count === 1
+            active: recipientCard.expanded || recipientCard.recipients.count === 1
             visible: active
             Layout.fillWidth: true
             sourceComponent: SendRecipientEditor {
-                wallet: recipientCard.wallet; recipient: recipientCard.recipientObject
+                fees: recipientCard.fees
+                selectedCoins: recipientCard.selectedCoins
+                importPending: recipientCard.recipients.importPending
+                onUseMaximumRequested: recipientCard.useMaximumRequested()
+                recipient: recipientCard.recipientObject
                 clipboardRequest: recipientCard.clipboardRequest
                 clipboardText: recipientCard.clipboardText
-                enabled: recipientCard.wallet && recipientCard.wallet.available
-                canRemove: recipientCard.wallet.recipients.count > 1
+                enabled: recipientCard.available
+                canRemove: recipientCard.recipients.count > 1
                 removeButtonObjectName: "sendRemoveRecipient_" + recipientCard.index
                 onPaymentUriPasted: function(field, text) { recipientCard.paymentUriPasted(field, text) }
                 onEdited: recipientCard.edited()

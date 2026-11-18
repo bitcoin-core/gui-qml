@@ -24,6 +24,7 @@
         <file>components/CoinsList.qml</file>
         <file>components/SendCoinSelection.qml</file>
         <file>components/SendFeeSelection.qml</file>
+        <file>components/SendForm.qml</file>
         <file>components/MiniBlockClock.qml</file>
         <file>controls/MonospaceOutputView.qml</file>
         <file>controls/InfoBanner.qml</file>

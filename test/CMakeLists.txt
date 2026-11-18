@@ -81,6 +81,9 @@ add_executable(bitcoinqml_unit_tests
   test_blockclockmodel.cpp
   test_bitcoinuri.cpp
   test_bitcoinurimodel.cpp
+  test_sendimportmodel.cpp
+  test_transactionreviewcontroller.cpp
+  test_senddraftcontroller.cpp
   test_qmlfiledialog.cpp
   test_bitcoinamount.cpp
   test_debuglogmodel.cpp
@@ -283,6 +286,32 @@ add_executable(bitcoinqml_qmltests
   qmlcoverage.cpp
   mocks/receiveqmlfixture.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/messagesigningprompt.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportports.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportmodel.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/psbtoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/preparationoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/senddraftcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/senddraftcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/senddraftinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/securityoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletsecurityinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpasswordcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpasswordcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpagecontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpagecontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletbackupinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletbackupcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletbackupcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/feebumpoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/feebumpinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/feebumpcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/feebumpcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/transactionreviewcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/transactionreviewcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/transactionreviewinterface.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/exacttextdocument.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/exacttextdocument.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/texteditsessionmodel.cpp
@@ -295,6 +324,8 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receivereservationmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestsharingmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestsharingmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestimageexportoperation.cpp
@@ -307,8 +338,6 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/backuppolicy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/walletrequesterror.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/walletrequesterror.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/requestsharing.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/requestsharing.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/ownedqrimage.cpp

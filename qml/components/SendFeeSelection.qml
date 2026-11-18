@@ -10,8 +10,10 @@ import "../controls"
 ColumnLayout {
     id: root
     objectName: "feeSelectionControl"
-    property WalletQmlModel walletModel: null
-    readonly property FeeSelectionModel fees: walletModel ? walletModel.fees : null
+    required property FeeSelectionModel fees
+    required property double estimatedFeeSatoshi
+    required property string estimatedFeeRate
+    required property bool feeEstimatePending
     readonly property int currentTarget: fees ? fees.targetBlocks : 6
     readonly property bool customSelected: fees && fees.mode === FeeSelectionModel.Manual
     readonly property var blockTargets: [2, 3, 4, 6, 10, 25, 50]
@@ -25,7 +27,7 @@ ColumnLayout {
     signal feeChanged(int target)
     spacing: 0
 
-    BitcoinAmount { id: fee; satoshi: root.walletModel ? Math.max(0, root.walletModel.estimatedFeeSatoshi) : 0; unit: ApplicationModels.optionsModel.displayUnit }
+    BitcoinAmount { id: fee; satoshi: Math.max(0, root.estimatedFeeSatoshi); unit: ApplicationModels.optionsModel.displayUnit }
 
     FormRow {
         Layout.fillWidth: true
@@ -93,8 +95,8 @@ ColumnLayout {
         visible: !root.customSelected
         Layout.fillWidth: true
         title: qsTr("Fee rate")
-        value: !root.walletModel || root.walletModel.feeEstimatePending || root.walletModel.estimatedFeeSatoshi < 0
-            ? "—" : qsTr("%1 sat/vB").arg(root.walletModel.estimatedFeeRate)
+        value: root.feeEstimatePending || root.estimatedFeeSatoshi < 0
+            ? "—" : qsTr("%1 sat/vB").arg(root.estimatedFeeRate)
         valueTextStyle: Theme.text.monoDescription
     }
 
@@ -122,7 +124,7 @@ ColumnLayout {
         Layout.fillWidth: true
         title: qsTr("Fee amount")
         showDivider: false
-        value: root.walletModel && !root.walletModel.feeEstimatePending && root.walletModel.estimatedFeeSatoshi >= 0
+        value: !root.feeEstimatePending && root.estimatedFeeSatoshi >= 0
             ? fee.localizedDisplay : "—"
         valueUnit: fee.unitLabel
     }

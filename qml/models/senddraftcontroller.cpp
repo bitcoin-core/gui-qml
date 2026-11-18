@@ -4,7 +4,12 @@
 
 #include <qml/models/senddraftcontroller.h>
 
-SendDraftController::SendDraftController(QObject* parent) : QObject(parent) {}
+SendDraftController::SendDraftController(QObject* parent) : QObject(parent)
+{
+    connect(this, &SendDraftController::draftInterfaceChanged, this, &SendDraftController::canPrepareChanged);
+    connect(this, &SendDraftController::preparationChanged, this, &SendDraftController::canPrepareChanged);
+    connect(this, &SendDraftController::importChanged, this, &SendDraftController::canPrepareChanged);
+}
 
 SendDraftController::~SendDraftController()
 {
@@ -19,6 +24,8 @@ void SendDraftController::setDraftInterface(SendDraftInterface* draft_interface)
     dropAll();
     m_interface = draft_interface;
     if (m_interface) {
+        connect(m_interface, &QObject::destroyed, this, &SendDraftController::canPrepareChanged);
+        connect(m_interface, &SendDraftInterface::draftReadyChanged, this, &SendDraftController::canPrepareChanged);
         connect(m_interface, &SendDraftInterface::draftChanged, this, [this] {
             // A result answers for the draft it was started for.
             if (!m_interface) return;
@@ -26,7 +33,9 @@ void SendDraftController::setDraftInterface(SendDraftInterface* draft_interface)
             if (m_interface->draftRevision() != m_draft) dropAll();
         });
         connect(m_interface, &SendDraftInterface::availableChanged, this, [this] {
+            const QPointer<SendDraftController> guard{this};
             if (m_interface && !m_interface->available()) dropAll();
+            if (guard) Q_EMIT canPrepareChanged();
         });
     }
     Q_EMIT draftInterfaceChanged();
@@ -50,6 +59,25 @@ QString SendDraftController::preparationError() const
 {
     if (m_preparation_refused) return tr("Another wallet action is still running.");
     return m_preparation ? m_preparation->error() : QString{};
+}
+
+bool SendDraftController::canPrepare() const
+{
+    return m_interface && m_interface->available() && m_interface->draftReady() && !preparing();
+}
+
+void SendDraftController::requestPreparation()
+{
+    if (!m_active || !canPrepare()) return;
+    if (m_interface->sweepsWallet()) askSweepConsent();
+    else prepare();
+}
+
+bool SendDraftController::resetDraft()
+{
+    if (!m_active || !m_interface || !m_interface->available() || preparing() || importing()) return false;
+    m_interface->resetDraft();
+    return true;
 }
 
 void SendDraftController::prepare()

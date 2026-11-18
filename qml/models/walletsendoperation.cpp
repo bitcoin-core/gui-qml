@@ -362,8 +362,48 @@ void WalletSendOperation::workFinished(const walletsend::Result& result, bool re
 WalletTransactionReviewInterface::WalletTransactionReviewInterface(WalletQmlModel& wallet)
     : TransactionReviewInterface(&wallet), m_wallet{&wallet}
 {
+    connect(&wallet, &WalletQmlModel::preparationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
     connect(&wallet, &WalletQmlModel::currentTransactionChanged, this, &TransactionReviewInterface::currentReviewChanged);
     connect(&wallet, &WalletQmlModel::availableChanged, this, &TransactionReviewInterface::availableChanged);
+    connect(&wallet, &WalletQmlModel::unverifiedSigningResultChanged, this, &TransactionReviewInterface::unverifiedSignerResultChanged);
+    connect(&wallet, &WalletQmlModel::signerApprovalChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletQmlModel::fileExportOperationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletQmlModel::transactionErrorChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+}
+
+bool WalletTransactionReviewInterface::currentTransactionIsImportedPsbt() const
+{
+    return m_wallet && m_wallet->currentTransactionIsImportedPsbt();
+}
+
+bool WalletTransactionReviewInterface::currentTransactionCanSend() const
+{
+    return m_wallet && m_wallet->currentTransactionCanSend();
+}
+
+bool WalletTransactionReviewInterface::currentTransactionCanSignOnly() const
+{
+    return m_wallet && m_wallet->currentTransactionCanSignOnly();
+}
+
+bool WalletTransactionReviewInterface::currentTransactionNeedsRevalidation() const
+{
+    return m_wallet && m_wallet->currentTransactionNeedsRevalidation();
+}
+
+bool WalletTransactionReviewInterface::transactionFeePending() const
+{
+    return m_wallet && m_wallet->transactionFeePending();
+}
+
+bool WalletTransactionReviewInterface::currentTransactionCanBroadcast() const
+{
+    return m_wallet && m_wallet->currentTransactionCanBroadcast();
+}
+
+QString WalletTransactionReviewInterface::currentTransactionReviewMessage() const
+{
+    return m_wallet ? m_wallet->currentTransactionReviewMessage() : QString{};
 }
 
 QObject* WalletTransactionReviewInterface::currentReview() const
@@ -374,6 +414,41 @@ QObject* WalletTransactionReviewInterface::currentReview() const
 bool WalletTransactionReviewInterface::available() const
 {
     return m_wallet && m_wallet->available();
+}
+
+QString WalletTransactionReviewInterface::unverifiedSignerResult() const
+{
+    return m_wallet ? m_wallet->signerUnverifiedResultToken() : QString{};
+}
+
+int WalletTransactionReviewInterface::signerApprovalState() const
+{
+    return m_wallet ? static_cast<int>(m_wallet->signerApprovalState()) : 0;
+}
+
+QString WalletTransactionReviewInterface::signerApprovalError() const
+{
+    return m_wallet ? m_wallet->signerApprovalError() : QString{};
+}
+
+bool WalletTransactionReviewInterface::signerNotFound() const
+{
+    return m_wallet && m_wallet->signerApprovalSignerNotFound();
+}
+
+void WalletTransactionReviewInterface::approveSigner()
+{
+    if (m_wallet) m_wallet->approveExternalSignerTransaction();
+}
+
+FileSaveOperation* WalletTransactionReviewInterface::fileExportOperation() const
+{
+    return m_wallet ? m_wallet->fileExportOperation() : nullptr;
+}
+
+QString WalletTransactionReviewInterface::reviewError() const
+{
+    return m_wallet ? m_wallet->transactionError() : QString{};
 }
 
 SendOperation* WalletTransactionReviewInterface::startSend(bool sign_only)

@@ -80,8 +80,22 @@ WalletSendDraftInterface::WalletSendDraftInterface(WalletQmlModel& wallet)
     : SendDraftInterface(&wallet), m_wallet{&wallet}
 {
     connect(&wallet, &WalletQmlModel::availableChanged, this, &SendDraftInterface::availableChanged);
+    connect(&wallet, &WalletQmlModel::feeEstimatePendingChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::preparationChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::customFeeTargetPendingChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::coinSelectionChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::sendAmountExhaustsBalanceChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::maximumRecipientChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::customFeeEnabledChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::customFeeRateValidChanged, this, &SendDraftInterface::draftReadyChanged);
+    connect(&wallet, &WalletQmlModel::psbtActionChanged, this, &SendDraftInterface::draftReadyChanged);
+    if (auto* fees = wallet.fees()) {
+        connect(fees, &FeeSelectionModel::policyChanged, this, &SendDraftInterface::draftReadyChanged);
+        connect(fees, &FeeSelectionModel::estimateChanged, this, &SendDraftInterface::draftReadyChanged);
+    }
     if (auto* recipients = wallet.sendRecipientList()) {
         connect(recipients, &SendRecipientsListModel::revisionChanged, this, &SendDraftInterface::draftChanged);
+        connect(recipients, &SendRecipientsListModel::validationChanged, this, &SendDraftInterface::draftReadyChanged);
     }
     if (auto* coins = wallet.coinsListModel()) {
         connect(coins, &CoinsListModel::selectionSnapshotChanged, this, &SendDraftInterface::draftChanged);
@@ -104,6 +118,35 @@ QString WalletSendDraftInterface::draftRevision() const
 bool WalletSendDraftInterface::selectionPending() const
 {
     return m_wallet && m_wallet->coinsListModel() && m_wallet->coinsListModel()->selectionPending();
+}
+
+bool WalletSendDraftInterface::draftReady() const
+{
+    const auto* wallet = m_wallet.data();
+    if (!wallet) return false;
+    const auto* recipients = wallet->sendRecipientList();
+    const auto* fees = wallet->fees();
+    return recipients && recipients->allValid() && fees && !fees->policyPending() &&
+        !wallet->feeEstimatePending() && !wallet->preparationBusy() &&
+        !wallet->customFeeTargetPending() && !wallet->coinSelectionPending() && !wallet->coinSelectionBlocked() &&
+        !wallet->sendAmountExhaustsBalance() && (!wallet->maximumRecipient() || fees->errorText().isEmpty()) &&
+        (!wallet->customFeeEnabled() || wallet->customFeeRateValid());
+}
+
+bool WalletSendDraftInterface::sweepsWallet() const
+{
+    return m_wallet && m_wallet->sendDraftSweepsWallet();
+}
+
+void WalletSendDraftInterface::resetDraft()
+{
+    if (!available() || m_wallet->preparationBusy() || m_wallet->psbtActionBusy()) return;
+    const QPointer<WalletQmlModel> wallet{m_wallet};
+    wallet->sendRecipientList()->clear();
+    if (!wallet) return;
+    auto* coins = wallet->coinsListModel();
+    coins->setManualInputSelection(false);
+    if (wallet) coins->update();
 }
 
 PreparationOperation* WalletSendDraftInterface::startPreparation(std::optional<QString> passphrase)
