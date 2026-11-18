@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QFileDialog>
 #include <QLineEdit>
+#include <QQuickWindow>
 #include <QSignalSpy>
 #include <QUrl>
 
@@ -36,8 +37,30 @@ private Q_SLOTS:
     void onlyDirectoryModeShowsHiddenEntries();
     void propertiesReachTheDialog();
     void acceptedCarriesTheSelectedFile();
+    void overwritePolicyIsExplicitAndRetained();
+    void closingChooserDoesNotCloseTheApplication();
+    void chooserAdmissionRejectsOverlapAndReentry();
     void cancellingTheVisibleChooserReleasesModalityAndAdmission();
+    void retiredNativeCallbackCannotChooseForANewContext();
+    void contextChangeDuringFilePublicationRejectsAcceptance();
+    void disablingDuringCompletionRejectsAcceptance();
 };
+
+void QmlFileDialogTests::chooserAdmissionRejectsOverlapAndReentry()
+{
+    QmlFileDialog first, second;
+    QVERIFY(first.open());
+    QVERIFY(!first.open());
+    QVERIFY(!second.open());
+    bool reentered{true}, overlapped{true};
+    connect(&first, &QmlFileDialog::rejected, this, [&] { reentered = first.open(); overlapped = second.open(); });
+    first.close();
+    QVERIFY(!reentered);
+    QVERIFY(!overlapped);
+    QVERIFY(!first.isVisible());
+    QVERIFY(second.open());
+    second.close();
+}
 
 // #1066: the platform-independent part of the overlap. While Save is open, an
 // Import request is refused without ever reporting a visible chooser. When the
@@ -71,6 +94,75 @@ void QmlFileDialogTests::cancellingTheVisibleChooserReleasesModalityAndAdmission
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QVERIFY(!VisibleFileDialog()); QVERIFY(!QApplication::activeModalWidget());
     QVERIFY(save.open()); save.close();
+}
+
+void QmlFileDialogTests::retiredNativeCallbackCannotChooseForANewContext()
+{
+    QObject original, replacement;
+    QmlFileDialog chooser;
+    chooser.setContextObject(&original);
+    QVERIFY(chooser.open());
+    const QPointer<QFileDialog> old = VisibleFileDialog();
+    QVERIFY(old);
+    QSignalSpy accepted{&chooser, &QmlFileDialog::accepted};
+    QSignalSpy rejected{&chooser, &QmlFileDialog::rejected};
+    QVERIFY(QMetaObject::invokeMethod(old, "accepted", Qt::QueuedConnection));
+    chooser.setContextObject(&replacement);
+    QCOMPARE(rejected.count(), 1);
+    QVERIFY(!chooser.isVisible());
+    QVERIFY(chooser.open());
+    const QPointer<QFileDialog> current = VisibleFileDialog();
+    QVERIFY(current);
+    QVERIFY(current != old);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+    QCOMPARE(accepted.count(), 0);
+    QCOMPARE(rejected.count(), 1);
+    QVERIFY(chooser.isVisible());
+    chooser.close();
+    QCOMPARE(rejected.count(), 2);
+}
+
+void QmlFileDialogTests::contextChangeDuringFilePublicationRejectsAcceptance()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QObject original, replacement;
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.setContextObject(&original);
+    chooser.setCurrentFile(QUrl::fromLocalFile(directory.filePath("backup.bak")));
+    QVERIFY(chooser.open());
+    const QPointer<QFileDialog> native = VisibleFileDialog();
+    QVERIFY(native);
+    QSignalSpy accepted{&chooser, &QmlFileDialog::accepted};
+    QSignalSpy rejected{&chooser, &QmlFileDialog::rejected};
+    connect(&chooser, &QmlFileDialog::selectedFileChanged, this, [&] { chooser.setContextObject(&replacement); });
+    QVERIFY(QMetaObject::invokeMethod(native, "accepted", Qt::DirectConnection));
+    QCOMPARE(accepted.count(), 0);
+    QCOMPARE(rejected.count(), 1);
+    QVERIFY(!chooser.isVisible());
+}
+
+void QmlFileDialogTests::disablingDuringCompletionRejectsAcceptance()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.setCurrentFile(QUrl::fromLocalFile(directory.filePath("backup.bak")));
+    QVERIFY(chooser.open());
+    const QPointer<QFileDialog> native = VisibleFileDialog();
+    QVERIFY(native);
+    QSignalSpy accepted{&chooser, &QmlFileDialog::accepted};
+    QSignalSpy rejected{&chooser, &QmlFileDialog::rejected};
+    connect(&chooser, &QmlFileDialog::visibleChanged, this, [&] { if (!chooser.isVisible()) chooser.setEnabled(false); });
+    QVERIFY(QMetaObject::invokeMethod(native, "accepted", Qt::DirectConnection));
+    QCOMPARE(accepted.count(), 0);
+    QCOMPARE(rejected.count(), 1);
+    QVERIFY(!chooser.open());
+    chooser.setEnabled(true);
+    QVERIFY(chooser.open());
+    chooser.close();
 }
 
 void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
@@ -155,6 +247,41 @@ void QmlFileDialogTests::propertiesReachTheDialog()
     chooser.close();
 }
 
+void QmlFileDialogTests::overwritePolicyIsExplicitAndRetained()
+{
+    QmlFileDialog chooser;
+    QVERIFY(chooser.confirmOverwrite());
+    QSignalSpy changes{&chooser, &QmlFileDialog::confirmOverwriteChanged};
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.open();
+    QVERIFY(VisibleFileDialog());
+    QVERIFY(!VisibleFileDialog()->testOption(QFileDialog::DontConfirmOverwrite));
+    chooser.close();
+    chooser.setConfirmOverwrite(false);
+    chooser.setConfirmOverwrite(false);
+    QCOMPARE(changes.count(), 1);
+    chooser.open();
+    QVERIFY(VisibleFileDialog()->testOption(QFileDialog::DontConfirmOverwrite));
+    chooser.close();
+    chooser.setConfirmOverwrite(true);
+    chooser.open();
+    QVERIFY(!VisibleFileDialog()->testOption(QFileDialog::DontConfirmOverwrite));
+    chooser.close();
+    QCOMPARE(changes.count(), 2);
+}
+
+void QmlFileDialogTests::closingChooserDoesNotCloseTheApplication()
+{
+    QQuickWindow main;
+    main.show();
+    QmlFileDialog chooser; chooser.open();
+    auto* dialog = VisibleFileDialog(); QVERIFY(dialog);
+    QVERIFY(!dialog->testAttribute(Qt::WA_QuitOnClose));
+    QSignalSpy last_closed{qGuiApp, &QGuiApplication::lastWindowClosed};
+    chooser.close(); QCoreApplication::processEvents();
+    QCOMPARE(last_closed.count(), 0); QVERIFY(main.isVisible());
+}
+
 void QmlFileDialogTests::acceptedCarriesTheSelectedFile()
 {
     // Offscreen takes the native path, which emits urlSelected and hides the bug.
@@ -193,4 +320,4 @@ BITCOINQML_REGISTER_QT_TEST(QmlFileDialogTests)
 #else
 QTEST_MAIN(QmlFileDialogTests)
 #endif
-#include "test_qmlfiledialog.moc"
+#include <test_qmlfiledialog.moc>

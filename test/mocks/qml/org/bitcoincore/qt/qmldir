@@ -1,7 +1,5 @@
 module org.bitcoincore.qt
 singleton AppMode 1.0 AppMode.qml
-singleton BitcoinUri 1.0 BitcoinUri.qml
-PaymentImportOperation 1.0 PaymentImportOperation.qml
 DesktopIntentModel 1.0 DesktopIntentModel.qml
 BlockClockDial 1.0 BlockClockDial.qml
 singleton Clipboard 1.0 Clipboard.qml

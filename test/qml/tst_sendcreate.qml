@@ -33,12 +33,10 @@ TestCase {
     }
 
     function confirmExplicitImport(form) {
-        const operation = form.m_importOperation
+        const operation = form.imports.operation
         if (operation && operation.promptToken) {
             compare(operation.state, PaymentImportOperation.AwaitingReplacement)
-            const popup = findChild(form, "sendPaymentUriOverwritePopup")
-            if (popup) popup.close()
-            operation.replace(operation.promptToken)
+            form.imports.replace()
         }
     }
 
@@ -1024,12 +1022,12 @@ TestCase {
         verify(sendPage !== null)
 
         const callsBefore = testWalletModel.scheduleFeeEstimatesCalls
-        sendPage.applyPaymentRequestFromText(
+        sendPage.imports.importText(
             "bitcoin:bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9?amount=0.02000000&label=uri-label",
-            "clipboard"
+            SendImportModel.Clipboard
         )
 
-        tryVerify(function() { return sendPage.m_importOperation && !sendPage.m_importOperation.pending })
+        tryVerify(function() { return sendPage.imports.operation && !sendPage.imports.operation.pending })
         confirmExplicitImport(sendPage)
 
         // The mocked amount input still emits one schedule request when the
@@ -1040,8 +1038,8 @@ TestCase {
         compare(testSendRecipient.amount.display, "0.02000000")
         compare(testSendRecipient.paymentRequestLabel, "uri-label")
         compare(testSendRecipient.label, "")
-        compare(sendPage.paymentRequestStatus, "Payment request imported from clipboard")
-        compare(sendPage.paymentRequestIsError, false)
+        compare(sendPage.imports.status, "Payment request imported from clipboard")
+        compare(sendPage.imports.statusIsError, false)
     }
 
     function test_send_uri_import_dialog_focuses_field_and_applies_on_return() {
@@ -1059,10 +1057,10 @@ TestCase {
         keyClick(Qt.Key_Return)
         tryCompare(popup, "opened", false)
         // Imports are asynchronous and applied after an explicit confirmation.
-        tryVerify(function() { return sendPage.m_importOperation && !sendPage.m_importOperation.pending })
+        tryVerify(function() { return sendPage.imports.operation && !sendPage.imports.operation.pending })
         confirmExplicitImport(sendPage)
         tryCompare(testSendRecipient.amount, "display", "0.01000000")
-        tryCompare(sendPage, "paymentRequestStatus", "Payment request imported from manual entry")
+        tryCompare(sendPage.imports, "status", "Payment request imported from manual entry")
     }
 
     function test_send_payment_uri_paste_applies_from_each_recipient_field_data() {
@@ -1108,8 +1106,8 @@ TestCase {
         Clipboard.currentText = original
         component.paste(false)
         compare(testSendRecipient.address.address, original)
-        compare(sendPage.uriActionPending, false)
-        compare(sendPage.m_importOperation, null)
+        compare(sendPage.imports.pending, false)
+        compare(sendPage.imports.operation, null)
     }
 
     function test_uri_probe_is_fenced_by_draft_and_visibility_data() {
@@ -1122,8 +1120,8 @@ TestCase {
         const original = testSendRecipient.address.address
         BitcoinUri.holdPublications = true
         try {
-            sendPage.applyPaymentRequestFromText("bitcoin:bcrt1qstaleresult?amount=0.42", "clipboard")
-            verify(sendPage.uriActionPending)
+            sendPage.imports.importText("bitcoin:bcrt1qstaleresult?amount=0.42", SendImportModel.Clipboard)
+            verify(sendPage.imports.pending)
             if (data.action === 0) testSendRecipient.label = "new draft"
             else if (data.action === 1) page.visible = false
             else testWalletModel.available = false
@@ -1206,7 +1204,7 @@ TestCase {
         Clipboard.currentText = "0.1" + " ".repeat(126) + "junk"
         input.forceActiveFocus()
         pasteShortcut()
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         verify(!testSendRecipient.amount.inputAcceptable)
         compare(testSendRecipient.amount.satoshi, 0)
         compare(testSendRecipient.amount.inputError, "Amount input exceeds the 128-character limit.")
@@ -1232,16 +1230,16 @@ TestCase {
         verify(input.activeFocus)
         pasteShortcut()
 
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(overwritePopup.opened, false)
         tryCompare(testSendRecipient.address, "address", address)
         compare(testSendRecipient.amount.satoshi, 10000000000)
         compare(testSendRecipient.paymentRequestLabel, "Alice")
         compare(testSendRecipient.label, "")
         compare(findChild(page, "sendNoteInput").text, "")
-        compare(sendPage.paymentRequestMessage, "Pay me")
-        compare(sendPage.paymentRequestStatus, "Payment request imported from clipboard")
-        compare(sendPage.paymentRequestIsError, false)
+        compare(sendPage.imports.message, "Pay me")
+        compare(sendPage.imports.status, "Payment request imported from clipboard")
+        compare(sendPage.imports.statusIsError, false)
     }
 
     function test_send_payment_request_details_data() {
@@ -1267,11 +1265,11 @@ TestCase {
         verify(section !== null)
         compare(section.visible, false)
 
-        sendPage.importPastedUri(BitcoinUri.AddressField, "bitcoin:bcrt1qreplacement" + data.params, page.recipient)
+        sendPage.imports.importPaste(BitcoinUri.AddressField, "bitcoin:bcrt1qreplacement" + data.params, page.recipient)
         const overwrite = findChild(page, "sendPaymentUriOverwritePopup")
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(overwrite.opened, false)
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(testSendRecipient.hasPaymentRequest, true)
         compare(testSendRecipient.label, data.note)
         compare(findChild(page, "sendNoteInput").text, data.note)
@@ -1293,10 +1291,10 @@ TestCase {
         compare(testSendRecipient.paymentRequestLabel, data.payTo)
 
         // Importing another request without public details hides the section.
-        sendPage.applyPaymentRequestFromText("bitcoin:bcrt1qreplacement?amount=0.01", "clipboard")
-        tryVerify(function() { return sendPage.m_importOperation && !sendPage.m_importOperation.pending })
+        sendPage.imports.importText("bitcoin:bcrt1qreplacement?amount=0.01", SendImportModel.Clipboard)
+        tryVerify(function() { return sendPage.imports.operation && !sendPage.imports.operation.pending })
         confirmExplicitImport(sendPage)
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(section.visible, false)
         compare(testSendRecipient.label, "My edited note")
     }
@@ -1308,15 +1306,15 @@ TestCase {
         const form = findChild(page, "walletSendPage")
         const popup = findChild(page, "sendPaymentUriOverwritePopup")
         const uri = "bitcoin:bcrt1qsendtoaddress?label=Tully&message=River%20Crossing"
-        form.importPastedUri(BitcoinUri.AddressField, uri, page.recipient)
-        tryCompare(form, "uriActionPending", false)
+        form.imports.importPaste(BitcoinUri.AddressField, uri, page.recipient)
+        tryCompare(form.imports, "pending", false)
         compare(popup.opened, false)
         compare(testSendRecipient.label, "My private note")
         compare(findChild(page, "sendNoteInput").text, "My private note")
         compare(testSendRecipient.paymentRequestLabel, "Tully")
         compare(testSendRecipient.message, "River Crossing")
-        form.importPastedUri(BitcoinUri.AddressField, uri, page.recipient)
-        tryCompare(form, "uriActionPending", false)
+        form.imports.importPaste(BitcoinUri.AddressField, uri, page.recipient)
+        tryCompare(form.imports, "pending", false)
         compare(popup.opened, false)
         compare(testSendRecipient.label, "My private note")
     }
@@ -1335,14 +1333,14 @@ TestCase {
         findChild(page, "sendUseMaximumButton").clicked()
         compare(testSendRecipient.amountMode, SendRecipient.Maximum)
         Clipboard.currentText = "bitcoin:" + address + "?amount=0.00012345"
-        sendPage.importPastedUri(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
+        sendPage.imports.importPaste(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
         const prompt = findChild(page, "sendPaymentUriOverwritePopup")
         tryCompare(prompt, "opened", true)
         compare(testSendRecipient.amount.satoshi, 12345)
         compare(testSendRecipient.amountMode, SendRecipient.Maximum)
         findChild(prompt.contentItem, data.confirm ? "sendPaymentUriOverwriteConfirmButton" : "sendPaymentUriOverwriteCancelButton").clicked()
         tryCompare(prompt, "opened", false)
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(testSendRecipient.amount.satoshi, 12345)
         compare(testSendRecipient.amountMode, data.confirm ? SendRecipient.Fixed : SendRecipient.Maximum)
     }
@@ -1366,7 +1364,7 @@ TestCase {
 
         const uri = "bitcoin:bcrt1qreplacement?amount=0.02000000&label=replacement-label"
         Clipboard.currentText = uri
-        sendPage.importPastedUri(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
+        sendPage.imports.importPaste(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
         tryCompare(overwritePopup, "opened", true)
 
         verify(addressInput.text !== uri)
@@ -1382,7 +1380,7 @@ TestCase {
         compare(testSendRecipient.amount.satoshi, 100000000)
         compare(testSendRecipient.label, "existing label")
 
-        sendPage.importPastedUri(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
+        sendPage.imports.importPaste(BitcoinUri.AddressField, Clipboard.text(), page.recipient)
         tryCompare(overwritePopup, "opened", true)
         const confirmButton = findChild(overwritePopup.contentItem, "sendPaymentUriOverwriteConfirmButton")
         verify(confirmButton !== null)
@@ -1414,7 +1412,7 @@ TestCase {
         pasteShortcut()
 
         tryCompare(testSendRecipient.address, "address", address)
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(testSendRecipient.paymentRequestLabel, nestedUri)
         compare(testSendRecipient.label, "")
         compare(testSendRecipient.amount.satoshi, 0)
@@ -1431,9 +1429,9 @@ TestCase {
         verify(sendPage !== null)
         verify(overwritePopup !== null)
 
-        sendPage.importPastedUri(BitcoinUri.AddressField, "bitcoin:bcrt1qreplacement", page.recipient)
+        sendPage.imports.importPaste(BitcoinUri.AddressField, "bitcoin:bcrt1qreplacement", page.recipient)
 
-        tryCompare(sendPage, "uriActionPending", false)
+        tryCompare(sendPage.imports, "pending", false)
         compare(overwritePopup.opened, false)
         compare(testSendRecipient.address.address, "bcrt1qreplacement")
         compare(testSendRecipient.amount.satoshi, 100000000)
@@ -2215,13 +2213,13 @@ TestCase {
         BitcoinUri.admitRequestsForTest = false
         const calls = BitcoinUri.requestCallsForTest
         try {
-            if (data.file) form.applyPaymentRequestFromFile("original-payment-request.txt")
-            else form.applyPaymentRequestFromText("bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.04", "clipboard")
+            if (data.file) form.imports.importFile("original-payment-request.txt")
+            else form.imports.importText("bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.04", SendImportModel.Clipboard)
             compare(BitcoinUri.requestCallsForTest, calls + 1)
-            compare(form.uriActionPending, false)
-            compare(form.paymentRequestIsError, true)
-            compare(form.paymentRequestStatus, "Payment URI services are unavailable. Try again.")
-            compare(form.paymentRequestMessage, "")
+            compare(form.imports.pending, false)
+            compare(form.imports.statusIsError, true)
+            compare(form.imports.status, "Payment URI services are unavailable. Try again.")
+            compare(form.imports.message, "")
             compare(testSendRecipient.address.address, address)
             compare(testSendRecipient.amount.satoshi, 0)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
@@ -2239,31 +2237,31 @@ TestCase {
         BitcoinUri.admitRequestsForTest = false
         const calls = BitcoinUri.requestCallsForTest
         try {
-            form.applyPaymentRequestFromText(text, "refused original")
+            form.imports.importText(text, SendImportModel.ManualEntry)
             compare(BitcoinUri.requestCallsForTest, calls + 1)
-            compare(form.uriActionPending, false)
-            compare(form.paymentRequestIsError, true)
-            compare(form.paymentRequestStatus, "Payment URI services are unavailable. Try again.")
-            compare(form.paymentRequestMessage, "")
+            compare(form.imports.pending, false)
+            compare(form.imports.statusIsError, true)
+            compare(form.imports.status, "Payment URI services are unavailable. Try again.")
+            compare(form.imports.message, "")
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             BitcoinUri.admitRequestsForTest = true
             BitcoinUri.holdPublications = true
-            form.applyPaymentRequestFromText(data.valid ? text : "ordinary text", "owned successor")
+            form.imports.importText(data.valid ? text : "ordinary text", SendImportModel.ManualEntry)
             compare(BitcoinUri.requestCallsForTest, calls + 2)
-            verify(form.m_importOperation !== null)
-            compare(form.uriActionPending, true)
-            compare(form.paymentRequestIsError, false)
-            compare(form.paymentRequestStatus, "")
-            compare(form.paymentRequestMessage, "")
+            verify(form.imports.operation !== null)
+            compare(form.imports.pending, true)
+            compare(form.imports.statusIsError, false)
+            compare(form.imports.status, "")
+            compare(form.imports.message, "")
             compare(testSendRecipient.address.address, originalAddress)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             BitcoinUri.releasePublications()
             confirmExplicitImport(form)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + (data.valid ? 1 : 0))
-            compare(form.paymentRequestIsError, !data.valid)
-            compare(form.paymentRequestStatus, data.valid ? "Payment request imported from owned successor" : "Not a valid Bitcoin payment URI.")
-            compare(form.paymentRequestMessage, data.valid ? "Owned successor" : "")
+            compare(form.imports.statusIsError, !data.valid)
+            compare(form.imports.status, data.valid ? "Payment request imported from manual entry" : "Not a valid Bitcoin payment URI.")
+            compare(form.imports.message, data.valid ? "Owned successor" : "")
             compare(testSendRecipient.address.address, data.valid ? "bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4" : originalAddress)
             compare(testSendRecipient.amount.satoshi, data.valid ? 7000000 : 0)
             BitcoinUri.releasePublications()
@@ -2285,9 +2283,9 @@ TestCase {
         else testWalletModel.available = false
         const calls = BitcoinUri.requestCallsForTest
         try {
-            form.importPastedUri(BitcoinUri.AddressField, "bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.03", page.recipient)
+            form.imports.importPaste(BitcoinUri.AddressField, "bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.03", page.recipient)
             compare(BitcoinUri.requestCallsForTest, calls)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
             compare(testSendRecipient.address.address, original)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
         } finally { testWalletModel.available = true }
@@ -2309,12 +2307,12 @@ TestCase {
         Clipboard.currentText = "bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.05&message=original"
         try {
             field.paste(false)
-            compare(form.uriActionPending, true)
+            compare(form.imports.pending, true)
             Clipboard.currentText = "unrelated replacement"
             BitcoinUri.releasePublications()
-            compare(form.uriActionPending, false)
-            compare(form.paymentRequestStatus, "The captured request probe failed.")
-            compare(form.paymentRequestIsError, true)
+            compare(form.imports.pending, false)
+            compare(form.imports.status, "The captured request probe failed.")
+            compare(form.imports.statusIsError, true)
             compare(testSendRecipient.address.address, original)
             compare(testSendRecipient.amount.satoshi, 0)
             compare(testSendRecipient.label, note)
@@ -2342,9 +2340,9 @@ TestCase {
         if (data.name === "address") compare(testSendRecipient.address.address, data.text)
         else if (data.name === "amount") compare(testSendRecipient.amount.satoshi, 2000000)
         else compare(testSendRecipient.label, data.text)
-        compare(form.m_importOperation, null)
+        compare(form.imports.operation, null)
         compare(testSendRecipient.appliedPaymentRequestCalls, applications)
-        compare(form.paymentRequestIsError, false)
+        compare(form.imports.statusIsError, false)
     }
     function test_empty_clipboard_completes_paste_without_parser_data() {
         return [{tag: "address", field: "address"}, {tag: "amount", field: "amount"}, {tag: "note", field: "label"}]
@@ -2382,26 +2380,26 @@ TestCase {
         const applications = testSendRecipient.appliedPaymentRequestCalls
         BitcoinUri.holdPublications = true
         try {
-            if (data.file) form.applyPaymentRequestFromFile(data.text)
-            else form.applyPaymentRequestFromText(data.text, "original source")
-            compare(form.uriActionPending, true)
+            if (data.file) form.imports.importFile(data.text)
+            else form.imports.importText(data.text, SendImportModel.ManualEntry)
+            compare(form.imports.pending, true)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             compare(testSendRecipient.address.address, address)
             BitcoinUri.releasePublications()
             confirmExplicitImport(form)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + (data.valid ? 1 : 0))
             if (data.valid) {
                 compare(testSendRecipient.address.address, "bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4")
                 compare(testSendRecipient.amount.satoshi, 7000000)
-                compare(form.paymentRequestMessage, data.message)
-                compare(form.paymentRequestStatus, "Payment request imported from original source")
-                compare(form.paymentRequestIsError, false)
+                compare(form.imports.message, data.message)
+                compare(form.imports.status, "Payment request imported from manual entry")
+                compare(form.imports.statusIsError, false)
             } else {
                 compare(testSendRecipient.address.address, address)
                 compare(testSendRecipient.amount.satoshi, 0)
-                compare(form.paymentRequestIsError, true)
-                compare(form.paymentRequestStatus, data.file ? "File parsing is unavailable in QML unit tests." : "Not a valid Bitcoin payment URI.")
+                compare(form.imports.statusIsError, true)
+                compare(form.imports.status, data.file ? "File parsing is unavailable in QML unit tests." : "Not a valid Bitcoin payment URI.")
             }
             BitcoinUri.releasePublications()
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + (data.valid ? 1 : 0))
@@ -2429,7 +2427,7 @@ TestCase {
         testSendRecipient.address.addressChanged.connect(loseInterest)
         BitcoinUri.holdPublications = true
         try {
-            form.applyPaymentRequestFromText("bitcoin:bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9?amount=0.09&message=original", "clipboard")
+            form.imports.importText("bitcoin:bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9?amount=0.09&message=original", SendImportModel.Clipboard)
             BitcoinUri.releasePublications()
             confirmExplicitImport(form)
             compare(changed, true)
@@ -2439,9 +2437,9 @@ TestCase {
             compare(replacement.address.address, otherAddress)
             compare(replacement.amount.satoshi, otherAmount)
             compare(replacement.label, otherNote)
-            compare(form.paymentRequestStatus, "")
-            compare(form.m_importOperation, null)
-            compare(form.uriActionPending, false)
+            compare(form.imports.status, "")
+            compare(form.imports.operation, null)
+            compare(form.imports.pending, false)
             const popup = findChild(page, "sendPaymentUriOverwritePopup")
             compare(popup.opened, false)
             tryCompare(popup, "visible", false)
@@ -2505,7 +2503,7 @@ TestCase {
         const applications = testSendRecipient.appliedPaymentRequestCalls
         const replacementApplications = testSecondWalletModel.recipients.current.appliedPaymentRequestCalls
         const mailbox = createTemporaryObject(desktopMailboxComponent, page, {inspection: operation, beforeReturn: function(receiver) {
-            compare(receiver, findChild(page, "walletSendPage"))
+            compare(receiver, findChild(page, "walletSendPage").imports)
             if (data.action === "replace") page.wallet = testSecondWalletModel
         }})
         verify(mailbox !== null)
@@ -2537,8 +2535,8 @@ TestCase {
         BitcoinUri.holdPublications = true
         try {
             if (data.paste) { Clipboard.currentText = uri; editor.addressField.paste(false) }
-            else form.applyPaymentRequestFromText(uri, "original request")
-            const original = form.m_importOperation
+            else form.imports.importText(uri, SendImportModel.ManualEntry)
+            const original = form.imports.operation
             verify(original !== null)
             if (data.paste) {
                 testSendRecipient.validationRevision++
@@ -2546,10 +2544,10 @@ TestCase {
                 testSendRecipient.amount.inputChanged()
             } else testRecipientsModel.totalAmountChanged() // Repeated cached projection, same semantic revision.
             compare(page.draftRevision, revision)
-            compare(form.m_importOperation, original)
+            compare(form.imports.operation, original)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             BitcoinUri.releasePublications()
-            tryCompare(form, "uriActionPending", false)
+            tryCompare(form.imports, "pending", false)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + 1)
             compare(testSendRecipient.amount.satoshi, 7000000)
             compare(testSendRecipient.message, "Original")
@@ -2565,17 +2563,17 @@ TestCase {
         const page = createControlledSendPage()
         const form = findChild(page, "walletSendPage")
         Clipboard.currentText = "BITCOIN:bcrt1qsendtoaddress?message=%4Friginal&amount=0.00700000&label=Invoice"
-        tryVerify(function() { return form.m_clipboardOperation && !form.m_clipboardOperation.pending })
-        compare(form.showClipboardUriBanner, false)
+        tryVerify(function() { return form.imports.clipboardCheck && !form.imports.clipboardCheck.pending })
+        compare(form.imports.clipboardOffered, false)
         testSendRecipient.label = "Changed private bookkeeping"
-        tryVerify(function() { return form.m_clipboardOperation && !form.m_clipboardOperation.pending })
-        compare(form.showClipboardUriBanner, false)
+        tryVerify(function() { return form.imports.clipboardCheck && !form.imports.clipboardCheck.pending })
+        compare(form.imports.clipboardOffered, false)
         Clipboard.currentText = "bitcoin:bcrt1qsendtoaddress?amount=0.007&label=Invoice&message=Changed"
-        tryCompare(form, "showClipboardUriBanner", true)
+        tryCompare(form.imports, "clipboardOffered", true)
         Clipboard.currentText = "bitcoin:bcrt1qsendtoaddress?amount=0.007&label=Invoice"
-        tryCompare(form, "showClipboardUriBanner", true)
+        tryCompare(form.imports, "clipboardOffered", true)
         testSendRecipient.message = ""
-        tryCompare(form, "showClipboardUriBanner", false)
+        tryCompare(form.imports, "clipboardOffered", false)
         compare(testSendRecipient.label, "Changed private bookkeeping")
     }
 
@@ -2586,8 +2584,8 @@ TestCase {
         testWalletModel.isLocked = true
         try {
             testSendRecipient.label = "Private locked note"
-            form.importPastedUri(BitcoinUri.AddressField, "bitcoin:bcrt1qsendtoaddress?amount=0.007&message=Public", page.recipient)
-            tryCompare(form, "uriActionPending", false)
+            form.imports.importPaste(BitcoinUri.AddressField, "bitcoin:bcrt1qsendtoaddress?amount=0.007&message=Public", page.recipient)
+            tryCompare(form.imports, "pending", false)
             compare(testSendRecipient.amount.satoshi, 700000)
             compare(testSendRecipient.message, "Public")
             compare(testSendRecipient.label, "Private locked note")
@@ -2647,7 +2645,7 @@ TestCase {
         } finally {
             picker.close()
             BitcoinUri.releasePublications()
-            form.cancelUriIntents()
+            form.imports.cancel()
             const review = findChild(page, "transactionReviewPopup")
             review.close()
             tryCompare(review, "visible", false)
@@ -2770,8 +2768,8 @@ TestCase {
             } else {
                 if (data.kind === "uri") {
                     BitcoinUri.holdPublications = true
-                    form.applyPaymentRequestFromText("bitcoin:bcrt1qsendtoaddress?amount=0.07", "original intent")
-                    compare(form.uriActionPending, true)
+                    form.imports.importText("bitcoin:bcrt1qsendtoaddress?amount=0.07", SendImportModel.ManualEntry)
+                    compare(form.imports.pending, true)
                 } else testWalletModel.available = false
                 page.confirmTransactionReview()
                 page.prepareTransactionForReview()
@@ -2783,7 +2781,7 @@ TestCase {
                     BitcoinUri.releasePublications()
                     compare(testSendRecipient.appliedPaymentRequestCalls, applications + 1)
                     compare(testSendRecipient.amount.satoshi, 7000000)
-                    compare(form.uriActionPending, false)
+                    compare(form.imports.pending, false)
                 } else testWalletModel.available = true
                 page.prepareTransactionForReview()
                 compare(testWalletModel.prepareTransactionCalls, calls + 1)
@@ -2829,7 +2827,7 @@ TestCase {
             compare(testSendRecipient.amount.satoshi, 0)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             BitcoinUri.releasePublications()
-            tryCompare(form, "uriActionPending", false)
+            tryCompare(form.imports, "pending", false)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + (data.result === "apply" ? 1 : 0))
             compare(testSendRecipient.address.address, address)
             compare(testSendRecipient.label, note)
@@ -2865,18 +2863,18 @@ TestCase {
         try {
             editor.addressField.paste(false)
             compare(request.count, 1)
-            const pasted = form.m_importOperation
+            const pasted = form.imports.operation
             verify(pasted !== null)
             if (data.literal) {
                 Clipboard.currentText = "original literal replacement"
                 editor.noteField.field.forceActiveFocus()
                 editor.noteField.paste(false)
-            } else form.applyPaymentRequestFromText("bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.09", "replacement intent")
+            } else form.imports.importText("bitcoin:bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4?amount=0.09", SendImportModel.ManualEntry)
             compare(pasted.state, PaymentImportOperation.Closed)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications)
             BitcoinUri.releasePublications()
             confirmExplicitImport(form)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + (data.literal ? 0 : 1))
             compare(testSendRecipient.address.address, data.literal ? originalAddress : "bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4")
             compare(testSendRecipient.label, data.literal ? "original literal replacement" : "")
@@ -2909,7 +2907,7 @@ TestCase {
             compare(testSendRecipient.amount.satoshi, 10000)
             compare(testSendRecipient.label, "original private note")
             compare(testWalletModel.prepareTransactionCalls, prepareCalls)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
         } finally { testWalletModel.available = true; popup.close() }
     }
     function test_committed_completion_keeps_original_draft_ownership_data() {
@@ -3117,7 +3115,7 @@ TestCase {
             tryCompare(testSendRecipient.address, "address", data.changeClipboard ? "bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4" : "bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9")
             compare(testSendRecipient.amount.satoshi, data.changeClipboard ? 9000000 : 7000000)
             compare(testSendRecipient.appliedPaymentRequestCalls, applications + 1)
-            compare(form.uriActionPending, false)
+            compare(form.imports.pending, false)
         } finally { testWalletModel.available = true; BitcoinUri.releasePublications() }
     }
 

@@ -26,6 +26,7 @@
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
+#include <qml/models/sendimportmodel.h>
 #include <qml/models/blockclockmodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
@@ -74,6 +75,7 @@
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletimporttarget.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 #include <qml/qmlfiledialog.h>
 #include <qml/nativelistmodel.h>
@@ -333,6 +335,10 @@ struct BitcoinAddressForeign {
     QML_FOREIGN(BitcoinAddress)
     QML_NAMED_ELEMENT(BitcoinAddress)
 };
+
+struct ImportOperationForeign { Q_GADGET QML_FOREIGN(ImportOperation) QML_NAMED_ELEMENT(ImportOperation) QML_UNCREATABLE("An import owned by its source") };
+struct ImportTargetForeign { Q_GADGET QML_FOREIGN(ImportTarget) QML_NAMED_ELEMENT(ImportTarget) QML_UNCREATABLE("A send draft") };
+struct SendImportModelForeign { Q_GADGET QML_FOREIGN(SendImportModel) QML_NAMED_ELEMENT(SendImportModel) };
 
 struct ActivityExportResultForeign { Q_GADGET QML_FOREIGN(ActivityExportResult) QML_ANONYMOUS };
 struct ActivityExportOperationForeign { Q_GADGET QML_FOREIGN(ActivityExportOperation) QML_NAMED_ELEMENT(ActivityExportOperation) QML_UNCREATABLE("Owned by the original export action") };
@@ -633,6 +639,8 @@ struct PaymentImportOperationForeign {
     QML_NAMED_ELEMENT(PaymentImportOperation)
     QML_UNCREATABLE("Owned by an import request")
 };
+
+struct WalletImportTargetForeign { Q_GADGET QML_FOREIGN(WalletImportTarget) QML_NAMED_ELEMENT(WalletImportTarget) };
 
 #endif
 #endif // BITCOIN_CMAKE_QMLTYPES_H

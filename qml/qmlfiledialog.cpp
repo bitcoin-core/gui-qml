@@ -7,7 +7,15 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QGuiApplication>
+#include <QScopeGuard>
 #include <QWindow>
+#include <limits>
+
+namespace {
+// Native choosers are application-modal. A second request cannot steal an
+// existing chooser or create an overlapping native modal session.
+QPointer<QmlFileDialog> ActiveChooser;
+}
 
 QmlFileDialog::QmlFileDialog(QObject* parent)
     : QObject(parent)
@@ -16,9 +24,31 @@ QmlFileDialog::QmlFileDialog(QObject* parent)
 
 QmlFileDialog::~QmlFileDialog()
 {
-    if (m_dialog) {
-        m_dialog->deleteLater();
-    }
+    dismiss(false);
+}
+
+void QmlFileDialog::setContextObject(QObject* context)
+{
+    if (m_context == context) return;
+    disconnect(m_context_destroyed);
+    m_context = context;
+    if (context) m_context_destroyed = connect(context, &QObject::destroyed, this, [this] {
+        const QPointer<QmlFileDialog> guard{this};
+        dismiss(true);
+        if (guard) Q_EMIT contextObjectChanged();
+    });
+    const QPointer<QmlFileDialog> guard{this};
+    dismiss(true);
+    if (guard) Q_EMIT contextObjectChanged();
+}
+
+void QmlFileDialog::setEnabled(bool enabled)
+{
+    if (m_enabled == enabled) return;
+    m_enabled = enabled;
+    const QPointer<QmlFileDialog> guard{this};
+    if (!enabled) dismiss(true);
+    if (guard) Q_EMIT enabledChanged();
 }
 
 void QmlFileDialog::setTitle(const QString& title)
@@ -70,31 +100,48 @@ void QmlFileDialog::setSelectedFile(const QUrl& file)
     Q_EMIT selectedFileChanged();
 }
 
-bool QmlFileDialog::isVisible() const
+void QmlFileDialog::setSuggestedName(const QString& name)
 {
-    return m_dialog && m_dialog->isVisible();
+    if (name.size() > 32768 || m_suggested_name == name) return;
+    m_suggested_name = name;
+    Q_EMIT suggestedNameChanged();
 }
 
-QFileDialog* QmlFileDialog::dialog()
+void QmlFileDialog::setConfirmOverwrite(bool confirm)
 {
-    if (m_dialog) return m_dialog;
+    if (m_confirm_overwrite == confirm) return;
+    m_confirm_overwrite = confirm;
+    Q_EMIT confirmOverwriteChanged();
+}
 
+bool QmlFileDialog::isVisible() const
+{
+    return m_active;
+}
+
+QFileDialog* QmlFileDialog::dialog(quint64 ticket)
+{
     m_dialog = new QFileDialog(nullptr);
-    connect(m_dialog, &QFileDialog::accepted, this, [this] {
-        setSelectedFile(m_dialog->selectedUrls().value(0));
-        Q_EMIT accepted();
-    });
-    connect(m_dialog, &QFileDialog::rejected, this, [this] { Q_EMIT rejected(); });
-    connect(m_dialog, &QFileDialog::finished, this, [this] { Q_EMIT visibleChanged(); });
+    // This native handoff must not become an application window whose close
+    // requests node shutdown (notably with mixed Widgets/Quick on Qt 6.2).
+    m_dialog->setAttribute(Qt::WA_QuitOnClose, false);
+    const auto native = m_dialog;
+    connect(native, &QFileDialog::accepted, this, [this, ticket, native] { finish(ticket, native, true); });
+    connect(native, &QFileDialog::rejected, this, [this, ticket, native] { finish(ticket, native, false); });
     return m_dialog;
 }
 
-void QmlFileDialog::open()
+bool QmlFileDialog::open()
 {
-    QFileDialog* dlg = dialog();
+    if (!m_enabled || m_active || m_finishing || ActiveChooser || m_ticket == std::numeric_limits<quint64>::max()) return false;
+    m_active = true;
+    m_request_context = m_context;
+    ActiveChooser = this;
+    QFileDialog* dlg = dialog(++m_ticket);
     dlg->setWindowTitle(m_title);
     dlg->setNameFilters(m_name_filters);
     dlg->setDefaultSuffix(m_default_suffix);
+    dlg->setOption(QFileDialog::DontConfirmOverwrite, !m_confirm_overwrite);
 
     switch (m_file_mode) {
     case OpenFile:
@@ -124,6 +171,8 @@ void QmlFileDialog::open()
     }
     if (m_current_file.isValid() && !m_current_file.isEmpty()) {
         dlg->selectUrl(m_current_file);
+    } else if (!m_suggested_name.isEmpty()) {
+        dlg->selectFile(m_suggested_name);
     }
 
     // Keep the chooser tied to the window that asked for it, so a compositor
@@ -136,13 +185,63 @@ void QmlFileDialog::open()
         }
     }
 
+    const QPointer<QmlFileDialog> guard{this};
     dlg->open();
-    Q_EMIT visibleChanged();
+    if (guard && m_active) Q_EMIT visibleChanged();
+    return true;
 }
 
 void QmlFileDialog::close()
 {
-    if (m_dialog) {
-        m_dialog->close();
+    dismiss(true);
+}
+
+void QmlFileDialog::dismiss(bool notify)
+{
+    if (m_finishing) m_cancelled = true;
+    if (!m_active) return;
+    const QPointer<QmlFileDialog> guard{this};
+    const bool previous_finishing = m_finishing;
+    m_finishing = true;
+    const auto restore = qScopeGuard([guard, identity = this, previous_finishing] {
+        if (ActiveChooser == identity) ActiveChooser.clear();
+        if (guard) guard->m_finishing = previous_finishing;
+    });
+    m_active = false;
+    const auto native = m_dialog;
+    m_dialog.clear();
+    if (native) { native->close(); native->deleteLater(); }
+    if (notify) {
+        Q_EMIT visibleChanged();
+        if (guard) Q_EMIT rejected();
     }
+}
+
+void QmlFileDialog::finish(quint64 ticket, const QPointer<QFileDialog>& native, bool accepted)
+{
+    if (!m_active || ticket != m_ticket || native != m_dialog) return;
+    const QPointer<QmlFileDialog> guard{this};
+    m_finishing = true;
+    m_cancelled = false;
+    const auto restore = qScopeGuard([guard, identity = this] {
+        if (ActiveChooser == identity) ActiveChooser.clear();
+        if (guard) guard->m_finishing = false;
+    });
+    if (accepted) {
+        setSelectedFile(native->selectedUrls().value(0));
+        // A binding may close the view, replace its context or destroy this
+        // object during selectedFileChanged. That retires this same request.
+        if (!guard || !m_active || ticket != m_ticket || native != m_dialog) return;
+    }
+    m_active = false;
+    m_dialog.clear();
+    if (native) native->deleteLater();
+    Q_EMIT visibleChanged();
+    if (!guard) return;
+    if (accepted && !m_cancelled && m_enabled && !m_selected_file.isEmpty()) {
+        const auto file = m_selected_file;
+        const auto context = m_request_context;
+        Q_EMIT chosen(context, file);
+        if (guard && !m_cancelled && m_enabled) Q_EMIT this->accepted();
+    } else Q_EMIT rejected();
 }

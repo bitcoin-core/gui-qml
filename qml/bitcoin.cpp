@@ -61,6 +61,7 @@
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
+#include <qml/models/sendimportmodel.h>
 #include <qml/models/blockclockmodel.h>
 #include <qml/models/blockclockhistory.h>
 #include <qml/models/chainmodel.h>
@@ -113,6 +114,7 @@
 #include <qml/models/walletcreationmodel.h>
 #include <qml/models/walletoperationpresentationmodel.h>
 #include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletimporttarget.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 #include <qml/models/fileexportoperation.h>
 #include <qml/walletqmlcontroller.h>
@@ -445,10 +447,15 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterType<MonospaceOutputModel>("org.bitcoincore.qt", 1, 0, "MonospaceOutputModel");
     qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
     qmlRegisterType<BitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
+    qmlRegisterUncreatableType<ImportOperation>("org.bitcoincore.qt", 1, 0, "ImportOperation", "An import owned by its source");
+    qmlRegisterUncreatableType<ImportTarget>("org.bitcoincore.qt", 1, 0, "ImportTarget", "A send draft");
+    qmlRegisterType<SendImportModel>("org.bitcoincore.qt", 1, 0, "SendImportModel");
 #ifdef ENABLE_WALLET
     qmlRegisterUncreatableType<PaymentImportOperation>("org.bitcoincore.qt", 1, 0, "PaymentImportOperation", "Owned by an import request");
+    qmlRegisterType<WalletImportTarget>("org.bitcoincore.qt", 1, 0, "WalletImportTarget");
 #else
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "PaymentImportOperation", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletImportTarget", "Wallet support is not compiled");
 #endif
     qmlRegisterType<ExactTextDocument>("org.bitcoincore.qt", 1, 0, "ExactTextDocument");
     qmlRegisterUncreatableType<TextEditSessionModel>("org.bitcoincore.qt", 1, 0, "TextEditSessionModel", "Owned by an editor factory");

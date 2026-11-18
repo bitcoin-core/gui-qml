@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include <algorithm>
+
 namespace {
 BitcoinUriParseResult BuildError(const QString& message)
 {
@@ -94,4 +96,17 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
 
     result.success = true;
     return result;
+}
+
+bool BitcoinUri::PasteProvenance(const QString& previous, const QString& current, const QString& clipboard)
+{
+    if (clipboard.isEmpty() || previous == current || current.size() < clipboard.size()) return false;
+    const auto unchanged = current.size() - clipboard.size();
+    if (unchanged > previous.size()) return false;
+    qsizetype prefix{0}, suffix{0};
+    while (prefix < std::min(previous.size(), current.size()) && previous[prefix] == current[prefix]) ++prefix;
+    while (suffix < std::min(previous.size(), current.size()) && previous[previous.size() - suffix - 1] == current[current.size() - suffix - 1]) ++suffix;
+    const auto lower = std::max<qsizetype>(0, unchanged - suffix), upper = std::min(prefix, unchanged);
+    const auto found = current.indexOf(clipboard, lower);
+    return lower <= upper && found >= 0 && found <= upper;
 }

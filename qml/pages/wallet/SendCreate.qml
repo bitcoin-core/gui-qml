@@ -71,7 +71,7 @@ PageStack {
     }
 
     function confirmTransactionReview() {
-        if (!root.wallet || !root.wallet.available || sendPage.uriActionPending) return
+        if (!root.wallet || !root.wallet.available || sendPage.imports.pending) return
         if (root.wallet.sendDraftSweepsWallet) {
             reviewSweepAlert.draftRevision = root.draftRevision
             reviewSweepAlert.open()
@@ -86,7 +86,7 @@ PageStack {
     property int preparationHiddenCount: -1
 
     function prepareTransactionForReview() {
-        if (!root.wallet || !root.wallet.available || root.wallet.preparationBusy || sendPage.uriActionPending) return
+        if (!root.wallet || !root.wallet.available || root.wallet.preparationBusy || sendPage.imports.pending) return
         root.clearPrepareTransactionError()
         preparationWallet = root.wallet
         preparationDraftRevision = root.draftRevision
@@ -140,24 +140,12 @@ PageStack {
     }
 
     function acceptDesktopImport(mailbox: DesktopIntentModel): bool {
-        if (!mailbox || !root.visible || !root.wallet || !root.wallet.available || !root.recipient
-                || root.wallet.recipients.importPending) return false
-        const originalWallet = root.wallet
-        const originalRecipient = root.recipient
-        sendPage.cancelUriAction()
-        if (root.wallet !== originalWallet || root.recipient !== originalRecipient || !root.visible) return false
-        const operation = mailbox.takeInspection(sendPage)
-        if (!operation) return false
-        sendPage.m_importOperation = operation
-        sendPage.m_importWallet = originalWallet
-        sendPage.m_importSource = qsTr("desktop")
-        if (root.wallet !== originalWallet || root.recipient !== originalRecipient || !root.visible || !originalWallet.available) {
-            operation.cancel()
-            return false
-        }
-        operation.chooseTarget(originalWallet, originalRecipient)
-        operation.use()
-        return true
+        const imports = sendPage.imports
+        if (!mailbox || !imports.canAccept) return false
+        // Taking the inspection can change the selection; the import then
+        // belongs to no draft and is cancelled.
+        const context = imports.context
+        return imports.acceptImport(mailbox.takeInspection(imports), context)
     }
 
     function openPsbtFileImport() {
@@ -171,10 +159,9 @@ PageStack {
     onDraftRevisionChanged: if (sendPage && reviewSweepAlert) root.draftChanged()
 
     function draftChanged() {
-        if (!(root.wallet && root.wallet.recipients.importPending)) sendPage.cancelUriIntents()
+        sendPage.imports.draftChanged()
         root.preparingReview = false
         reviewSweepAlert.close()
-        sendPage.checkClipboard()
     }
 
     // Counts how often this page was hidden. A deferred open is dropped if
@@ -201,7 +188,7 @@ PageStack {
         root.wallet.coinsListModel.update()
         root.clearPrepareTransactionError()
         sendPage.expandedRecipient = 0
-        sendPage.m_importAdmissionError = ""
+        sendPage.imports.clearStatus()
     }
 
     function displayTransactionError(error) {
@@ -222,28 +209,18 @@ PageStack {
         sendPage.expandedRecipient = index
     }
 
-    // Re-check the clipboard whenever the Send tab becomes visible so the
-    // banner appears even if the URI was copied before navigating here.
     onVisibleChanged: {
-        if (visible) {
-            sendPage.checkClipboard()
-        } else {
+        if (!visible) {
             root.hiddenCount++
-            sendPage.cancelUriIntents()
             reviewSweepAlert.close()
         }
     }
     onWalletChanged: {
-        sendPage.cancelUriIntents()
         reviewSweepAlert.close()
         if (transactionReviewPopup.opened) {
             transactionReviewPopup.close()
         }
         root.pop()
-        // Clear URI import state so stale results from the previous wallet
-        // are not shown when this page is pointed at another wallet.
-        sendPage.m_importAdmissionError = ""
-        paymentUriOverwritePopup.close()
     }
 
     Connections {
@@ -256,7 +233,6 @@ PageStack {
                 root.wallet.scheduleFeeEstimates()
             }
         }
-        function onValidationChanged() { if (!root.wallet.recipients.importPending) sendPage.checkClipboard() }
         function onCountChanged() {
             root.draftChanged()
             root.clearPrepareTransactionError()
@@ -268,14 +244,10 @@ PageStack {
             if (root.wallet && !root.wallet.maximumRecipient) reviewSweepAlert.close()
         }
         function onCurrentRecipientChanged() {
-            if (sendPage.m_importOperation) sendPage.cancelUriAction()
             root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
-            sendPage.m_importAdmissionError = ""
             sendPage.expandedRecipient = root.wallet.recipients.currentIndex - 1
-            sendPage.checkClipboard()
-            paymentUriOverwritePopup.close()
         }
     }
 
@@ -289,9 +261,8 @@ PageStack {
 
     Connections {
         target: root.wallet
-        function onCurrentTransactionChanged() { reviewSweepAlert.close(); sendPage.presentImportedReview() }
+        function onCurrentTransactionChanged() { reviewSweepAlert.close() }
         function onPreparationChanged() { root.handlePreparationOutcome() }
-        function onAvailableChanged() { if (!root.wallet.available) sendPage.cancelUriIntents() }
         function onPsbtActionChanged() { root.handlePsbtOutcome() }
         function onMaximumRecipientChanged() { root.draftChanged() }
         function onCustomFeeEnabledChanged() {
@@ -347,11 +318,7 @@ PageStack {
 
         function openPsbtFileImport() {
             sendOptionsPopup.close()
-            cancelUriAction()
-            m_importWallet = root.wallet
-            m_importSource = qsTr("file")
-            m_importOperation = BitcoinUri.captureImport(root.wallet, root.recipient, sendPage)
-            if (m_importOperation) psbtOpenDialog.open()
+            if (imports.beginFileChoice()) psbtOpenDialog.open()
         }
 
         Popup {
@@ -504,12 +471,9 @@ PageStack {
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-            contextObject: sendPage.m_importOperation
+            contextObject: sendPage.imports.operation
             enabled: root.visible && root.wallet !== null && root.wallet.available && !root.wallet.psbtActionBusy
-            onChosen: (context, file) => {
-                const original = context as PaymentImportOperation
-                if (original && original === sendPage.m_importOperation && original.requestFile(file)) original.use()
-            }
+            onChosen: (context, file) => sendPage.imports.chooseFile(context as ImportOperation, file)
         }
 
         // Kept hidden so functional tests can inject a PSBT path until the
@@ -560,116 +524,20 @@ PageStack {
             }
         }
 
-        // URI import state
-        property string m_importAdmissionError: ""
-        readonly property string paymentRequestStatus: m_importOperation
-            ? (m_importOperation.error.length > 0 ? m_importOperation.error
-                : m_importOperation.state === PaymentImportOperation.Applied ? qsTr("Payment request imported from %1").arg(m_importSource) : "")
-            : m_importAdmissionError
-        readonly property bool paymentRequestIsError: m_importOperation ? m_importOperation.error.length > 0 : m_importAdmissionError.length > 0
-        readonly property string paymentRequestMessage: m_importOperation
-            ? (m_importOperation.state === PaymentImportOperation.Applied ? m_importOperation.message : "") : ""
-
-        // Native clipboard capture and immutable Domain probe outcomes belong
-        // to the original wallet, recipient, draft and editor selection.
-        readonly property bool showClipboardUriBanner: root.visible && m_clipboardOperation !== null
-            && m_clipboardWallet !== null && m_clipboardWallet.available
-            && m_clipboardOperation.state === PaymentImportOperation.Inspecting
-            && m_clipboardOperation.sourceKind === PaymentImportOperation.PaymentSource
-            && m_clipboardOperation.canApply && !m_clipboardOperation.matchesExistingRequest
-            && root.wallet === m_clipboardWallet && root.recipient === m_clipboardRecipient
-            && root.draftRevision === m_clipboardRevision && root.hiddenCount === m_clipboardHidden
-            && Clipboard.revision === m_clipboardCounter
-        readonly property string m_pendingClipboardUri: showClipboardUriBanner ? m_clipboardText : ""
-        property PaymentImportOperation m_importOperation: null
-        property WalletQmlModel m_importWallet: null
-        property string m_importSource: ""
-        property string m_importPresentedResult: ""
-        readonly property string importError: m_importOperation ? m_importOperation.error : ""
-        property PaymentImportOperation m_clipboardOperation: null
-        property WalletQmlModel m_clipboardWallet: null
-        property SendRecipient m_clipboardRecipient: null
-        property string m_clipboardRevision: ""
-        property int m_clipboardHidden: -1
-        property double m_clipboardCounter: -1
-        property string m_clipboardText: ""
-        readonly property bool uriActionPending: m_importOperation !== null && m_importOperation.pending
-
-        Connections {
-            target: sendPage.m_importOperation
-            function onChanged() {
-                const operation = sendPage.m_importOperation
-                if (!operation) return
-                if (operation.promptToken) paymentUriOverwritePopup.open()
-                sendPage.presentImportedReview()
-            }
-        }
-        function presentImportedReview() {
-            const operation = m_importOperation
-            if (!operation || operation.state !== PaymentImportOperation.ReviewOpened || !m_importWallet
-                    || root.wallet !== m_importWallet || !m_importWallet.available
-                    || m_importWallet.importedReviewToken !== operation.resultToken || m_importPresentedResult === operation.resultToken) return
-            m_importPresentedResult = operation.resultToken
-            root.openTransactionReview()
-        }
-        function cancelUriAction() {
-            const operation = m_importOperation
-            m_importOperation = null
-            m_importWallet = null
-            m_importPresentedResult = ""
-            paymentUriOverwritePopup.close()
-            if (operation) operation.cancel()
-        }
-        function cancelUriIntents() {
-            cancelUriAction()
-            if (m_clipboardOperation) m_clipboardOperation.cancel()
-            m_clipboardOperation = null
-        }
-        // A payment URI pasted into a field of `recipient`. That field's own
-        // value is not a conflict when the request replaces it.
-        function importPastedUri(field, text, recipient) {
-            cancelUriAction()
-            if (!root.visible || !root.wallet || !root.wallet.available || !recipient) return
-            m_importWallet = root.wallet
-            m_importSource = qsTr("clipboard")
-            m_importOperation = BitcoinUri.requestImportPaste(text, field, m_importWallet, recipient, sendPage)
-            if (m_importOperation) m_importOperation.use()
-            else m_importAdmissionError = qsTr("Payment URI services are unavailable. Try again.")
-        }
-        function checkClipboard() {
-            if (m_clipboardOperation) m_clipboardOperation.cancel()
-            m_clipboardOperation = null
-            if (!root.visible || !root.wallet || !root.wallet.available || !root.recipient || root.wallet.recipients.importPending) return
-            m_clipboardWallet = root.wallet
-            m_clipboardRecipient = root.recipient
-            m_clipboardRevision = root.draftRevision
-            m_clipboardHidden = root.hiddenCount
-            m_clipboardText = Clipboard.text()
-            m_clipboardCounter = Clipboard.revision
-            m_clipboardOperation = BitcoinUri.requestImportText(m_clipboardText, m_clipboardWallet, m_clipboardRecipient, sendPage)
-        }
-
-        // Parse a URI from text and apply to form.
-        function applyPaymentRequestFromText(text, source) {
-            cancelUriAction()
-            m_importWallet = root.wallet; m_importSource = source
-            m_importOperation = BitcoinUri.requestImportText(text, m_importWallet, root.recipient, sendPage)
-            if (m_importOperation) m_importOperation.use()
-            else { m_importAdmissionError = qsTr("Payment URI services are unavailable. Try again.") }
-        }
-
-        function applyPaymentRequestFromFile(path) {
-            cancelUriAction()
-            m_importWallet = root.wallet; m_importSource = qsTr("file")
-            m_importOperation = BitcoinUri.requestImportFile(path, m_importWallet, root.recipient, sendPage)
-            if (m_importOperation) m_importOperation.use()
-            else { m_importAdmissionError = qsTr("Payment URI services are unavailable. Try again.") }
+        // Payment request and PSBT imports into this wallet's draft.
+        readonly property SendImportModel imports: SendImportModel {
+            objectName: "sendImportModel"
+            target: WalletImportTarget { wallet: root.wallet; uri: BitcoinUri }
+            active: root.visible
+            clipboardText: Clipboard.currentText
+            onReviewReady: root.openTransactionReview()
         }
 
         AlertPopup {
             id: paymentUriOverwritePopup
             objectName: "sendPaymentUriOverwritePopup"
             parent: Overlay.overlay
+            visible: sendPage.imports.confirmationRequired
             title: qsTr("Replace payment details?")
             message: qsTr("The payment request differs from the current draft. Replace the payment details?")
             messageObjectName: "sendPaymentUriOverwriteMessage"
@@ -679,52 +547,16 @@ PageStack {
                 role: AlertAction.Cancel
                 buttonObjectName: "sendPaymentUriOverwriteCancelButton"
                 closesPopup: false
-                onTriggered: {
-                    sendPage.cancelUriAction()
-                }
+                onTriggered: sendPage.imports.cancel()
             }
 
             AlertAction {
                 text: qsTr("Replace")
                 buttonObjectName: "sendPaymentUriOverwriteConfirmButton"
                 closesPopup: false
-                onTriggered: {
-                    if (sendPage.m_importOperation) sendPage.m_importOperation.replace(sendPage.m_importOperation.promptToken)
-                    paymentUriOverwritePopup.close()
-                }
+                onTriggered: sendPage.imports.replace()
             }
         }
-
-        Connections {
-            target: Clipboard
-            function onDataChanged() { sendPage.checkClipboard() }
-        }
-
-        // Capture a fresh observation after local input. Public metadata
-        // equality is decided by the original target on Domain.
-        Connections {
-            target: root.recipient.address
-            function onAddressChanged() {
-                if (root.recipient.address.address === "") {
-                    sendPage.m_importAdmissionError = ""
-                }
-                sendPage.checkClipboard()
-            }
-        }
-        Connections {
-            target: root.recipient.amount
-            function onAmountChanged() {
-                sendPage.checkClipboard()
-            }
-        }
-        Connections {
-            target: root.recipient
-            function onLabelChanged() { sendPage.checkClipboard() }
-            function onMessageChanged() { sendPage.checkClipboard() }
-            function onPaymentRequestChanged() { sendPage.checkClipboard() }
-        }
-
-        Component.onCompleted: sendPage.checkClipboard()
 
         Connections {
             target: sendOptionsPopup
@@ -761,7 +593,7 @@ PageStack {
                 text: qsTr("Apply")
                 buttonObjectName: "sendUriImportApplyButton"
                 enabled: uriImportInput.text.trim().length > 0
-                onTriggered: sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
+                onTriggered: sendPage.imports.importText(uriImportInput.text, SendImportModel.ManualEntry)
             }
         }
 
@@ -771,12 +603,8 @@ PageStack {
             anchors.fill: parent
             keys: ["text/uri-list", "text/plain"]
             onDropped: (drop) => {
-                sendPage.cancelUriAction()
-                sendPage.m_importWallet = root.wallet
-                sendPage.m_importSource = qsTr("drag and drop")
-                sendPage.m_importOperation = BitcoinUri.requestImportDrop(drop.hasUrls ? drop.urls.length : 0,
-                    drop.hasUrls && drop.urls.length ? drop.urls[0] : "", drop.hasUrls ? "" : drop.text, root.wallet, root.recipient, sendPage)
-                if (sendPage.m_importOperation) sendPage.m_importOperation.use()
+                sendPage.imports.importDrop(drop.hasUrls ? drop.urls.length : 0,
+                    drop.hasUrls && drop.urls.length ? drop.urls[0] : "", drop.hasUrls ? "" : drop.text)
             }
         }
 
@@ -904,15 +732,15 @@ PageStack {
                                         wallet: root.wallet
                                         width: recipientColumn.width
                                         expanded: sendPage.expandedRecipient === recipientDelegate.index
-                                        clipboardRequest: sendPage.showClipboardUriBanner
-                                        clipboardText: sendPage.m_pendingClipboardUri
+                                        clipboardRequest: sendPage.imports.clipboardOffered
+                                        clipboardText: sendPage.imports.offeredText
                                         onToggleExpanded: {
                                             const wasExpanded = recipientDelegate.expanded
                                             root.wallet.recipients.setCurrentIndex(recipientDelegate.index)
                                             sendPage.expandedRecipient = wasExpanded ? -1 : recipientDelegate.index
                                         }
                                         onPaymentUriPasted: function(field, text) {
-                                            sendPage.importPastedUri(field, text, recipientDelegate.editorItem ? recipientDelegate.editorItem.recipient : root.recipient)
+                                            sendPage.imports.importPaste(field, text, recipientDelegate.editorItem ? recipientDelegate.editorItem.recipient : null)
                                         }
                                         onEdited: {
                                             root.draftChanged()
@@ -925,9 +753,9 @@ PageStack {
                             }
                             CoreText {
                                 objectName: "sendPaymentRequestStatusText"
-                                visible: sendPage.importError.length > 0 || (sendPage.paymentRequestIsError && sendPage.paymentRequestStatus.length > 0)
+                                visible: sendPage.imports.statusIsError && sendPage.imports.status.length > 0
                                 Layout.leftMargin: 16; Layout.rightMargin: 16
-                                Layout.fillWidth: true; text: sendPage.importError.length > 0 ? sendPage.importError : sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
+                                Layout.fillWidth: true; text: sendPage.imports.status; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
                             }
 
                             NeutralButton {
@@ -1023,7 +851,7 @@ PageStack {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true
                                 text: qsTr("Review transaction")
-                                enabled: !sendPage.uriActionPending && root.wallet && root.wallet.available && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending && !root.wallet.preparationBusy && !root.wallet.fees.policyPending && !root.wallet.customFeeTargetPending && !root.wallet.coinSelectionPending && !root.wallet.coinSelectionBlocked
+                                enabled: !sendPage.imports.pending && root.wallet && root.wallet.available && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending && !root.wallet.preparationBusy && !root.wallet.fees.policyPending && !root.wallet.customFeeTargetPending && !root.wallet.coinSelectionPending && !root.wallet.coinSelectionBlocked
                                     && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.maximumRecipient || root.wallet.fees.errorText.length === 0) && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: root.confirmTransactionReview()
                             }
@@ -1053,7 +881,7 @@ PageStack {
                     Button {
                         objectName: "sendApplyPaymentRequestFilePathButton"
                         visible: false
-                        onClicked: sendPage.applyPaymentRequestFromFile(fileImportPathInput.text)
+                        onClicked: sendPage.imports.importFile(fileImportPathInput.text)
                     }
 
                     TextField {
@@ -1065,11 +893,11 @@ PageStack {
                     Button {
                         objectName: "sendApplyDropUriButton"
                         visible: false
-                        onClicked: sendPage.applyPaymentRequestFromText(dropUriInput.text, qsTr("drag and drop"))
+                        onClicked: sendPage.imports.importText(dropUriInput.text, SendImportModel.DragAndDrop)
                     }
 
                     // Exercises the DropArea hasUrls + file:// branch.
-                    // Passes the raw URL to applyPaymentRequestFromFile so C++
+                    // Passes the raw URL to importFile so C++
                     // handles the platform-correct toLocalFile() conversion.
                     TextField {
                         id: dropFileUrlInput
@@ -1083,9 +911,9 @@ PageStack {
                         onClicked: {
                             const url = dropFileUrlInput.text
                             if (url.startsWith("file://")) {
-                                sendPage.applyPaymentRequestFromFile(url)
+                                sendPage.imports.importFile(url)
                             } else {
-                                sendPage.applyPaymentRequestFromText(url, qsTr("drag and drop"))
+                                sendPage.imports.importText(url, SendImportModel.DragAndDrop)
                             }
                         }
                     }

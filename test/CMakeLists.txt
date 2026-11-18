@@ -81,6 +81,7 @@ add_executable(bitcoinqml_unit_tests
   test_blockclockmodel.cpp
   test_bitcoinuri.cpp
   test_bitcoinurimodel.cpp
+  test_sendimportmodel.cpp
   test_qmlfiledialog.cpp
   test_bitcoinamount.cpp
   test_debuglogmodel.cpp
@@ -286,6 +287,9 @@ add_executable(bitcoinqml_qmltests
   qmlcoverage.cpp
   mocks/receiveqmlfixture.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/messagesigningprompt.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportports.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/sendimportmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/exacttextdocument.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/exacttextdocument.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/texteditsessionmodel.cpp
