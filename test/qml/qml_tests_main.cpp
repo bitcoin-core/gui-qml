@@ -1220,6 +1220,9 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastTemplateRequestId MEMBER m_last_template_request_id NOTIFY lastTemplateRequestIdChanged)
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
     Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
+    Q_PROPERTY(QString rebroadcastResponse MEMBER m_rebroadcast_response NOTIFY walletInfoChanged)
+    Q_PROPERTY(QString lastRebroadcastTxid MEMBER m_last_rebroadcast_txid NOTIFY lastRebroadcastTxidChanged)
+    Q_PROPERTY(int rebroadcastTransactionCalls MEMBER m_rebroadcast_transaction_calls NOTIFY rebroadcastTransactionCallsChanged)
 
 public:
     enum class KeyScheme {
@@ -1252,6 +1255,9 @@ public:
     QString m_last_removed_request_id;
     bool m_remove_receive_request_result{true};
     bool m_receive_request_reconciliation_pending{false};
+    QString m_rebroadcast_response;
+    QString m_last_rebroadcast_txid;
+    int m_rebroadcast_transaction_calls{0};
     QString m_saved_payment_request_label;
     QString m_saved_payment_request_message;
     QString m_saved_payment_request_note_self;
@@ -1674,6 +1680,17 @@ public:
         Q_EMIT lastRemovedRequestIdChanged();
         return true;
     }
+    Q_INVOKABLE QString rebroadcastTransaction(const QString& txid)
+    {
+        ++m_rebroadcast_transaction_calls;
+        m_last_rebroadcast_txid = txid;
+        Q_EMIT lastRebroadcastTxidChanged();
+        Q_EMIT rebroadcastTransactionCallsChanged();
+        QMetaObject::invokeMethod(this, [this, txid, res = m_rebroadcast_response] {
+            Q_EMIT transactionRebroadcastFinished(txid, res);
+        }, Qt::QueuedConnection);
+        return QString{};
+    }
 
 Q_SIGNALS:
     void availableChanged();
@@ -1713,6 +1730,9 @@ Q_SIGNALS:
     void lastRemovedRequestIdChanged();
     void removeReceiveRequestResultChanged();
     void receiveRequestReconciliationPendingChanged();
+    void lastRebroadcastTxidChanged();
+    void rebroadcastTransactionCallsChanged();
+    void transactionRebroadcastFinished(const QString& txid, const QString& error);
 
 private:
     void setTransactionStatus(const QString& error, bool needs_unlock)

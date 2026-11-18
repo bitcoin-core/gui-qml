@@ -228,6 +228,11 @@ public:
     void commitTransaction(CTransactionRef, const std::vector<std::string>&) override {}
     bool transactionCanBeAbandoned(const Txid&) override { return false; }
     bool abandonTransaction(const Txid&) override { return false; }
+    bool transactionCanBeBroadcast(const Txid&) override { return false; }
+    util::Expected<void, wallet::WalletError> rebroadcastTransaction(const Txid&) override
+    {
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated("not implemented")}};
+    }
     bool transactionCanBeBumped(const Txid&) override { return false; }
     bool createBumpTransaction(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&) override
     {

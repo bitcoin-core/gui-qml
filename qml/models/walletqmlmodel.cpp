@@ -3015,6 +3015,44 @@ void WalletQmlModel::discardCurrentTransaction()
     }
 }
 
+QString WalletQmlModel::rebroadcastTransaction(const QString& txid)
+{
+    if (!available()) {
+        return tr("The wallet is not available.");
+    }
+    const auto txid_opt{Txid::FromHex(txid.toStdString())};
+    if (!txid_opt.has_value()) {
+        return tr("Could not parse transaction id: %1").arg(txid);
+    }
+
+    const auto Work{[w = m_wallet, t = txid_opt.value()] {
+        const auto result{w->rebroadcastTransaction(t)};
+        return result ? QString{} : LocalizedString(result.error().message);
+    }};
+
+    const auto Done{[this, txid](QString error) {
+        Q_EMIT transactionRebroadcastFinished(txid, error);
+    }};
+
+    const auto Failed{[this, txid](std::exception_ptr exception) {
+        QString error{tr("Unexpected exception while rebroadcasting the transaction.")};
+        try {
+            if (exception != nullptr) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const std::exception& e) {
+            error = QString::fromUtf8(e.what());
+        } catch (...) {
+        }
+        Q_EMIT transactionRebroadcastFinished(txid, error);
+    }};
+
+    if (!m_backend_executor->submit(this, std::move(Work), std::move(Done), std::move(Failed))) {
+        return tr("Could not schedule the rebroadcast job in the background.");
+    }
+    return QString{};
+}
+
 bool WalletQmlModel::canBumpTransaction(const uint256& txid) const
 {
     if (!m_wallet) {
