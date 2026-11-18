@@ -255,6 +255,23 @@ AppMode SetupAppMode(bool wallet_enabled)
 
 void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, UrlOpener& url_opener, BitcoinUriModel& bitcoin_uri_model);
 
+// Shows a startup error as an alert inside a window that is already open (the
+// onboarding window) and waits until it is dismissed or the window closes.
+bool StartupErrorInWindow(QQuickWindow& window, const QString& summary, QmlQuitHandler& quit_handler)
+{
+    QQuickItem* content{window.contentItem()};
+    const bool content_enabled{content->isEnabled()};
+    content->setEnabled(true);
+    QEventLoop dialog_loop;
+    QObject::connect(&window, SIGNAL(startupErrorAcknowledged()), &dialog_loop, SLOT(quit()));
+    QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
+    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
+    QMetaObject::invokeMethod(&window, "showStartupError", Q_ARG(QVariant, summary));
+    if (!quit_handler.isQuitRequested()) dialog_loop.exec();
+    content->setEnabled(content_enabled);
+    return false;
+}
+
 bool InitErrorMessageBox(
     const QString& summary, const execution::SnapshotServices& services,
     std::shared_ptr<const startupdiagnostics::Collection> full_message,
@@ -804,6 +821,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         const auto startup_error_reported=std::make_shared<std::atomic_bool>(false);
         const auto wallet_presentation=std::make_shared<std::atomic_bool>(AppMode::walletCompiled());
         bool startup_canceled{false};
+        // Set while the onboarding window is open, so startup errors show inside it.
+        QPointer<QQuickWindow> startup_error_window;
         btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
             [&](const bilingual_str& message, unsigned int style) {
                 const auto origin = QThread::currentThread() == app.thread()
@@ -818,6 +837,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 bool result{false};
                 const auto handle_message = [&] {
                     result = startup::DeliverError(startup_canceled, quit_handler.isQuitRequested(), [&] {
+                        if (startup_error_window) return StartupErrorInWindow(*startup_error_window, error.summary, quit_handler);
                         return InitErrorMessageBox(error.summary, startup_services, error.details, quit_handler,
                             [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); }, nullptr, diagnostic_loss,wallet_presentation->load());
                     });
@@ -1142,8 +1162,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 preparation_finished = true;
                 preparation_loop.quit();
             });
+            startup_error_window = context.window;
             context.onboarding_options_model->prepareNodeAsync(gArgs,{start_preparation,[owner=startup_preparation]{owner->close();}});
             while (!preparation_finished) preparation_loop.exec();
+            startup_error_window.clear();
             QObject::disconnect(visibility_connection);
             QObject::disconnect(preparation_connection);
         } else {
@@ -1169,7 +1191,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             return EXIT_SUCCESS;
         }
         if(preparation.disposition!=startup::preparation::Disposition::Ready){
-            if(preparation.cancelled&&(preparation.closing||startup_canceled||quit_handler.isQuitRequested()))return EXIT_SUCCESS;
+            // Closing the onboarding window, including over a startup error, cancels startup.
+            if(startup_canceled||(preparation.cancelled&&(preparation.closing||quit_handler.isQuitRequested())))return EXIT_SUCCESS;
             if(!preparation.closing&&!preparation.error_reported&&!preparation.error.isEmpty())startup::Run(startup_services,[error=preparation.error]{return InitError(Untranslated(error.toStdString()));});
             return EXIT_FAILURE;
         }
