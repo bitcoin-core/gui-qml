@@ -53,7 +53,7 @@ struct OperationState {
         if (!Pending(current.phase) && services.outcome) services.outcome(current);
         return decision;
     }
-    void consume(Event event)
+    void consume(Event event, const Services::WriteFile& write)
     {
         try {
             if (current.phase != Phase::Writing && services.available && !services.available()) {
@@ -89,7 +89,8 @@ struct OperationState {
                 if (!admission.compare_exchange_strong(expected, Admission::Writing)) { advance(Event::Retire); return; }
                 decision = advance(Event::AdmitWrite);
                 if (decision.effect == Effect::Write) {
-                    const auto result = services.write(current.target, current.destination_approved);
+                    const auto& writer = write ? write : services.write;
+                    const auto result = writer(current.target, current.destination_approved);
                     advance(Event::Written, {}, result);
                 }
             }
@@ -123,7 +124,7 @@ void RequestPromptRetirement(const std::shared_ptr<OperationState>& state)
         if (state->current.phase == Phase::AwaitingConfirmation) state->advance(Event::Retire);
     };
     try {
-        if (state->services.submit) state->services.submit(retire_prompt);
+        if (state->services.submit) state->services.submit([retire_prompt](const Services::WriteFile&) { retire_prompt(); });
         else execution::Submit(*state->services.scheduler, retire_prompt, [] {});
     } catch (...) { }
 }
@@ -146,8 +147,8 @@ bool backup::Operation::start()
     bool expected{false};
     if (!state->started.compare_exchange_strong(expected, true)) return false;
     const auto& services = state->services;
-    if (!services.scheduler || !services.post || !services.wallet_name || !services.inspect || !services.write ||
-        (!services.submit && state->serial == execution::ResourceKey{})) {
+    if (!services.scheduler || !services.post || !services.wallet_name || !services.inspect ||
+        (!services.submit && (!services.write || state->serial == execution::ResourceKey{}))) {
         failBeforeStart(Error::Transport);
         return false;
     }
@@ -180,9 +181,10 @@ bool backup::Operation::submit(Event event)
 {
     const auto state = m_state;
     if (!state || !state->services.scheduler) return false;
-    const auto work = [state, event] { state->consume(event); };
+    const auto work = [state, event](const Services::WriteFile& write) { state->consume(event, write); };
     const auto admission = state->services.submit ? state->services.submit(work)
-        : execution::Submit(*state->services.scheduler, work, [] {}, {}, {execution::Lane::Core, state->serial, execution::WorkClass::Action});
+        : execution::Submit(*state->services.scheduler, [work] { work({}); }, [] {}, {},
+            {execution::Lane::Core, state->serial, execution::WorkClass::Action});
     if (event == Event::Start) {
         state->admitted.store(bool(admission));
         if (!admission) failBeforeStart(Error::Transport);
@@ -211,9 +213,7 @@ void backup::Operation::retire()
     if (!state || !state->admitted.load()) return;
     auto expected = OperationState::Admission::Open;
     if (!state->admission.compare_exchange_strong(expected, OperationState::Admission::Retired)) return;
-    const auto work = [state] { state->consume(Event::Retire); };
-    if (state->services.submit) state->services.submit(work);
-    else execution::Submit(*state->services.scheduler, work, [] {}, {}, {execution::Lane::Core, state->serial, execution::WorkClass::Action});
+    submit(Event::Retire);
 }
 
 bool backup::Operation::retiredBeforeWrite() const

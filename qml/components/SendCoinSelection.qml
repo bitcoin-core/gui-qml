@@ -9,14 +9,21 @@ DialogPopup {
     id: root
     objectName: "coinSelectionPopup"
     property var wallet
+    // The coins of the wallet the dialog opened for; a wallet change while
+    // it is open closes it and cancels that wallet's selection.
     property var editingCoins: null
+    Binding on editingCoins {
+        when: !root.visible
+        value: root.wallet ? root.wallet.coinsListModel : null
+        restoreMode: Binding.RestoreNone
+    }
     //: Title of the manual transaction-input selection dialog.
     title: qsTr("View coins")
     implicitWidth: 1000
     implicitHeight: 800
 
-    onAboutToShow: { editingCoins = wallet.coinsListModel; browser.fallbackTarget = wallet.sendTotalSatoshi; editingCoins.beginSelection(); wallet.scheduleFeeEstimates() }
-    onClosed: { if (editingCoins) editingCoins.cancelSelection(); editingCoins = null }
+    onAboutToShow: { if (editingCoins) editingCoins.beginSelection(); if (wallet) wallet.scheduleFeeEstimates() }
+    onAboutToHide: if (editingCoins) editingCoins.cancelSelection()
     onWalletChanged: if (opened) close()
     contentItem: ColumnLayout {
         spacing: Theme.space.xl

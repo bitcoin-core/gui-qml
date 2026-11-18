@@ -745,17 +745,18 @@ private Q_SLOTS:
         ManualWalletDrain cleanup{commands, &model};
         for (int n{0}; n < 4; ++n) { commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); }
         model.requestClose(); commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-        const auto original_question = model.closeQuestionToken();
-        QVERIFY(!original_question.isEmpty());
+        const QPointer<WalletCloseQuestion> original_question{model.closeQuestion()};
+        QVERIFY(original_question);
         QVERIFY(model.available());
         QVERIFY(model.encryptWallet("secret"));
         original_question->accept();
         commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         QCOMPARE(native->effects, 1);
         QVERIFY(model.available());
-        QVERIFY(!model.closeQuestionToken().isEmpty());
-        QVERIFY(model.closeQuestionToken() != original_question);
-        model.answerClose(original_question, true); commands.drain();
+        QVERIFY(model.closeQuestion());
+        QVERIFY(model.closeQuestion() != original_question);
+        if (original_question) original_question->accept();
+        commands.drain();
         QVERIFY(model.available());
     }
     void retirementClosingDuringStartupDoesNotAcquireNativeOwnership()

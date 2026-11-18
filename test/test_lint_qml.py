@@ -101,6 +101,12 @@ def main():
             'Base { id: root; property PeerSelectionModel selection: null; '
             'property PeerDetailsModel details: root.selection ? root.selection.selectedDetails : null; '
             'property bool connected: root.details ? root.details.connected : false }', 0),
+        "reject-request-ticket-property": (
+            'import "../controls"\nBase { property double sendTicket: 0 }', 1, "sendTicket"),
+        "reject-request-token-property": (
+            'import "../controls"\nBase { property string pendingToken: "" }', 1, "pendingToken"),
+        "readonly-model-token-binding": (
+            'import "../controls"\nBase { readonly property string questionToken: "" }', 0),
         "reject-node-lifecycle-writer": (
             'import org.bitcoincore.qt 1.0\nimport "../controls"\n'
             'Base { id: root; property NodeModel node: null; '

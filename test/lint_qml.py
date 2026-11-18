@@ -8,6 +8,7 @@
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +25,25 @@ def is_qt62_compatibility_note(diagnostic):
     return diagnostic["id"] == "unqualified" and [
         suggestion.get("replacement") for suggestion in diagnostic.get("suggestions", [])
     ] == ["pragma ComponentBehavior: Bound\n"]
+
+
+# A page that stores a request ticket, token or epoch to match a later result
+# is doing a controller's work. See doc/architecture.md: controllers own the
+# operations their page starts, and identity is the object.
+REQUEST_TICKET = re.compile(r"(?<!readonly )(?<![\w.])property[ \t]+(?:double|int|string|var)[ \t]+(\w*(?:Ticket|Token|Epoch))\b")
+
+
+def request_ticket_diagnostics(text):
+    """Writable QML properties that hold a request identity."""
+    diagnostics = []
+    for match in REQUEST_TICKET.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        diagnostics.append({
+            "type": "warning", "id": "app.request-ticket", "line": line, "column": 1,
+            "message": f"Property {match.group(1)} stores a request identity in QML; "
+                       "let a controller own the operation instead (doc/architecture.md)",
+        })
+    return diagnostics
 
 
 def main():
@@ -74,7 +94,10 @@ def main():
         failures = 0
         compatibility_notes = 0
         for entry in report["files"]:
-            entry["filename"] = str(originals.get(Path(entry["filename"]), entry["filename"]))
+            staged = Path(entry["filename"])
+            if staged.suffix == ".qml" and staged.is_file():
+                entry["warnings"].extend(request_ticket_diagnostics(staged.read_text(encoding="utf-8")))
+            entry["filename"] = str(originals.get(staged, entry["filename"]))
             for diagnostic in entry["warnings"]:
                 if is_qt62_compatibility_note(diagnostic):
                     diagnostic["qt62Compatibility"] = True

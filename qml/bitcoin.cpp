@@ -492,6 +492,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterUncreatableType<FeeBumpInterface>("org.bitcoincore.qt", 1, 0, "FeeBumpInterface", "A wallet");
     qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
     qmlRegisterUncreatableType<WalletSecurityModel>("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Owned by a wallet opening");
+    qmlRegisterUncreatableType<WalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Owned by a wallet");
     qmlRegisterUncreatableType<SecurityOperationModel>("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Owned by a security command");
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
                                                "WalletQmlModel cannot be instantiated from QML");
@@ -515,6 +516,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "FeeRateEntry", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SendRecipient", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "BumpTransactionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletPasswordController", "Wallet support is not compiled");

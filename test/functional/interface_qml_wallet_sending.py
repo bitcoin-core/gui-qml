@@ -6,15 +6,41 @@
 
 import base64
 from decimal import Decimal
+from io import BytesIO
+import json
+import sys
 from pathlib import Path
 from qml_scenarios import run_scenarios
 from qml_smoke_lib import (
     create_wallet,
+    save_review_psbt,
+    select_wallet,
     stop_gui_checked,
     wait_until,
     wallet_scenario,
+    wait_review_psbt,
+    wait_review_send,
 )
 from qml_wallet_test_lib import rpc_call
+
+
+def original_review_outputs(gui, expected_count):
+    """Observe complete typed rows of this review, not its graph preview."""
+    page = "sendTransactionReviewPage"
+    gui.wait_for_property(page, "detailsReady", True, timeout_ms=30000)
+    revision = gui.get_property(page, "flowDetails.revision")
+    assert isinstance(revision, int) and revision > 0
+    model = "flowDetails.outputRows"
+    guard = {"revision_property": "flowDetails.revision", "revision": revision}
+    original = gui.get_model_row(page, model, **guard)
+    count = original["rowCount"]
+    assert count == expected_count
+    entries = [gui.get_model_row(page, model, row, "entry", model_id=original["modelId"], expected_rows=count, **guard)["value"]
+               for row in range(count)]
+    assert gui.get_property(page, "flowDetails.revision") == revision
+    assert gui.get_property(page, "detailsContextValid") is True
+    assert gui.get_property(page, "detailsReady") is True
+    return entries
 
 
 def send_receive_smoke(harness, checkpoint):
@@ -81,7 +107,7 @@ def psbt_smoke(harness, checkpoint):
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
     for name in ("signer", "recipient", "reviewer"):
         rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": name})
-    gui.wait_for_property("walletBadge", "text", "reviewer", timeout_ms=30000)
+    select_wallet(gui, "reviewer")
     addresses = [rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="recipient") for _ in range(2)]
     mining_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="signer")
     rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining_address])
@@ -105,6 +131,7 @@ def psbt_smoke(harness, checkpoint):
     gui.wait_for_property("transactionReviewPopup", "opened", True, timeout_ms=30000)
     gui.wait_for_property("sendTransactionReviewRecipient1", "visible", True)
     gui.wait_for_property("sendTransactionReviewSendButton", "enabled", True)
+    gui.wait_for_property("sendTransactionReviewPage", "canBroadcast", True, timeout_ms=30000)
     checkpoint("signed PSBT imported and reviewed")
     gui.click("sendTransactionReviewSendButton")
     gui.wait_for_page("sendCompletePage", timeout_ms=30000)
@@ -129,7 +156,8 @@ def replacement_smoke(harness, checkpoint):
     rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": "receiver"})
     address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="receiver")
     rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": "sender", "passphrase": "replacement password"})
-    gui.wait_for_property("walletBadge", "text", "sender", timeout_ms=30000)
+    # RPC loading publishes a catalog entry; selection is a separate user intent.
+    select_wallet(gui, "sender")
     mining_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="sender")
     rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining_address])
     rpc_call(harness.gui_rpc_port, "walletpassphrase", ["replacement password", 60], wallet="sender")
@@ -167,9 +195,176 @@ def replacement_smoke(harness, checkpoint):
     checkpoint("replacement confirmed")
 
 
+def legacy_fee_matrix(harness, checkpoint, version, confirmed=True):
+    """A real legacy signature survives forged amounts; the GUI must reject them."""
+    # Reuse the pinned Core PSBT parser/serializer without changing its sources.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bitcoin/test/functional"))
+    from test_framework.messages import CTransaction, from_binary
+    from test_framework.psbt import PSBT, PSBT_IN_NON_WITNESS_UTXO, PSBT_IN_WITNESS_UTXO
+
+    harness.start_gui()
+    gui = harness.driver
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
+    for name in ("fee-miner", "fee-foreign", "fee-reviewer"):
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": name})
+    select_wallet(gui, "fee-reviewer")
+    mining = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet="fee-miner")
+    rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining])
+    checked = 0
+    for owned in (0, 1, 2):
+        for forged in (False, True):
+            inputs = []
+            for index in range(2):
+                wallet = "fee-reviewer" if index < owned else "fee-foreign"
+                address = rpc_call(harness.gui_rpc_port, "getnewaddress", ["", "legacy"], wallet=wallet)
+                funding = rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.01], wallet="fee-miner")
+                raw = rpc_call(harness.gui_rpc_port, "gettransaction", [funding], wallet="fee-miner")["hex"]
+                decoded = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [raw])
+                output = next(item for item in decoded["vout"] if item["scriptPubKey"].get("address") == address)
+                inputs.append({"txid": funding, "vout": output["n"]})
+            if confirmed:
+                rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining])
+            # Wallets learn about the funding transactions asynchronously; legacy
+            # inputs can only be signed once each wallet has the previous transaction.
+            rpc_call(harness.gui_rpc_port, "syncwithvalidationinterfacequeue")
+            actual_inputs = sum(Decimal(str(rpc_call(harness.gui_rpc_port, "gettxout", [item["txid"], item["vout"]])["value"])) for item in inputs)
+            actual_fee = actual_inputs - Decimal("0.015")
+            assert actual_fee == Decimal("0.005")
+            outputs = {mining: 0.015}
+            if owned == 2:
+                change = rpc_call(harness.gui_rpc_port, "getrawchangeaddress", wallet="fee-reviewer")
+                outputs = {mining: 0.013, change: 0.002}
+            doc = rpc_call(harness.gui_rpc_port, "createpsbt", [inputs, outputs, 0, False, 2, version])
+            for wallet in ("fee-reviewer", "fee-foreign"):
+                doc = rpc_call(harness.gui_rpc_port, "walletprocesspsbt", [doc, True, "ALL", True, True], wallet=wallet)["psbt"]
+            signed = rpc_call(harness.gui_rpc_port, "finalizepsbt", [doc])
+            assert signed["complete"]
+            control_hex = signed["hex"]
+            decoded_control = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [control_hex])
+            expected_txid = decoded_control["txid"]
+            candidate = PSBT.from_base64(doc)
+            assert candidate.version == version
+            if forged or not confirmed:
+                for index, item in enumerate(candidate.i):
+                    if confirmed and index != 1:
+                        continue
+                    metadata = item.map
+                    previous = from_binary(CTransaction, BytesIO(metadata[PSBT_IN_NON_WITNESS_UTXO]))
+                    utxo = previous.vout[inputs[index]["vout"]]
+                    if forged and index == 1:
+                        utxo.nValue -= 499_999
+                    metadata[PSBT_IN_WITNESS_UTXO] = utxo.serialize()
+                    del metadata[PSBT_IN_NON_WITNESS_UTXO]
+                doc = candidate.to_base64()
+            extracted = rpc_call(harness.gui_rpc_port, "finalizepsbt", [doc])
+            assert extracted["complete"] and extracted["hex"] == control_hex
+            acceptance = rpc_call(harness.gui_rpc_port, "testmempoolaccept", [[control_hex]])[0]
+            assert acceptance["allowed"] and Decimal(str(acceptance["fees"]["base"])) == actual_fee
+            # The counterfeit is a valid payment, rather than a malformed PSBT.
+            path = Path(harness.tmpdir) / f"legacy-v{version}-owned{owned}-{forged}.psbt"
+            path.write_bytes(base64.b64decode(doc))
+            gui.click("sendTabButton")
+            gui.wait_for_page("sendPage")
+            gui.set_text("psbtImportPathField", str(path))
+            gui.click("sendOptionsButton")
+            gui.wait_for_property("sendOptionsPopup", "opened", True)
+            gui.click("sendImportPsbtFromFileButton")
+            gui.wait_for_property("transactionReviewPopup", "opened", True, timeout_ms=30000)
+            gui.wait_for_page("sendTransactionReviewPage")
+            gui.wait_for_property("sendTransactionReviewPage", "importedPsbt", True, timeout_ms=30000)
+            gui.wait_for_property("sendTransactionReviewPage", "feePending", False, timeout_ms=30000)
+            full_outputs = original_review_outputs(gui, len(outputs))
+            graph_outputs = gui.get_property("sendTransactionReviewFlow", "outputEntries")
+            fee_indices = [index for index, entry in enumerate(graph_outputs) if entry.get("kind") == "fee"]
+            assert len(fee_indices) == 1, graph_outputs
+            fee_known = gui.get_property("sendTransactionReviewPage", "wallet.currentTransaction.feeKnown")
+            fee_sat = gui.get_property("sendTransactionReviewPage", "wallet.currentTransaction.feeAmount.satoshi") if fee_known else None
+            fee_entry = graph_outputs[fee_indices[0]]
+            assert fee_entry["amountKnown"] == fee_known
+            assert fee_entry["amountSat"] == fee_sat
+            fee_node = f"transactionFlowOutput_{fee_indices[0]}"
+            gui.wait_for_property(fee_node, "title", "Network fee")
+            gui.wait_for_property(
+                fee_node, "amountText",
+                "Unknown amount" if forged else "0.00500000 BTC",
+            )
+            print("[fee-observation] " + json.dumps({"version": version, "owned_inputs": owned, "forged": forged,
+                  "confirmed": confirmed, "actual_fee_sat": 500000, "summary": gui.get_property("sendTransactionReviewFee", "value"),
+                  "flow_fee_known": fee_known, "flow_fee_sat": fee_sat,
+                  "can_send": gui.get_property("sendTransactionReviewPage", "canSend"),
+                  "can_broadcast": gui.get_property("sendTransactionReviewPage", "canBroadcast")}), flush=True)
+            assert gui.get_property("sendTransactionReviewPage", "wallet.recipients.count") == 1
+            # R21 imported reviews bind every output and deliberately leave
+            # change intent unknown. Retain the independent Core classification
+            # oracle without inferring intent from wallet ownership in the DTO.
+            assert {output["index"] for output in full_outputs} == set(range(len(outputs)))
+            core_change_count = 0
+            for output in full_outputs:
+                index = output["index"]
+                authoritative = decoded_control["vout"][index]
+                assert output["id"] == f"output:{index}", output
+                assert output["address"] == authoritative["scriptPubKey"]["address"], output
+                assert output["amountKnown"] is True, output
+                assert output["amountSat"] == int(Decimal(str(authoritative["value"])) * 100_000_000), output
+                info = rpc_call(harness.gui_rpc_port, "getaddressinfo", [output["address"]], wallet="fee-reviewer")
+                assert (output["ownership"] == "wallet") == info["ismine"], (output, info)
+                core_change_count += bool(info.get("ischange", False))
+                assert output["changeKnown"] is False, output
+                assert output["isChange"] is False, output
+            assert core_change_count == (1 if owned == 2 else 0), full_outputs
+            if forged:
+                assert not fee_known and fee_sat is None
+                assert not gui.get_property("sendTransactionReviewPage", "canSend")
+                assert not gui.get_property("sendTransactionReviewPage", "canBroadcast")
+                assert gui.get_property("sendTransactionReviewFee", "value") == "Unknown"
+                assert gui.get_property("sendTransactionReviewWarning", "visible")
+                # The button is disabled; the wallet must refuse a direct send too.
+                gui.invoke("sendTransactionReviewController", "send")
+                wait_review_send(gui, terminal="Failed")
+                assert gui.get_property("sendTransactionReviewController", "sendError")
+                assert gui.get_property("sendTransactionReviewController", "txid") in (None, "")
+                gui.invoke("sendTransactionReviewController", "broadcast")
+                wait_review_psbt(gui, terminal="Failed")
+                assert gui.get_property("sendTransactionReviewController", "psbtError")
+                assert gui.get_property("sendTransactionReviewController", "psbtTxid") in (None, "")
+                assert expected_txid not in rpc_call(harness.gui_rpc_port, "getrawmempool")
+                # Each ownership row retains its own rejected document. Reusing
+                # a destination would require a separate overwrite approval.
+                exported = Path(harness.tmpdir) / f"rejected-v{version}-owned{owned}.psbt"
+                save_review_psbt(gui, exported)
+                retained = base64.b64encode(exported.read_bytes()).decode("ascii")
+                assert rpc_call(harness.gui_rpc_port, "finalizepsbt", [retained])["hex"] == control_hex
+                gui.click("sendTransactionReviewCloseButton")
+                gui.wait_for_property("transactionReviewPopup", "visible", False)
+                if not confirmed:
+                    rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining])
+            else:
+                assert fee_known and fee_sat == 500000
+                assert gui.get_property("sendTransactionReviewPage", "canBroadcast")
+                assert gui.get_property("sendTransactionReviewFee", "value") == "0.00500000 BTC"
+                gui.click("sendTransactionReviewSendButton")
+                gui.wait_for_page("sendCompletePage", timeout_ms=30000)
+                wait_until(lambda: expected_txid in rpc_call(harness.gui_rpc_port, "getrawmempool"), "authenticated payment")
+                paid = rpc_call(harness.gui_rpc_port, "getmempoolentry", [expected_txid])["fees"]["base"]
+                assert Decimal(str(paid)) == actual_fee
+                rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining])
+                gui.click("sendResultDoneButton")
+                gui.wait_for_property("transactionReviewPopup", "visible", False)
+            checked += 1
+            print("[fee-oracle] " + json.dumps({"version": version, "owned_inputs": owned, "forged": forged,
+                  "actual_fee_sat": int(actual_fee * 100_000_000), "raw_transaction_unchanged": True,
+                  "protected_actions_blocked": forged, "checked": checked}), flush=True)
+    assert checked == 6
+    checkpoint(f"v{version}: all six ownership/metadata combinations verified with independent UTXO and mempool fees")
+
+
 if __name__ == "__main__":
     raise SystemExit(run_scenarios('Sending, PSBT and replacement process journeys', [
         wallet_scenario("encrypted-multinode-send", 6, send_receive_smoke),
         wallet_scenario("signed-foreign-psbt", 7, psbt_smoke),
+        wallet_scenario("legacy-fee-v0", 7, lambda h, c: legacy_fee_matrix(h, c, 0)),
+        wallet_scenario("legacy-fee-v2", 7, lambda h, c: legacy_fee_matrix(h, c, 2)),
+        wallet_scenario("legacy-fee-unconfirmed-v0", 7, lambda h, c: legacy_fee_matrix(h, c, 0, confirmed=False)),
+        wallet_scenario("legacy-fee-unconfirmed-v2", 7, lambda h, c: legacy_fee_matrix(h, c, 2, confirmed=False)),
         wallet_scenario("encrypted-replacement", 7, replacement_smoke),
     ]))

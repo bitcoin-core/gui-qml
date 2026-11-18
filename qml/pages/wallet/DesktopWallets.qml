@@ -540,8 +540,8 @@ WalletShellPage {
         // Old buttons and native callbacks cannot resolve a newer target.
         model: {
             const wallet = ApplicationModels.walletController.closeTarget
-            return wallet && wallet.closeQuestionToken.length > 0
-                ? [{wallet: wallet, token: wallet.closeQuestionToken}] : []
+            return wallet && wallet.closeQuestion
+                ? [{wallet: wallet, question: wallet.closeQuestion}] : []
         }
         delegate: Item {
             id: questionContext
@@ -550,7 +550,7 @@ WalletShellPage {
             AlertPopup {
                 id: closeConfirmationPopup
                 readonly property WalletQmlModel targetWallet: questionContext.modelData.wallet
-                readonly property string questionToken: questionContext.modelData.token
+                readonly property WalletCloseQuestion question: questionContext.modelData.question
                 readonly property string walletName: targetWallet ? targetWallet.displayName : ""
                 objectName: "walletCloseConfirmationPopup"
                 // Keeps the overlay when the page leaves the window. A popup whose parent
@@ -565,12 +565,12 @@ WalletShellPage {
                 title: qsTr("Close wallet")
                 visible: true
                 message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)
-                onClosed: if (targetWallet) targetWallet.answerClose(questionToken, false)
+                onClosed: if (question) question.decline()
                 AlertAction {
                     text: qsTr("Cancel")
                     role: AlertAction.Cancel
                     buttonObjectName: "walletCloseConfirmationCancelButton"
-                    onTriggered: if (closeConfirmationPopup.targetWallet) closeConfirmationPopup.targetWallet.answerClose(closeConfirmationPopup.questionToken, false)
+                    onTriggered: if (closeConfirmationPopup.question) closeConfirmationPopup.question.decline()
                 }
                 AlertAction {
                     text: qsTr("Close wallet")
@@ -578,7 +578,7 @@ WalletShellPage {
                     // Answer before closing: onClosed answers an unanswered question with no.
                     closesPopup: false
                     onTriggered: {
-                        if (closeConfirmationPopup.targetWallet) closeConfirmationPopup.targetWallet.answerClose(closeConfirmationPopup.questionToken, true)
+                        if (closeConfirmationPopup.question) closeConfirmationPopup.question.accept()
                         closeConfirmationPopup.close()
                     }
                 }

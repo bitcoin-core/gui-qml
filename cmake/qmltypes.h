@@ -472,6 +472,13 @@ struct SecurityOperationModelForeign {
     QML_FOREIGN(SecurityOperationModel)
     QML_NAMED_ELEMENT(SecurityOperationModel)
     QML_UNCREATABLE("Owned by a security command")
+struct WalletCloseQuestionForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletCloseQuestion)
+    QML_NAMED_ELEMENT(WalletCloseQuestion)
+    QML_UNCREATABLE("Owned by a wallet")
+};
+
 };
 
 struct WalletQmlModelForeign {

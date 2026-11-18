@@ -152,14 +152,13 @@ def close_wallet(harness, wallet_name):
     gui.click(f"walletSelectActions_{wallet_name}")
     gui.click(f"walletSelectClose_{wallet_name}")
     gui.wait_for_property("walletCloseConfirmationPopup", "opened", True)
-    question = gui.get_property("walletCloseConfirmationPopup", "questionToken")
-    assert question and gui.get_property("walletCloseConfirmationPopup", "targetWallet.name") == wallet_name
-    assert gui.get_property("walletCloseConfirmationPopup", "questionToken") == question
+    assert gui.get_property("walletCloseConfirmationPopup", "targetWallet.name") == wallet_name
+    assert gui.get_property("walletCloseConfirmationPopup", "question.wallet.name") == wallet_name
     gui.click("walletCloseConfirmationConfirmButton")
     def original_question_gone():
         try:
-            # Never answer or dismiss another opening's replacement question.
-            if gui.get_property("walletCloseConfirmationPopup", "questionToken") != question:
+            # Never answer or dismiss another wallet's question.
+            if gui.get_property("walletCloseConfirmationPopup", "targetWallet.name") != wallet_name:
                 return True
             return gui.get_property("walletCloseConfirmationPopup", "visible") is False
         except QmlDriverError as error:

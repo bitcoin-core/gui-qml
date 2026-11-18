@@ -29,6 +29,7 @@ Rectangle {
     readonly property string title: entry.label || (entry.kind === "coinbase" ? qsTr("Block reward")
         : entry.kind === "fee" ? qsTr("Network fee")
         : entry.kind === "output-group" ? qsTr("%1 outputs").arg(entry.outputCount)
+        : entry.kind === "input-group" ? qsTr("%1 inputs").arg(entry.inputCount)
         : entry.kind === "data" ? qsTr("Data output")
         : entry.ownership === "wallet" ? (entry.isChange ? qsTr("Change · %1").arg(walletName) : walletName)
         : input ? qsTr("External input") : qsTr("Recipient"))
@@ -118,7 +119,7 @@ Rectangle {
             visible: !root.entry.address && !root.hasData
             Layout.fillWidth: true
             text: root.entry.kind === "fee" ? qsTr("Total transaction fee")
-                : root.entry.kind === "output-group" ? qsTr("Not wallet-owned")
+                : root.entry.kind === "output-group" || root.entry.kind === "input-group" ? qsTr("Grouped entries")
                 : root.entry.kind === "coinbase" ? qsTr("Newly mined bitcoin")
                 : root.entry.previousTxid ? String(root.entry.previousTxid).substring(0, 8) + "…:" + root.entry.previousOutputIndex
                 : qsTr("No standard address")

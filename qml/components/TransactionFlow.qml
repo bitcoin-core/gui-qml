@@ -27,38 +27,23 @@ FormSection {
     property color feeColor: Theme.color.info
     property color dataColor: Theme.color.neutral8
     property color unknownColor: Theme.color.neutral6
-    readonly property var inputEntries: flow.inputs || []
-    // Select the visible outputs in one binding. Separate group/threshold
-    // bindings can briefly expose every output while a new snapshot arrives.
-    readonly property var outputPresentation: {
-        const snapshot = flow
-        const group = FlowLayout.outputGroup(snapshot.outputs || [])
-        const collapsible = (snapshot.outputs || []).length > 10 && group !== null
-        return { group: group, collapsible: collapsible,
-            entries: FlowLayout.outputs(snapshot, collapsible && !outputsExpanded ? group : null) }
-    }
-    readonly property var nonWalletOutputGroup: outputPresentation.group
-    readonly property bool canCollapseOutputs: outputPresentation.collapsible
-    readonly property var outputEntries: outputPresentation.entries.map(function(entry) {
-        return entry.kind === "output-group" && nonWalletOutputGroup
-            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.localizedDisplayWithUnit : ""}) : entry
-    })
+    readonly property var presentation: flow.presentation || ({})
+    readonly property var inputEntries: presentation.inputs || []
+    readonly property bool canCollapseOutputs: !!presentation.canCollapseOutputs
+    readonly property var outputEntries: (canCollapseOutputs && !outputsExpanded
+        ? presentation.collapsedOutputs : presentation.expandedOutputs) || []
+    readonly property var presentationFacts: (canCollapseOutputs && !outputsExpanded
+        ? presentation.collapsedFacts : presentation.expandedFacts) || ({})
     readonly property real diagramWidth: Math.max(560, width - 48)
     readonly property real inputCardWidth: diagramWidth * 0.35
     readonly property real outputCardWidth: diagramWidth * 0.35
     property var nodeMeasurements: ({ inputs: [], outputs: [] })
     property var ribbonObjects: []
     readonly property var geometry: FlowLayout.calculate(inputEntries, outputEntries,
-        nodeMeasurements.inputs, nodeMeasurements.outputs, diagramWidth, !!flow.complete)
+        nodeMeasurements.inputs, nodeMeasurements.outputs, diagramWidth, presentationFacts)
     signal paymentRequestRequested(string requestId)
     onTransactionIdChanged: outputsExpanded = false
     Component.onDestruction: ribbonInstantiator.active = false
-
-    BitcoinAmount {
-        id: groupedAmount
-        unit: root.displayUnit
-        satoshi: root.nonWalletOutputGroup && root.nonWalletOutputGroup.amountKnown ? root.nonWalletOutputGroup.amountSat : 0
-    }
 
     function updateNodeMeasurements() {
         // Coalesce a layout pass into one geometry update, rather than
@@ -87,13 +72,25 @@ FormSection {
     description: (inputCount === 1 ? qsTr("1 input") : qsTr("%1 inputs").arg(inputCount)) + " · "
         + (outputCount === 1 ? qsTr("1 output") : qsTr("%1 outputs").arg(outputCount))
     descriptionObjectName: "transactionFlowCounts"
-    readonly property int inputCount: flow.inputCount || inputEntries.length
-    readonly property int outputCount: flow.outputCount || (flow.outputs || []).length
+    // Counts describe the whole transaction; the bounded presentation may group entries.
+    readonly property int inputCount: root.presentation.inputCount || 0
+    readonly property int outputCount: root.presentation.outputCount || 0
     headerTrailingItem: LinkButton {
         objectName: "transactionFlowOutputsToggle"
         visible: root.canCollapseOutputs
-        text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
+        text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs")
+            : root.presentation.presentationLimited ? qsTr("Expand output preview") : qsTr("Show all outputs")
         onClicked: root.outputsExpanded = !root.outputsExpanded
+    }
+
+    CoreText {
+        objectName: "transactionFlowPreviewNotice"
+        visible: !!root.presentation.presentationLimited
+        Layout.fillWidth: true
+        text: qsTr("This diagram groups additional entries. Full inputs and outputs are listed in transaction details.")
+        color: Theme.color.neutral7
+        textStyle: Theme.text.caption
+        wrap: true
     }
 
     Item {

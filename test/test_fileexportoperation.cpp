@@ -65,8 +65,8 @@ void UseSerialPromptRetirement(backup::Services& services, std::function<void()>
     const auto scheduler = services.scheduler;
     const auto action_key = scheduler->allocateKey();
     auto after_admission = std::make_shared<std::function<void()>>(std::move(after_first_admission));
-    services.submit = [scheduler, action_key, after_admission](std::function<void()> work) {
-        auto submitted = execution::Submit(*scheduler, std::move(work), [] {}, {},
+    services.submit = [scheduler, action_key, after_admission](backup::Services::Work work) {
+        auto submitted = execution::Submit(*scheduler, [work = std::move(work)] { work({}); }, [] {}, {},
             {execution::Lane::Core, action_key, execution::WorkClass::Action});
         // Model an accepted enqueue whose caller is synchronously closed
         // before submit() returns the admission receipt.
@@ -207,9 +207,9 @@ private Q_SLOTS:
         auto services = fixture.services();
         const auto scheduler = services.scheduler;
         const auto key = scheduler->allocateKey();
-        services.submit = [scheduler, key, accept, &operation](std::function<void()> work) {
+        services.submit = [scheduler, key, accept, &operation](backup::Services::Work work) {
             const auto receipt = accept
-                ? execution::Submit(*scheduler, std::move(work), [] {}, {},
+                ? execution::Submit(*scheduler, [work = std::move(work)] { work({}); }, [] {}, {},
                     {execution::Lane::Core, key, execution::WorkClass::Action})
                 : execution::SubmitResult{{}, execution::Rejection::Transport};
             // Admission may close the public projection before returning its

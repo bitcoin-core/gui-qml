@@ -89,8 +89,8 @@ TestCase {
             verify(popup !== null)
             compare(popup.objectName, "walletCloseConfirmationPopup")
             tryCompare(popup, "opened", true)
-            const originalQuestion = popup.questionToken
-            verify(originalQuestion.length > 0)
+            const originalQuestion = popup.question
+            verify(originalQuestion !== null)
             compare(popup.targetWallet, testWalletModel)
 
             // Hold the old presentation while its original facade is already
@@ -99,10 +99,10 @@ TestCase {
             walletController.setOpenWallets([testSecondWalletModel])
             walletController.setSelectedWalletObject(testSecondWalletModel)
             testSecondWalletModel.requestClose()
-            const replacementQuestion = testSecondWalletModel.closeQuestionToken
-            verify(replacementQuestion.length > 0)
+            const replacementQuestion = testSecondWalletModel.closeQuestion
+            verify(replacementQuestion !== null)
             compare(popup.targetWallet, testWalletModel)
-            compare(popup.questionToken, originalQuestion)
+            compare(popup.question, originalQuestion)
             verify(popup.contentItem !== null)
             // Popup's visual contents are hosted by its popup item. Resolve the
             // actual button in this original popup's content, not its QObject tree.
@@ -111,15 +111,15 @@ TestCase {
             mouseClick(confirm)
             tryCompare(popup, "visible", false)
             compare(walletController.closeWalletCalls, 0)
-            compare(testSecondWalletModel.closeQuestionToken, replacementQuestion)
+            compare(testSecondWalletModel.closeQuestion, replacementQuestion)
             compare(testSecondWalletModel.available, true)
             compare(walletController.selectedWallet, testSecondWalletModel)
         } finally {
             walletController.reset()
             testWalletModel.available = true
-            testWalletModel.closeQuestionToken = ""
+            testWalletModel.clearCloseQuestionForTest()
             testSecondWalletModel.available = true
-            testSecondWalletModel.closeQuestionToken = ""
+            testSecondWalletModel.clearCloseQuestionForTest()
             testSecondWalletModel.name = replacementName
         }
     }

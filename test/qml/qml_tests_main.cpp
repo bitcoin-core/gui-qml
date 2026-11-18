@@ -1743,6 +1743,22 @@ public:
     QAbstractItemModel* inputRows() { return &m_inputs; } QAbstractItemModel* outputRows() { return &m_outputs; }
     QAbstractItemModel* recipientRows() { return &m_recipients; } QAbstractItemModel* entryDocument() { return &m_document; }
     void setSource(QVariantMap flow, QVariantList recipients, QObject* context, quint64 revision) {
+class MockWalletQmlModel;
+//! A wallet's close question. Answering a replaced question does nothing.
+class MockWalletCloseQuestion : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QObject* wallet READ wallet CONSTANT)
+public:
+    explicit MockWalletCloseQuestion(QObject* wallet) : QObject(wallet), m_wallet(wallet) {}
+    QObject* wallet() const { return m_wallet; }
+    Q_INVOKABLE void accept() { answer(true); }
+    Q_INVOKABLE void decline() { answer(false); }
+private:
+    void answer(bool accept);
+    QPointer<QObject> m_wallet;
+};
+
         m_flow = std::move(flow); m_full_recipients = std::move(recipients); m_context = context; m_revision = revision;
         QVariantList inputs, outputs, values;
         for (const auto& row : m_flow.value("inputs").toList()) inputs.append(BoundedFlowEntry(row.toMap()));
@@ -1869,6 +1885,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(qint64 coinSelectionTargetSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QObject* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
@@ -1876,8 +1893,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString displayName MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(bool available MEMBER m_available NOTIFY availableChanged)
     Q_PROPERTY(bool capabilitiesKnown MEMBER m_capabilities_known NOTIFY walletInfoChanged)
-    Q_PROPERTY(int ensureReceivingAddressCalls MEMBER m_ensure_receiving_calls NOTIFY walletInfoChanged)
-    Q_PROPERTY(QString closeQuestionToken MEMBER m_close_question_token NOTIFY closeQuestionChanged)
+    Q_PROPERTY(MockWalletCloseQuestion* closeQuestion MEMBER m_close_question NOTIFY closeQuestionChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(bool balanceKnown MEMBER m_balance_known NOTIFY balanceChanged)
     Q_PROPERTY(qint64 balanceSatoshi MEMBER m_balance_satoshi NOTIFY balanceChanged)
@@ -2123,6 +2139,12 @@ public:
             : m_transaction_needs_unlock ? PreparationNeedsUnlock : PreparationFailed;
         Q_EMIT preparationChanged();
     }
+    Q_INVOKABLE void finishPreparationStaleForTest()
+    {
+        if (!preparationBusy()) return;
+        m_preparation_state = PreparationStale;
+        Q_EMIT preparationChanged();
+    }
     enum ApprovalState { ApprovalInitial, ApprovalWaiting, ApprovalSigned, ApprovalPartiallySigned, ApprovalFailed, ApprovalClosed, ApprovalOtherReview, ApprovalUncertain, ApprovalUnverified };
     Q_ENUM(ApprovalState)
     int m_approval_state{ApprovalInitial};
@@ -2309,10 +2331,8 @@ public:
     bool m_available{true};
     Q_INVOKABLE void closeBeforeAvailabilityNotificationForTest() { m_available = false; }
     Q_INVOKABLE void checkBeforeReconciliationNotificationForTest() { m_receive_request_reconciliation_pending = true; }
-    Q_INVOKABLE MockImageExportOperation* savePaymentRequestImage(MockPaymentRequest*, const QVariant&, const QUrl& path) {
-        auto* operation = new MockImageExportOperation(this); operation->m_path = path; return operation;
-    }
-    QString m_close_question_token;
+    //! The current question. Replaced questions stay alive but inert.
+    QPointer<MockWalletCloseQuestion> m_close_question;
     quint64 m_close_sequence{0};
     QObject* m_transaction_activity_model{nullptr};
     MockFeeBumps* m_fee_bumps{nullptr};
@@ -2403,6 +2423,12 @@ public:
     }
     Q_INVOKABLE void deliverReceiveSelection(bool address_ready, bool request_loaded, const QString& request_id, const QString& error) {
         if (!m_selection_operation) return;
+    Q_INVOKABLE void clearCloseQuestionForTest()
+    {
+        if (!m_close_question) return;
+        m_close_question = nullptr;
+        Q_EMIT closeQuestionChanged();
+    }
         m_selection_operation->m_address_ready = address_ready;
         m_selection_operation->m_loaded = request_loaded; m_selection_operation->m_id = request_id;
         m_selection_operation->m_error = error; m_selection_operation->m_pending = false;
@@ -2436,8 +2462,6 @@ public:
         operation->m_address_ready = true; operation->m_view_revision = m_receiving_address.m_revision;
         return operation;
     }
-    Q_INVOKABLE MockReceiveRequestOperation* ensureReceivingAddressWithPassphrase(const QString&, bool next = false, const QString& type = {})
-    { return ensureReceivingAddress(next, type); }
     Q_INVOKABLE MockReceiveRequestOperation* resumeReceivingAddress(MockReceiveRequestOperation* original, const QString&)
     {
         if (!original) return nullptr;
@@ -2651,6 +2675,11 @@ public:
     {
         ++m_prepare_transaction_calls;
         Q_EMIT prepareTransactionCallsChanged();
+void MockWalletCloseQuestion::answer(bool accept)
+{
+    if (auto* wallet = qobject_cast<MockWalletQmlModel*>(m_wallet)) wallet->answerCloseQuestion(this, accept);
+}
+
         if (m_prepare_transaction_result) {
             setTransactionStatus({}, false);
         } else {
@@ -2686,13 +2715,14 @@ public:
     Q_INVOKABLE void requestClose()
     {
         if (!m_available) return;
-        m_close_question_token = m_name + QStringLiteral(":%1").arg(++m_close_sequence);
+        ++m_close_sequence;
+        m_close_question = new MockWalletCloseQuestion(this);
         Q_EMIT closeQuestionChanged();
     }
-    Q_INVOKABLE void answerClose(const QString& token, bool accept)
+    void answerCloseQuestion(const MockWalletCloseQuestion* question, bool accept)
     {
-        if (!m_available || token.isEmpty() || token != m_close_question_token) return;
-        m_close_question_token.clear();
+        if (!m_available || !question || question != m_close_question) return;
+        m_close_question = nullptr;
         Q_EMIT closeQuestionChanged();
         if (accept) Q_EMIT closeConfirmed();
     }
@@ -2896,6 +2926,7 @@ Q_SIGNALS:
     void availableChanged();
     void nameChanged();
     void balanceChanged();
+    void sentDraftCleared();
     void targetBlocksChanged();
     void customFeeEnabledChanged();
     void customFeeRateChanged();
@@ -3262,7 +3293,6 @@ public:
     MockWalletQmlModel* resultWallet() const { return m_wallet; }
     bool canReconcile() const { return false; }
     Q_INVOKABLE void reconcile() {}
-    Q_PROPERTY(QObject* creation READ creation WRITE setCreation NOTIFY creationChanged)
     bool canOpenResult() const { return m_phase == Succeeded && m_wallet && m_wallet->m_available; }
     QVariantMap error() const { return {{QStringLiteral("message"), m_error.left(1024)}, {QStringLiteral("code"), m_error.isEmpty() ? QString{} : QStringLiteral("FixtureFailure")}, {QStringLiteral("field"), QString{}}, {QStringLiteral("recovery"), m_recovery}}; }
     QVariantMap result() const { return {{QStringLiteral("resultId"), m_id + QStringLiteral(":result")}, {QStringLiteral("warnings"), m_warnings.isEmpty() ? QStringList{} : QStringList{m_warnings.left(1024)}}, {QStringLiteral("warningsTruncated"), m_warnings.size() > 1024}, {QStringLiteral("recoveryPaths"), m_recovery_paths}}; }
@@ -3301,8 +3331,8 @@ private:
 class MockWalletCreationModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QObject* creation READ creation WRITE setCreation NOTIFY creationChanged)
     Q_PROPERTY(MockWalletCreationText* name READ name CONSTANT)
-    void creationChanged();
     Q_PROPERTY(MockWalletCreationText* extendedPublicKey READ extendedPublicKey CONSTANT)
     Q_PROPERTY(QVariantMap error READ error NOTIFY changed)
     Q_PROPERTY(Kind kind READ kind NOTIFY changed)
@@ -3317,7 +3347,6 @@ public:
         connect(&m_name, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
         connect(&m_key, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
         refresh();
-    QPointer<QObject> m_creation;
     }
     MockWalletCreationText* name() { return &m_name; }
     MockWalletCreationText* extendedPublicKey() { return &m_key; }
@@ -3342,6 +3371,7 @@ public:
         Q_EMIT changed(); return submitted;
     }
 Q_SIGNALS:
+    void creationChanged();
     void changed();
 private:
     void refresh() {
@@ -3356,6 +3386,7 @@ private:
         });
     }
     QVariantMap m_error;
+    QPointer<QObject> m_creation;
     Submit m_submit;
     std::function<bool()> m_available;
     MockWalletCreationText m_name{this}, m_key{this};
@@ -3499,18 +3530,6 @@ public:
             if (!m_hold_creation) QTimer::singleShot(0, operation, [this, operation] { if (m_pending_creation == operation) finishCreation(); });
             return operation;
         }, [this] { return m_initialized && (!m_pending_creation || !m_pending_creation->busy()); });
-    Q_PROPERTY(MockWalletOperationModel* loadFailure READ loadFailure NOTIFY loadFailureChanged)
-    MockWalletOperationModel* loadFailure() const { return m_load_failure; }
-    Q_INVOKABLE void dismissLoadFailure() { if (m_load_failure) m_load_failure->deleteLater(); m_load_failure = nullptr; Q_EMIT loadFailureChanged(); }
-    //! Reports that opening \p name failed with \p message.
-    Q_INVOKABLE void failLoadForTest(const QString& name, const QString& message) {
-        auto* failure = new MockWalletOperationModel(QString::number(++m_notice_operation), name, 0, MockWalletOperationModel::Software, false, true, this);
-        failure->setOperationKind(MockWalletOperationModel::Open);
-        failure->complete(nullptr, {}, message, false);
-        if (m_load_failure) m_load_failure->deleteLater();
-        m_load_failure = failure; Q_EMIT loadFailureChanged();
-    }
-    QPointer<MockWalletOperationModel> m_load_failure;
     }
     Q_INVOKABLE void finishCreation(const QString& error = QString(), bool created_artifact = false) {
         if (!m_pending_creation || !m_pending_creation->busy()) return;
@@ -3549,6 +3568,18 @@ public:
     Q_INVOKABLE void refreshSigners() { m_signers->refresh(); }
     //! The mock controller also stands in for its creation controller.
     Q_PROPERTY(QObject* creation READ creation CONSTANT)
+    Q_PROPERTY(MockWalletOperationModel* loadFailure READ loadFailure NOTIFY loadFailureChanged)
+    MockWalletOperationModel* loadFailure() const { return m_load_failure; }
+    Q_INVOKABLE void dismissLoadFailure() { if (m_load_failure) m_load_failure->deleteLater(); m_load_failure = nullptr; Q_EMIT loadFailureChanged(); }
+    //! Reports that opening \p name failed with \p message.
+    Q_INVOKABLE void failLoadForTest(const QString& name, const QString& message) {
+        auto* failure = new MockWalletOperationModel(QString::number(++m_notice_operation), name, 0, MockWalletOperationModel::Software, false, true, this);
+        failure->setOperationKind(MockWalletOperationModel::Open);
+        failure->complete(nullptr, {}, message, false);
+        if (m_load_failure) m_load_failure->deleteLater();
+        m_load_failure = failure; Q_EMIT loadFailureChanged();
+    }
+    QPointer<MockWalletOperationModel> m_load_failure;
     QObject* creation() { return this; }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
@@ -3646,7 +3677,7 @@ public:
         auto* model = qobject_cast<MockWalletQmlModel*>(wallet);
         if (!model || !wallet->property("available").toBool() || !m_open_wallets.contains(wallet)) return;
         QObject::disconnect(m_close_connection);
-        if (m_close_target && m_close_target != wallet) m_close_target->setProperty("closeQuestionToken", QString{});
+        if (m_close_target && m_close_target != wallet) QMetaObject::invokeMethod(m_close_target, "clearCloseQuestionForTest");
         m_close_target = wallet;
         m_close_connection = connect(model, &MockWalletQmlModel::closeConfirmed, this, [this, model] { closeWallet(model->property("name").toString()); });
         Q_EMIT closeTargetChanged();
@@ -3659,7 +3690,6 @@ public:
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
     }
-        dismissLoadFailure();
     Q_INVOKABLE void setInitialized(bool initialized)
     {
         if (m_initialized == initialized) return;
@@ -3687,7 +3717,7 @@ public:
 
         m_pending_creation.clear(); m_hold_creation = false; m_refuse_creation = false; m_creation_calls = 0; m_creation_name.clear(); m_creation_warnings.clear();
         QObject::disconnect(m_close_connection);
-        if (m_close_target) m_close_target->setProperty("closeQuestionToken", QString{});
+        if (m_close_target) QMetaObject::invokeMethod(m_close_target, "clearCloseQuestionForTest");
         m_close_target = nullptr;
         Q_EMIT closeTargetChanged();
         setOpenWallets({});
@@ -3698,6 +3728,7 @@ public:
         m_close_payment_request_detail_requests = 0;
         m_open_receive_requests = 0;
         m_names.reset();
+        dismissLoadFailure();
         clearWalletLoadStatus();
         m_restore = nullptr; m_migration = nullptr; m_restore_source.clear(); m_restore_error.clear(); m_restore_warnings.clear(); m_restore_calls = 0; m_hold_restore = false; m_hold_migration = false;
         m_last_imported_wallet_name.clear();
@@ -3726,13 +3757,6 @@ public:
 Q_SIGNALS:
     void closeTargetChanged();
     void initializedChanged();
-void MockWalletCreationModel::setCreation(QObject* creation)
-{
-    if (m_creation == creation || m_creation) return;
-    m_creation = creation; Q_EMIT creationChanged();
-    if (auto* controller = qobject_cast<MockWalletController*>(creation)) controller->adoptCreation(*this);
-}
-
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
     void walletLoadInProgressChanged();
@@ -3769,6 +3793,13 @@ private:
     QObject* m_close_target{nullptr};
     QMetaObject::Connection m_close_connection;
 };
+
+void MockWalletCreationModel::setCreation(QObject* creation)
+{
+    if (m_creation == creation || m_creation) return;
+    m_creation = creation; Q_EMIT creationChanged();
+    if (auto* controller = qobject_cast<MockWalletController*>(creation)) controller->adoptCreation(*this);
+}
 
 class MockCoreSettingsModel;
 class MockCoreProxyDraft;

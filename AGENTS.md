@@ -17,3 +17,10 @@ Don't take an existing page as design authority; older pages may predate
 design.md. When a correction from a reviewer is a reusable rule, change the
 shared control or propose a focused addition to design.md. Keep page-only
 exceptions local and commented.
+
+## Models, controllers and operations
+
+Before adding or changing a C++ object that QML uses, read
+[doc/architecture.md](doc/architecture.md). It defines models, controllers,
+operations and interfaces, which object owns which state, and how QML binds to
+them and calls their actions.

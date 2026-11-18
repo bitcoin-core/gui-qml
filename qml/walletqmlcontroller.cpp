@@ -596,7 +596,7 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
     host->loadError = [this](const QString& error) { setWalletListError(error); };
     host->forgetCloseTarget = [this](WalletQmlModel* wallet) { const bool target = m_close_target == wallet; if (target) m_close_target = nullptr; return target; };
     host->closeQuestionChanged = [this](WalletQmlModel* wallet) {
-        if (m_close_target == wallet && wallet->closeQuestionToken().isEmpty()) { m_close_target = nullptr; Q_EMIT closeTargetChanged(); }
+        if (m_close_target == wallet && !wallet->closeQuestion()) { m_close_target = nullptr; Q_EMIT closeTargetChanged(); }
     };
     host->prepareForget = [this](WalletQmlModel* wallet) { m_selection->prepareForget(wallet); };
     host->forget = [this](WalletQmlModel* wallet, WalletQmlModel* successor) { m_selection->forget(wallet, successor); };
@@ -702,7 +702,7 @@ void WalletQmlController::requestCloseWallet(WalletQmlModel* wallet)
     const QPointer<WalletQmlController> guard{this};
     const QPointer<WalletQmlModel> original{wallet};
     if (m_close_target != wallet) {
-        if (m_close_target) m_close_target->answerClose(m_close_target->closeQuestionToken(), false);
+        if (m_close_target && m_close_target->closeQuestion()) m_close_target->closeQuestion()->decline();
         if (!guard || !original || !original->available() || m_shutting_down) return;
         m_close_target = wallet;
         Q_EMIT closeTargetChanged();

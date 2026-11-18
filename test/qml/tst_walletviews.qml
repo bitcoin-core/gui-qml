@@ -60,7 +60,8 @@ TestCase {
             originalPopup = questions.count === 1 ? questions.itemAt(0).confirmation : null
             return originalPopup && originalPopup.opened
         })
-        const originalToken = originalPopup.questionToken
+        const originalQuestion = originalPopup.question
+        verify(originalQuestion !== null)
         const oldAction = findChild(originalPopup.contentItem, "walletCloseConfirmationConfirmButton")
         verify(oldAction !== null)
         const next = data.sameOpening ? testWalletModel : testSecondWalletModel
@@ -76,7 +77,7 @@ TestCase {
         })
         compare(currentPopup.targetWallet, next)
         compare(walletController.closeWalletCalls, before)
-        testWalletModel.answerClose(originalToken, true)
+        originalQuestion.accept()
         compare(walletController.closeWalletCalls, before)
         findChild(currentPopup.contentItem, "walletCloseConfirmationConfirmButton").clicked()
         compare(walletController.closeWalletCalls, before + 1)

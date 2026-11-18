@@ -17,17 +17,19 @@
 
 namespace backup {
 struct Services {
+    using WriteFile = std::function<WriteResult(const Proposal&, bool)>;
+    using Work = std::function<void(const WriteFile&)>;
     std::shared_ptr<execution::Scheduler> scheduler;
     std::function<void(std::function<void()>)> post;
     std::function<std::string()> wallet_name;
     std::function<Proposal(const std::string&, const std::string&)> inspect;
-    std::function<WriteResult(const Proposal&, bool)> write;
+    WriteFile write;
     std::shared_ptr<InstallCoordinator> coordinator;
     // Consumed on the backend lane, even if the GUI observer has disappeared.
     std::function<void(Snapshot)> outcome;
-    // Optional original-opening admission; the production adapter uses the
-    // original Action scope. File-only work does not borrow Wallet on Core.
-    std::function<execution::SubmitResult(std::function<void()>)> submit;
+    // The opening supplies its writer for the duration of an admitted action.
+    // File-only callers use the writer already configured above.
+    std::function<execution::SubmitResult(Work)> submit;
     // Reserve and activate a Native terminal receipt before the operation
     // starts. This receipt retires an unanswered overwrite prompt even when
     // ordinary Core queue admission is full.

@@ -2876,8 +2876,8 @@ void WalletQmlControllerTests::manualOldOpeningPromptAndOutcomeCannotResolveReop
     const auto original_opening = original->opening();
     const auto original_identity = original_opening->identity();
     controller.requestCloseWallet(original);
-    QVERIFY(graph.until([&] { return !original->closeQuestionToken().isEmpty(); }));
-    const QString old_question = original->closeQuestionToken();
+    QVERIFY(graph.until([&] { return original->closeQuestion() != nullptr; }));
+    const QPointer<WalletCloseQuestion> old_question{original->closeQuestion()};
     auto held = original_opening->borrow();
     QVERIFY(held);
     const auto* native_original = held.get();
@@ -2934,15 +2934,16 @@ void WalletQmlControllerTests::manualOldOpeningPromptAndOutcomeCannotResolveReop
     QVERIFY(controller.selectWallet(OpenResult(controller)));
     QCOMPARE(controller.selectedWallet(), reopened);
     controller.requestCloseWallet(reopened);
-    QVERIFY(graph.until([&] { return !reopened->closeQuestionToken().isEmpty(); }));
-    const QString new_question = reopened->closeQuestionToken();
-    reopened->answerClose(old_question, true);
+    QVERIFY(graph.until([&] { return reopened->closeQuestion() != nullptr; }));
+    const QPointer<WalletCloseQuestion> new_question{reopened->closeQuestion()};
+    // The original wallet's question cannot answer the reopened wallet's.
+    if (old_question) old_question->accept();
     delayed_result();
     notification();
     QVERIFY(delayed_old_gui);
     delayed_old_gui();
     QVERIFY(graph.until([&] { return reopened->available(); }));
-    QCOMPARE(reopened->closeQuestionToken(), new_question);
+    QCOMPARE(reopened->closeQuestion(), new_question.data());
     QCOMPARE(stale_gui_writes, 0);
     QCOMPARE(reopened_state.remove_calls.load(), 0);
     QCOMPARE(controller.walletForName("reloaded"), reopened);
@@ -3689,8 +3690,8 @@ void WalletQmlControllerTests::manualRetainedResultBackendCleanupFencesReopen()
 
     // The real close-prompt path preserves completed warning presentation.
     controller.requestCloseWallet(original);
-    QVERIFY(graph.until([&] { return !original->closeQuestionToken().isEmpty(); }));
-    original->answerClose(original->closeQuestionToken(), true);
+    QVERIFY(graph.until([&] { return original->closeQuestion() != nullptr; }));
+    original->closeQuestion()->accept();
     QVERIFY(graph.until([&] { return original->shutdownComplete(); }));
     QVERIFY(original); QVERIFY(!original->available());
     QVERIFY(!controller.isWalletOpen("target")); QVERIFY(!OpenCanOpen(controller));

@@ -18,6 +18,8 @@ AlertPopup {
     property string passphraseFieldObjectName: ""
     property string cancelButtonObjectName: ""
     property string confirmButtonObjectName: ""
+    // False once the wallet, draft or operation this prompt answers is gone.
+    property bool contextValid: true
     readonly property bool canSubmit: !busy && passphraseField.text.length > 0
 
     signal submitted(string passphrase)
@@ -38,10 +40,21 @@ AlertPopup {
     function submitPassphrase() {
         const passphrase = passphraseField.text
         clearPassphraseField()
+        // A repeated failure can report the same error text again.
+        errorDismissed = false
         root.submitted(passphrase)
     }
 
-    onAboutToShow: clearPassphraseField()
+    // Closing can change the state the check depends on; defer it so the
+    // change notification can finish.
+    // The prompt can be destroyed before the deferred call runs, for example
+    // when its wallet view goes away; then there is nothing left to close.
+    // A bound prompt closes with its owner's state instead.
+    onContextValidChanged: if (!contextValid && !bound) Qt.callLater(function() { if (root && !root.contextValid) root.close() })
+    onAboutToShow: {
+        clearPassphraseField()
+        errorDismissed = false
+    }
     onAboutToHide: clearPassphraseField()
     onClosed: clearPassphraseField()
 
@@ -60,6 +73,7 @@ AlertPopup {
         fieldObjectName: root.passphraseFieldObjectName
         placeholderText: qsTr("Enter password…")
         fieldBackgroundColor: Theme.color.surface2
+        onTextEdited: if (root.errorText.length > 0) root.errorDismissed = true
     }
 
     AlertAction {
