@@ -74,7 +74,7 @@ public:
     explicit ApplicationModels(QQmlEngine* engine) : QObject(engine), m_context(engine->rootContext()) {
         if (auto* source = startupSource()) connect(source, &StartupDiagnosticsModel::changed, this, &ApplicationModels::startupErrorChanged);
 #ifdef ENABLE_WALLET
-        if (auto* controller = walletController()) connect(controller, &WalletQmlController::externalSignerStatusChanged, this, &ApplicationModels::signersChanged);
+        if (auto* controller = walletController()) connect(controller->creation(), &WalletCreationController::signersChanged, this, &ApplicationModels::signersChanged);
 #endif
     }
 
@@ -92,7 +92,7 @@ public:
     DebugLogModel* debugLogModel() const { return m_context ? m_context->contextProperty(QStringLiteral("debugLogModel")).value<DebugLogModel*>() : nullptr; }
     RpcConsoleModel* rpcConsoleModel() const { return m_context ? m_context->contextProperty(QStringLiteral("rpcConsoleModel")).value<RpcConsoleModel*>() : nullptr; }
 #ifdef ENABLE_WALLET
-    SignerDiscoveryModel* signers() const { const auto* controller = walletController(); return controller ? controller->signers() : nullptr; }
+    SignerDiscoveryModel* signers() const { const auto* controller = walletController(); return controller ? controller->creation()->signers() : nullptr; }
     WalletQmlController* walletController() const { return m_context ? m_context->contextProperty(QStringLiteral("walletController")).value<WalletQmlController*>() : nullptr; }
 #else
     QObject* walletController() const { return nullptr; }

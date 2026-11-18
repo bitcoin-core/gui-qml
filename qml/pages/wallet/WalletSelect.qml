@@ -35,6 +35,7 @@ Popup {
     }
 
     enter: Transition {
+        enabled: Theme.motion.animated
         NumberAnimation {
             property: "opacity"
             from: 0
@@ -59,6 +60,7 @@ Popup {
     }
 
     exit: Transition {
+        enabled: Theme.motion.animated
         NumberAnimation {
             property: "opacity"
             to: 0
@@ -97,11 +99,10 @@ Popup {
     }
 
     Connections {
-        target: ApplicationModels.walletController
-        function onWalletLoadSucceeded() {
-            root.close()
-        }
-        function onWalletMigrationRequired() {
+        target: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+        // A wallet that needs migration is offered as a migration; the picker
+        // gives way to its question.
+        function onMigrationOffered() {
             root.close()
         }
         // Intentionally no handler for the LoadError branch of
@@ -159,6 +160,7 @@ Popup {
                 required property int loadState;
                 required property string errorMessage;
                 required property string balance;
+                required property bool balanceKnown;
                 required property var balanceSatoshi;
                 required property int keySchemeKind;
 
@@ -180,6 +182,7 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
+                        if (!balanceKnown) return qsTr("Balance unavailable")
                         return balance + " " + (ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
                             ? ApplicationModels.optionsModel.displayUnitLabelForAmount(balanceSatoshi) : ApplicationModels.optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
@@ -196,7 +199,9 @@ Popup {
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
-                checked: loadState === WalletListModel.Open && ApplicationModels.walletController.selectedWallet.name === name
+                checked: loadState === WalletListModel.Open
+                    && ApplicationModels.walletController.selectedWallet.available
+                    && ApplicationModels.walletController.selectedWallet.name === name
                 enabled: !ApplicationModels.walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
                 focusPolicy: Qt.StrongFocus
@@ -407,8 +412,9 @@ Popup {
                     if (ApplicationModels.walletController.isWalletOpen(name)) {
                         root.close()
                     }
-                    // Otherwise: stay open until walletLoadSucceeded or
-                    // walletMigrationRequired arrives via Connections above.
+                    // A completed load updates its row. The next explicit
+                    // click opens that wallet; completion cannot select it
+                    // behind a newer selection or another dialog.
                 }
             }
         }

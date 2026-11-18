@@ -393,6 +393,73 @@ struct BumpTransactionModelForeign {
     QML_UNCREATABLE("Owned by the application")
 };
 
+struct WalletSecurityInterfaceForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletSecurityInterface)
+    QML_NAMED_ELEMENT(WalletSecurityInterface)
+    QML_UNCREATABLE("A wallet")
+};
+
+struct SecurityOperationForeign {
+    Q_GADGET
+    QML_FOREIGN(SecurityOperation)
+    QML_NAMED_ELEMENT(SecurityOperation)
+    QML_UNCREATABLE("Started by a wallet")
+};
+
+struct WalletPasswordControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletPasswordController)
+    QML_NAMED_ELEMENT(WalletPasswordController)
+};
+
+struct WalletInterfaceForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletInterface)
+    QML_NAMED_ELEMENT(WalletInterface)
+    QML_UNCREATABLE("A wallet")
+};
+
+struct WalletPageControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletPageController)
+    QML_NAMED_ELEMENT(WalletPageController)
+    QML_UNCREATABLE("Base of a wallet page's controller")
+};
+
+struct WalletBackupInterfaceForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletBackupInterface)
+    QML_NAMED_ELEMENT(WalletBackupInterface)
+    QML_UNCREATABLE("A wallet")
+};
+
+struct WalletBackupControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletBackupController)
+    QML_NAMED_ELEMENT(WalletBackupController)
+};
+
+struct FeeBumpOperationForeign {
+    Q_GADGET
+    QML_FOREIGN(FeeBumpOperation)
+    QML_NAMED_ELEMENT(FeeBumpOperation)
+    QML_UNCREATABLE("Opened by a FeeBumpController")
+};
+
+struct FeeBumpInterfaceForeign {
+    Q_GADGET
+    QML_FOREIGN(FeeBumpInterface)
+    QML_NAMED_ELEMENT(FeeBumpInterface)
+    QML_UNCREATABLE("A wallet")
+};
+
+struct FeeBumpControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(FeeBumpController)
+    QML_NAMED_ELEMENT(FeeBumpController)
+};
+
 struct WalletSecurityModelForeign {
     Q_GADGET
     QML_FOREIGN(WalletSecurityModel)
@@ -433,6 +500,20 @@ struct WalletSelectionModelForeign {
     QML_FOREIGN(WalletSelectionModel)
     QML_NAMED_ELEMENT(WalletSelectionModel)
     QML_UNCREATABLE("Owned by a window")
+};
+
+struct WalletCreationControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletCreationController)
+    QML_NAMED_ELEMENT(WalletCreationController)
+    QML_UNCREATABLE("Owned by the wallet controller")
+};
+
+struct WalletNamesControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletNamesController)
+    QML_NAMED_ELEMENT(WalletNamesController)
+    QML_UNCREATABLE("Owned by the wallet controller")
 };
 
 struct CoinsListModelForeign {

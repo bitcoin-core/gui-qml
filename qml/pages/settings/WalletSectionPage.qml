@@ -16,8 +16,10 @@ SettingsPage {
     title: qsTr("Wallet settings")
     showBackButton: false
 
-    property var wallet: null
-    property string errorText: ""
+    property WalletQmlModel wallet: null
+    readonly property string errorText: root.wallet
+        ? (root.wallet.settingsError.length > 0 ? root.wallet.settingsError : backup.error)
+        : ""
     readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: ApplicationModels.walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
@@ -28,41 +30,15 @@ SettingsPage {
     signal addressesRequested()
     signal coinsRequested()
 
-    function backupFileName() {
-        const walletName = root.wallet && root.wallet.name.length > 0
-            ? root.wallet.name.replace(/[\\/]/g, "_")
-            : "wallet"
-        return walletName + ".bak"
-    }
-
-    function backupDefaultFileUrl() {
-        return "file://" + ApplicationModels.walletController.homePath() + "/" + root.backupFileName()
-    }
-
-    function resolvedBackupPath(rawPath) {
-        let normalized = ApplicationModels.walletController.normalizeWalletPath(rawPath)
-        if (normalized.length === 0) return ""
-
-        const hasKnownSuffix = /\.(bak|dat)$/i.test(normalized)
-        if (ApplicationModels.walletController.walletPathExists(normalized) && !hasKnownSuffix) {
-            normalized += "/" + root.backupFileName()
-        } else if (!hasKnownSuffix) {
-            normalized += ".bak"
-        }
-        return normalized
-    }
-
     function startBackup() {
         if (!root.wallet) return
-        root.errorText = ""
         root.wallet.clearSettingsError()
         if (backupAutomationPath.text.length > 0) {
-            const automatedPath = root.resolvedBackupPath(backupAutomationPath.text)
+            const automatedPath = backupAutomationPath.text
             backupAutomationPath.text = ""
-            if (!root.wallet.backupWallet(automatedPath)) root.errorText = root.wallet.settingsError
+            backup.begin(automatedPath)
             return
         }
-        backupDialog.targetWallet = root.wallet
         backupDialog.open()
     }
 
@@ -79,20 +55,16 @@ SettingsPage {
         id: backupDialog
         objectName: "walletSettingsBackupDialog"
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + ApplicationModels.walletController.homePath()
-        currentFile: root.backupDefaultFileUrl()
+        currentFolder: ApplicationModels.walletController.names.homeUrl
+        suggestedName: root.wallet ? root.wallet.backupFileName : "wallet.bak"
         defaultSuffix: "bak"
+        confirmOverwrite: false // The operation confirms the resolved final path.
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
-        property var targetWallet: null
-        onAccepted: {
-            const wallet = targetWallet
-            targetWallet = null
-            if (!wallet || wallet !== root.wallet || backupDialog.selectedFile.toString().length === 0) return
-            const normalized = root.resolvedBackupPath(backupDialog.selectedFile.toString())
-            if (!wallet.backupWallet(normalized)) root.errorText = wallet.settingsError
-            else root.errorText = ""
-        }
-        onRejected: targetWallet = null
+        // A late choice reaches only the controller that asked; a disabled
+        // controller starts nothing.
+        contextObject: backup
+        enabled: backup.available
+        onChosen: (context, file) => { if (context === backup) backup.begin(file.toString()) }
     }
 
     TextField {
@@ -101,15 +73,16 @@ SettingsPage {
         visible: false
     }
 
-    Connections {
-        target: root.wallet
-
-        function onSettingsErrorChanged() {
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
-        }
+    SaveConfirmationPopup {
+        objectName: "walletBackupOverwritePopup"
+        operation: backup.operation
+        active: backup.active
+        saveTitle: qsTr("Save backup?")
+        replaceTitle: qsTr("Replace backup?")
+        pathObjectName: "walletBackupFinalPathText"
+        approveObjectName: "walletBackupOverwriteApproveButton"
+        refuseObjectName: "walletBackupOverwriteRejectButton"
     }
-
-    onWalletChanged: root.errorText = ""
 
     PageHeading {
         objectName: "walletSettingsEmptyHeading"
@@ -201,6 +174,12 @@ SettingsPage {
             objectName: "walletBackupRow"
             Layout.fillWidth: true
             title: qsTr("Back up wallet")
+            enabled: backup.canStart
+            supportingText: backup.busy ? qsTr("Preparing backup...")
+                : backup.saved ? qsTr("Backup saved.") : ""
+            description: root.wallet && root.wallet.isEncrypted
+                ? qsTr("After setting a password, earlier backups may not cover new receiving addresses or change. Make a fresh backup. Keep your older backups in a safe place.")
+                : ""
             showsDisclosureIndicator: true
             onClicked: root.startBackup()
         }

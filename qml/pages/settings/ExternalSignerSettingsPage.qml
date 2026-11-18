@@ -15,70 +15,18 @@ SettingsPage {
     title: qsTr("External signer")
     showBackButton: false
 
-    readonly property var signerStatus: (ApplicationModels.optionsModel.coreSettingStatuses || ({})).signer || ({})
-    property bool checkAfterSave: false
-    property bool checkAfterValidation: false
-    readonly property bool signerPathPending: ApplicationModels.optionsModel.signerPathValidationPending || ApplicationModels.optionsModel.settingsPending
-    readonly property bool signerInputChanged: signerPathInput.text.trim() !== ApplicationModels.optionsModel.externalSignerPath
-    readonly property string signerPathError: ApplicationModels.optionsModel.signerPathError || ""
-    readonly property bool signerConnected: !root.signerPathPending && !root.signerInputChanged
-        && root.signerPathError.length === 0
-        && ApplicationModels.walletController.canCreateExternalSignerWallet
-    readonly property string signerStatusText: {
-        if (root.signerPathPending) return qsTr("Checking signer path…")
-        if (root.signerPathError.length > 0) return root.signerPathError
-        if (root.signerInputChanged) {
-            return qsTr("Path updated. Press Check device to rescan with the current signer command.")
-        }
-        if (ApplicationModels.walletController.canCreateExternalSignerWallet) {
-            return qsTr("Detected external signer: %1").arg(ApplicationModels.walletController.externalSignerName)
-        }
-        if (ApplicationModels.walletController.externalSignerError.length > 0) {
-            return ApplicationModels.walletController.externalSignerError
-        }
-        if ((root.signerStatus.infoText || "").length > 0) {
-            return root.signerStatus.infoText
-        }
-        if (ApplicationModels.optionsModel.walletSettingsDirty) {
-            return qsTr("Path updated. Press Check device to rescan with the current signer command.")
-        }
-        if (ApplicationModels.optionsModel.externalSignerPath.length > 0) {
-            return qsTr("No external signer is currently detected.")
-        }
-        return qsTr("Set the command path for HWI or another external signer tool.")
-    }
-
-    function commitSignerPath() {
-        if (root.signerPathError.length > 0) return false
-        const normalizedPath = signerPathInput.text.trim()
-        if (normalizedPath !== ApplicationModels.optionsModel.externalSignerPath) {
-            ApplicationModels.optionsModel.externalSignerPath = normalizedPath
-        }
-        return true
-    }
-
-    function checkDevice() {
-        if (ApplicationModels.optionsModel.signerPathValidationPending) {
-            root.checkAfterValidation = true
-            return
-        }
-        root.checkAfterValidation = false
-        if (!root.commitSignerPath()) return
-        if (ApplicationModels.optionsModel.settingsPending) root.checkAfterSave = true
-        else ApplicationModels.walletController.refreshExternalSignerStatus()
-    }
-
-    Connections {
-        target: ApplicationModels.optionsModel
-        function onSignerPathValidationChanged() {
-            if (!ApplicationModels.optionsModel.signerPathValidationPending && root.checkAfterValidation) root.checkDevice()
-        }
-        function onSettingsPendingChanged() {
-            if (ApplicationModels.optionsModel.settingsPending || !root.checkAfterSave) return
-            root.checkAfterSave = false
-            if (!ApplicationModels.optionsModel.settingsError) ApplicationModels.walletController.refreshExternalSignerStatus()
-        }
-    }
+    property SettingsEditorModel editor: null
+    readonly property SettingsEntryModel signerEntry: editor ? editor.entry("signer") : null
+    readonly property bool savingConfiguration: editor ? editor.phase === SettingsEditorModel.Checking || editor.phase === SettingsEditorModel.Saving : discovery && discovery.saving
+    readonly property bool canApplyConfiguration: editor ? editor.canSave : discovery && discovery.canApply
+    readonly property SignerDiscoveryModel discovery: ApplicationModels.signers
+    readonly property bool signerConnected: discovery && !savingConfiguration && discovery.fresh && discovery.uniqueSignerId.length > 0
+    readonly property string signerStatusText: !discovery ? qsTr("Signer discovery is unavailable.")
+        : savingConfiguration ? qsTr("Saving signer configuration…")
+        : discovery.pending ? qsTr("Checking external signer…")
+        : discovery.error.message.length > 0 ? discovery.error.message
+        : signerConnected ? qsTr("Detected external signer: %1").arg(discovery.uniqueSignerName)
+        : qsTr("No external signer is currently detected.")
 
     PageHeading {
         objectName: "externalSignerIntroduction"
@@ -95,7 +43,7 @@ SettingsPage {
         FormRow {
             objectName: "externalSignerPathRow"
             Layout.fillWidth: true
-            enabled: root.signerStatus.canEdit !== false
+            enabled: root.discovery !== null
             showDivider: false
             bodySpacing: 0
             topPadding: 16
@@ -119,10 +67,12 @@ SettingsPage {
                         fieldHeight: Theme.size.control
                         fieldBackgroundColor: Theme.color.surface2
                         fieldTextStyle: Theme.text.monoDescription
-                        text: ApplicationModels.optionsModel.externalSignerPath
+                        text: root.signerEntry ? root.signerEntry.text : root.discovery ? root.discovery.editedPath : ""
+                        maximumLength: 32769
+                        readOnly: root.editor ? !root.signerEntry || !root.signerEntry.editable : !root.discovery || !root.discovery.configurationKnown || !root.discovery.editable || root.discovery.saving
                         placeholderText: qsTr("Enter external signer path")
-                        onTextChanged: ApplicationModels.optionsModel.requestExternalSignerPathValidation(text)
-                        onEditingFinished: root.checkDevice()
+                        onTextEdited: function(text) { if (root.signerEntry) root.signerEntry.editText(text); else if (root.discovery) root.discovery.editPath(text) }
+                        onAccepted: signerPathInput.field.focus = false
                     }
 
                     RowLayout {
@@ -136,7 +86,7 @@ SettingsPage {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: 4
                             radius: width / 2
-                            color: root.signerPathPending || root.signerInputChanged ? Theme.color.neutral7
+                            color: !root.discovery || root.savingConfiguration || !root.discovery.fresh ? Theme.color.neutral7
                                 : root.signerConnected ? Theme.color.success : Theme.color.danger
 
                             Behavior on color {
@@ -162,15 +112,35 @@ SettingsPage {
                     Layout.preferredWidth: Math.max(140, implicitWidth)
                     Layout.preferredHeight: Math.max(40, implicitHeight)
                     Layout.alignment: Qt.AlignVCenter
-                    text: qsTr("Check device")
+                    text: root.editor && root.editor.inputPending ? qsTr("Checking edited path…") : root.canApplyConfiguration ? qsTr("Save and check") : qsTr("Check device")
                     textStyle: Theme.text.subheading
-                    enabled: root.signerPathError.length === 0 && !root.signerPathPending
-                        && root.signerStatus.canEdit !== false
-                    onClicked: root.checkDevice()
+                    enabled: root.discovery && (!root.editor || !root.editor.inputPending) && !root.savingConfiguration && (root.canApplyConfiguration || root.discovery.canRefresh)
+                    onClicked: {
+                        if (!enabled) return
+                        if (root.canApplyConfiguration) { if (root.editor) root.editor.save(); else root.discovery.apply(); }
+                        else root.discovery.refresh()
+                    }
                 }
             }
         }
     }
 
-    Component.onCompleted: ApplicationModels.walletController.refreshExternalSignerStatus()
+    CoreText {
+        objectName: "externalSignerEditErrorText"
+        Layout.fillWidth: true
+        text: root.editor ? root.signerEntry.error || root.editor.error : root.discovery ? root.discovery.editError.message : ""
+        visible: text.length > 0
+        color: Theme.color.dangerText
+        wrap: true
+    }
+    CoreText {
+        objectName: "externalSignerEffectiveConfigurationText"
+        Layout.fillWidth: true
+        text: root.discovery && root.discovery.configurationSource === "CommandLine" ? qsTr("Set by command line. Remove the override to edit it here.")
+            : root.discovery && (root.signerEntry ? root.signerEntry.text : root.discovery.editedPath) !== root.discovery.effectivePath ? qsTr("The edited path has not been applied. Device status refers to the effective configuration.") : ""
+        visible: text.length > 0
+        wrap: true
+    }
+    onVisibleChanged: if (visible && root.discovery) root.discovery.refresh()
+    Component.onCompleted: ApplicationModels.walletController.creation.refreshSigners()
 }

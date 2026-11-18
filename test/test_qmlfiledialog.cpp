@@ -36,7 +36,42 @@ private Q_SLOTS:
     void onlyDirectoryModeShowsHiddenEntries();
     void propertiesReachTheDialog();
     void acceptedCarriesTheSelectedFile();
+    void cancellingTheVisibleChooserReleasesModalityAndAdmission();
 };
+
+// #1066: the platform-independent part of the overlap. While Save is open, an
+// Import request is refused without ever reporting a visible chooser. When the
+// user dismisses Save through the dialog itself, no modal dialog or admission
+// is left behind and Import presents a chooser that releases the same way.
+void QmlFileDialogTests::cancellingTheVisibleChooserReleasesModalityAndAdmission()
+{
+    QTemporaryDir directory; QVERIFY(directory.isValid());
+    QmlFileDialog save, import;
+    save.setFileMode(QmlFileDialog::SaveFile);
+    save.setCurrentFile(QUrl::fromLocalFile(directory.filePath("transaction.psbt")));
+    import.setFileMode(QmlFileDialog::OpenFile);
+    QSignalSpy import_visible{&import, &QmlFileDialog::visibleChanged};
+    QSignalSpy save_rejected{&save, &QmlFileDialog::rejected};
+    QVERIFY(save.open());
+    const QPointer<QFileDialog> save_dialog = VisibleFileDialog(); QVERIFY(save_dialog);
+    QVERIFY(save_dialog->isModal());
+    QVERIFY(!import.open());
+    QVERIFY(!import.isVisible()); QCOMPARE(import_visible.count(), 0);
+    QCOMPARE(VisibleFileDialog(), save_dialog.data());
+    save_dialog->reject();
+    QCOMPARE(save_rejected.count(), 1);
+    QVERIFY(!save.isVisible());
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(!VisibleFileDialog()); QVERIFY(!QApplication::activeModalWidget());
+    QVERIFY(import.open());
+    QVERIFY(import.isVisible()); QCOMPARE(import_visible.count(), 1);
+    const QPointer<QFileDialog> import_dialog = VisibleFileDialog(); QVERIFY(import_dialog); QVERIFY(import_dialog != save_dialog);
+    import_dialog->reject();
+    QVERIFY(!import.isVisible()); QCOMPARE(import_visible.count(), 2);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(!VisibleFileDialog()); QVERIFY(!QApplication::activeModalWidget());
+    QVERIFY(save.open()); save.close();
+}
 
 void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
 {

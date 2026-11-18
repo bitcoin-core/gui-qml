@@ -459,6 +459,7 @@ TestCase {
             ["designSystemSuccessAlertButton", "designSystemSuccessAlert"],
             ["designSystemErrorAlertButton", "designSystemErrorAlert"],
             ["designSystemInputAlertButton", "designSystemInputAlert"],
+            ["designSystemSaveConfirmationButton", "designSystemSaveConfirmation"],
             ["designSystemFeatureModalButton", "designSystemFeatureModal"],
             ["designSystemSheetButton", "designSystemSheet"]
         ]

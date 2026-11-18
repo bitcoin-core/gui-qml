@@ -13,57 +13,54 @@ import "../../controls/utils.js" as Utils
 import "../../components"
 import "../node"
 
-Page {
+WalletShellPage {
     id: root
+    objectName: "desktopWalletsPage"
     background: null
 
-    property string pendingMigrationPath: ""
     // The wallet shown in the window. Wallet pages never look this up
     // themselves; each WalletView gets its wallet when it is created.
-    readonly property var activeWallet: ApplicationModels.walletController.isWalletLoaded ? ApplicationModels.walletController.selectedWallet : null
+    readonly property var activeWallet: ApplicationModels.walletController.isWalletLoaded
+        && ApplicationModels.walletController.selectedWallet.available
+        ? ApplicationModels.walletController.selectedWallet : null
+    property int walletViewGeneration: 0
     readonly property WalletView activeView: {
         walletViews.count
+        root.walletViewGeneration
         return root.viewForWallet(root.activeWallet)
     }
     readonly property bool walletTabSelected: navigationTabs.checkedButton !== null
         && (navigationTabs.checkedButton as WalletNavigationTab).index <= 2
     readonly property Item walletSettingsHost: settingsLoader.item ? (settingsLoader.item as SettingsView).walletSettingsHost : null
+    readonly property SettingsView settingsView: settingsLoader.item as SettingsView
+    modalNavigationBlocked: settingsView !== null
+        && (settingsView.settingsNavigationPending
+            || (settingsView.settingsEditor !== null && settingsView.settingsEditor.closeQuestion))
     readonly property alias walletViews: walletViews
 
     ButtonGroup { id: navigationTabs }
 
-    signal addWallet()
+    onCloseWalletRequested: root.requestCloseWallet()
+    onBackupRequested: root.startWalletBackup()
+    onUriImportRequested: root.openUriImporter()
+    onSignMessageRequested: root.openSignVerifyMessage(SignVerifyMessage.SignTab)
+    onVerifyMessageRequested: root.openSignVerifyMessage(SignVerifyMessage.VerifyTab)
+    onPsbtImportRequested: root.openPsbtImporter()
+    onNodeRequested: root.openNode()
+    onActivityRequested: root.openActivity()
+    onSendRequested: root.openSend()
+    onReceiveRequested: root.openReceive()
+    onConsoleRequested: root.openConsole()
+    onNetworkTrafficRequested: root.openNetworkTraffic()
+    onPeersRequested: root.openPeers()
+    onSettingsRequested: function(section) { root.openSettings(section) }
+    onPresentWalletRequested: function(wallet) { root.openWallet(wallet as WalletQmlModel) }
+    onContinueImportRequested: function(mailbox) { root.continueDesktopImport(mailbox) }
 
     function viewForWallet(wallet) {
         if (!wallet) return null
-        for (let index = 0; index < walletViews.count; ++index) {
-            const view = walletViews.itemAt(index) as WalletView
-            if (view && view.wallet === wallet) return view
-        }
-        return null
-    }
-
-    // Mirror walletController.openWallets in a ListModel so the Repeater
-    // creates or destroys only the views of wallets that opened or closed.
-    // A wallet that is unloading loses its view at once, before the
-    // controller drops it from the list.
-    function syncOpenWallets() {
-        const wallets = ApplicationModels.walletController.openWallets.filter(function(wallet) {
-            return wallet.available !== false
-        })
-        for (let index = openWalletsModel.count - 1; index >= 0; --index) {
-            if (wallets.indexOf(openWalletsModel.get(index).wallet) < 0) openWalletsModel.remove(index)
-        }
-        for (let index = 0; index < wallets.length; ++index) {
-            let known = false
-            for (let row = 0; row < openWalletsModel.count; ++row) {
-                if (openWalletsModel.get(row).wallet === wallets[index]) {
-                    known = true
-                    break
-                }
-            }
-            if (!known) openWalletsModel.append({ "wallet": wallets[index] })
-        }
+        const row = ApplicationModels.walletController.rowForWallet(wallet)
+        return row >= 0 ? walletViews.itemAt(row) as WalletView : null
     }
 
     function walletTabButton(tab) {
@@ -92,7 +89,6 @@ Page {
     }
 
     onActiveViewChanged: root.showActiveViewTab()
-    Component.onCompleted: root.syncOpenWallets()
 
     function navigateToTransaction(txid, outputIndex) {
         if (root.activeView) root.activeView.navigateToTransaction(txid, outputIndex)
@@ -102,8 +98,7 @@ Page {
         if (!root.activeWallet) {
             return
         }
-        closeConfirmationPopup.walletName = root.activeWallet.name
-        closeConfirmationPopup.open()
+        ApplicationModels.walletController.requestCloseWallet(root.activeWallet)
     }
 
     function startWalletBackup() {
@@ -148,8 +143,8 @@ Page {
 
     // Show a wallet's Activity, as long as that wallet is still open.
     function openWallet(wallet) {
-        if (!wallet || wallet.available === false || ApplicationModels.walletController.openWallets.indexOf(wallet) < 0) return
-        if (ApplicationModels.walletController.selectedWallet !== wallet) ApplicationModels.walletController.setSelectedWallet(wallet.name)
+        if (!wallet || wallet.available === false || ApplicationModels.walletController.rowForWallet(wallet) < 0) return
+        if (ApplicationModels.walletController.selectedWallet !== wallet && !ApplicationModels.walletController.selectWallet(wallet)) return
         if (root.activeWallet === wallet) root.showWalletTab(WalletView.Activity)
     }
 
@@ -159,6 +154,14 @@ Page {
 
     function openSend() {
         if (root.activeView) root.showWalletTab(WalletView.Send)
+    }
+
+    function continueDesktopImport(mailbox: DesktopIntentModel): bool {
+        const original = root.activeView
+        if (!original || !original.wallet || !original.wallet.available) return false
+        root.showWalletTab(WalletView.Send)
+        if (root.activeView !== original || !original.active) return false
+        return original.sendPage.acceptDesktopImport(mailbox)
     }
 
     function openReceive() {
@@ -207,57 +210,16 @@ Page {
     function showSettingsSection(section) {
         settingsLoader.pendingRoute = section
         settingsTabButton.checked = true
-        Qt.callLater(settingsLoader.applyPendingRoute)
+        settingsLoader.applyPendingRoute()
     }
-
-    ListModel { id: openWalletsModel }
 
     Connections {
         target: ApplicationModels.walletController
-        function onOpenWalletsChanged() {
-            root.syncOpenWallets()
-        }
-        function onWalletLoadStateChanged(name, state, error) {
-            if (state === WalletListModel.LoadError) {
-                loadErrorPopup.message = error
-                loadErrorPopup.open()
-            }
-        }
-        function onWalletMigrationRequired(path) {
-            root.pendingMigrationPath = path
-            migrationRequiredPopup.errorText = ""
-            migrationRequiredPopup.open()
-        }
-        function onWalletMigrationPassphraseRequired(path) {
-            root.pendingMigrationPath = path
-            migrationRequiredPopup.close()
-            migrationPassphrasePopup.busy = false
-            migrationPassphrasePopup.errorText = ""
-            migrationPassphrasePopup.open()
-        }
-        function onWalletMigrationSucceeded() {
-            root.pendingMigrationPath = ""
-            migrationRequiredPopup.close()
-            migrationPassphrasePopup.close()
-        }
-        function onWalletMigrationFailed() {
-            if (root.pendingMigrationPath.length === 0) {
-                return
-            }
-            if (ApplicationModels.walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
-                const showPassphraseError = migrationPassphrasePopup.opened
-                migrationRequiredPopup.close()
-                migrationPassphrasePopup.busy = false
-                migrationPassphrasePopup.errorText = showPassphraseError ? ApplicationModels.walletController.walletMigrationError : ""
-                migrationPassphrasePopup.open()
-            } else {
-                migrationPassphrasePopup.busy = false
-                migrationPassphrasePopup.close()
-                migrationRequiredPopup.busy = false
-                migrationRequiredPopup.errorText = ApplicationModels.walletController.walletMigrationError
-                migrationRequiredPopup.open()
-            }
-        }
+        function onWalletLoadWarningsOffered(operation) { migrationPresentations.offer(operation) }
+    }
+    Connections {
+        target: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+        function onMigrationOffered(operation) { migrationPresentations.offer(operation) }
     }
 
     header: NavigationBar2 {
@@ -268,6 +230,7 @@ Page {
             walletType: ApplicationModels.walletController.selectedWallet.keyScheme
             text: ApplicationModels.walletController.selectedWallet.displayName
             balance: ApplicationModels.walletController.selectedWallet.balance
+            balanceKnown: ApplicationModels.walletController.selectedWallet.balanceKnown
             balanceSatoshi: ApplicationModels.walletController.selectedWallet.balanceSatoshi
             loading: !ApplicationModels.walletController.initialized
             noWalletLoaded: !ApplicationModels.walletController.isWalletLoaded
@@ -294,8 +257,7 @@ Page {
                     root.openSettingsRoute("wallet")
                 }
                 onCloseWalletRequested: (name) => {
-                    closeConfirmationPopup.walletName = name
-                    closeConfirmationPopup.open()
+                    ApplicationModels.walletController.requestCloseWallet(ApplicationModels.walletController.walletForName(name))
                 }
             }
         }
@@ -445,8 +407,10 @@ Page {
 
             Repeater {
                 id: walletViews
-                model: openWalletsModel
+                model: ApplicationModels.walletController.openWalletModel
                 onCountChanged: root.showActiveViewTab()
+                onItemAdded: root.walletViewGeneration++
+                onItemRemoved: root.walletViewGeneration++
 
                 WalletView {
                     id: walletView
@@ -463,13 +427,6 @@ Page {
                     }
                     onWalletSelectionRequested: root.openWalletSelection()
 
-                    Connections {
-                        target: walletView.wallet
-                        ignoreUnknownSignals: true
-                        function onAvailableChanged() {
-                            Qt.callLater(root.syncOpenWallets)
-                        }
-                    }
                 }
             }
         }
@@ -511,8 +468,9 @@ Page {
 
                     function applyPendingRoute() {
                         if (!item || pendingRoute.length === 0) return
-                        (item as SettingsView).selectSection(pendingRoute)
+                        const route = pendingRoute
                         pendingRoute = ""
+                        if (settingsTabButton.checked) (item as SettingsView).selectSection(route)
                     }
 
                     // Create Settings on first use, then retain its navigation
@@ -520,12 +478,16 @@ Page {
                     active: settingsTabButton.checked || retainItem
                     onLoaded: {
                         retainItem = true
-                        Qt.callLater(applyPendingRoute)
+                        applyPendingRoute()
                     }
                     sourceComponent: SettingsView {
                         showDoneButton: false
                         walletSettingsProvided: root.activeView !== null
                         activeWalletName: root.activeWallet ? root.activeWallet.name : ""
+                        activeWalletRpcContext: root.activeWallet !== null
+                        activeWalletRpcName: root.activeWallet ? root.activeWallet.rpcName : ""
+                        activeWalletRpcReady: root.activeWallet !== null && root.activeWallet.capabilitiesKnown
+                        activeWalletAvailable: root.activeWallet !== null && root.activeWallet.available
                         onSelectWalletRequested: root.openWalletSelection()
                         onWalletSettingsResetRequested: {
                             if (root.activeView) root.activeView.settingsStack.resetToRoot()
@@ -536,43 +498,32 @@ Page {
         }
     }
 
-    WalletMigrationPopup {
-        id: migrationRequiredPopup
-        parent: Overlay.overlay
-        popupObjectName: "walletMigrationPopup"
-        errorTextObjectName: "walletMigrationErrorText"
-        cancelButtonObjectName: "walletMigrationCancelButton"
-        confirmButtonObjectName: "walletMigrationConfirmButton"
-        descriptionText: qsTr("This wallet uses a legacy format and needs to be updated before it can be opened.")
-        busy: ApplicationModels.walletController.walletMigrationInProgress
-        onConfirmed: {
-            migrationRequiredPopup.errorText = ""
-            migrationRequiredPopup.close()
-            ApplicationModels.walletController.migrateWallet(root.pendingMigrationPath, "")
-        }
+    WalletOperationPresentationModel { id: migrationPresentations }
+    CoreText {
+        anchors.bottom: parent.bottom
+        width: parent.width
+        text: migrationPresentations.error.message
+        visible: text.length > 0
+        wrapMode: Text.WordWrap
+        color: Theme.color.dangerText
     }
-
-    WalletPassphrasePopup {
-        id: migrationPassphrasePopup
-        parent: Overlay.overlay
-        popupObjectName: "walletMigrationPassphrasePopup"
-        passphraseFieldObjectName: "walletMigrationPassphraseField"
-        errorTextObjectName: "walletMigrationPassphraseErrorText"
-        cancelButtonObjectName: "walletMigrationPassphraseCancelButton"
-        confirmButtonObjectName: "walletMigrationPassphraseConfirmButton"
-        titleText: qsTr("Enter wallet password")
-        descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
-        confirmText: qsTr("Unlock and update")
-        busyConfirmText: qsTr("Updating…")
-        onSubmitted: (passphrase) => {
-            migrationPassphrasePopup.busy = true
-            ApplicationModels.walletController.migrateWallet(root.pendingMigrationPath, passphrase)
+    Repeater {
+        model: migrationPresentations
+        delegate: WalletOperationDialog {
+            presenter: migrationPresentations
+            maximumWidth: Math.min(420, root.width - 40)
         }
     }
 
     AlertPopup {
         id: loadErrorPopup
         objectName: "walletLoadErrorPopup"
+        // The failed open reports its own target and bounded message.
+        readonly property WalletOperationModel failure: ApplicationModels.walletController ? ApplicationModels.walletController.loadFailure : null
+        readonly property string walletName: failure ? failure.targetWalletId : ""
+        message: failure ? failure.error.message : ""
+        shown: failure !== null
+        onCloseRequested: ApplicationModels.walletController.dismissLoadFailure()
         parent: Overlay.overlay
         title: qsTr("Failed to open wallet")
         messageObjectName: "walletLoadErrorPopupText"
@@ -583,24 +534,55 @@ Page {
         }
     }
 
-    AlertPopup {
-        id: closeConfirmationPopup
-        objectName: "walletCloseConfirmationPopup"
-        parent: Overlay.overlay
-        title: qsTr("Close wallet?")
-
-        property string walletName: ""
-        message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)
-
-        AlertAction {
-            text: qsTr("Cancel")
-            role: AlertAction.Cancel
-            buttonObjectName: "walletCloseConfirmationCancelButton"
+    Repeater {
+        objectName: "walletCloseQuestions"
+        // One presentation instance per immutable opening/question pair.
+        // Old buttons and native callbacks cannot resolve a newer target.
+        model: {
+            const wallet = ApplicationModels.walletController.closeTarget
+            return wallet && wallet.closeQuestionToken.length > 0
+                ? [{wallet: wallet, token: wallet.closeQuestionToken}] : []
         }
-        AlertAction {
-            text: qsTr("Close wallet")
-            buttonObjectName: "walletCloseConfirmationConfirmButton"
-            onTriggered: ApplicationModels.walletController.closeWallet(closeConfirmationPopup.walletName)
+        delegate: Item {
+            id: questionContext
+            required property var modelData
+            readonly property alias confirmation: closeConfirmationPopup
+            AlertPopup {
+                id: closeConfirmationPopup
+                readonly property WalletQmlModel targetWallet: questionContext.modelData.wallet
+                readonly property string questionToken: questionContext.modelData.token
+                readonly property string walletName: targetWallet ? targetWallet.displayName : ""
+                objectName: "walletCloseConfirmationPopup"
+                // Keeps the overlay when the page leaves the window. A popup whose parent
+                // goes null there loses its window while its item is still in the overlay,
+                // and a hover event then crashes Qt 6.8.4 and newer.
+                Binding on parent {
+                    when: root.Overlay.overlay !== null
+                    value: root.Overlay.overlay
+                    restoreMode: Binding.RestoreNone
+                }
+                width: Math.min(420, root.width - 40)
+                title: qsTr("Close wallet")
+                visible: true
+                message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)
+                onClosed: if (targetWallet) targetWallet.answerClose(questionToken, false)
+                AlertAction {
+                    text: qsTr("Cancel")
+                    role: AlertAction.Cancel
+                    buttonObjectName: "walletCloseConfirmationCancelButton"
+                    onTriggered: if (closeConfirmationPopup.targetWallet) closeConfirmationPopup.targetWallet.answerClose(closeConfirmationPopup.questionToken, false)
+                }
+                AlertAction {
+                    text: qsTr("Close wallet")
+                    buttonObjectName: "walletCloseConfirmationConfirmButton"
+                    // Answer before closing: onClosed answers an unanswered question with no.
+                    closesPopup: false
+                    onTriggered: {
+                        if (closeConfirmationPopup.targetWallet) closeConfirmationPopup.targetWallet.answerClose(closeConfirmationPopup.questionToken, true)
+                        closeConfirmationPopup.close()
+                    }
+                }
+            }
         }
     }
 

@@ -25,7 +25,7 @@ std::span<const IntegrationTestModule> IntegrationTestModules()
         {"blocksonly", node_modes, CreateBlocksonlyTests, 3,
          [](const QString&) { return QStringList{"-blocksonly"}; }},
 #ifdef ENABLE_WALLET
-        {"wallet", {WalletMode::Enabled}, CreateWalletTests, 4, WalletTestArguments},
+        {"wallet", {WalletMode::Enabled}, CreateWalletTests, 4, WalletTestArguments, WalletPreparedWallet},
         {"receive", {WalletMode::Enabled}, CreateReceiveTests, 5, ReceiveTestArguments},
         {"activity", {WalletMode::Enabled}, CreateActivityTests, 5},
         {"transaction-policy", {WalletMode::Enabled}, CreateTransactionPolicyTests, 6, [](const QString&) { return QStringList{"-fallbackfee=0.00010000"}; }},

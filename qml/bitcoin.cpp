@@ -463,7 +463,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterUncreatableType<SignerDiscoveryModel>("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Owned by application signer discovery");
     qmlRegisterUncreatableMetaObject(SignerDiscoveryError::staticMetaObject, "org.bitcoincore.qt", 1, 0, "SignerDiscoveryError", "Error value");
     qRegisterMetaType<SignerDiscoveryError>();
-    qmlRegisterUncreatableType<WalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel", "Owned by a creation form");
+    qmlRegisterType<WalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel");
     qmlRegisterUncreatableType<WalletCreationText>("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Owned by a creation form");
     qmlRegisterUncreatableType<WalletOperationModel>("org.bitcoincore.qt", 1, 0, "WalletOperationModel", "Owned by an immutable wallet operation");
     qmlRegisterUncreatableType<WalletOperationPrompt>("org.bitcoincore.qt", 1, 0, "WalletOperationPrompt", "Owned by an immutable wallet operation");
@@ -472,6 +472,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterUncreatableType<WalletProvisioningCheck>("org.bitcoincore.qt", 1, 0, "WalletProvisioningCheck", "Owned by the wallet controller");
     qmlRegisterUncreatableType<WalletSelectionModel>("org.bitcoincore.qt", 1, 0, "WalletSelectionModel", "Owned by a window");
     qmlRegisterType<PaymentRequest>("org.bitcoincore.qt", 1, 0, "PaymentRequest");
+    qmlRegisterUncreatableType<WalletNamesController>("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Owned by the wallet controller");
+    qmlRegisterUncreatableType<WalletCreationController>("org.bitcoincore.qt", 1, 0, "WalletCreationController", "Owned by the wallet controller");
     RegisterReceiveTypes();
     qmlRegisterUncreatableType<ReceiveRequestOperation>("org.bitcoincore.qt", 1, 0, "ReceiveRequestOperation", "Owned by a receive request command");
     qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
@@ -481,6 +483,14 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
 
     qmlRegisterUncreatableType<BumpTransactionModel>("org.bitcoincore.qt", 1, 0, "BumpTransactionModel",
                                                       "BumpTransactionModel cannot be instantiated from QML");
+    qmlRegisterUncreatableType<WalletSecurityInterface>("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "A wallet");
+    qmlRegisterUncreatableType<SecurityOperation>("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Started by a wallet");
+    qmlRegisterType<WalletPasswordController>("org.bitcoincore.qt", 1, 0, "WalletPasswordController");
+    qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
+    qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
+    qmlRegisterUncreatableType<FeeBumpOperation>("org.bitcoincore.qt", 1, 0, "FeeBumpOperation", "Opened by a FeeBumpController");
+    qmlRegisterUncreatableType<FeeBumpInterface>("org.bitcoincore.qt", 1, 0, "FeeBumpInterface", "A wallet");
+    qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
     qmlRegisterUncreatableType<WalletSecurityModel>("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Owned by a wallet opening");
     qmlRegisterUncreatableType<SecurityOperationModel>("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Owned by a security command");
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
@@ -505,12 +515,21 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "FeeRateEntry", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SendRecipient", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "BumpTransactionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletPasswordController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletBackupController", "Wallet support is not compiled");
+    for (const auto* type : {"FeeBumpOperation", "FeeBumpInterface", "FeeBumpController"})
+        qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, type, "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletQmlModelTransaction", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletListModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSelectionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationController", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationModel", "Wallet support is not compiled");
     qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Wallet support is not compiled");
@@ -1253,7 +1272,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             wallet_controller = std::make_unique<WalletQmlController>(*node, walletopening::ChainPreferences(*chain),
                 walletopening::FeePolicy{[chain = chain.get()] { return chain->relayMinFee().GetFeePerK(); }});
             wallet_controller->setPsbtPolicyRead(psbtpolicy::ReadNode(node.get(), chain.get()));
-            wallet_controller->setSignerDiscoveryPorts(signerdiscovery::PublicPorts(*node, gArgs));
+            wallet_controller->creation()->setSignerPorts(signerdiscovery::PublicPorts(*node, gArgs));
             QObject::connect(
                 &init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(),
                 [wallet_controller = wallet_controller.get(), &shutdown_requested](bool success, interfaces::BlockAndHeaderTipInfo, bool, bool backend_shutdown_requested) {
@@ -1437,16 +1456,19 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                              });
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletOperationChanged,
                              wallet_list_model.get(), [controller = wallet_controller.get(), catalog = wallet_list_model.get()] {
-                                 const auto id = controller->walletOperationId();
-                                 const auto name = controller->walletOperationName();
-                                 const bool pending = controller->walletOperationState() == WalletQmlController::WalletOperationState::WalletOperationPending;
-                                 if (id) catalog->setOperationId(name, pending ? QString::number(id) : QString{});
-                                 const auto* operation = controller->creationOperation();
-                                 if (operation && operation->terminal() && operation->result().effect != WalletOperationResult::NoEffect) catalog->listWalletDir();
+                                 const auto* opening = controller->commandOpening();
+                                 if (opening && opening->operationId()) catalog->setOperationId(opening->target(), opening->busy() ? QString::number(opening->operationId()) : QString{});
+                             });
+            QObject::connect(wallet_controller->creation(), &WalletCreationController::operationChanged,
+                             wallet_list_model.get(), [creation = wallet_controller->creation(), catalog = wallet_list_model.get()] {
+                                 const auto* operation = creation->operation();
+                                 if (!operation) return;
+                                 catalog->setOperationId(operation->targetWalletId(), operation->busy() ? QString::number(operation->sequence()) : QString{});
+                                 if (operation->terminal() && operation->result().effect != WalletOperationResult::NoEffect) catalog->listWalletDir();
                              });
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletInfoChanged,
                              wallet_list_model.get(), &WalletListModel::setWalletInfo);
-            QObject::connect(wallet_controller.get(), &WalletQmlController::walletDisplayNamesChanged,
+            QObject::connect(wallet_controller->names(), &WalletNamesController::namesChanged,
                              wallet_list_model.get(), &WalletListModel::refreshDisplayNames);
             QObject::connect(wallet_list_model.get(), &WalletListModel::walletListChanged,
                              wallet_controller.get(), [controller = wallet_controller.get()](bool has_wallets) {
@@ -1476,9 +1498,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                                             [&] { options_model.beginShutdown(); });
 #ifdef ENABLE_WALLET
         if (wallet_controller) {
-            QObject::connect(wallet_controller.get(), &WalletQmlController::externalSignerStatusChanged, &options_model,
-                [&options_model, controller = wallet_controller.get()] { options_model.setSignerDiscoveryModel(controller->signers()); });
-            options_model.setSignerDiscoveryModel(wallet_controller->signers());
+            QObject::connect(wallet_controller->creation(), &WalletCreationController::signersChanged, &options_model,
+                [&options_model, creation = wallet_controller->creation()] { options_model.setSignerDiscoveryModel(creation->signers()); });
+            options_model.setSignerDiscoveryModel(wallet_controller->creation()->signers());
         }
         if (wallet_list_model) {
             wallet_list_model->setDisplayUnit(options_model.displayUnit());

@@ -16,31 +16,30 @@ OnboardingView {
     property bool watchOnly: false
     property bool modalView: false
     property bool creating: false
-    property string nameError: ""
-    readonly property bool validXpub: root.fieldsView
-        && root.fieldsView.xpubText.trim().length >= 100
-        && ApplicationModels.walletController.validateXpub(root.fieldsView.xpubText.trim())
+    readonly property WalletCreationModel editor: WalletCreationModel {
+        creation: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+    }
+    property WalletOperationModel operation: editor ? editor.operation : null
+    readonly property string nameError: editor ? editor.name.error : qsTr("Wallet creation is unavailable.")
+    readonly property bool validXpub: editor && !editor.pendingValidation && editor.extendedPublicKey.error.length === 0
+        && editor.extendedPublicKey.text.length > 0
     readonly property bool passwordsMatch: root.fieldsView
         && root.fieldsView.passwordText.length > 0
         && root.fieldsView.passwordText === root.fieldsView.confirmText
-    readonly property bool canCreate: root.fieldsView && ApplicationModels.walletController.initialized && !creating
-        && !ApplicationModels.walletController.walletLoadInProgress && root.fieldsView.walletName.trim().length > 0
+    readonly property bool canCreate: root.fieldsView && editor && editor.canCreate && !creating
         && (watchOnly ? validXpub : root.fieldsView.encryptWallet
             ? passwordsMatch && root.fieldsView.passwordLossAcknowledged
             : root.fieldsView.unencryptedWalletAcknowledged)
 
     signal cancel()
-    signal createRequested(string name, string xpub, string passphrase)
+    signal operationSubmitted(WalletOperationModel operation)
 
     function submit() {
         if (!canCreate) return
-        const availabilityError = ApplicationModels.walletController.walletNameAvailabilityError(root.fieldsView.walletName)
-        if (availabilityError.length > 0) {
-            nameError = availabilityError
-            return
-        }
-        createRequested(root.fieldsView.walletName.trim(), root.fieldsView.xpubText.trim(),
-            watchOnly || !root.fieldsView.encryptWallet ? "" : root.fieldsView.passwordText)
+        const accepted = editor.create(watchOnly || !root.fieldsView.encryptWallet ? "" : root.fieldsView.passwordText,
+            watchOnly || !root.fieldsView.encryptWallet ? "" : root.fieldsView.confirmText)
+        clearSecrets()
+        if (accepted) operationSubmitted(accepted)
     }
 
     function clearSecrets() {
@@ -57,7 +56,7 @@ OnboardingView {
         ? (navigationStack.canGoBack !== undefined
             ? navigationStack.canGoBack : navigationStack.depth > 1) : false
     showCloseButton: modalView && !creating
-    primaryButtonText: creating ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creating ? qsTr("Creating…") : editor && editor.pendingValidation ? qsTr("Checking…") : qsTr("Create wallet")
     primaryButtonObjectName: "createWalletFormCreateButton"
     primaryButtonEnabled: canCreate
     onCloseClicked: root.cancel()
@@ -67,18 +66,19 @@ OnboardingView {
         else root.fieldsView.openUnencryptedWarning()
     }
 
-    Component.onCompleted: {
-        ApplicationModels.walletController.clearWalletCreateStatus()
-        ApplicationModels.walletController.clearWalletLoadStatus()
-    }
-    Component.onDestruction: clearSecrets()
+    Component.onCompleted: if (editor) editor.chooseKind(watchOnly ? WalletCreationModel.WatchOnly : WalletCreationModel.Software)
+    Component.onDestruction: { clearSecrets(); if (editor) editor.discard() }
 
     childView: CreateWalletFields {
         watchOnly: root.watchOnly
         nameError: root.nameError
         validXpub: root.validXpub
-        onNameEdited: root.nameError = ""
+        xpubChecked: root.editor !== null && !root.editor.pendingValidation
+        operation: root.operation
+        submissionError: root.editor ? root.editor.error.message : ""
+        onNameIntent: function(value) { if (root.editor) root.editor.name.edit(value) }
+        onKeyIntent: function(value) { if (root.editor) root.editor.extendedPublicKey.edit(value) }
+        onEncryptionIntent: function(value) { if (root.editor) root.editor.setEncryptRequested(value) }
         onSubmitRequested: root.submit()
     }
-
 }

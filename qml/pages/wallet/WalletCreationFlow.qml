@@ -15,15 +15,15 @@ Item {
     property bool modalView: false
     property bool onboardingEntry: false
     property bool waitForWalletDiscovery: false
-    property bool creatingWallet: false
-    property bool importingWallet: false
-    property string pendingImportResult: ""
-    property bool completedWatchOnly: false
-    property bool completedEncrypted: false
+    property WalletOperationModel operation: null
+    readonly property bool creatingWallet: operation !== null && operation.busy
+    readonly property bool importingWallet: operation !== null && operation.kind === WalletOperationModel.Restore && !operation.terminal
+    readonly property bool completedWatchOnly: operation !== null && operation.creationKind === WalletOperationModel.WatchOnly
+    readonly property bool completedEncrypted: operation !== null && operation.encrypted
     property bool readyPending: false
     // The wallet just created or imported. The completion pages act on it,
     // even if another wallet is selected meanwhile.
-    property WalletQmlModel completedWallet: null
+    readonly property WalletQmlModel completedWallet: operation !== null ? operation.resultWallet : null
     readonly property alias currentItem: pages.currentItem
     readonly property OnboardingView currentOnboardingPage: pages.currentItem as OnboardingView
     readonly property alias depth: pages.depth
@@ -32,7 +32,7 @@ Item {
     readonly property alias navigationBar: navigationBar
     readonly property bool walletDiscoveryReady: ApplicationModels.walletController.initialized
         && (!waitForWalletDiscovery || ApplicationModels.walletListModel.walletDirLoaded)
-    signal finished(bool openActivity, var wallet)
+    signal finished(bool openActivity, WalletQmlModel wallet)
 
     function showingCompletion() {
         const page = root.currentItem ? root.currentItem.objectName : ""
@@ -42,7 +42,7 @@ Item {
 
     function completedWalletIsOpen() {
         return root.completedWallet !== null && root.completedWallet.available !== false
-            && ApplicationModels.walletController.openWallets.indexOf(root.completedWallet) >= 0
+            && ApplicationModels.walletController.rowForWallet(root.completedWallet) >= 0
     }
 
     // A completion page for a wallet that has since closed has nothing
@@ -59,6 +59,30 @@ Item {
     function pop() { return pages.pop() }
     function goBack() { pages.goBack() }
 
+    function showOperationResult() {
+        if (root.busy) return
+        if (!root.operation || !root.operation.terminal || root.showingCompletion()) return
+        if (root.operation.phase === WalletOperationModel.Partial || root.operation.phase === WalletOperationModel.Uncertain) {
+            if (!root.currentItem || root.currentItem.objectName !== "walletCreationOutcomePage") root.push(outcomePage, { "operation": root.operation }, StackView.Immediate)
+            return
+        }
+        if (root.operation.kind === WalletOperationModel.Restore) {
+            if (root.operation.phase === WalletOperationModel.Succeeded) root.push(importSuccess, { "operation": root.operation }, StackView.Immediate)
+            else if (root.operation.phase === WalletOperationModel.Failed || root.operation.phase === WalletOperationModel.Rejected) {
+                if (!root.currentItem || root.currentItem.objectName !== "walletImportErrorPage") root.push(importError, { "operation": root.operation }, StackView.Immediate)
+            }
+            return
+        }
+        if (root.operation.phase !== WalletOperationModel.Succeeded) return
+        if (root.operation.creationKind === WalletOperationModel.ExternalSigner) root.push(externalConfirm, { "operation": root.operation }, StackView.Immediate)
+        else root.showReady()
+    }
+
+    Connections {
+        target: root.operation
+        function onChanged() { root.showOperationResult() }
+    }
+
     function showReady() {
         if (root.busy) {
             root.readyPending = true
@@ -68,7 +92,7 @@ Item {
         root.push(readyPage, { "wallet": root.completedWallet,
                                "watchOnly": root.completedWatchOnly,
                                "encryptedWallet": root.completedEncrypted,
-                               "modalView": root.modalView }, StackView.Immediate)
+                               "modalView": root.modalView, "operation": root.operation }, StackView.Immediate)
     }
 
     function chooseImportFile() {
@@ -83,23 +107,26 @@ Item {
     }
 
     function importFile(path) {
-        if (!path || root.importingWallet) return
-        root.importingWallet = true
-        ApplicationModels.walletController.importWallet(ApplicationModels.walletController.normalizeWalletPath(path))
+        if (!path || root.importingWallet || root.showingCompletion()) return
+        root.operation = ApplicationModels.walletController.creation.restoreLocalFile(path)
+        importPresentations.offer(root.operation)
+        root.showOperationResult()
     }
 
-    function showImportResult() {
-        if (root.busy || root.pendingImportResult.length === 0) return
-        const result = root.pendingImportResult
-        root.pendingImportResult = ""
-        if (result === "success") root.push(importSuccess, {}, StackView.Immediate)
-        else if (!root.currentItem || root.currentItem.objectName !== "walletImportErrorPage")
-            root.push(importError, { "modalView": root.modalView }, StackView.Immediate)
+    WalletOperationPresentationModel { id: importPresentations; showTerminalResults: false }
+    Repeater {
+        model: importPresentations
+        delegate: WalletOperationDialog {
+            presenter: importPresentations
+            showResult: false
+            maximumWidth: Math.min(420, root.width - 40)
+        }
     }
 
     Component.onCompleted: {
         if (!ApplicationModels.walletController.initialized) ApplicationModels.nodeModel.startNodeInitializionThread()
-        ApplicationModels.walletController.refreshExternalSignerStatus()
+        ApplicationModels.walletController.creation.refreshSigners()
+        root.showOperationResult()
     }
 
     AppFileDialog {
@@ -107,7 +134,11 @@ Item {
         objectName: "walletImportFileDialog"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
         onAccepted: {
-            if (selectedFile.toString().length > 0) root.importFile(selectedFile.toString())
+            if (selectedFile.toString().length > 0 && !root.importingWallet) {
+                root.operation = ApplicationModels.walletController.creation.restore(selectedFile)
+                importPresentations.offer(root.operation)
+                root.showOperationResult()
+            }
         }
     }
 
@@ -128,37 +159,10 @@ Item {
 
     Connections {
         target: ApplicationModels.walletController
-        function onWalletCreateSucceeded(wallet) {
-            if (!root.creatingWallet) return
-            root.creatingWallet = false
-            root.completedWallet = wallet
-            const form = root.currentItem as CreateWalletForm
-            if (form) form.clearSecrets()
-            root.showReady()
-        }
-        function onWalletCreateErrorChanged() {
-            if (root.creatingWallet && ApplicationModels.walletController.walletCreateError.length > 0)
-                root.creatingWallet = false
-        }
         function onOpenWalletsChanged() {
             root.closeIfCompletedWalletClosed()
         }
-        function onWalletLoadErrorChanged() {
-            if (root.creatingWallet && ApplicationModels.walletController.walletLoadError.length > 0)
-                root.creatingWallet = false
-            if (root.importingWallet && ApplicationModels.walletController.walletLoadError.length > 0) {
-                root.importingWallet = false
-                root.pendingImportResult = "error"
-                root.showImportResult()
-            }
-        }
-        function onWalletImportSucceeded(wallet) {
-            if (!root.importingWallet) return
-            root.importingWallet = false
-            root.completedWallet = wallet
-            root.pendingImportResult = "success"
-            root.showImportResult()
-        }
+
     }
 
     OnboardingNavigationBar {
@@ -167,7 +171,7 @@ Item {
         width: parent.width
         surfaceLevel: root.modalView ? 1 : 0
         buttonSidePadding: SizeClass.isCompact(width) ? 16 : 24
-        visible: root.currentOnboardingPage !== null && root.currentOnboardingPage.usesSharedNavigation === true
+        visible: root.currentOnboardingPage !== null && root.currentOnboardingPage.usesSharedNavigation
         height: visible ? implicitHeight : 0
         title: visible ? root.currentOnboardingPage.title : ""
         showBackButton: visible && root.currentOnboardingPage.showBackButton
@@ -189,7 +193,7 @@ Item {
         initialItem: root.modalView ? typePage : startPage
         onBusyChanged: {
             if (!busy && root.readyPending) root.showReady()
-            if (!busy && root.pendingImportResult.length > 0) root.showImportResult()
+            if (!busy) root.showOperationResult()
         }
     }
 
@@ -241,9 +245,9 @@ Item {
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
                 ApplicationModels.walletController.clearWalletLoadStatus()
-                ApplicationModels.walletController.refreshExternalSignerStatus()
+                ApplicationModels.walletController.creation.refreshSigners()
                 root.push(externalWallet, {
-                    "defaultWalletName": ApplicationModels.walletController.suggestedExternalSignerWalletName
+                    "defaultWalletName": ApplicationModels.signers ? ApplicationModels.signers.suggestedWalletName : "external_signer"
                 })
             }
             onImportSelected: root.chooseImportFile()
@@ -255,20 +259,22 @@ Item {
         CreateWalletForm {
             creating: root.creatingWallet || root.readyPending
             onCancel: root.finished(false, null)
-            onCreateRequested: function(name, xpub, passphrase) {
-                root.completedWatchOnly = watchOnly
-                root.completedEncrypted = !watchOnly && passphrase.length > 0
-                root.creatingWallet = true
-                if (watchOnly) ApplicationModels.walletController.createWatchOnlyWallet(name, xpub)
-                else ApplicationModels.walletController.createSingleSigWallet(name, passphrase)
+            onOperationSubmitted: function(accepted) {
+                root.operation = accepted
+                root.showOperationResult()
             }
         }
     }
 
     Component {
+        id: outcomePage
+        WalletCreationOutcomePage { onDone: root.finished(false, null); onOpenRequested: function(wallet) { root.finished(true, wallet) } }
+    }
+
+    Component {
         id: readyPage
         WalletCreationReadyPage {
-            onDone: root.finished(true, root.completedWallet)
+            onDone: root.finished(root.operation ? root.operation.canOpenResult : root.completedWalletIsOpen(), root.completedWallet)
         }
     }
 
@@ -282,7 +288,8 @@ Item {
     Component {
         id: importSuccess
         WalletImportCompletePage {
-            onDone: root.finished(true, root.completedWallet)
+            id: originalImportResult
+            onDone: root.finished(originalImportResult.operation.canOpenResult, originalImportResult.operation.resultWallet)
         }
     }
     Component {
@@ -290,16 +297,17 @@ Item {
         ExternalSignerWalletForm {
             modalView: root.modalView
             onCancel: root.finished(false, null)
-            onCreated: function(wallet) {
-                root.completedWallet = wallet
-                root.push(externalConfirm, {}, StackView.Immediate)
+            onOperationSubmitted: function(accepted) {
+                root.operation = accepted
+                root.showOperationResult()
             }
         }
     }
     Component {
         id: externalConfirm
         WalletCreationExternalReadyPage {
-            onDone: root.finished(true, root.completedWallet)
+            id: originalExternalResult
+            onDone: root.finished(originalExternalResult.operation.canOpenResult, originalExternalResult.operation.resultWallet)
         }
     }
 }

@@ -114,7 +114,7 @@ Page {
     }
 
     function defaultSavePsbtFileUrl() {
-        return "file://" + ApplicationModels.walletController.homePath() + "/transaction-"
+        return "file://" + ApplicationModels.walletController.names.homePath() + "/transaction-"
             + Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm") + ".psbt"
     }
 
@@ -159,7 +159,7 @@ Page {
         objectName: "sendTransactionReviewSaveDialog"
         title: qsTr("Save transaction as PSBT")
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + ApplicationModels.walletController.homePath()
+        currentFolder: "file://" + ApplicationModels.walletController.names.homePath()
         defaultSuffix: "psbt"
         nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
         property var targetWallet: null

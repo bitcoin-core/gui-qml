@@ -1791,69 +1791,55 @@ namespace {
 execution::SnapshotServices& MockFeeServices() { static execution::SnapshotServices value; return value; }
 std::vector<QPointer<FeeSelectionModel>>& MockFeeOwners() { static std::vector<QPointer<FeeSelectionModel>> value; return value; }
 }
-class MockSecurityOperation : public QObject
+class MockSecurityOperation : public SecurityOperation
 {
     Q_OBJECT
     Q_PROPERTY(QString operationId MEMBER m_id CONSTANT)
-    Q_PROPERTY(QString promptId MEMBER m_id CONSTANT)
-    Q_PROPERTY(Kind kind MEMBER m_kind CONSTANT)
-    Q_PROPERTY(Phase phase MEMBER m_phase NOTIFY changed)
-    Q_PROPERTY(bool busy READ busy NOTIFY changed)
-    Q_PROPERTY(bool canSubmit READ canSubmit NOTIFY changed)
-    Q_PROPERTY(bool canCancel READ canSubmit NOTIFY changed)
-    Q_PROPERTY(QString error MEMBER m_error NOTIFY changed)
 public:
-    enum Kind { Encrypt, ChangePassphrase };
-    Q_ENUM(Kind)
-    enum Phase { AwaitingCredentials, Pending, Succeeded, Failed, Uncertain, Cancelled };
-    Q_ENUM(Phase)
     MockSecurityOperation(Kind kind, std::function<bool()> submit, QObject* parent)
-        : QObject(parent), m_kind(kind), m_submit(std::move(submit)) {}
-    bool busy() const { return m_phase == Pending; }
-    bool canSubmit() const { return m_phase == AwaitingCredentials; }
-    Q_INVOKABLE bool submitCredentials(const QString& prompt, const QString&, const QString& replacement, const QString& confirmation)
+        : SecurityOperation(kind, parent), m_submit(std::move(submit)) {}
+    bool submit(const QString&, const QString& replacement, const QString& confirmation) override
     {
-        if (prompt != m_id || !canSubmit() || !m_submit()) return false;
-        m_phase = Pending;
-        if (replacement != confirmation) { m_phase = Failed; m_error = QStringLiteral("The new passwords do not match."); }
-        Q_EMIT changed();
+        if (!canSubmit() || !m_submit()) return false;
+        if (replacement != confirmation) publish(Phase::Failed, QStringLiteral("The new passwords do not match."));
+        else publish(Phase::Pending);
         return true;
     }
-    Q_INVOKABLE bool cancel()
+    bool cancel() override
     {
         if (!canSubmit()) return false;
-        m_phase = Cancelled; Q_EMIT changed(); return true;
+        publish(Phase::Cancelled); return true;
     }
     void finish(bool success)
     {
         if (!busy()) return;
-        m_phase = success ? Succeeded : Failed;
-        m_error = success ? QString{} : QStringLiteral("Security operation failed");
-        Q_EMIT changed();
+        publish(success ? Phase::Succeeded : Phase::Failed, success ? QString{} : QStringLiteral("Security operation failed"));
     }
     const QString m_id{QUuid::createUuid().toString(QUuid::WithoutBraces)};
-    const Kind m_kind;
-    Phase m_phase{AwaitingCredentials};
-    QString m_error;
-Q_SIGNALS:
-    void changed();
 private:
     const std::function<bool()> m_submit;
 };
 
-class MockWalletSecurity : public QObject
+class MockWalletSecurity : public WalletSecurityInterface
 {
     Q_OBJECT
     Q_PROPERTY(MockSecurityOperation* activeOperation MEMBER m_active NOTIFY changed)
-    Q_PROPERTY(bool canEncrypt READ canBegin NOTIFY changed)
-    Q_PROPERTY(bool canChangePassphrase READ canBegin NOTIFY changed)
 public:
     MockWalletSecurity(QObject* parent, std::function<bool()> available, std::function<bool()> submit)
-        : QObject(parent), m_available(std::move(available)), m_submit(std::move(submit)) {}
-    Q_INVOKABLE MockSecurityOperation* beginEncryption() { return begin(MockSecurityOperation::Encrypt); }
-    Q_INVOKABLE MockSecurityOperation* beginPassphraseChange() { return begin(MockSecurityOperation::ChangePassphrase); }
+        : WalletSecurityInterface(parent), m_available(std::move(available)), m_submit(std::move(submit))
+    {
+        connect(this, &MockWalletSecurity::changed, this, &WalletSecurityInterface::capabilitiesChanged);
+    }
+    bool canEncrypt() const override { return canBegin(); }
+    bool canChangePassphrase() const override { return canBegin(); }
+    bool busy() const override { return m_active && m_active->busy(); }
+    bool available() const override { return !walletAvailable || walletAvailable(); }
+    //! The wallet itself can be used (not "can begin"); set by the mock wallet.
+    std::function<bool()> walletAvailable;
+    MockSecurityOperation* beginEncryption() override { return begin(SecurityOperation::Kind::Encrypt); }
+    MockSecurityOperation* beginPassphraseChange() override { return begin(SecurityOperation::Kind::ChangePassphrase); }
     bool canBegin() const { return m_available() && (!m_active || (!m_active->busy() && !m_active->canSubmit())); }
-    MockSecurityOperation* begin(MockSecurityOperation::Kind kind)
+    MockSecurityOperation* begin(SecurityOperation::Kind kind)
     {
         if (!m_available() || (m_active && (m_active->busy() || m_active->canSubmit()))) return nullptr;
         if (m_active) m_active->deleteLater();
@@ -3180,9 +3166,9 @@ public:
     QString title() const { return m_kind == Confirmation ? QStringLiteral("Wallet update required") : QStringLiteral("Enter wallet password"); }
     QString message() const { return QStringLiteral("Original wallet operation ") + m_operation; }
     QVariantMap error() const { return {{QStringLiteral("message"), m_error}}; }
-    Q_INVOKABLE WalletCreationReceipt answer(const QString& id, Response response) { return invoke(id, {}, response == Decline); }
-    Q_INVOKABLE WalletCreationReceipt submitSecret(const QString& id, const QString& secret) { return invoke(id, secret, false); }
-    Q_INVOKABLE WalletCreationReceipt dismiss(const QString& id) { return invoke(id, {}, true); }
+    Q_INVOKABLE WalletCreationReceipt confirm() { return invoke(m_id, {}, false); }
+    Q_INVOKABLE WalletCreationReceipt submit(const QString& secret) { return invoke(m_id, secret, false); }
+    Q_INVOKABLE WalletCreationReceipt decline() { return invoke(m_id, {}, true); }
     WalletCreationReceipt invoke(const QString& id, const QString& secret, bool decline) {
         if (id != m_id || m_busy) return {id, false, {QStringLiteral("StalePrompt"), QStringLiteral("Wrong original prompt"), {}, {}}};
         return m_answer(id, secret, decline);
@@ -3252,7 +3238,7 @@ public:
     bool presentationBusy() const override { return busy(); }
     bool presentationTerminal() const override { return terminal(); }
     bool presentationHasPrompt() const override { return prompt() != nullptr; }
-    QString presentationPromptId() const override { return prompt() ? m_prompt->promptId() : QString{}; }
+    const QObject* presentationPrompt() const override { return prompt(); }
     WalletCreationReceipt dismissPresentation() override {
         if (busy()) return {m_id, false, {QStringLiteral("Busy"), QStringLiteral("Original effect still running"), {}, {}}};
         if (!terminal()) { m_phase = Cancelled; Q_EMIT changed(); }
@@ -3265,7 +3251,7 @@ public:
         const QString id = m_id + QLatin1Char(':') + QString::number(m_prompts.size() + 1);
         m_prompt = new MockWalletOperationPrompt(m_id, id, passphrase ? MockWalletOperationPrompt::Passphrase : MockWalletOperationPrompt::Confirmation,
             [this, id](const QString& token, const QString& secret, bool decline) -> WalletCreationReceipt {
-                if (token != id || presentationPromptId() != id) return {token, false, {QStringLiteral("StalePrompt"), QStringLiteral("Wrong original prompt"), {}, {}}};
+                if (token != id || !prompt() || m_prompt->promptId() != id) return {token, false, {QStringLiteral("StalePrompt"), QStringLiteral("Wrong original prompt"), {}, {}}};
                 if (decline) { m_phase = Cancelled; Q_EMIT changed(); return {token, true, {}}; }
                 m_phase = Creating; Q_EMIT changed(); if (promptAccepted) promptAccepted(secret); return {token, true, {}};
             }, this);
@@ -3276,6 +3262,7 @@ public:
     MockWalletQmlModel* resultWallet() const { return m_wallet; }
     bool canReconcile() const { return false; }
     Q_INVOKABLE void reconcile() {}
+    Q_PROPERTY(QObject* creation READ creation WRITE setCreation NOTIFY creationChanged)
     bool canOpenResult() const { return m_phase == Succeeded && m_wallet && m_wallet->m_available; }
     QVariantMap error() const { return {{QStringLiteral("message"), m_error.left(1024)}, {QStringLiteral("code"), m_error.isEmpty() ? QString{} : QStringLiteral("FixtureFailure")}, {QStringLiteral("field"), QString{}}, {QStringLiteral("recovery"), m_recovery}}; }
     QVariantMap result() const { return {{QStringLiteral("resultId"), m_id + QStringLiteral(":result")}, {QStringLiteral("warnings"), m_warnings.isEmpty() ? QStringList{} : QStringList{m_warnings.left(1024)}}, {QStringLiteral("warningsTruncated"), m_warnings.size() > 1024}, {QStringLiteral("recoveryPaths"), m_recovery_paths}}; }
@@ -3315,6 +3302,7 @@ class MockWalletCreationModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(MockWalletCreationText* name READ name CONSTANT)
+    void creationChanged();
     Q_PROPERTY(MockWalletCreationText* extendedPublicKey READ extendedPublicKey CONSTANT)
     Q_PROPERTY(QVariantMap error READ error NOTIFY changed)
     Q_PROPERTY(Kind kind READ kind NOTIFY changed)
@@ -3325,10 +3313,11 @@ class MockWalletCreationModel : public QObject
 public:
     enum Kind { Software, WatchOnly, ExternalSigner }; Q_ENUM(Kind)
     using Submit = std::function<MockWalletOperationModel*(const QString&, const QString&, Kind, bool, quint64)>;
-    MockWalletCreationModel(Submit submit, std::function<bool()> available, QObject* parent) : QObject(parent), m_submit(std::move(submit)), m_available(std::move(available)) {
+    explicit MockWalletCreationModel(QObject* parent = nullptr) : QObject(parent) {
         connect(&m_name, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
         connect(&m_key, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
         refresh();
+    QPointer<QObject> m_creation;
     }
     MockWalletCreationText* name() { return &m_name; }
     MockWalletCreationText* extendedPublicKey() { return &m_key; }
@@ -3336,14 +3325,17 @@ public:
     QVariantMap error() const { return {{QStringLiteral("message"), m_error.value(QStringLiteral("message")).toString()}, {QStringLiteral("code"), m_error.value(QStringLiteral("code")).toString()}}; }
     bool encryptRequested() const { return m_encrypt; }
     bool pendingValidation() const { return m_pending; }
-    bool canCreate() const { return !m_closed && !m_pending && m_available() && m_name.error().isEmpty() && (m_kind != WatchOnly || (!m_key.text().isEmpty() && m_key.error().isEmpty())); }
+    QObject* creation() const { return m_creation; }
+    void setCreation(QObject* creation);
+    void setPorts(Submit submit, std::function<bool()> available) { m_submit = std::move(submit); m_available = std::move(available); refresh(); }
+    bool canCreate() const { return !m_closed && !m_pending && m_available && m_available() && m_name.error().isEmpty() && (m_kind != WatchOnly || (!m_key.text().isEmpty() && m_key.error().isEmpty())); }
     MockWalletOperationModel* operation() const { return m_operation; }
     Q_INVOKABLE void chooseKind(Kind kind) { m_kind = kind; refresh(); }
     Q_INVOKABLE void chooseSigner(const QString&) {}
     Q_INVOKABLE void setEncryptRequested(bool value) { m_encrypt = value; ++m_revision; Q_EMIT changed(); }
     Q_INVOKABLE void discard() { m_closed = true; ++m_revision; ++m_validation_revision; Q_EMIT changed(); }
     Q_INVOKABLE MockWalletOperationModel* create(const QString&, const QString&) {
-        if (m_closed) return nullptr;
+        if (m_closed || !m_submit) return nullptr;
         auto* submitted = m_submit(m_name.text(), m_key.text(), m_kind, m_encrypt, m_revision);
         if (submitted->phase() == MockWalletOperationModel::Rejected) m_error = submitted->error();
         else { m_operation = submitted; m_error.clear(); }
@@ -3378,6 +3370,40 @@ struct SignerPresentationFacts {
     QString fingerprint{QStringLiteral("00000001")}, name{QStringLiteral("Test signer")}, error, save_error;
     int reads{0}, writes{0};
 };
+//! The app's wallet names and file locations, with a scripted open result.
+class MockWalletNamesController : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QUrl homeUrl READ homeUrl CONSTANT)
+    Q_PROPERTY(bool locationPending READ locationPending CONSTANT)
+    Q_PROPERTY(QString locationError READ locationError NOTIFY locationChanged)
+    Q_PROPERTY(QObject* lastLocationWallet MEMBER m_last_wallet NOTIFY locationChanged)
+    Q_PROPERTY(int openLocationCalls MEMBER m_open_calls NOTIFY locationChanged)
+public:
+    using QObject::QObject;
+    QUrl homeUrl() const { return QUrl::fromLocalFile(QStringLiteral("/tmp")); }
+    Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
+    bool locationPending() const { return false; }
+    QString locationError() const { return m_location_error; }
+    Q_INVOKABLE void setOpenLocationResult(bool result, const QString& error = QString()) { m_open_result = result; m_open_error = error; }
+    Q_INVOKABLE bool openLocation(QObject* wallet)
+    {
+        m_last_wallet = wallet; ++m_open_calls;
+        m_location_error = m_open_result ? QString{} : m_open_error.isEmpty() ? QStringLiteral("Could not open wallet file location.") : m_open_error;
+        Q_EMIT locationChanged();
+        return m_open_result;
+    }
+    Q_INVOKABLE void clearLocationError() { if (m_location_error.isEmpty()) return; m_location_error.clear(); Q_EMIT locationChanged(); }
+    void reset() { m_last_wallet = nullptr; m_open_calls = 0; m_open_result = true; m_open_error.clear(); m_location_error.clear(); Q_EMIT locationChanged(); }
+Q_SIGNALS:
+    void locationChanged();
+private:
+    QObject* m_last_wallet{nullptr};
+    int m_open_calls{0};
+    bool m_open_result{true};
+    QString m_open_error, m_location_error;
+};
+
 class MockWalletController : public QObject
 {
     Q_OBJECT
@@ -3394,30 +3420,8 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool isWalletLoaded MEMBER m_is_wallet_loaded NOTIFY isWalletLoadedChanged)
     Q_PROPERTY(bool noWalletsFound MEMBER m_no_wallets_found NOTIFY noWalletsFoundChanged)
     Q_PROPERTY(bool walletLoadInProgress MEMBER m_wallet_load_in_progress NOTIFY walletLoadInProgressChanged)
-    Q_PROPERTY(QString walletLoadError MEMBER m_wallet_load_error NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(bool walletLoadHasError READ walletLoadHasError NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletLoadErrorDisplay READ walletLoadErrorDisplay NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletLoadWarnings MEMBER m_wallet_load_warnings NOTIFY walletLoadWarningsChanged)
-    Q_PROPERTY(QString walletImportErrorTitle READ walletImportErrorTitle NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletImportErrorDescription READ walletImportErrorDescription NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletImportErrorHelpText READ walletImportErrorHelpText NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QAbstractItemModel* walletImportErrorHelpModel READ walletImportErrorHelpModel CONSTANT)
-    Q_PROPERTY(bool walletImportErrorPending READ walletImportErrorPending CONSTANT)
-    Q_PROPERTY(bool walletImportErrorUnavailable READ walletImportErrorUnavailable CONSTANT)
-    Q_PROPERTY(QString walletImportErrorProjectionError READ walletImportErrorProjectionError CONSTANT)
-    Q_PROPERTY(bool walletImportErrorRetryAvailable READ walletImportErrorRetryAvailable CONSTANT)
-    Q_PROPERTY(QString walletCreateError MEMBER m_wallet_create_error NOTIFY walletCreateErrorChanged)
-    Q_PROPERTY(bool walletCreateHasError READ walletCreateHasError NOTIFY walletCreateErrorChanged)
-    Q_PROPERTY(QString walletCreateErrorDisplay READ walletCreateErrorDisplay NOTIFY walletCreateErrorChanged)
-    Q_PROPERTY(QAbstractItemModel* walletCreateErrorHelpModel READ walletCreateErrorHelpModel CONSTANT)
-    Q_PROPERTY(bool walletMigrationInProgress MEMBER m_wallet_migration_in_progress NOTIFY walletMigrationInProgressChanged)
-    Q_PROPERTY(QString walletMigrationError MEMBER m_wallet_migration_error NOTIFY walletMigrationErrorChanged)
     Q_PROPERTY(QString lastImportedWalletName MEMBER m_last_imported_wallet_name NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme MEMBER m_last_imported_wallet_key_scheme NOTIFY lastImportedWalletInfoChanged)
-    Q_PROPERTY(bool canCreateExternalSignerWallet MEMBER m_can_create_external_signer_wallet NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString externalSignerName MEMBER m_external_signer_name NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString externalSignerError MEMBER m_external_signer_error NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString suggestedExternalSignerWalletName MEMBER m_suggested_external_signer_wallet_name NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString lastSelectedWalletName READ lastSelectedWalletName NOTIFY lastSelectedWalletNameChanged)
     Q_PROPERTY(QString lastClosedWalletName READ lastClosedWalletName NOTIFY lastClosedWalletNameChanged)
     Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
@@ -3426,11 +3430,9 @@ class MockWalletController : public QObject
     Q_PROPERTY(QAbstractItemModel* openWalletModel READ openWalletModel CONSTANT)
     Q_PROPERTY(QList<QObject*> openWallets READ openWallets NOTIFY openWalletsChanged)
     Q_PROPERTY(QObject* openedWallet MEMBER m_opened_wallet NOTIFY openWalletsChanged)
-    Q_PROPERTY(QObject* lastLocationWallet MEMBER m_last_location_wallet NOTIFY openWalletLocationCallsChanged)
+    Q_PROPERTY(MockWalletNamesController* names READ names CONSTANT)
     Q_PROPERTY(int closePaymentRequestDetailRequests MEMBER m_close_payment_request_detail_requests NOTIFY closePaymentRequestDetailRequestsChanged)
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
-    Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
-    Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
 
 public:
     bool m_hold_creation{false}, m_refuse_creation{false};
@@ -3461,12 +3463,7 @@ public:
         m_signers = new SignerDiscoveryModel(std::move(services), this);
         connect(m_signers, &SignerDiscoveryModel::changed, this, &MockWalletController::externalSignerStatusChanged);
 
-        connect(this, &MockWalletController::walletLoadErrorChanged, this, [this] { m_error_lines.setText(m_wallet_load_error); });
-        connect(this, &MockWalletController::walletCreateErrorChanged, this, [this] { m_create_error_lines.setText(m_wallet_create_error); });
-        connect(this, &MockWalletController::walletLoadStateChanged, this, [this](const QString& name, int state, const QString& error) { if (state == 3) Q_EMIT walletLoadErrorNotice(name, ++m_notice_operation, error); });
-        connect(this, &MockWalletController::walletMigrationRequired, this, [this](const QString& name) { m_migration_notice_path = name; });
-        connect(this, &MockWalletController::walletMigrationPassphraseRequired, this, [this](const QString& name) { m_migration_notice_path = name; });
-        connect(this, &MockWalletController::walletMigrationFailed, this, [this] { Q_EMIT walletMigrationErrorNotice(m_migration_notice_path, ++m_notice_operation, m_wallet_migration_error.contains(QLatin1String("passphrase"), Qt::CaseInsensitive), m_wallet_migration_error.left(1024)); });
+        connect(this, &MockWalletController::walletLoadStateChanged, this, [this](const QString& name, int state, const QString& error) { if (state == 3) failLoadForTest(name, error); });
     }
     ~MockWalletController() override { if (m_held_signer) m_signer_process.finishWork(*m_held_signer); m_signers->close(); advanceSignerForTest(); delete m_signers; }
     SignerDiscoveryModel* signers() const { return m_signers; }
@@ -3491,20 +3488,8 @@ public:
         m_held_signer = m_signer_process.dispatchNext(execution::Lane::Core); return m_held_signer.has_value();
     }
     Q_INVOKABLE void releaseSignerProcessForTest() { if (m_held_signer) { m_signer_process.finishWork(*m_held_signer); m_held_signer.reset(); } advanceSignerForTest(); }
-    bool walletLoadHasError() const { return !m_wallet_load_error.isEmpty(); }
-    bool walletCreateHasError() const { return !m_wallet_create_error.isEmpty(); }
-    QString walletLoadErrorDisplay() const { return m_wallet_load_error.left(1024); }
-    QString walletCreateErrorDisplay() const { return m_wallet_create_error.left(1024); }
-    QAbstractItemModel* walletCreateErrorHelpModel() { return &m_create_error_lines; }
-    QAbstractItemModel* walletImportErrorHelpModel() { return &m_error_lines; }
-    bool walletImportErrorPending() const { return false; }
-    bool walletImportErrorUnavailable() const { return false; }
-    QString walletImportErrorProjectionError() const { return {}; }
-    bool walletImportErrorRetryAvailable() const { return false; }
-    Q_INVOKABLE bool retryWalletImportErrorPresentation() { return false; }
-    Q_INVOKABLE QAbstractItemModel* captureMigrationErrorDetails(quint64, int slot) { auto* lines = slot == 0 ? &m_migration_required_details : &m_migration_passphrase_details; lines->setText(m_wallet_migration_error); return lines; }
-    Q_INVOKABLE MockWalletCreationModel* newCreation() {
-        return new MockWalletCreationModel([this](const QString& name, const QString&, MockWalletCreationModel::Kind kind, bool encrypt, quint64 revision) {
+    void adoptCreation(MockWalletCreationModel& editor) {
+        editor.setPorts([this](const QString& name, const QString&, MockWalletCreationModel::Kind kind, bool encrypt, quint64 revision) {
             const bool accepted = (!m_pending_creation || !m_pending_creation->busy()) && !std::exchange(m_refuse_creation, false);
             auto* operation = new MockWalletOperationModel(QString::number(++m_creation_sequence), name, revision,
                 static_cast<MockWalletOperationModel::Kind>(kind), kind == MockWalletCreationModel::Software && encrypt, accepted, this);
@@ -3513,7 +3498,19 @@ public:
             m_wallet_load_in_progress = true; Q_EMIT walletLoadInProgressChanged();
             if (!m_hold_creation) QTimer::singleShot(0, operation, [this, operation] { if (m_pending_creation == operation) finishCreation(); });
             return operation;
-        }, [this] { return m_initialized && (!m_pending_creation || !m_pending_creation->busy()); }, this);
+        }, [this] { return m_initialized && (!m_pending_creation || !m_pending_creation->busy()); });
+    Q_PROPERTY(MockWalletOperationModel* loadFailure READ loadFailure NOTIFY loadFailureChanged)
+    MockWalletOperationModel* loadFailure() const { return m_load_failure; }
+    Q_INVOKABLE void dismissLoadFailure() { if (m_load_failure) m_load_failure->deleteLater(); m_load_failure = nullptr; Q_EMIT loadFailureChanged(); }
+    //! Reports that opening \p name failed with \p message.
+    Q_INVOKABLE void failLoadForTest(const QString& name, const QString& message) {
+        auto* failure = new MockWalletOperationModel(QString::number(++m_notice_operation), name, 0, MockWalletOperationModel::Software, false, true, this);
+        failure->setOperationKind(MockWalletOperationModel::Open);
+        failure->complete(nullptr, {}, message, false);
+        if (m_load_failure) m_load_failure->deleteLater();
+        m_load_failure = failure; Q_EMIT loadFailureChanged();
+    }
+    QPointer<MockWalletOperationModel> m_load_failure;
     }
     Q_INVOKABLE void finishCreation(const QString& error = QString(), bool created_artifact = false) {
         if (!m_pending_creation || !m_pending_creation->busy()) return;
@@ -3526,33 +3523,21 @@ public:
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
-    QString m_wallet_load_error;
-    QString m_wallet_load_warnings;
-    QString m_wallet_create_error;
-    bool m_wallet_migration_in_progress{false};
-    QString m_wallet_migration_error;
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
-    bool m_can_create_external_signer_wallet{false};
-    QString m_external_signer_name;
-    QString m_external_signer_error;
-    QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
     QObject* m_selected_wallet{nullptr};
     QList<QObject*> m_open_wallets;
     // The wallet reported by create, import and load success; the selected
     // wallet unless a test sets another.
     QObject* m_opened_wallet{nullptr};
-    QObject* m_last_location_wallet{nullptr};
+    MockWalletNamesController m_names{this};
+    MockWalletNamesController* names() { return &m_names; }
     QObject* reportedWallet() const { return m_opened_wallet ? m_opened_wallet : m_selected_wallet; }
     QString m_last_selected_wallet_name;
     QString m_last_closed_wallet_name;
     int m_close_wallet_calls{0};
     int m_close_payment_request_detail_requests{0};
     int m_open_receive_requests{0};
-    QString m_wallet_location_open_error;
-    bool m_open_wallet_location_result{true};
-    QString m_open_wallet_location_error;
-    int m_open_wallet_location_calls{0};
 
     QObject* selectedWallet() const { return m_selected_wallet; }
     QList<QObject*> openWallets() const { return m_open_wallets; }
@@ -3561,59 +3546,14 @@ public:
     QString lastSelectedWalletName() const { return m_last_selected_wallet_name; }
     QString lastClosedWalletName() const { return m_last_closed_wallet_name; }
     int closeWalletCalls() const { return m_close_wallet_calls; }
-    QString walletLocationOpenError() const { return m_wallet_location_open_error; }
-    int openWalletLocationCalls() const { return m_open_wallet_location_calls; }
-    QString walletImportErrorTitle() const { return m_wallet_load_error.isEmpty() ? QString{} : QStringLiteral("Failed to load wallet"); }
-    QString walletImportErrorDescription() const { return m_wallet_load_error; }
-    QString walletImportErrorHelpText() const { return QString{}; }
-    Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
-    Q_PROPERTY(QUrl homeUrl READ homeUrl CONSTANT)
-    QUrl homeUrl() const { return QUrl::fromLocalFile(QStringLiteral("/tmp")); }
-    Q_PROPERTY(int externalSignerRefreshCalls MEMBER m_external_signer_refresh_calls NOTIFY externalSignerStatusChanged)
-    int m_external_signer_refresh_calls{0};
-    Q_INVOKABLE void refreshExternalSignerStatus() { ++m_external_signer_refresh_calls; m_signers->refresh(); Q_EMIT externalSignerStatusChanged(); }
+    Q_INVOKABLE void refreshSigners() { m_signers->refresh(); }
+    //! The mock controller also stands in for its creation controller.
+    Q_PROPERTY(QObject* creation READ creation CONSTANT)
+    QObject* creation() { return this; }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
-        m_wallet_load_error.clear();
-        m_wallet_load_warnings.clear();
         m_wallet_load_in_progress = false;
-        Q_EMIT walletLoadErrorChanged();
-        Q_EMIT walletLoadWarningsChanged();
         Q_EMIT walletLoadInProgressChanged();
-    }
-    Q_INVOKABLE void clearWalletCreateStatus()
-    {
-        m_wallet_create_error.clear();
-        Q_EMIT walletCreateErrorChanged();
-    }
-    Q_INVOKABLE void clearWalletMigrationStatus()
-    {
-        m_wallet_migration_in_progress = false;
-        m_wallet_migration_error.clear();
-        Q_EMIT walletMigrationInProgressChanged();
-        Q_EMIT walletMigrationErrorChanged();
-    }
-    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& /*xpub*/)
-    {
-        clearWalletLoadStatus();
-        Q_EMIT walletCreateSucceeded(reportedWallet());
-    }
-    Q_INVOKABLE void createSingleSigWallet(const QString&, const QString&)
-    {
-        clearWalletCreateStatus();
-        clearWalletLoadStatus();
-        Q_EMIT walletCreateSucceeded(reportedWallet());
-    }
-    Q_INVOKABLE bool createExternalSignerWallet(const QString&)
-    {
-        clearWalletLoadStatus();
-        if (!m_can_create_external_signer_wallet) {
-            m_wallet_load_error = QStringLiteral("Connect an external signer and try again.");
-            Q_EMIT walletLoadErrorChanged();
-            return false;
-        }
-        Q_EMIT walletLoadSucceeded(reportedWallet());
-        return true;
     }
     Q_PROPERTY(int restoreCalls MEMBER m_restore_calls NOTIFY provisioningChanged)
     Q_PROPERTY(QString lastRestoreSource MEMBER m_restore_source NOTIFY provisioningChanged)
@@ -3637,13 +3577,11 @@ public:
         Q_EMIT provisioningChanged(); return operation;
     }
     Q_INVOKABLE MockWalletOperationModel* restoreLocalFile(const QString& path) { return restore(QUrl::fromLocalFile(path)); }
-    Q_INVOKABLE void importWallet(const QString& path) { restoreLocalFile(path); }
     Q_INVOKABLE void finishRestore(const QString& error = {}, bool copied = false) {
         if (!m_restore || !m_restore->busy()) return;
         const auto failure = error.isEmpty() ? std::exchange(m_restore_error, {}) : error;
         m_restore->complete(qobject_cast<MockWalletQmlModel*>(reportedWallet()), m_restore_warnings, failure, copied);
         m_wallet_load_in_progress = false; Q_EMIT walletLoadInProgressChanged();
-        if (failure.isEmpty() && !copied) Q_EMIT walletImportSucceeded(reportedWallet());
     }
     Q_INVOKABLE MockWalletOperationModel* migrate(const QString& path) {
         auto* operation = new MockWalletOperationModel(QString::number(++m_creation_sequence), path, 0, MockWalletOperationModel::Software, false, true, this);
@@ -3652,7 +3590,7 @@ public:
             m_wallet_load_in_progress = true; Q_EMIT walletLoadInProgressChanged();
             if (!m_hold_migration) QTimer::singleShot(0, operation, [this, operation] { if (m_migration == operation) finishMigration(); });
         };
-        operation->requestPrompt(false); Q_EMIT migrationOperationOffered(operation); Q_EMIT provisioningChanged(); return operation;
+        operation->requestPrompt(false); Q_EMIT migrationOffered(operation); Q_EMIT provisioningChanged(); return operation;
     }
     Q_INVOKABLE void requestMigrationPassphrase(const QString& error = {}) { if (m_migration) { m_migration->requestPrompt(true, error); m_wallet_load_in_progress = false; Q_EMIT walletLoadInProgressChanged(); } }
     Q_INVOKABLE void finishMigration(const QString& error = {}, bool partial = false) {
@@ -3660,7 +3598,6 @@ public:
         m_migration->complete(qobject_cast<MockWalletQmlModel*>(reportedWallet()), m_restore_warnings, error, partial);
         m_wallet_load_in_progress = false; Q_EMIT walletLoadInProgressChanged();
     }
-    Q_INVOKABLE void migrateWallet(const QString& path, const QString& = QString()) { migrate(path); }
     Q_INVOKABLE void requestOpenWalletSettings(QObject* wallet)
     {
         if (wallet) Q_EMIT openWalletSettingsRequested(wallet);
@@ -3722,6 +3659,7 @@ public:
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
     }
+        dismissLoadFailure();
     Q_INVOKABLE void setInitialized(bool initialized)
     {
         if (m_initialized == initialized) return;
@@ -3754,33 +3692,21 @@ public:
         Q_EMIT closeTargetChanged();
         setOpenWallets({});
         m_opened_wallet = nullptr;
-        m_last_location_wallet = nullptr;
         m_last_selected_wallet_name.clear();
         m_last_closed_wallet_name.clear();
         m_close_wallet_calls = 0;
         m_close_payment_request_detail_requests = 0;
         m_open_receive_requests = 0;
-        m_open_wallet_location_calls = 0;
-        m_open_wallet_location_result = true;
-        m_open_wallet_location_error.clear();
-        clearWalletLocationOpenError();
+        m_names.reset();
         clearWalletLoadStatus();
-        clearWalletCreateStatus();
-        clearWalletMigrationStatus();
         m_restore = nullptr; m_migration = nullptr; m_restore_source.clear(); m_restore_error.clear(); m_restore_warnings.clear(); m_restore_calls = 0; m_hold_restore = false; m_hold_migration = false;
         m_last_imported_wallet_name.clear();
         m_last_imported_wallet_key_scheme.clear();
-        m_external_signer_refresh_calls = 0;
-        m_can_create_external_signer_wallet = false;
-        m_external_signer_name.clear();
-        m_external_signer_error.clear();
-        m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
         Q_EMIT closePaymentRequestDetailRequestsChanged();
         Q_EMIT openReceiveRequestsChanged();
-        Q_EMIT openWalletLocationCallsChanged();
         Q_EMIT lastImportedWalletInfoChanged();
         Q_EMIT externalSignerStatusChanged();
     }
@@ -3796,45 +3722,21 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         if (wallet) Q_EMIT openReceiveRequested(wallet);
     }
-    Q_INVOKABLE void setOpenWalletLocationResult(const bool result, const QString& error = QString())
-    {
-        m_open_wallet_location_result = result;
-        m_open_wallet_location_error = error;
-    }
-    Q_INVOKABLE bool openWalletLocation(QObject* wallet)
-    {
-        m_last_location_wallet = wallet;
-        ++m_open_wallet_location_calls;
-        Q_EMIT openWalletLocationCallsChanged();
-        if (m_open_wallet_location_result) {
-            clearWalletLocationOpenError();
-            return true;
-        }
-        m_wallet_location_open_error = m_open_wallet_location_error.isEmpty()
-            ? QStringLiteral("Could not open wallet file location.")
-            : m_open_wallet_location_error;
-        Q_EMIT walletLocationOpenErrorChanged();
-        return false;
-    }
-    Q_INVOKABLE void clearWalletLocationOpenError()
-    {
-        if (m_wallet_location_open_error.isEmpty()) return;
-        m_wallet_location_open_error.clear();
-        Q_EMIT walletLocationOpenErrorChanged();
-    }
 
 Q_SIGNALS:
     void closeTargetChanged();
     void initializedChanged();
+void MockWalletCreationModel::setCreation(QObject* creation)
+{
+    if (m_creation == creation || m_creation) return;
+    m_creation = creation; Q_EMIT creationChanged();
+    if (auto* controller = qobject_cast<MockWalletController*>(creation)) controller->adoptCreation(*this);
+}
+
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
     void walletLoadInProgressChanged();
-    void walletLoadErrorChanged();
-    void walletLoadWarningsChanged();
     void walletLoadWarningsOffered(MockWalletOperationModel* operation);
-    void walletCreateErrorChanged();
-    void walletMigrationInProgressChanged();
-    void walletMigrationErrorChanged();
     void lastImportedWalletInfoChanged();
     void externalSignerStatusChanged();
     void lastSelectedWalletNameChanged();
@@ -3847,20 +3749,11 @@ Q_SIGNALS:
     void openReceiveRequestsChanged();
     void openReceiveRequested(QObject* wallet);
     void openWalletSettingsRequested(QObject* wallet);
-    void walletCreateSucceeded(QObject* wallet);
     void walletLoadSucceeded(QObject* wallet);
-    void walletImportSucceeded(QObject* wallet);
-    void walletMigrationSucceeded();
     void walletLoadStateChanged(const QString& name, int state, const QString& error);
-    void walletLoadErrorNotice(const QString& name, quint64 operation, const QString& description);
-    void walletMigrationRequired(const QString& wallet_name);
-    void walletMigrationPassphraseRequired(const QString& wallet_name);
-    void walletMigrationFailed();
-    void walletMigrationErrorNotice(const QString& name, quint64 operation, bool needsPassphrase, const QString& description);
-    void migrationOperationOffered(MockWalletOperationModel* operation);
+    void loadFailureChanged();
+    void migrationOffered(MockWalletOperationModel* operation);
     void provisioningChanged();
-    void walletLocationOpenErrorChanged();
-    void openWalletLocationCallsChanged();
 private:
     const std::shared_ptr<SignerPresentationFacts> m_signer_facts{std::make_shared<SignerPresentationFacts>()};
     ManualRoutedExecution m_signer_process, m_signer_configuration;
@@ -3871,9 +3764,6 @@ private:
     QString m_restore_source, m_restore_error, m_restore_warnings;
     int m_restore_calls{0};
     bool m_hold_restore{false}, m_hold_migration{false};
-    MockWalletErrorLines m_error_lines{this}, m_create_error_lines{this};
-    MockWalletErrorLines m_migration_required_details{this}, m_migration_passphrase_details{this};
-    QString m_migration_notice_path;
     quint64 m_notice_operation{0};
     MockOpenWalletListModel m_open_model;
     QObject* m_close_target{nullptr};
@@ -7702,10 +7592,13 @@ public Q_SLOTS:
         qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
         qmlRegisterType<MockBumpTransactionModel>("org.bitcoincore.qt", 1, 0, "TestBumpTransactionModel");
         qmlRegisterUncreatableType<FileSaveOperation>("org.bitcoincore.qt", 1, 0, "FileSaveOperation", "Started by a save request");
-        qmlRegisterUncreatableType<MockWalletSecurity>("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Test fixture");
-        qmlRegisterUncreatableType<MockSecurityOperation>("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Test fixture");
+        qmlRegisterUncreatableType<WalletSecurityInterface>("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "A wallet");
+        qmlRegisterUncreatableType<SecurityOperation>("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Started by a wallet");
+        qmlRegisterType<WalletPasswordController>("org.bitcoincore.qt", 1, 0, "WalletPasswordController");
+        qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
+        qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
         qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Test stub type");
-        qmlRegisterUncreatableType<MockWalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel", "Test creation editor");
+        qmlRegisterType<MockWalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel");
         qmlRegisterUncreatableType<MockWalletCreationText>("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Test creation input");
         qmlRegisterUncreatableType<SignerDiscoveryModel>("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Actual controlled signer projection");
         qmlRegisterUncreatableMetaObject(SignerDiscoveryError::staticMetaObject, "org.bitcoincore.qt", 1, 0, "SignerDiscoveryError", "Error value");

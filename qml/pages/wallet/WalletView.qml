@@ -192,6 +192,7 @@ Item {
         ActivityList {
             id: activityPage
             wallet: root.wallet
+            walletViewActive: root.active
             onVisibleChanged: if (!visible) root.pageHidden(activityPage)
         }
         SendCreate {
@@ -200,9 +201,10 @@ Item {
             onVisibleChanged: if (!visible) root.pageHidden(sendPage)
             onViewTransactionInActivity: (txid) => root.navigateToTransaction(txid)
         }
-        ReceivePage {
+        ReceiveViewHost {
             id: receivePage
             wallet: root.wallet
+            walletViewActive: root.active
             onVisibleChanged: if (!visible) root.pageHidden(receivePage)
             onPaymentRequestCreated: {
                 activityPage.pop(null)

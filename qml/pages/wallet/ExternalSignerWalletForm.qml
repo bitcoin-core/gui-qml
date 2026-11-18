@@ -15,65 +15,56 @@ OnboardingView {
 
     property bool modalView: false
     property string defaultWalletName: ""
-    property string nameError: ""
-    property bool submitted: false
-    readonly property bool creatingWallet: submitted || ApplicationModels.walletController.walletLoadInProgress
-    readonly property bool canCreate: ApplicationModels.walletController.initialized
-        && ApplicationModels.walletController.canCreateExternalSignerWallet
-        && !creatingWallet && root.fieldsView
-        && root.fieldsView.walletName.trim().length > 0
+    readonly property WalletCreationModel editor: WalletCreationModel {
+        creation: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+    }
+    property WalletOperationModel operation: editor ? editor.operation : null
+    readonly property string nameError: editor ? editor.name.error : qsTr("Wallet creation is unavailable.")
+    readonly property bool creatingWallet: operation && operation.busy
+    readonly property bool canCreate: editor && editor.canCreate && !creatingWallet
 
     signal cancel()
-    signal created(var wallet)
+    signal operationSubmitted(WalletOperationModel operation)
 
     function submit() {
         if (!canCreate) return
-        nameError = ApplicationModels.walletController.walletNameAvailabilityError(root.fieldsView.walletName)
-        if (nameError.length > 0) return
-        submitted = true
-        if (!ApplicationModels.walletController.createExternalSignerWallet(root.fieldsView.walletName.trim()))
-            submitted = false
+        const accepted = editor.create("", "")
+        if (accepted) operationSubmitted(accepted)
     }
 
     title: ""
     heading: qsTr("External signer wallet")
-    subheading: ApplicationModels.walletController.externalSignerError.length > 0
-        ? ApplicationModels.walletController.externalSignerError
-        : ApplicationModels.walletController.externalSignerName.length > 0
-          ? qsTr("Connected signer: %1").arg(ApplicationModels.walletController.externalSignerName)
-          : qsTr("Connect one external signer to continue.")
+    readonly property SignerDiscoveryModel signers: ApplicationModels.signers
+    readonly property string signerError: signers ? signers.error.message : ""
+    readonly property string signerName: signers ? signers.uniqueSignerName : ""
+    subheading: signerError.length > 0 ? signerError
+        : signerName.length > 0 ? qsTr("Connected signer: %1").arg(signerName)
+        : qsTr("Connect one external signer to continue.")
     maximumContentWidth: 800
     showBackButton: !creatingWallet && navigationStack && navigationStack.depth > 1
     showCloseButton: modalView && !creatingWallet
-    primaryButtonText: creatingWallet ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creatingWallet ? qsTr("Creating…") : editor && editor.pendingValidation ? qsTr("Checking…") : qsTr("Create wallet")
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
 
     Component.onCompleted: {
-        ApplicationModels.walletController.clearWalletLoadStatus()
-        ApplicationModels.walletController.refreshExternalSignerStatus()
-    }
-
-    Connections {
-        target: ApplicationModels.walletController
-        function onWalletLoadSucceeded(wallet) {
-            if (!root.submitted) return
-            root.submitted = false
-            root.created(wallet)
+        if (editor) {
+            editor.chooseKind(WalletCreationModel.ExternalSigner)
+            editor.name.edit(defaultWalletName)
         }
-        function onWalletLoadErrorChanged() {
-            if (root.submitted && ApplicationModels.walletController.walletLoadError.length > 0)
-                root.submitted = false
-        }
+        ApplicationModels.walletController.creation.refreshSigners()
     }
+    Component.onDestruction: if (editor) editor.discard()
 
     childView: ExternalSignerWalletFields {
         defaultWalletName: root.defaultWalletName
         nameError: root.nameError
         creatingWallet: root.creatingWallet
-        onNameEdited: root.nameError = ""
+        operation: root.operation
+        submissionError: root.editor ? root.editor.error.message : ""
+        onNameIntent: function(value) { if (root.editor) root.editor.name.edit(value) }
     }
 
 }

@@ -11,6 +11,7 @@ import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
+    id: testCase
     name: "DesktopWallets"
     when: windowShown
     visible: true
@@ -41,6 +42,7 @@ TestCase {
         walletController.noWalletsFound = false
         walletController.setOpenWallets([testWalletModel])
         walletController.setSelectedWalletObject(testWalletModel)
+        testWalletModel.balanceKnown = true
         walletListModel.reset()
         nodeModel.numPeers = 0
         nodeModel.initialSyncComplete = false
@@ -51,6 +53,159 @@ TestCase {
         nodeModel.pause = false
         nodeModel.faulted = false
         nodeModel.blockTipHeight = 0
+    }
+
+    function test_load_error_popup_keeps_original_wallet_and_prepared_message() {
+        const page = createDesktopWallets()
+        const popup = findChild(page, "walletLoadErrorPopup")
+        verify(popup !== null)
+        walletController.failLoadForTest("original-wallet", "Prepared original failure")
+        tryCompare(popup, "opened", true)
+        compare(popup.walletName, "original-wallet")
+        compare(popup.failure, walletController.loadFailure)
+        compare(popup.message, "Prepared original failure")
+        findChild(popup.contentItem, "walletLoadErrorPopupDismissButton").clicked()
+        tryCompare(popup, "visible", false)
+        compare(walletController.loadFailure, null)
+    }
+
+    function test_old_close_prompt_keeps_original_pair_after_same_name_reopen() {
+        const page = createDesktopWallets()
+        const oldName = testWalletModel.name
+        const replacementName = testSecondWalletModel.name
+        try {
+            testWalletModel.available = true
+            testSecondWalletModel.available = true
+            testSecondWalletModel.name = oldName
+            walletController.requestCloseWallet(testWalletModel)
+            const questions = findChild(page, "walletCloseQuestions")
+            verify(questions !== null)
+            tryCompare(questions, "count", 1)
+            // The popup belongs to this immutable question delegate, while its
+            // visual parent is the window Overlay rather than the page tree.
+            const originalQuestionView = questions.itemAt(0)
+            verify(originalQuestionView !== null)
+            const popup = originalQuestionView.confirmation
+            verify(popup !== null)
+            compare(popup.objectName, "walletCloseConfirmationPopup")
+            tryCompare(popup, "opened", true)
+            const originalQuestion = popup.questionToken
+            verify(originalQuestion.length > 0)
+            compare(popup.targetWallet, testWalletModel)
+
+            // Hold the old presentation while its original facade is already
+            // fenced and a distinct facade with the same name becomes selected.
+            testWalletModel.available = false
+            walletController.setOpenWallets([testSecondWalletModel])
+            walletController.setSelectedWalletObject(testSecondWalletModel)
+            testSecondWalletModel.requestClose()
+            const replacementQuestion = testSecondWalletModel.closeQuestionToken
+            verify(replacementQuestion.length > 0)
+            compare(popup.targetWallet, testWalletModel)
+            compare(popup.questionToken, originalQuestion)
+            verify(popup.contentItem !== null)
+            // Popup's visual contents are hosted by its popup item. Resolve the
+            // actual button in this original popup's content, not its QObject tree.
+            const confirm = findChild(popup.contentItem, "walletCloseConfirmationConfirmButton")
+            verify(confirm !== null)
+            mouseClick(confirm)
+            tryCompare(popup, "visible", false)
+            compare(walletController.closeWalletCalls, 0)
+            compare(testSecondWalletModel.closeQuestionToken, replacementQuestion)
+            compare(testSecondWalletModel.available, true)
+            compare(walletController.selectedWallet, testSecondWalletModel)
+        } finally {
+            walletController.reset()
+            testWalletModel.available = true
+            testWalletModel.closeQuestionToken = ""
+            testSecondWalletModel.available = true
+            testSecondWalletModel.closeQuestionToken = ""
+            testSecondWalletModel.name = replacementName
+        }
+    }
+
+    function test_migration_error_uses_typed_original_wallet_notice() {
+        walletController.holdMigration = true
+        const page = createDesktopWallets()
+        walletController.migrate("legacy-original")
+        const original = walletController.lastMigration
+        verify(original !== null)
+        walletController.requestMigrationPassphrase("Prepared short message")
+        tryVerify(function() { return testSetup.findVisualDescendant(testCase.Window.window, "walletMigrationPassphrasePopup") !== null })
+        const popup = testSetup.findVisualDescendant(testCase.Window.window, "walletMigrationPassphrasePopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        const text = findChild(popup.contentItem, "walletMigrationPassphraseErrorText")
+        verify(text !== null)
+        compare(text.text, "Prepared short message")
+        const details = popup.errorDetailsModel
+        verify(details !== null)
+        compare(text.text, "Prepared short message")
+        compare(popup.errorDetailsModel, details)
+        compare(original.error.message, "Prepared short message")
+    }
+
+    function test_stale_prompt_cannot_authorize_a_successor_data() {
+        return [{tag: "confirm", passphrase: false}, {tag: "passphrase", passphrase: true}]
+    }
+    function test_stale_prompt_cannot_authorize_a_successor(data) {
+        walletController.holdMigration = true
+        const page = createDesktopWallets()
+        walletController.migrate("original-wallet")
+        const original = walletController.lastMigration
+        const confirmation = original.prompt
+        if (data.passphrase) {
+            verify(confirmation.confirm().acceptedForDelivery)
+            walletController.requestMigrationPassphrase()
+        }
+        const prompt = original.prompt
+        walletController.migrate("successor-wallet")
+        const successor = walletController.lastMigration
+        verify(successor !== original)
+        const receipt = prompt.decline()
+        verify(receipt.acceptedForDelivery)
+        tryCompare(original, "phase", WalletOperationModel.Cancelled)
+        const stale = prompt.submit("old original password")
+        verify(!stale.acceptedForDelivery)
+        compare(successor.phase, WalletOperationModel.AwaitingConfirmation)
+        compare(successor.targetWalletId, "successor-wallet")
+        compare(walletController.selectedWallet, testWalletModel)
+    }
+    function test_migration_result_does_not_select_before_explicit_open() {
+        walletController.holdMigration = true
+        const page = createDesktopWallets()
+        walletController.migrate("legacy-original")
+        const operation = walletController.lastMigration
+        const prompt = operation.prompt
+        verify(prompt.confirm().acceptedForDelivery)
+        walletController.setOpenWallets([testWalletModel, testSecondWalletModel])
+        walletController.openedWallet = testSecondWalletModel
+        walletController.finishMigration()
+        tryVerify(function() { return testSetup.findVisualDescendant(testCase.Window.window, "walletMigrationResultPopup") !== null })
+        const popup = testSetup.findVisualDescendant(testCase.Window.window, "walletMigrationResultPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        compare(operation.resultWallet, testSecondWalletModel)
+        compare(walletController.selectedWallet, testWalletModel)
+        const button = findChild(popup.contentItem, "walletMigrationOpenResultButton")
+        verify(button !== null)
+        // The 600 px test window is shorter than the dialog's preferred height;
+        // its actions must still be inside it, or a click lands outside and
+        // dismisses it.
+        const buttonBottom = button.mapToItem(null, 0, button.height).y
+        const popupBottom = popup.contentItem.mapToItem(null, 0, popup.contentItem.height).y
+        verify(buttonBottom <= popupBottom, "Open wallet ends at " + buttonBottom + ", below the dialog at " + popupBottom)
+        const retired = testSetup.watchDestruction(popup)
+        try {
+            verify(retired.count > 0)
+            mouseClick(button)
+            tryCompare(walletController, "selectedWallet", testSecondWalletModel)
+            // Dismissing the owned result removes its immutable delegate.
+            // Observe actual teardown rather than querying a deleted wrapper.
+            tryCompare(retired, "pending", 0)
+        } finally {
+            testSetup.releaseDestructionWatch(retired)
+        }
     }
 
     function test_leaving_peers_tab_stops_refresh() {
@@ -118,6 +273,20 @@ TestCase {
 
         compare(balanceText.font.family, optionsModel.moneyFont.family)
         compare(balanceText.font.weight, optionsModel.moneyFont.weight)
+    }
+
+    function test_unknown_balance_is_not_presented_as_zero() {
+        const page = createDesktopWallets()
+        const balance = findChild(page, "walletBadgeBalanceText")
+        const unavailable = findChild(page, "walletBadgeBalanceUnavailable")
+        verify(balance !== null)
+        verify(unavailable !== null)
+        testWalletModel.balanceKnown = false
+        tryCompare(balance, "visible", false)
+        tryCompare(unavailable, "visible", true)
+        testWalletModel.balanceKnown = true
+        tryCompare(balance, "visible", true)
+        tryCompare(unavailable, "visible", false)
     }
 
     function test_wallet_badge_balance_updates_unit_suffix() {

@@ -3,6 +3,7 @@
         <file>controls/AddressLabel.qml</file>
         <file>controls/AlertAction.qml</file>
         <file>controls/AlertPopup.qml</file>
+        <file>controls/SaveConfirmationPopup.qml</file>
         <file>components/BannedPeersPopup.qml</file>
         <file>controls/BitcoinAddressInputField.qml</file>
         <file>controls/BitcoinAmountInputField.qml</file>

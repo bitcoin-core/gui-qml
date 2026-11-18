@@ -60,8 +60,8 @@ OnboardingView {
             objectName: "walletTypeExternalSigner"
             Layout.fillWidth: true
             enabled: !root.importingWallet
-            visible: ApplicationModels.walletController.canCreateExternalSignerWallet
-            title: ApplicationModels.walletController.externalSignerName.length > 0
+            visible: BuildInfo.externalSignerSupport
+            title: ApplicationModels.signers && ApplicationModels.signers.uniqueSignerName.length > 0
                 ? qsTr("External signer") : qsTr("Hardware wallet")
             description: qsTr("Sign with a connected device.")
             iconSource: "image://images/devices-filled"
