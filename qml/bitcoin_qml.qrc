@@ -69,6 +69,7 @@
         <file>controls/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
+        <file>components/TransactionEntryPopup.qml</file>
         <file>components/TransactionEntriesList.qml</file>
         <file>components/TransactionActionsMenu.qml</file>
         <file>components/TransactionDetailsGrid.qml</file>

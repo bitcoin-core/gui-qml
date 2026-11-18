@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 
@@ -14,11 +15,37 @@ Page {
 
     property string txid: ""
     property int targetBlocks: 0
-    readonly property string descriptionText: targetBlocks >= 10
-        ? qsTr("Based on the selected fee rate, confirmation may take %1 or more blocks.").arg(targetBlocks)
+    property int submissionState: WalletQmlModel.SubmissionUnknown
+    property int recordState: WalletQmlModel.SendRecordUnknown
+    readonly property bool accepted: submissionState === WalletQmlModel.SubmissionMempool
+        || submissionState === WalletQmlModel.SubmissionAccepted
+    readonly property bool confirmed: submissionState === WalletQmlModel.SubmissionConfirmed
+    readonly property bool attention: !accepted && !confirmed
+    readonly property string titleText: confirmed ? qsTr("Transaction confirmed")
+        : accepted ? qsTr("Transaction submitted")
+        : submissionState === WalletQmlModel.SubmissionConflicted ? qsTr("Transaction conflicted")
+        : submissionState === WalletQmlModel.SubmissionAbandoned ? qsTr("Transaction abandoned")
+        : submissionState === WalletQmlModel.SubmissionUnknown && recordState !== WalletQmlModel.SendRecordRecorded
+            ? qsTr("Transaction status unknown")
+            : qsTr("Transaction saved")
+    readonly property string descriptionText: confirmed ? qsTr("Your transaction is confirmed.")
+        : submissionState === WalletQmlModel.SubmissionConflicted
+            ? qsTr("A conflicting transaction was observed. Check Activity before trying again.")
+        : submissionState === WalletQmlModel.SubmissionAbandoned
+            ? qsTr("The transaction was marked abandoned. Check Activity before trying again.")
+        : submissionState === WalletQmlModel.SubmissionNotInMempool
+            ? qsTr("Your transaction was saved to the wallet, but was not in the mempool when checked. Check Activity for its latest status.")
+        : submissionState === WalletQmlModel.SubmissionUnknown && recordState === WalletQmlModel.SendRecordAbsentAtObservation
+            ? qsTr("The wallet did not report this transaction in its records when checked. Check Activity before retrying.")
+        : submissionState === WalletQmlModel.SubmissionUnknown && recordState !== WalletQmlModel.SendRecordRecorded
+            ? qsTr("The wallet record could not be confirmed. Check Activity before retrying.")
+        : !accepted
+            ? qsTr("Your transaction was saved to the wallet. Its submission status could not be confirmed. Check Activity for its latest status.")
+        : targetBlocks >= 10
+            ? qsTr("Based on the selected fee rate, confirmation may take %1 or more blocks.").arg(targetBlocks)
         : targetBlocks > 0
             ? qsTr("Based on the selected fee rate, it should confirm within %1 blocks.").arg(targetBlocks)
-            : qsTr("Your transaction was broadcast. Confirmation depends on its fee rate.")
+        : qsTr("Your node accepted the transaction. Confirmation depends on its fee rate.")
 
     Translate { id: messageOffset; y: 12 }
     Translate { id: actionsOffset; y: 12 }
@@ -64,7 +91,16 @@ Page {
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Theme.color.success
+                color: root.attention ? Theme.color.warning : Theme.color.success
+            }
+
+            CoreText {
+                objectName: "sendCompleteStatusGlyph"
+                anchors.centerIn: parent
+                visible: root.attention
+                text: root.submissionState === WalletQmlModel.SubmissionUnknown ? "?" : "!"
+                color: Theme.color.accentForeground
+                textStyle: Theme.text.headline
             }
 
             Canvas {
@@ -73,6 +109,7 @@ Page {
                 width: 40
                 height: 40
                 antialiasing: true
+                visible: !root.attention
                 property real progress: 0
                 onProgressChanged: requestPaint()
                 onPaint: {
@@ -117,7 +154,8 @@ Page {
 
             CoreText {
                 Layout.fillWidth: true
-                text: qsTr("Transaction sent")
+                objectName: "sendCompleteTitle"
+                text: root.titleText
                 textStyle: Theme.text.headline
                 horizontalAlignment: Text.AlignHCenter
             }

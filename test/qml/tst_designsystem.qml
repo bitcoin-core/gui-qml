@@ -96,7 +96,7 @@ TestCase {
                 "NodeWarningsPopup", "OnboardingSettingsPopup", "WalletOperationWarnings", "WalletShellPage",
                 "DesktopRequestsBar", "EffectiveSettingRow", "ReceiveEditorCloseQuestion",
                 "ReceiveEditorFields", "ReceiveRequestEditorCard", "ReceiveRequestModal", "SavedRequestSharing",
-                "SendRecipientCard", "SettingsEditorBar", "TransactionEntriesList", "WalletBackupConfirmation",
+                "SendRecipientCard", "SettingsEditorBar", "TransactionEntriesList", "TransactionEntryPopup",
                 "WalletOperationDialog"]
         }
         const exemptions = {}

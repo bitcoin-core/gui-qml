@@ -15,8 +15,9 @@ Pane {
     required property WalletQmlModel wallet
     required property bool expanded
     property bool clipboardRequest: false
+    property string clipboardText: ""
     signal toggleExpanded()
-    signal pasteRequested(string field)
+    signal paymentUriPasted(int field, string text)
     signal edited()
     signal removeRequested()
     readonly property SendRecipientEditor editorItem: editorLoader.item as SendRecipientEditor
@@ -82,9 +83,11 @@ Pane {
             sourceComponent: SendRecipientEditor {
                 wallet: recipientCard.wallet; recipient: recipientCard.recipientObject
                 clipboardRequest: recipientCard.clipboardRequest
+                clipboardText: recipientCard.clipboardText
+                enabled: recipientCard.wallet && recipientCard.wallet.available
                 canRemove: recipientCard.wallet.recipients.count > 1
                 removeButtonObjectName: "sendRemoveRecipient_" + recipientCard.index
-                onPasteRequested: function(field) { recipientCard.pasteRequested(field) }
+                onPaymentUriPasted: function(field, text) { recipientCard.paymentUriPasted(field, text) }
                 onEdited: recipientCard.edited()
                 onRemoveRequested: recipientCard.removeRequested()
             }

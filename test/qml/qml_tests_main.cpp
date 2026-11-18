@@ -2137,6 +2137,12 @@ public:
             : m_transaction_needs_unlock ? PreparationNeedsUnlock : PreparationFailed;
         Q_EMIT preparationChanged();
     }
+    Q_INVOKABLE void finishPreparationStaleForTest()
+    {
+        if (!preparationBusy()) return;
+        m_preparation_state = PreparationStale;
+        Q_EMIT preparationChanged();
+    }
     enum ApprovalState { ApprovalInitial, ApprovalWaiting, ApprovalSigned, ApprovalPartiallySigned, ApprovalFailed, ApprovalClosed, ApprovalOtherReview, ApprovalUncertain, ApprovalUnverified };
     Q_ENUM(ApprovalState)
     int m_approval_state{ApprovalInitial};
@@ -2436,8 +2442,6 @@ public:
         operation->m_address_ready = true; operation->m_view_revision = m_receiving_address.m_revision;
         return operation;
     }
-    Q_INVOKABLE MockReceiveRequestOperation* ensureReceivingAddressWithPassphrase(const QString&, bool next = false, const QString& type = {})
-    { return ensureReceivingAddress(next, type); }
     Q_INVOKABLE MockReceiveRequestOperation* resumeReceivingAddress(MockReceiveRequestOperation* original, const QString&)
     {
         if (!original) return nullptr;

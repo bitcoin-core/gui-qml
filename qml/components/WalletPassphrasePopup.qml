@@ -18,6 +18,8 @@ AlertPopup {
     property string passphraseFieldObjectName: ""
     property string cancelButtonObjectName: ""
     property string confirmButtonObjectName: ""
+    // False once the wallet, draft or operation this prompt answers is gone.
+    property bool contextValid: true
     readonly property bool canSubmit: !busy && passphraseField.text.length > 0
 
     signal submitted(string passphrase)
@@ -41,6 +43,9 @@ AlertPopup {
         root.submitted(passphrase)
     }
 
+    // Closing can change the state the check depends on; defer it so the
+    // change notification can finish.
+    onContextValidChanged: if (!contextValid) Qt.callLater(function() { if (!root.contextValid) root.close() })
     onAboutToShow: clearPassphraseField()
     onAboutToHide: clearPassphraseField()
     onClosed: clearPassphraseField()

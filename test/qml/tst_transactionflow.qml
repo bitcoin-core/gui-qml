@@ -24,9 +24,14 @@ TestCase {
         id: flowComponent
         TransactionFlow {
             width: 1100
+            property var sourceFlow: ({})
+            flow: testSetup.prepareTransactionFlow(sourceFlow)
             property int geometryUpdates: 0
             onGeometryChanged: geometryUpdates++
         }
+    }
+    function fixtureTotal(entries) {
+        return entries.reduce(function(total, entry) { return total + entry.amountSat }, 0)
     }
     function entry(id, value, ownership) {
         return { id: id, kind: "output", amountSat: value, amountKnown: value !== null,
@@ -52,7 +57,7 @@ TestCase {
         try {
             for (const scale of [0.85, 1, 1.3]) {
                 Theme.textScale = scale
-                const flow = createTemporaryObject(flowComponent, this, {flow: snapshot()})
+                const flow = createTemporaryObject(flowComponent, this, {sourceFlow: snapshot()})
                 verify(waitForRendering(flow))
                 const node = findChild(flow, "transactionFlowOutput_0")
                 const amount = findChild(node, "transactionFlowAmountWide")
@@ -67,7 +72,7 @@ TestCase {
     }
 
     function test_amount_labels_survive_unit_changes() {
-        const flow = createTemporaryObject(flowComponent, this, {flow: snapshot(), displayUnit: BitcoinAmount.SAT})
+        const flow = createTemporaryObject(flowComponent, this, {sourceFlow: snapshot(), displayUnit: BitcoinAmount.SAT})
         verify(waitForRendering(flow))
         const node = findChild(flow, "transactionFlowOutput_0")
         const label = findChild(node, "transactionFlowAmountWide")
@@ -75,7 +80,7 @@ TestCase {
         for (const unit of [BitcoinAmount.BTC, BitcoinAmount.SAT]) {
             flow.displayUnit = unit
             // The model publishes a fresh snapshot when formatting changes.
-            flow.flow = snapshot()
+            flow.sourceFlow = snapshot()
             compare(findChild(flow, "transactionFlowOutput_0"), node)
             compare(label.animating, false)
             verify(label.text.endsWith(unit === BitcoinAmount.SAT ? " sats" : " BTC"))
@@ -94,7 +99,7 @@ TestCase {
     }
 
     function test_output_grouping_threshold(data) {
-        const flow = createTemporaryObject(flowComponent, this, { flow: batchSnapshot(data.count, data.walletCount) })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: batchSnapshot(data.count, data.walletCount) })
         verify(waitForRendering(flow))
         compare(findChild(flow, "transactionFlowOutputsToggle").visible, data.collapsed)
         compare(flow.outputEntries.length, data.visibleCount)
@@ -104,11 +109,11 @@ TestCase {
     }
 
     function test_late_large_snapshot_never_exposes_hidden_outputs() {
-        const flow = createTemporaryObject(flowComponent, this, {flow: {}})
+        const flow = createTemporaryObject(flowComponent, this, {sourceFlow: {}})
         verify(waitForRendering(flow))
         let peakOutputs = 0
         flow.outputEntriesChanged.connect(function() { peakOutputs = Math.max(peakOutputs, flow.outputEntries.length) })
-        flow.flow = batchSnapshot(1001, 1)
+        flow.sourceFlow = batchSnapshot(1001, 1)
         verify(waitForRendering(flow))
         compare(flow.outputEntries.length, 3)
         verify(peakOutputs <= 3, "A collapsed snapshot must not briefly instantiate all outputs")
@@ -122,7 +127,7 @@ TestCase {
         const data = batchSnapshot(12, 2)
         data.outputs[0].paymentRequests = [{ requestId: "91" }]
         data.outputs[2].label = "Recipient note"
-        const flow = createTemporaryObject(flowComponent, this, { flow: data, transactionId: "first" })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data, transactionId: "first" })
         verify(waitForRendering(flow))
         const toggle = findChild(flow, "transactionFlowOutputsToggle")
         const counts = findChild(flow, "transactionFlowCounts")
@@ -134,7 +139,7 @@ TestCase {
         compare(group.title, "10 outputs")
         compare(group.entry.amountSat, 100000)
         compare(group.amountText, "0.00100000 BTC")
-        const total = FlowLayout.sum(flow.outputEntries)
+        const total = fixtureTotal(flow.outputEntries)
         verify(flow.geometry.proportional)
 
         mouseClick(toggle)
@@ -143,7 +148,7 @@ TestCase {
         compare(flow.outputEntries.length, 13)
         compare(counts.text, "1 input · 12 outputs")
         compare(findChild(flow, "transactionFlowOutput_2").title, "Recipient note")
-        compare(FlowLayout.sum(flow.outputEntries), total)
+        compare(fixtureTotal(flow.outputEntries), total)
         verify(flow.geometry.proportional)
 
         mouseClick(toggle)
@@ -159,7 +164,7 @@ TestCase {
         // Refreshing this transaction preserves the choice; opening another
         // transaction restores the collapsed default.
         mouseClick(toggle)
-        flow.flow = batchSnapshot(12, 2)
+        flow.sourceFlow = batchSnapshot(12, 2)
         compare(flow.outputsExpanded, true)
         flow.transactionId = "second"
         compare(flow.outputsExpanded, false)
@@ -173,11 +178,11 @@ TestCase {
         data.outputs[2].amountKnown = false
         data.outputs[2].amountSat = null
         data.complete = false
-        const flow = createTemporaryObject(flowComponent, this, { flow: data })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data })
         verify(waitForRendering(flow))
         const group = findChild(flow, "transactionFlowOutput_1")
         compare(group.entry.amountKnown, false)
-        compare(group.entry.amountSat, null)
+        verify(group.entry.amountSat === null || group.entry.amountSat === undefined)
         compare(group.amountText, "Unknown amount")
         const path = flow.ribbonObjects.find(function(r) { return r.ribbon.id === "out:non-wallet-outputs" })
         verify(!path.ribbon.proportional)
@@ -186,7 +191,8 @@ TestCase {
 
     function test_small_fees_keep_a_minimum_width_and_other_ribbons_stay_proportional() {
         const data = snapshot()
-        const graph = FlowLayout.calculate(data.inputs, FlowLayout.outputs(data), [80], [80, 80, 80], 1052, true)
+        const prepared = testSetup.prepareTransactionFlow(data).presentation
+        const graph = FlowLayout.calculate(prepared.inputs, prepared.expandedOutputs, [80], [80, 80, 80], 1052, prepared.expandedFacts)
         verify(graph.proportional)
         compare(graph.ribbons.length, 4)
         compare(graph.ribbons[0].thickness, 64)
@@ -194,14 +200,16 @@ TestCase {
         fuzzyCompare(graph.ribbons[1].thickness / graph.ribbons[2].thickness, 75000 / 24200, 0.00001)
         fuzzyCompare(graph.ribbons.slice(1).reduce(function(sum, r) { return sum + r.thickness }, 0), 64, 0.00001)
         const mixedInputs = [entry("in:0", 75000, "wallet"), entry("in:1", 25000, "external")]
-        const mixed = FlowLayout.calculate(mixedInputs, FlowLayout.outputs(data), [80, 80], [80, 80, 80], 1052, true)
+        const mixedData = testSetup.prepareTransactionFlow(Object.assign({}, data, {inputs: mixedInputs})).presentation
+        const mixed = FlowLayout.calculate(mixedData.inputs, mixedData.expandedOutputs, [80, 80], [80, 80, 80], 1052, mixedData.expandedFacts)
         compare(mixed.ribbons[2].sourceOwnership, "unknown")
     }
 
     function test_small_inputs_and_large_batches_preserve_the_junction_width() {
         const inputs = [entry("tiny:0", 1, "wallet"), entry("tiny:1", 1, "wallet"), entry("large", 999998, "wallet")]
         const outputs = [entry("a", 500000, "external"), entry("b", 500000, "wallet"), entry("zero", 0, "external")]
-        const graph = FlowLayout.calculate(inputs, outputs, [], [], 1052, true)
+        const p = testSetup.prepareTransactionFlow({inputs: inputs, outputs: outputs, complete: true, coinbase: true}).presentation
+        const graph = FlowLayout.calculate(p.inputs, p.expandedOutputs, [], [], 1052, p.expandedFacts)
         compare(graph.ribbons.length, 5)
         compare(graph.ribbons[0].thickness, 1)
         compare(graph.ribbons[1].thickness, 1)
@@ -211,9 +219,12 @@ TestCase {
 
         const batch = []
         for (let i = 0; i < 80; ++i) batch.push(entry("output:" + i, 1, "external"))
-        const crowded = FlowLayout.calculate([entry("input", 80, "wallet")], batch, [], [], 1052, true)
-        compare(crowded.ribbons[0].thickness, 80)
-        crowded.ribbons.slice(1).forEach(function(ribbon) { compare(ribbon.thickness, 1) })
+        const c = testSetup.prepareTransactionFlow({inputs: [entry("input", 80, "wallet")], outputs: batch, complete: true, coinbase: true}).presentation
+        const crowded = FlowLayout.calculate(c.inputs, c.expandedOutputs, [], [], 1052, c.expandedFacts)
+        compare(crowded.ribbons[0].thickness, 64)
+        compare(c.expandedOutputs.length, 15)
+        compare(c.expandedOutputs[14].outputCount, 66)
+        fuzzyCompare(crowded.ribbons.slice(1).reduce(function(total, ribbon) { return total + ribbon.thickness }, 0), 64, 0.001)
     }
 
     function test_unknown_and_zero_amounts_do_not_invent_values() {
@@ -222,9 +233,10 @@ TestCase {
         data.inputs[0].amountKnown = false
         data.feeKnown = false
         data.complete = false
-        const graph = FlowLayout.calculate(data.inputs, FlowLayout.outputs(data), [80], [80, 80, 80], 800, false)
+        const p = testSetup.prepareTransactionFlow(data).presentation
+        const graph = FlowLayout.calculate(p.inputs, p.expandedOutputs, [80], [80, 80, 80], 800, p.expandedFacts)
         verify(!graph.proportional)
-        compare(FlowLayout.outputs(data)[2].amountSat, null)
+        compare(testSetup.prepareTransactionFlow(data).presentation.expandedOutputs[2].amountSat, null)
         const input = graph.ribbons.find(function(r) { return r.id === "in:input:0" })
         const fee = graph.ribbons.find(function(r) { return r.id === "out:fee" })
         const received = graph.ribbons.find(function(r) { return r.id === "out:output:0" })
@@ -239,7 +251,8 @@ TestCase {
         fuzzyCompare(received.thickness / change.thickness, 75000 / 24200, 0.00001)
         graph.ribbons.forEach(function(r) { verify(FlowLayout.path(r).indexOf("NaN") === -1) })
         const zero = entry("data", 0, "external")
-        const zeroGraph = FlowLayout.calculate([zero], [zero], [80], [80], 800, true)
+        const z = testSetup.prepareTransactionFlow({inputs: [zero], outputs: [zero], complete: true, coinbase: true}).presentation
+        const zeroGraph = FlowLayout.calculate(z.inputs, z.expandedOutputs, [80], [80], 800, z.expandedFacts)
         verify(!zeroGraph.proportional)
         verify(isFinite(zeroGraph.height))
         compare(zeroGraph.ribbons.length, 0)
@@ -251,7 +264,7 @@ TestCase {
         data.inputs[0].amountSat = null
         data.feeKnown = false
         data.complete = false
-        const flow = createTemporaryObject(flowComponent, this, { flow: data })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data })
         verify(flow !== null)
         tryVerify(function() { return flow.ribbonObjects.length === 4 })
         const input = flow.ribbonObjects.find(function(r) { return r.ribbon.id === "in:input:0" })
@@ -288,7 +301,7 @@ TestCase {
         }
         data.feeKnown = false
         data.complete = false
-        const flow = createTemporaryObject(flowComponent, this, { flow: data })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data })
         tryVerify(function() { return flow.ribbonObjects.length === 6 })
         const inputs = flow.ribbonObjects.filter(function(r) { return r.ribbon.id.indexOf("in:") === 0 })
         const outputs = flow.geometry.ribbons.filter(function(r) { return r.id.indexOf("out:") === 0 })
@@ -311,7 +324,7 @@ TestCase {
         const data = snapshot()
         data.inputs[0].label = "Savings"
         data.outputs[1].paymentRequests = [{ requestId: "91" }, { requestId: "92" }]
-        const flow = createTemporaryObject(flowComponent, this, { flow: data })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data })
         verify(flow !== null)
         tryVerify(function() { return flow.ribbonObjects.length === 4 })
         waitForRendering(flow)
@@ -340,20 +353,20 @@ TestCase {
     }
 
     function test_replaces_snapshot_without_stale_paths() {
-        const flow = createTemporaryObject(flowComponent, this, { flow: snapshot() })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: snapshot() })
         verify(flow !== null)
         tryVerify(function() { return flow.ribbonObjects.length === 4 })
         const data = snapshot()
         data.inputs[0].amountKnown = false
         data.inputs[0].amountSat = null
         data.complete = false
-        flow.flow = data
+        flow.sourceFlow = data
         tryVerify(function() { return !flow.geometry.proportional })
         verify(findChild(flow, "transactionFlowUnknownNotice").visible)
-        flow.flow = { inputs: [], outputs: [], coinbase: true }
+        flow.sourceFlow = { inputs: [], outputs: [], coinbase: true }
         tryVerify(function() { return flow.ribbonObjects.length === 0 })
         compare(flow.geometry.height, 0)
-        flow.flow = snapshot()
+        flow.sourceFlow = snapshot()
         tryVerify(function() { return flow.ribbonObjects.length === 4 })
         compare(flow.ribbonObjects[0].ribbon.id, "in:input:0")
         verify(flow.geometry.proportional)
@@ -373,13 +386,15 @@ TestCase {
         data.outputs[1].kind = "data"
         data.outputs[1].address = ""
         data.outputs[0].paymentRequests = [{ requestId: "1" }]
-        const flow = createTemporaryObject(flowComponent, this, { flow: data })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: data })
         verify(flow !== null)
         verify(waitForRendering(flow))
         compare(flow.outputEntries.length, 2)
         mouseClick(findChild(flow, "transactionFlowOutputsToggle"))
         verify(waitForRendering(flow))
-        compare(flow.outputEntries.length, 329)
+        compare(flow.outputEntries.length, 16)
+        compare(flow.outputEntries[14].outputCount, 314)
+        verify(findChild(flow, "transactionFlowPreviewNotice").visible)
         compare(findChild(flow, "transactionFlowOutput_1").entry.kind, "data")
         const paths = flow.ribbonObjects.slice()
         compare(paths.length, flow.geometry.ribbons.length)
@@ -391,8 +406,8 @@ TestCase {
         verify(flow.geometryUpdates < 25, "Resizing must not recalculate once per card")
         compare(flow.ribbonObjects.length, paths.length)
         for (let i = 0; i < paths.length; ++i) compare(flow.ribbonObjects[i], paths[i])
-        const output = findChild(flow, "transactionFlowOutput_327")
-        const path = flow.ribbonObjects.find(function(item) { return item.ribbon.id === "out:output:327" })
+        const output = findChild(flow, "transactionFlowOutput_14")
+        const path = flow.ribbonObjects.find(function(item) { return item.ribbon.id === "out:remaining-outputs" })
         // Card heights settle in a later, coalesced measurement pass.
         tryVerify(function() { return Math.abs(path.ribbon.endY - (output.y + output.height / 2)) < 0.01 })
         fuzzyCompare(path.ribbon.endX, output.x, 0.01)
@@ -417,7 +432,7 @@ TestCase {
         const snapshotData = snapshot()
         snapshotData.outputs[0] = Object.assign(entry("output:0", 0, "external"),
             { kind: "data", address: "", dataType: "OP_RETURN" }, data.fields)
-        const flow = createTemporaryObject(flowComponent, this, { flow: snapshotData })
+        const flow = createTemporaryObject(flowComponent, this, { sourceFlow: snapshotData })
         verify(waitForRendering(flow))
         const output = findChild(flow, "transactionFlowOutput_0")
         const pill = findChild(output, "transactionFlowDataTypePill")
