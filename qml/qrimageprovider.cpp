@@ -34,13 +34,12 @@ class Response final : public QQuickImageResponse
         QImage image;
         QString error;
     };
-    const std::shared_ptr<State> m_state{std::make_shared<State>()};
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
-    execution::TaskId m_task{};
+    mutable State m_state;
+    const std::shared_ptr<execution::SerialQueue> m_queue;
     bool m_finished{false}, m_engine_retired{false};
 public:
-    Response(std::shared_ptr<execution::Scheduler> scheduler, QRImageProvider::Render render, QString id, QObject* engine_lifetime)
-        : m_scheduler(std::move(scheduler))
+    Response(std::shared_ptr<execution::SerialQueue> queue, QRImageProvider::Render render, QString id, QObject* engine_lifetime)
+        : m_queue(std::move(queue))
     {
         // Qt's per-engine image thread can stop before an outstanding response
         // completes. Use the application's presentation loop for this bounded
@@ -51,48 +50,41 @@ public:
             m_engine_retired = true;
             if (m_finished) deleteLater();
         });
-        if (!m_scheduler || id.size() > MAX_SOURCE_CHARS) {
+        if (id.size() > MAX_SOURCE_CHARS) {
             complete({}, QStringLiteral("QR request exceeds the rendering limit")); return;
         }
-        const auto state = m_state;
-        const auto submitted = execution::Submit(*m_scheduler,
-            [state, render = std::move(render), id = std::move(id)] {
-                if (state->cancelled.load()) return QImage{};
-                return render(id);
-            },
-            [this](QImage image) { complete(std::move(image), {}); },
-            [this](std::exception_ptr) { complete({}, QStringLiteral("QR rendering did not complete")); },
-            {execution::Lane::Domain, {}, execution::WorkClass::Observation});
-        m_task = submitted.id;
-        if (!submitted) complete({}, QStringLiteral("QR rendering is unavailable"));
+        const bool accepted = m_queue && m_queue->post([this, render = std::move(render), id = std::move(id)] {
+            try {
+                complete(m_state.cancelled.load() ? QImage{} : render(id), {});
+            } catch (...) {
+                complete({}, QStringLiteral("QR rendering did not complete"));
+            }
+        });
+        if (!accepted) complete({}, QStringLiteral("QR rendering is unavailable"));
     }
-    void cancel() override
-    {
-        m_state->cancelled.store(true);
-        if (m_scheduler && m_task.value) m_scheduler->cancelQueued(m_task);
-    }
+    void cancel() override { m_state.cancelled.store(true); }
     QQuickTextureFactory* textureFactory() const override
     {
-        std::lock_guard lock{m_state->mutex};
-        return m_state->image.isNull() ? nullptr : QQuickTextureFactory::textureFactoryForImage(m_state->image);
+        std::lock_guard lock{m_state.mutex};
+        return m_state.image.isNull() ? nullptr : QQuickTextureFactory::textureFactoryForImage(m_state.image);
     }
     QString errorString() const override
     {
-        std::lock_guard lock{m_state->mutex};
-        return m_state->error;
+        std::lock_guard lock{m_state.mutex};
+        return m_state.error;
     }
 private:
     void complete(QImage image, QString error)
     {
-        {
-            std::lock_guard lock{m_state->mutex};
-            if (m_state->cancelled.load()) error = QStringLiteral("QR request cancelled");
-            else { m_state->image = std::move(image); }
-            m_state->error = std::move(error);
-        }
-        // Required native response handoff, independent of domain decisions.
-        // Never finish inline: Qt must receive the response before completion.
-        QMetaObject::invokeMethod(this, [this] {
+        // Keep the image private until Qt receives the completion. Even a
+        // rejected request must return its response before emitting finished.
+        QMetaObject::invokeMethod(this, [this, image = std::move(image), error = std::move(error)]() mutable {
+            {
+                std::lock_guard lock{m_state.mutex};
+                if (m_state.cancelled.load()) error = QStringLiteral("QR request cancelled");
+                else m_state.image = std::move(image);
+                m_state.error = std::move(error);
+            }
             m_finished = true;
             if (m_engine_retired) deleteLater();
             Q_EMIT finished();
@@ -101,15 +93,15 @@ private:
 };
 } // namespace
 
-QRImageProvider::QRImageProvider(std::shared_ptr<execution::Scheduler> scheduler, Render render, QObject* engine_lifetime)
-    : m_scheduler(std::move(scheduler)), m_render(std::move(render)), m_engine_lifetime(engine_lifetime)
+QRImageProvider::QRImageProvider(std::shared_ptr<execution::SerialQueue> queue, Render render, QObject* engine_lifetime)
+    : m_queue(std::move(queue)), m_render(std::move(render)), m_engine_lifetime(engine_lifetime)
 {
 }
 
 QQuickImageResponse* QRImageProvider::requestImageResponse(const QString& id, const QSize& requested_size)
 {
     Q_UNUSED(requested_size); // Preserve the QR module grid; QML controls display scaling.
-    return new Response{m_scheduler, m_render, id, m_engine_lifetime};
+    return new Response{m_queue, m_render, id, m_engine_lifetime};
 }
 
 QImage QRImageProvider::RenderImage(const QString& id)

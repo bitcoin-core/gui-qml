@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_QRIMAGEPROVIDER_H
 #define BITCOIN_QML_QRIMAGEPROVIDER_H
 
-#include <qml/execution.h>
+#include <qml/executor.h>
 
 #include <QImage>
 #include <QQuickAsyncImageProvider>
@@ -17,14 +17,14 @@
 class QRImageProvider : public QQuickAsyncImageProvider
 {
 public:
-    // Pure value rendering on the injected Domain lane. Qt owns each response
+    // Pure value rendering on the injected Utility queue. Qt owns each response
     // until its finished signal, including cancelled responses.
     using Render = std::function<QImage(const QString&)>;
-    explicit QRImageProvider(std::shared_ptr<execution::Scheduler> scheduler, Render render = RenderImage, QObject* engine_lifetime = nullptr);
+    explicit QRImageProvider(std::shared_ptr<execution::SerialQueue> queue, Render render = RenderImage, QObject* engine_lifetime = nullptr);
     QQuickImageResponse* requestImageResponse(const QString& id, const QSize& requested_size) override;
     static QImage RenderImage(const QString& id);
 private:
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
+    const std::shared_ptr<execution::SerialQueue> m_queue;
     const Render m_render;
     QObject* const m_engine_lifetime;
 };

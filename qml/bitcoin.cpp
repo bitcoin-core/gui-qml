@@ -26,6 +26,7 @@
 #include <qml/appmode.h>
 #include <qml/applicationmodels.h>
 #include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/components/ownedqrimage.h>
 #include <qml/buttonkeyactivation.h>
 #include <qml/quithandler.h>
@@ -66,6 +67,10 @@
 #include <qml/models/requestdeletecontroller.h>
 #include <qml/models/requestviewcontroller.h>
 #include <qml/models/senddraftcontroller.h>
+#include <qml/models/feebumpcontroller.h>
+#include <qml/models/walletbackupcontroller.h>
+#include <qml/models/walletpasswordcontroller.h>
+#include <qml/models/settingsnavigationcontroller.h>
 #include <qml/models/senddraftinterface.h>
 #include <qml/models/sendoperation.h>
 #include <qml/models/transactionreviewcontroller.h>
@@ -301,6 +306,13 @@ bool InitErrorMessageBox(
         return EXIT_FAILURE;
     }
     auto* window = qobject_cast<QQuickWindow*>(engine->rootObjects().first());
+#ifdef ENABLE_TEST_AUTOMATION
+    // Functional tests read and close a startup error shown before any other window.
+    std::unique_ptr<TestBridge> test_bridge;
+    if (!automation_socket.isEmpty()) test_bridge = std::make_unique<TestBridge>(engine.get(), automation_socket);
+#else
+    Q_UNUSED(automation_socket);
+#endif
     if (window) ExecStartupDialog(*engine, *window, quit_handler);
     return false;
 }
@@ -442,10 +454,12 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterUncreatableMetaObject(SettingsSaveResult::staticMetaObject,"org.bitcoincore.qt",1,0,"SettingsSaveResult","Retained settings outcome");
     qRegisterMetaType<SettingsSaveResult>();
     qmlRegisterUncreatableType<SettingsEditorModel>("org.bitcoincore.qt",1,0,"SettingsEditorModel","Owned by the settings form");
+    qmlRegisterUncreatableType<SettingsEditorSource>("org.bitcoincore.qt",1,0,"SettingsEditorSource","The options");
+    qmlRegisterType<SettingsNavigationController>("org.bitcoincore.qt",1,0,"SettingsNavigationController");
     qmlRegisterUncreatableType<SettingsEntryModel>("org.bitcoincore.qt",1,0,"SettingsEntryModel","Owned by a settings editor");
     qmlRegisterUncreatableType<CoreSettingsModel>("org.bitcoincore.qt",1,0,"CoreSettingsModel","Owned by settings");
-    qmlRegisterUncreatableType<CoreProxyDraft>("org.bitcoincore.qt",1,0,"CoreProxyDraft","Owned by a settings form");
-    qmlRegisterUncreatableType<OptionsTransactionLinks>("org.bitcoincore.qt", 1, 0, "OptionsTransactionLinks", "Owned by options");
+    qmlRegisterType<CoreProxyDraft>("org.bitcoincore.qt",1,0,"CoreProxyDraft");
+    qmlRegisterType<OptionsTransactionLinks>("org.bitcoincore.qt", 1, 0, "OptionsTransactionLinks");
     qmlRegisterUncreatableType<FlowDetailsModel>("org.bitcoincore.qt", 1, 0, "FlowDetailsModel", "Owned by a transaction review");
     qmlRegisterUncreatableType<DebugLogModel>("org.bitcoincore.qt", 1, 0, "DebugLogModel", "");
     qmlRegisterUncreatableType<RpcConsoleModel>("org.bitcoincore.qt", 1, 0, "RpcConsoleModel", "");
@@ -634,7 +648,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
         return PreInitOnboardingStatus::FAILED;
     }
 
-    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc, nullptr, services);
+    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc, nullptr, services.post);
     context.onboarding_options_model->configureSettingsCommit(gArgs);
 
     context.network_style.reset(NetworkStyle::instantiate(onboarding_chain));
@@ -808,8 +822,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         ButtonKeyActivation button_key_activation;
         app.setQuitOnLastWindowClosed(false);
         const auto native_interfaces = std::make_shared<NativeApplicationInterfaces>();
-        const auto drain_workers_before_application_destruction = qScopeGuard([native_interfaces] {
-            startup::DrainThenRetire([native_interfaces] { native_interfaces->retire(); });
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto drain_workers_before_application_destruction = qScopeGuard([native_interfaces, &executor] {
+            startup::DrainThenRetire([native_interfaces] { native_interfaces->retire(); },
+                                    [&executor] { executor.stopAndJoin(); });
         });
         QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -1422,23 +1438,15 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
         });
 
-        // Wallet and QR work share the existing bounded executor. Node-only
-        // configurations retain one application service, with the same drain gate.
-        std::unique_ptr<BackendExecutor> qr_executor;
-        std::shared_ptr<execution::Scheduler> qr_scheduler;
-#ifdef ENABLE_WALLET
-        if (wallet_controller) qr_scheduler = wallet_controller->backgroundScheduler();
-#endif
-        if (!qr_scheduler) {
-            qr_executor = std::make_unique<BackendExecutor>(execution::Options{});
-            qr_scheduler = qr_executor->scheduler();
-            shutdown_coordinator.addParticipant(qr_executor.get(), &BackendExecutor::drained,
-                                                [&] { qr_executor->shutdown(); });
-        }
+        auto qr_queue = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        shutdown_coordinator.addStopHook([qr_queue] { qr_queue->close(); });
+        shutdown_coordinator.addAfterInterruptTask([qr_queue](std::function<void()> done) {
+            qr_queue->whenDrained(std::move(done));
+        });
 
         QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(runtime.network)};
         assert(!network_style.isNull());
-        auto engine = CreateMainEngine(network_style.data(), std::move(qr_scheduler));
+        auto engine = CreateMainEngine(network_style.data(), std::move(qr_queue));
         qmlEngineCreated(*engine);
 
         // The pre-init engine can have written the same persisted keys. Finish
@@ -1522,7 +1530,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         }
 #endif
 
-        OptionsQmlModel options_model(*node, gArgs, {node_model.queryScheduler(), presentation_post});
+        OptionsQmlModel options_model(*node, gArgs, {node_model.queryScheduler(), presentation_post}, &executor);
         shutdown_coordinator.addStopHook([&] { options_model.close(); });
         shutdown_coordinator.addBeforeInterruptParticipant(&options_model, &OptionsQmlModel::shutdownFinished,
                                             [&] { options_model.beginShutdown(); });

@@ -4,6 +4,7 @@
 
 #ifndef BITCOIN_QML_CORE_SETTINGS_H
 #define BITCOIN_QML_CORE_SETTINGS_H
+#include <QPointer>
 
 #include <common/settings.h>
 
@@ -12,8 +13,10 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 class ArgsManager;
 namespace interfaces {
@@ -32,7 +35,15 @@ struct Values {
     QString proxy_address{};
     bool tor_enabled{false};
     QString tor_address{};
+    // Exact configured target, retained while disabled. -1 is the legacy
+    // constructor's GB-derived value; 1 represents manual pruning.
+    int64_t prune_target_mib{-1};
 };
+
+/** Worker/test-only metadata envelope. The producer measures structural values
+ * once on Native; GUI admission reads only the cached byte count. */
+struct StatusProjection {QVariantMap values;std::shared_ptr<const char> identity{};};
+StatusProjection CaptureStatuses(QVariantMap values);
 
 struct Change {
     bool accepted{false};
@@ -41,6 +52,7 @@ struct Change {
     Values after;
     QVariantMap before_statuses;
     QVariantMap after_statuses;
+    bool force_write{false};
 };
 
 bool ValuesEqual(const Values& left, const Values& right);
@@ -60,16 +72,33 @@ template <typename Model>
 void EmitCoreSettingSignals(Model& model, const Change& change)
 {
     if (!change.accepted) return;
+    const QPointer<Model> observer{&model};
+    const auto open=[&] {
+        if(!observer)return false;
+        if constexpr(requires {observer->presentationOpen();})return observer->presentationOpen();
+        return true;
+    };
+    if(!open())return;
     if (StatusesChanged(change)) model.coreSettingStatusesChanged();
+    if(!open())return;
     if (PruneChanged(change)) model.pruneChanged(change.after.prune);
+    if(!open())return;
     if (PruneSizeGBChanged(change)) model.pruneSizeGBChanged(change.after.prune_size_gb);
+    if(!open())return;
     if (ListenChanged(change)) model.listenChanged(change.after.listen);
+    if(!open())return;
     if (NatpmpChanged(change)) model.natpmpChanged(change.after.natpmp);
+    if(!open())return;
     if (ServerChanged(change)) model.serverChanged(change.after.server);
+    if(!open())return;
     if (ProxyAddressChanged(change)) model.proxyAddressChanged(change.after.proxy_address);
+    if(!open())return;
     if (ProxyEnabledChanged(change)) model.proxyEnabledChanged(change.after.proxy_enabled);
+    if(!open())return;
     if (TorAddressChanged(change)) model.torAddressChanged(change.after.tor_address);
+    if(!open())return;
     if (TorEnabledChanged(change)) model.torEnabledChanged(change.after.tor_enabled);
+    if(!open())return;
 }
 
 const QStringList& CoreSettingNames();
@@ -78,9 +107,11 @@ const QStringList& OnboardingCoreSettingNames();
 int PruneMiBToGB(int64_t mib);
 int64_t PruneGBToMiB(int gb);
 common::SettingsValue PruneSetting(bool enabled, int prune_size_gb);
+common::SettingsValue PruneSetting(const Values& values);
 
 QString DefaultProxyAddress();
 QString ProxyValidationError(const QString& location);
+bool ProxyRequiresNameLookup(const QString& location);
 common::SettingsValue ProxySetting(bool enabled, const QString& address);
 
 Values LoadPersistentValues(interfaces::Node& node);
@@ -98,6 +129,7 @@ bool IsCommandLineOverridden(ArgsManager& args, const QString& name);
 bool CanEditCoreSetting(ArgsManager& args, const QString& name);
 
 common::SettingsValue GuiOverrideValue(ArgsManager& args, const QString& name, const common::SettingsValue& value);
+common::SettingsValue LegacyCompatibleRwSettingValue(const QString& name, const common::SettingsValue& value);
 void SetRwSetting(ArgsManager& args, const QString& name, const common::SettingsValue& value);
 void UpdateRwSetting(interfaces::Node& node, const QString& name, const common::SettingsValue& value);
 bool WriteCoreSettingOverride(ArgsManager& args, const QString& name, const common::SettingsValue& value);
@@ -109,7 +141,18 @@ bool WriteProxySetting(ArgsManager& args, const QString& key, bool enabled, cons
  */
 bool PersistSettings(ArgsManager& args, const QStringList& keys,
                      const std::function<bool()>& mutation, QString* error = nullptr);
+struct PersistenceResult {
+    bool persisted{false};
+    bool completed{false};
+    QString error;
+};
+/** Keep the app writer reservation through runtime application/readback.
+ * A post-save exception retains known persistence and never rolls it back.
+ * skip_unchanged is for an explicit retry of an already observed saved value. */
+PersistenceResult PersistTransaction(ArgsManager& args, const QStringList& keys,
+    const std::function<bool()>& mutation, const std::function<void()>& after_save = {}, bool skip_unchanged = false);
 
+enum class StorageChoice {Full,Reduced,Custom};
 class Session
 {
 public:
@@ -137,6 +180,13 @@ public:
     Change changeServer(bool server);
     Change changePrune(bool prune);
     Change changePruneSizeGB(int prune_size_gb);
+    Change changePruneTargetText(const QString& text);
+    QString pruneTargetText()const;
+    int64_t customPruneTarget()const;
+    Change chooseStorage(StorageChoice choice);
+    Change discardPruneInput();
+    QString pruneTargetError()const{return m_prune_input_error;}
+    void preservePruneInput(const Session& original){m_prune_input=original.m_prune_input;m_prune_input_error=original.m_prune_input_error;m_custom_prune_target=original.m_custom_prune_target;}
     Change changeProxyEnabled(bool enabled);
     Change changeTorEnabled(bool enabled);
     Change changeProxyLocation(const QString& location);
@@ -164,6 +214,8 @@ private:
     Change beginChange(const QString& setting_name) const;
     Change finishChange(Change change, bool accepted) const;
 
+    QString m_prune_input,m_prune_input_error;
+    int64_t m_custom_prune_target{-1};
     Values m_values;
     QSet<QString> m_touched_settings;
     QVariantMap m_statuses;

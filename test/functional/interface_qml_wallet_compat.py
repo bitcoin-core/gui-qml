@@ -6,10 +6,7 @@
 
 import os
 import re
-import shlex
 import shutil
-import signal
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -41,7 +38,6 @@ from qml_wallet_test_lib import (
 )
 
 
-COMPAT_VERSION = "31.0"
 WALLET_NAME = "qt_compat_wallet"
 REQUEST_AMOUNT = "0.001"
 REQUEST_LABEL = "QML Qt Compat"
@@ -100,16 +96,8 @@ def create_full_payment_request(gui):
 
 
 def qt_metadata_compatibility():
-    bitcoin_qt = find_compat_bitcoin_qt()
+    bitcoin_qt = compat_bitcoin_qt_or_skip()
     if not bitcoin_qt:
-        print(f"SKIPPED: bitcoin-qt {COMPAT_VERSION} not found.")
-        print(
-            f"Set BITCOIN_QT_COMPAT or provide releases/v{COMPAT_VERSION}/bin/bitcoin-qt "
-            "to exercise this flow."
-        )
-        return 77
-    if not has_bitcoin_qt_runner():
-        print(bitcoin_qt_runner_skip_message())
         return 77
 
     harness = WalletFlowHarness("qml_wallet_qt_compat", port_offset=95)
@@ -130,7 +118,7 @@ def qt_metadata_compatibility():
         stop_gui_checked(harness)
         print("[qml_wallet_qt_compat] bitcoin-core-app stopped")
 
-        qt_process = launch_bitcoin_qt(bitcoin_qt, harness)
+        qt_process = launch_bitcoin_qt(bitcoin_qt, harness.gui_datadir, harness.tmpdir)
         wait_for_rpc_or_process_exit(qt_process, harness.gui_rpc_port, harness.tmpdir)
         loaded_wallets = rpc_call(harness.gui_rpc_port, "listwallets")
         assert WALLET_NAME in loaded_wallets, f"Expected {WALLET_NAME} to load, got {loaded_wallets}"

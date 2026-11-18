@@ -26,6 +26,7 @@
 #include <qml/onboarding_storage.h>
 #include <QCryptographicHash>
 #include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/receiveqmlfixture.h>
 #include <qml/models/sendimportmodel.h>
 #include <qml/models/preparationoperation.h>
@@ -33,14 +34,16 @@
 #include <qml/models/requestdeletecontroller.h>
 #include <qml/models/requestviewcontroller.h>
 #include <qml/models/senddraftcontroller.h>
+#include <qml/models/feebumpcontroller.h>
+#include <qml/models/walletbackupcontroller.h>
+#include <qml/models/walletpasswordcontroller.h>
+#include <qml/models/walletsecurityinterface.h>
 #include <qml/models/senddraftinterface.h>
 #include <qml/models/sendoperation.h>
 #include <qml/models/transactionreviewcontroller.h>
 #include <qml/models/transactionreviewinterface.h>
 #include <QDir>
 
-#include <qml/models/walletpasswordcontroller.h>
-#include <qml/models/walletsecurityinterface.h>
 #include <QAbstractListModel>
 #include <QAccessible>
 #include <QColor>
@@ -88,6 +91,7 @@
 #include <vector>
 
 #include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/models/feeselectionmodel.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buttonkeyactivation.h>
@@ -1642,7 +1646,7 @@ public:
         QTimer::singleShot(0, this, [this, input, ticket, revision] {
             if (ticket != m_ticket || revision != m_revision) return;
             m_document.set(FlowEntryDocument(input)); m_document_pending = false; Q_EMIT entryDetailsChanged();
-        }); return ticket;
+        }); return true;
     }
 Q_SIGNALS:
     void snapshotChanged(); void entryDetailsChanged();
@@ -1730,7 +1734,6 @@ public:
         m_active = new MockSecurityOperation(kind, m_submit, this);
         connect(m_active, &MockSecurityOperation::changed, this, &MockWalletSecurity::changed);
         Q_EMIT changed();
-    Q_PROPERTY(qint64 coinSelectionTargetSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
         return m_active;
     }
     void finish(bool success) { if (m_active) m_active->finish(success); }
@@ -1808,6 +1811,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(qint64 coinSelectionTargetSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QObject* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
@@ -3694,7 +3698,6 @@ public:
     QString keyScheme() const { if (!m_key_scheme.isEmpty()) return m_key_scheme; return m_kind == WatchOnly ? QStringLiteral("Watch-only") : m_kind == ExternalSigner ? QStringLiteral("External signer") : QStringLiteral("Software wallet"); }
     MockWalletQmlModel* resultWallet() const { return m_wallet; }
     bool canReconcile() const { return false; }
-    Q_PROPERTY(QObject* creation READ creation WRITE setCreation NOTIFY creationChanged)
     Q_INVOKABLE void reconcile() {}
     bool canOpenResult() const { return m_phase == Succeeded && m_wallet && m_wallet->m_available; }
     QVariantMap error() const { return {{QStringLiteral("message"), m_error.left(1024)}, {QStringLiteral("code"), m_error.isEmpty() ? QString{} : QStringLiteral("FixtureFailure")}, {QStringLiteral("field"), QString{}}, {QStringLiteral("recovery"), m_recovery}}; }
@@ -3734,7 +3737,7 @@ private:
 class MockWalletCreationModel : public QObject
 {
     Q_OBJECT
-    void creationChanged();
+    Q_PROPERTY(QObject* creation READ creation WRITE setCreation NOTIFY creationChanged)
     Q_PROPERTY(MockWalletCreationText* name READ name CONSTANT)
     Q_PROPERTY(MockWalletCreationText* extendedPublicKey READ extendedPublicKey CONSTANT)
     Q_PROPERTY(QVariantMap error READ error NOTIFY changed)
@@ -3749,7 +3752,6 @@ public:
     explicit MockWalletCreationModel(QObject* parent = nullptr) : QObject(parent) {
         connect(&m_name, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
         connect(&m_key, &MockWalletCreationText::edited, this, &MockWalletCreationModel::refresh);
-    QPointer<QObject> m_creation;
         refresh();
     }
     MockWalletCreationText* name() { return &m_name; }
@@ -3775,6 +3777,7 @@ public:
         Q_EMIT changed(); return submitted;
     }
 Q_SIGNALS:
+    void creationChanged();
     void changed();
 private:
     void refresh() {
@@ -3789,6 +3792,7 @@ private:
         });
     }
     QVariantMap m_error;
+    QPointer<QObject> m_creation;
     Submit m_submit;
     std::function<bool()> m_available;
     MockWalletCreationText m_name{this}, m_key{this};
@@ -3931,18 +3935,6 @@ public:
             m_wallet_load_in_progress = true; Q_EMIT walletLoadInProgressChanged();
             if (!m_hold_creation) QTimer::singleShot(0, operation, [this, operation] { if (m_pending_creation == operation) finishCreation(); });
             return operation;
-    Q_PROPERTY(MockWalletOperationModel* loadFailure READ loadFailure NOTIFY loadFailureChanged)
-    MockWalletOperationModel* loadFailure() const { return m_load_failure; }
-    Q_INVOKABLE void dismissLoadFailure() { if (m_load_failure) m_load_failure->deleteLater(); m_load_failure = nullptr; Q_EMIT loadFailureChanged(); }
-    //! Reports that opening \p name failed with \p message.
-    Q_INVOKABLE void failLoadForTest(const QString& name, const QString& message) {
-        auto* failure = new MockWalletOperationModel(QString::number(++m_notice_operation), name, 0, MockWalletOperationModel::Software, false, true, this);
-        failure->setOperationKind(MockWalletOperationModel::Open);
-        failure->complete(nullptr, {}, message, false);
-        if (m_load_failure) m_load_failure->deleteLater();
-        m_load_failure = failure; Q_EMIT loadFailureChanged();
-    }
-    QPointer<MockWalletOperationModel> m_load_failure;
         }, [this] { return m_initialized && (!m_pending_creation || !m_pending_creation->busy()); });
     }
     Q_INVOKABLE void finishCreation(const QString& error = QString(), bool created_artifact = false) {
@@ -3982,6 +3974,18 @@ public:
     Q_INVOKABLE void refreshSigners() { m_signers->refresh(); }
     //! The mock controller also stands in for its creation controller.
     Q_PROPERTY(QObject* creation READ creation CONSTANT)
+    Q_PROPERTY(MockWalletOperationModel* loadFailure READ loadFailure NOTIFY loadFailureChanged)
+    MockWalletOperationModel* loadFailure() const { return m_load_failure; }
+    Q_INVOKABLE void dismissLoadFailure() { if (m_load_failure) m_load_failure->deleteLater(); m_load_failure = nullptr; Q_EMIT loadFailureChanged(); }
+    //! Reports that opening \p name failed with \p message.
+    Q_INVOKABLE void failLoadForTest(const QString& name, const QString& message) {
+        auto* failure = new MockWalletOperationModel(QString::number(++m_notice_operation), name, 0, MockWalletOperationModel::Software, false, true, this);
+        failure->setOperationKind(MockWalletOperationModel::Open);
+        failure->complete(nullptr, {}, message, false);
+        if (m_load_failure) m_load_failure->deleteLater();
+        m_load_failure = failure; Q_EMIT loadFailureChanged();
+    }
+    QPointer<MockWalletOperationModel> m_load_failure;
     QObject* creation() { return this; }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
@@ -4091,7 +4095,6 @@ public:
         ++m_close_wallet_calls;
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
-        dismissLoadFailure();
     }
     Q_INVOKABLE void setInitialized(bool initialized)
     {
@@ -4131,6 +4134,7 @@ public:
         m_close_payment_request_detail_requests = 0;
         m_open_receive_requests = 0;
         m_names.reset();
+        dismissLoadFailure();
         clearWalletLoadStatus();
         m_restore = nullptr; m_migration = nullptr; m_restore_source.clear(); m_restore_error.clear(); m_restore_warnings.clear(); m_restore_calls = 0; m_hold_restore = false; m_hold_migration = false;
         m_last_imported_wallet_name.clear();
@@ -4158,13 +4162,6 @@ public:
 
 Q_SIGNALS:
     void closeTargetChanged();
-void MockWalletCreationModel::setCreation(QObject* creation)
-{
-    if (m_creation == creation || m_creation) return;
-    m_creation = creation; Q_EMIT creationChanged();
-    if (auto* controller = qobject_cast<MockWalletController*>(creation)) controller->adoptCreation(*this);
-}
-
     void initializedChanged();
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
@@ -4202,6 +4199,13 @@ private:
     QObject* m_close_target{nullptr};
     QMetaObject::Connection m_close_connection;
 };
+
+void MockWalletCreationModel::setCreation(QObject* creation)
+{
+    if (m_creation == creation || m_creation) return;
+    m_creation = creation; Q_EMIT creationChanged();
+    if (auto* controller = qobject_cast<MockWalletController*>(creation)) controller->adoptCreation(*this);
+}
 
 class MockCoreSettingsModel;
 class MockCoreProxyDraft;
@@ -4291,7 +4295,6 @@ public:
     bool m_hold_proxy_effects{false}, m_refuse_proxy_admission{false};
     int m_proxy_apply_state{Applied}, m_proxy_apply_calls{0};
     std::deque<std::function<void()>> m_proxy_effects;
-    Q_INVOKABLE MockCoreProxyDraft* createProxyDraft();
 
     Q_INVOKABLE QObject* entry(const QString& key)
     {
@@ -4399,8 +4402,17 @@ class MockCoreProxyDraft : public QObject
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(quint64 operationId READ operationId NOTIFY changed)
     Q_PROPERTY(int operationState READ operationState NOTIFY changed)
+    Q_PROPERTY(MockCoreSettingsModel* source READ source WRITE setSource NOTIFY sourceChanged)
 public:
-    explicit MockCoreProxyDraft(MockCoreSettingsModel& source):m_source(&source){connect(&source,&MockCoreSettingsModel::changed,this,&MockCoreProxyDraft::evaluate);connect(&source,&MockCoreSettingsModel::statusesChanged,this,&MockCoreProxyDraft::evaluate);reset();}
+    explicit MockCoreProxyDraft(QObject* parent=nullptr):QObject(parent){}
+    MockCoreSettingsModel* source() const{return m_source;}
+    void setSource(MockCoreSettingsModel* source){
+        if(m_source==source)return;
+        if(m_source)disconnect(m_source,nullptr,this,nullptr);
+        m_source=source;++m_revision;m_ready=false;
+        if(source){connect(source,&MockCoreSettingsModel::changed,this,&MockCoreProxyDraft::evaluate);connect(source,&MockCoreSettingsModel::statusesChanged,this,&MockCoreProxyDraft::evaluate);}
+        Q_EMIT sourceChanged();if(m_source)reset();else Q_EMIT changed();
+    }
     bool proxyEnabled() const{return m_proxy;}QString proxyAddress() const{return m_address;}
     bool torEnabled() const{return m_tor;}QString torAddress() const{return m_onion;}
     QString proxyError() const{return m_pending?QString{}:m_proxy_error;}QString torError() const{return m_pending?QString{}:m_tor_error;}
@@ -4419,19 +4431,19 @@ public:
             m_ready=true;m_proxy=m_source->proxyEnabled();m_address=m_source->proxyAddress().isEmpty()?m_source->defaultAddress():m_source->proxyAddress();
             m_tor=m_source->torEnabled();m_onion=m_source->torAddress().isEmpty()?m_source->defaultAddress():m_source->torAddress();evaluate();});
     }
-    Q_INVOKABLE quint64 requestApply(){
-        if(!m_source||!canApply()||m_source->m_refuse_proxy_admission)return 0;
-        const auto ticket=++m_operation;m_state=MockCoreSettingsModel::Pending;Q_EMIT changed();
+    Q_INVOKABLE bool requestApply(){
+        if(!m_source||!canApply()||m_source->m_refuse_proxy_admission)return false;
+        ++m_operation;m_state=MockCoreSettingsModel::Pending;Q_EMIT changed();
         const auto source=m_source;const QPointer<MockCoreProxyDraft> observer{this};const bool proxy=m_proxy,tor=m_tor;const auto address=m_address,onion=m_onion;
         const int requested_state=source->m_proxy_apply_state;
         source->queueProxyEffect([source,observer,proxy,tor,address,onion,requested_state]{if(!source)return;
             const bool valid=(!proxy||source->validateAddress(address).isEmpty())&&(!tor||source->validateAddress(onion).isEmpty());
             if(valid && requested_state==MockCoreSettingsModel::Applied){if(source->canEdit("proxy")){if(source->validateAddress(address).isEmpty())source->setProxyAddress(address);source->setProxyEnabled(proxy);}
                 if(source->canEdit("onion")){if(source->validateAddress(onion).isEmpty())source->setTorAddress(onion);source->setTorEnabled(tor);}}
-            if(observer){observer->m_state=valid?requested_state:MockCoreSettingsModel::Failed;observer->m_error=observer->m_state==MockCoreSettingsModel::Applied?QString{}:valid?QStringLiteral("The original proxy draft could not be applied."):QStringLiteral("Invalid proxy location");Q_EMIT observer->changed();}
-        });return ticket;
+            if(observer){observer->m_state=valid?requested_state:MockCoreSettingsModel::Failed;observer->m_error=observer->m_state==MockCoreSettingsModel::Applied?QString{}:valid?QStringLiteral("The original proxy draft could not be applied."):QStringLiteral("Invalid proxy location");Q_EMIT observer->changed();if(observer&&observer->m_state==MockCoreSettingsModel::Applied)Q_EMIT observer->applied();}
+        });return true;
     }
-Q_SIGNALS:void changed();
+Q_SIGNALS:void sourceChanged();void changed();void applied();
 private:
     void evaluate(){
         if(!m_source)return;
@@ -4447,7 +4459,6 @@ private:
     QString m_address,m_onion,m_proxy_error,m_tor_error,m_error;
     bool m_proxy{false},m_tor{false},m_pending{true},m_valid{false},m_dirty{false},m_ready{false};
 };
-MockCoreProxyDraft* MockCoreSettingsModel::createProxyDraft(){auto* result=new MockCoreProxyDraft(*this);QQmlEngine::setObjectOwnership(result,QQmlEngine::JavaScriptOwnership);return result;}
 
 MockCoreSettingEntryModel::MockCoreSettingEntryModel(QString key, MockCoreSettingsModel& model, QObject* parent)
     : QObject{parent}
@@ -4559,13 +4570,15 @@ QString MockCoreSettingEntryModel::defaultAddress() const
 class MockOptionsTransactionLinks : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(QObject* source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QString txid READ txid WRITE setTxid NOTIFY txidChanged)
     Q_PROPERTY(QAbstractItemModel* links READ links CONSTANT)
     Q_PROPERTY(bool pending READ pending NOTIFY resultChanged)
     Q_PROPERTY(QString error READ error NOTIFY resultChanged)
 public:
-    MockOptionsTransactionLinks(QObject* owner, std::function<QVariantList(const QString&)> read)
-        : QAbstractListModel(owner), m_read(std::move(read)) {}
+    explicit MockOptionsTransactionLinks(QObject* parent = nullptr) : QAbstractListModel(parent) {}
+    QObject* source() const { return m_source; }
+    void setSource(QObject* source);
     QString txid() const { return m_txid; }
     QAbstractItemModel* links() { return this; }
     int rowCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : m_links.size(); }
@@ -4583,14 +4596,16 @@ public:
         m_pending = true; Q_EMIT resultChanged();
         QTimer::singleShot(0, this, [this, revision] {
             if (revision != m_revision) return;
-            beginResetModel(); m_links = m_read(m_txid); endResetModel();
+            beginResetModel(); m_links = m_read ? m_read(m_txid) : QVariantList{}; endResetModel();
             m_pending = false; Q_EMIT resultChanged();
         });
     }
 Q_SIGNALS:
+    void sourceChanged();
     void txidChanged();
     void resultChanged();
 private:
+    QPointer<QObject> m_source;
     std::function<QVariantList(const QString&)> m_read;
     QString m_txid;
     QVariantList m_links;
@@ -4600,8 +4615,8 @@ private:
 
 namespace {
 struct ControlledSettings {
-    ManualRoutedExecution transport;
     std::deque<std::function<void()>> gui;
+    ManualStartupExecution transport;
 };
 struct MockSettingsStore {
     std::mutex mutex;
@@ -4615,8 +4630,13 @@ struct MockSettingsStore {
     }
 };
 QList<QPointer<SettingsEditorModel>>& MockSettingsOwners(){static QList<QPointer<SettingsEditorModel>> result;return result;}
+std::atomic_size_t& MockSettingsPending()
+{
+    static std::atomic_size_t pending{0};
+    return pending;
 }
-class MockOptionsModel : public QObject
+}
+class MockOptionsModel : public SettingsEditorSource
 {
     Q_OBJECT
     Q_PROPERTY(bool settingsReady MEMBER m_settings_ready NOTIFY settingsReadyChanged)
@@ -4750,6 +4770,7 @@ public:
     QString pruneTargetError()const{return m_core_settings.pruneTargetError();}
     Q_INVOKABLE void editPruneTarget(const QString& text){m_core_settings.stagePruneLiteral(text);}
     std::shared_ptr<MockSettingsStore> m_settings_store;
+    execution::Executor& m_executor;
     std::shared_ptr<ControlledSettings> m_controlled_settings;
     std::vector<QPointer<SettingsEditorModel>> m_controlled_settings_owners;
     MockWalletController* m_settings_signer{nullptr};
@@ -4775,14 +4796,12 @@ public:
         m_setup_error=phase==QStringLiteral("failed")?QStringLiteral("Setup was not written."):m_setup_partial?QStringLiteral("Profile written; legacy cleanup incomplete."):m_setup_uncertain?QStringLiteral("Original outcome unknown."):QString{};
         Q_EMIT setupCommitChanged();if(m_setup_committed)Q_EMIT settingsCommitted();
     }
-    Q_PROPERTY(QString unpruneConsentToken READ unpruneConsentToken CONSTANT)
     bool m_setup_pending{false},m_setup_committed{false};
     QString m_setup_error;
     bool setupCommitPending()const{return m_setup_pending;}
     bool setupCommitted()const{return m_setup_committed;}
     QString setupCommitError()const{return m_setup_error;}
-    QString unpruneConsentToken()const{return QStringLiteral("mock-consent");}
-    Q_INVOKABLE void confirmUnpruning(const QString&){}
+    Q_INVOKABLE void confirmUnpruning(){}
     Q_INVOKABLE void commitSettings(){if(!canFinish()||m_setup_pending||m_setup_committed)return;m_setup_pending=true;Q_EMIT setupCommitChanged();QTimer::singleShot(0,this,[this]{m_setup_pending=false;m_setup_committed=true;Q_EMIT setupCommitChanged();Q_EMIT settingsCommitted();});}
     Q_INVOKABLE void resetSettingsEditorsForTest(){for(const auto& editor:MockSettingsOwners())if(editor)editor->close();m_settings_store.reset();m_setup_pending=m_setup_committed=m_setup_partial=m_setup_uncertain=false;m_setup_queries=m_setup_completions=m_setup_rechecks=0;m_setup_error={};Q_EMIT setupCommitChanged();}
     Q_INVOKABLE bool beginControlledSettingsForTest() {
@@ -4791,7 +4810,7 @@ public:
         return true;
     }
     Q_INVOKABLE bool stepControlledSettingsDomainForTest() {
-        return m_controlled_settings && m_controlled_settings->transport.step(execution::Lane::Domain);
+        return m_controlled_settings && m_controlled_settings->transport.step(execution::Lane::Utility);
     }
     Q_INVOKABLE bool publishControlledSettingsForTest() {
         if (!m_controlled_settings) return false;
@@ -4805,9 +4824,9 @@ public:
         if (!m_controlled_settings) return false;
         auto& state = *m_controlled_settings;
         for (int turn = 0; turn < 4096; ++turn) {
-            if (!state.transport.queuedIdle()) { if (!state.transport.stepNext()) return false; continue; }
+            if (state.transport.step(execution::Lane::Core) || state.transport.step(execution::Lane::Utility)) continue;
             if (!state.gui.empty()) { auto callback = std::move(state.gui.front()); state.gui.pop_front(); callback(); continue; }
-            return state.transport.transportIdle();
+            return state.transport.quiescent();
         }
         return false;
     }
@@ -4822,13 +4841,18 @@ public:
     }
     Q_INVOKABLE int settingsWritesForTest()const{if(!m_settings_store)return 0;std::lock_guard lock{m_settings_store->mutex};return m_settings_store->writes;}
     Q_INVOKABLE void rejectSettingsForTest(const QString& error){if(!m_settings_store)m_settings_store=std::make_shared<MockSettingsStore>();std::lock_guard lock{m_settings_store->mutex};m_settings_store->rejected=error;}
-    Q_INVOKABLE SettingsEditorModel* createSettingsEditor(){
+    SettingsEditorModel* createSettingsEditor() override{
         using namespace effectivesettings;if(!m_settings_store)m_settings_store=std::make_shared<MockSettingsStore>();const auto store=m_settings_store;
         if(m_settings_signer){const auto config=m_settings_signer->signerConfigurationForTest();std::lock_guard lock{store->mutex};auto& field=store->snapshot.fields[size_t(Key::Signer)];field.committed=field.effective=field.next_start=config.command;field.editable=config.editable;field.provenance=config.editable?Provenance::Persistent:Provenance::CommandLine;}
-        SettingsEditorModel::Ports ports;ports.execution=MockFeeServices();
-        if (const auto controlled = m_controlled_settings) ports.execution = {controlled->transport.scheduler, [controlled](auto turn) { controlled->gui.push_back(std::move(turn)); }};
+        SettingsEditorModel::Ports ports;
+        ports.post = MockFeeServices().post;
+        ports.executor = &m_executor;
+        if (const auto controlled = m_controlled_settings) {
+            ports.post = [controlled](auto turn) { controlled->gui.push_back(std::move(turn)); };
+            ports.executor = &controlled->transport.executor();
+        }
         const auto signer = QPointer<MockWalletController>{m_settings_signer};
-        const auto notify = ports.execution.post;
+        const auto notify = ports.post;
         ports.read=[store]{std::lock_guard lock{store->mutex};return store->snapshot;};
         ports.review=[store](const settingsedit::Save& save){std::lock_guard lock{store->mutex};const bool current=save.original.revision==store->snapshot.revision;QString error=store->rejected;for(const auto& edit:save.batch.edits)if(edit.key==Key::Signer&&edit.intent==Intent::ExplicitOverride)if(const auto path_error=signerdiscovery::PathError(std::get<QString>(edit.value));!path_error.isEmpty())error=path_error;return Check{current&&error.isEmpty(),{},{},current?error:QStringLiteral("Configuration changed")};};
         ports.write=[store, signer, notify](const settingsedit::Save& save) {
@@ -4853,6 +4877,8 @@ public:
             if (applied_signer) notify([signer, command=std::move(*applied_signer)] { if (signer) signer->settingsSignerSavedForTest(command); });
             return result;
         };
+        ++MockSettingsPending();
+        ports.retired = [] { --MockSettingsPending(); };
         auto* editor=new SettingsEditorModel(std::move(ports),this);
         if (m_controlled_settings) m_controlled_settings_owners.emplace_back(editor);
         MockSettingsOwners().removeIf([](const auto& item){return !item;});MockSettingsOwners().push_back(editor);connect(editor,&SettingsEditorModel::closed,editor,[editor]{editor->close();editor->deleteLater();});return editor;
@@ -4862,7 +4888,7 @@ Q_SIGNALS:
     void setupCommitChanged();
     void settingsCommitted();
 public:
-    MockOptionsModel()
+    explicit MockOptionsModel(execution::Executor& executor) : m_executor(executor)
     {
         connect(&m_core_settings, &MockCoreSettingsModel::changed, this, &MockOptionsModel::syncCoreSettingsFromDocument);
         connect(&m_core_settings,&MockCoreSettingsModel::changed,this,&MockOptionsModel::pruneTargetInputChanged);
@@ -4997,11 +5023,6 @@ public:
         status.insert(QStringLiteral("infoText"), QString{});
         return status;
     }
-    Q_INVOKABLE MockOptionsTransactionLinks* createTransactionLinks() {
-        auto* view = new MockOptionsTransactionLinks(this, [this](const QString& txid) { return preparedTransactionLinks(txid); });
-        connect(this, &MockOptionsModel::thirdPartyTransactionUrlsChanged, view, &MockOptionsTransactionLinks::refresh);
-        return view;
-    }
     QVariantList preparedTransactionLinks(const QString& txid) const {
         QVariantList result;
         if (m_third_party_transaction_urls.isEmpty()) return result;
@@ -5109,6 +5130,19 @@ private:
     int m_displayUnit{0};
     QString m_language;
 };
+
+void MockOptionsTransactionLinks::setSource(QObject* source)
+{
+    if (m_source == source) return;
+    if (m_source) disconnect(m_source, nullptr, this, nullptr);
+    m_source = source; ++m_revision;
+    auto* options = qobject_cast<MockOptionsModel*>(source);
+    m_read = options ? std::function<QVariantList(const QString&)>{[options = QPointer<MockOptionsModel>{options}](const QString& txid) { return options ? options->preparedTransactionLinks(txid) : QVariantList{}; }} : nullptr;
+    if (options) connect(options, &MockOptionsModel::thirdPartyTransactionUrlsChanged, this, &MockOptionsTransactionLinks::refresh);
+    beginResetModel(); m_links.clear(); endResetModel();
+    Q_EMIT sourceChanged();
+    if (!m_txid.isEmpty()) refresh();
+}
 
 class MockChainModel : public QObject
 {
@@ -6540,6 +6574,8 @@ private:
 MockActivityDetailModel* MockTransactionActivityModel::createDetailView(QObject* owner)
 {
     return owner?new MockActivityDetailModel{*this,owner}:nullptr;
+}
+
 //! Owns one page's detail model for the current mock activity source.
 class MockActivityDetailController : public QObject
 {
@@ -6577,8 +6613,6 @@ private:
     QString m_txid;
     bool m_active{false};
 };
-
-}
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
 {
@@ -7830,10 +7864,13 @@ public Q_SLOTS:
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
         QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, m_settings.path());
         m_qr_executor = std::make_unique<BackendExecutor>(execution::Options{});
+        m_qr_renderer = std::make_unique<execution::Executor>(execution::Executor::Config{});
         MockFeeServices() = {m_qr_executor->scheduler(), [this](std::function<void()> work) { QMetaObject::invokeMethod(this, std::move(work), Qt::QueuedConnection); }};
         qmlRegisterUncreatableMetaObject(SettingsSaveResult::staticMetaObject,"org.bitcoincore.qt",1,0,"SettingsSaveResult","Retained settings outcome");
         qRegisterMetaType<SettingsSaveResult>();
         qmlRegisterUncreatableType<SettingsEditorModel>("org.bitcoincore.qt",1,0,"SettingsEditorModel","Actual controlled editor");
+        qmlRegisterUncreatableType<SettingsEditorSource>("org.bitcoincore.qt",1,0,"SettingsEditorSource","The options");
+        qmlRegisterType<SettingsNavigationController>("org.bitcoincore.qt",1,0,"SettingsNavigationController");
         qmlRegisterUncreatableType<SettingsEntryModel>("org.bitcoincore.qt",1,0,"SettingsEntryModel","Actual controlled setting");
         qmlRegisterUncreatableType<FeeSelectionModel>("org.bitcoincore.qt", 1, 0, "FeeSelectionModel", "Owned fee policy");
         qmlRegisterUncreatableType<FeeRateEntry>("org.bitcoincore.qt", 1, 0, "FeeRateEntry", "Owned fee input");
@@ -7935,9 +7972,14 @@ public Q_SLOTS:
         if (!endControlledPreferences()) m_had_warnings = true;
         for(const auto& store:m_preferences_stores)if(store)store->close();
         for (const auto& owner : MockFeeOwners()) if (owner) owner->close();
-        for(const auto& editor:MockSettingsOwners())if(editor){editor->close();editor->deleteLater();}
-        MockFeeServices() = {};
         QEventLoop loop;
+        const auto editors = MockSettingsOwners();
+        for (const auto& editor : editors) if (editor) editor->close();
+        if (!QTest::qWaitFor([] { return MockSettingsPending() == 0; }, 5000)) {
+            m_had_warnings = true;
+            std::cerr << "Settings editors did not drain\n";
+        }
+        MockFeeServices() = {};
         bool retired{false};
         m_presentation_services->close();
         m_presentation_services->whenRetired(&loop, [&] { retired = true; loop.quit(); });
@@ -7945,6 +7987,8 @@ public Q_SLOTS:
         bool drained{false};
         BackendExecutor::shutdownAll(&loop, [&] { drained = true; loop.quit(); });
         while (!drained) loop.exec();
+        m_qr_renderer->stopAndJoin();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
 
@@ -7977,7 +8021,8 @@ public Q_SLOTS:
         while(!preferences->ready()&&preferences->error().isEmpty())preferences_loop.exec();
         engine->rootContext()->setContextProperty(QStringLiteral("testSetup"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
-        engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider{m_qr_executor->scheduler(), QRImageProvider::RenderImage, engine});
+        auto queue = std::make_shared<execution::SerialQueue>(m_qr_renderer->makeQueue(execution::Lane::Utility));
+        engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider{std::move(queue), QRImageProvider::RenderImage, engine});
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
         static MockBitcoinUri bitcoin_uri;
@@ -7985,7 +8030,7 @@ public Q_SLOTS:
         static TestImage test_image;
         static TestResources test_resources;
         static MockBuildInfo build_info;
-        static MockOptionsModel options_model;
+        static MockOptionsModel options_model{*m_qr_renderer};
         static MockChainModel chain_model;
         static MockBlockClockModel block_clock_model;
         static MockNodeModel node_model;
@@ -8081,8 +8126,8 @@ public Q_SLOTS:
         qmlRegisterType<MockActivityDetailController>("org.bitcoincore.qt",1,0,"ActivityDetailController");
         qmlRegisterType<AppPreferences>("org.bitcoincore.qt",1,0,"AppPreferences");
         qmlRegisterUncreatableType<MockCoreSettingsModel>("org.bitcoincore.qt",1,0,"CoreSettingsModel","Test fixture");
-        qmlRegisterUncreatableType<MockCoreProxyDraft>("org.bitcoincore.qt",1,0,"CoreProxyDraft","Test fixture");
-        qmlRegisterUncreatableType<MockOptionsTransactionLinks>("org.bitcoincore.qt", 1, 0, "OptionsTransactionLinks", "Test fixture");
+        qmlRegisterType<MockCoreProxyDraft>("org.bitcoincore.qt",1,0,"CoreProxyDraft");
+        qmlRegisterType<MockOptionsTransactionLinks>("org.bitcoincore.qt", 1, 0, "OptionsTransactionLinks");
         qmlRegisterType<MockSignVerifyMessageModel>("org.bitcoincore.qt", 1, 0, "SignVerifyMessageModel");
         qmlRegisterUncreatableType<MessageSigningPrompt>("org.bitcoincore.qt", 1, 0, "MessageSigningPrompt", "Owned by signing attempt");
         qmlRegisterType<ExactTextDocument>("org.bitcoincore.qt", 1, 0, "ExactTextDocument");
@@ -8107,8 +8152,9 @@ public Q_SLOTS:
         qmlRegisterType<WalletPasswordController>("org.bitcoincore.qt", 1, 0, "WalletPasswordController");
         qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
         qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
-        qmlRegisterUncreatableType<MockWalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Test stub type");
         qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Test stub type");
+        qmlRegisterUncreatableType<MockWalletNamesController>("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Test stub type");
+        qmlRegisterUncreatableType<MockWalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Test stub type");
         qmlRegisterSingletonInstance<MockBitcoinUri>("org.bitcoincore.qt", 1, 0, "BitcoinUri", &bitcoin_uri);
         qmlRegisterUncreatableType<ImportOperation>("org.bitcoincore.qt", 1, 0, "ImportOperation", "Test stub type");
         qmlRegisterUncreatableType<SendOperation>("org.bitcoincore.qt", 1, 0, "SendOperation", "Started by a wallet");
@@ -8204,6 +8250,7 @@ private:
     std::vector<QPointer<UiPreferencesStore>> m_preferences_stores;
     mutable blockclock::Snapshot m_block_clock_fixture;
     std::unique_ptr<BackendExecutor> m_qr_executor;
+    std::unique_ptr<execution::Executor> m_qr_renderer;
     std::unique_ptr<PresentationServices> m_presentation_services;
     QTemporaryDir m_settings;
     bool m_had_warnings{false};

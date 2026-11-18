@@ -11,6 +11,19 @@ DialogPopup {
     property Component initialPage: null
     property string closeButtonObjectName: "onboardingSettingsCloseButton"
     readonly property alias pageStack: pages
+    readonly property SettingsPage currentSettingsPage: pages.currentItem as SettingsPage
+    property bool exitPending: false
+    function requestClose() {
+        if (root.exitPending) return
+        root.exitPending = true
+        if (root.currentSettingsPage) root.currentSettingsPage.requestExit()
+        else root.close()
+    }
+    Connections {
+        target: root.currentSettingsPage
+        function onExitAllowed() { if (root.exitPending) root.close() }
+        function onExitCancelled() { root.exitPending = false }
+    }
 
     // Named after the hosted settings page.
     title: pages.currentItem && pages.currentItem.title ? pages.currentItem.title : "" // qmllint disable missing-property
@@ -19,10 +32,14 @@ DialogPopup {
     implicitHeight: 504
     padding: 0
     horizontalPadding: 0
+    // The hosted settings page decides whether it can close (requestClose).
+    dismissible: false
     closesOnPressOutside: false
 
     contentItem: Item {
         clip: true
+        focus: true
+        Keys.onEscapePressed: function(event) { event.accepted = true; root.requestClose() }
 
         PageStack {
             id: pages
@@ -36,9 +53,13 @@ DialogPopup {
             anchors.right: parent.right
             anchors.margins: Theme.space.l
             z: 2
-            onClicked: root.close()
+            onClicked: root.requestClose()
         }
     }
 
-    onClosed: if (pages.depth > 1) pages.pop(null, StackView.Immediate)
+    onOpened: root.exitPending = false
+    onClosed: {
+        root.exitPending = false
+        if (pages.depth > 1) pages.pop(null, StackView.Immediate)
+    }
 }

@@ -20,13 +20,9 @@ ContextMenu {
     property bool copyRawTransactionEnabled: true
     property string itemObjectNamePrefix: "transaction"
     property var clipboard: Clipboard
-    readonly property OptionsTransactionLinks transactionLinks: ApplicationModels.optionsModel.createTransactionLinks()
-
-    Binding {
-        target: root.transactionLinks
-        property: "txid"
-        value: root.txid
-        when: root.transactionLinks !== null
+    readonly property OptionsTransactionLinks transactionLinks: OptionsTransactionLinks {
+        source: ApplicationModels.optionsModel
+        txid: root.txid
     }
 
     // Explorer links send the transaction ID to a third party, so the host

@@ -4,7 +4,8 @@
 
 #include <QtTest/QtTest>
 
-#include <qml/backendexecutor.h>
+#include <qml/execution.h>
+#include <qml/executor.h>
 #include <qml/networkstyle.h>
 #include <qml/qmlengine.h>
 
@@ -142,15 +143,17 @@ void QmlEngineTests::preInitEngine_loadsLocalImages()
 
 void QmlEngineTests::mainEngine_blocksNetwork()
 {
-    BackendExecutor executor{execution::Options{}};
-    const auto engine = CreateMainEngine(m_network_style.get(), executor.scheduler());
+    execution::Executor executor{execution::Executor::Config{}};
+    const auto engine = CreateMainEngine(m_network_style.get(),
+        std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility)));
     VerifyNetworkBlocked(*engine);
 }
 
 void QmlEngineTests::mainEngine_loadsLocalImages()
 {
-    BackendExecutor executor{execution::Options{}};
-    const auto engine = CreateMainEngine(m_network_style.get(), executor.scheduler());
+    execution::Executor executor{execution::Executor::Config{}};
+    const auto engine = CreateMainEngine(m_network_style.get(),
+        std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility)));
     VerifyImageLoads(*engine, BUNDLED_IMAGE);
     VerifyImageLoads(*engine, PROVIDER_IMAGE);
     VerifyImageLoads(*engine, QR_IMAGE);

@@ -657,6 +657,19 @@ struct SettingsSaveResultForeign {
     QML_NAMED_ELEMENT(SettingsSaveResult)
     QML_UNCREATABLE("Retained settings outcome")
 };
+struct SettingsEditorSourceForeign {
+    Q_GADGET
+    QML_FOREIGN(SettingsEditorSource)
+    QML_NAMED_ELEMENT(SettingsEditorSource)
+    QML_UNCREATABLE("The options")
+};
+
+struct SettingsNavigationControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(SettingsNavigationController)
+    QML_NAMED_ELEMENT(SettingsNavigationController)
+};
+
 struct SettingsEditorModelForeign {
     Q_GADGET
     QML_FOREIGN(SettingsEditorModel)

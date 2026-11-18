@@ -5,15 +5,20 @@
 #ifndef BITCOIN_QML_APPMODE_H
 #define BITCOIN_QML_APPMODE_H
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <QObject>
+#include <QtGlobal>
 
 class AppMode : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool isDesktop READ isDesktop NOTIFY modeChanged)
     Q_PROPERTY(bool isMobile READ isMobile NOTIFY modeChanged)
+    Q_PROPERTY(bool walletCompiled READ walletCompiled CONSTANT)
     Q_PROPERTY(bool walletEnabled READ walletEnabled NOTIFY walletEnabledChanged)
     Q_PROPERTY(QString state READ state NOTIFY modeChanged)
+    Q_PROPERTY(bool animationsEnabled READ animationsEnabled CONSTANT)
 
 public:
     enum Mode {
@@ -23,15 +28,26 @@ public:
 
     explicit AppMode(Mode mode, bool wallet_enabled)
     : m_mode(mode)
-    , m_wallet_enabled(wallet_enabled)
+    , m_wallet_enabled(walletCompiled() && wallet_enabled)
+    , m_animations_enabled(!qEnvironmentVariableIsSet("BITCOIN_QML_TEST_NO_ANIMATIONS"))
     {
     }
 
     bool isMobile() { return m_mode == MOBILE; }
+    bool animationsEnabled() const { return m_animations_enabled; }
     bool isDesktop() { return m_mode == DESKTOP; }
+    static constexpr bool walletCompiled()
+    {
+#ifdef ENABLE_WALLET
+        return true;
+#else
+        return false;
+#endif
+    }
     bool walletEnabled() { return m_wallet_enabled; }
     void setWalletEnabled(bool wallet_enabled)
     {
+        wallet_enabled = walletCompiled() && wallet_enabled;
         if (m_wallet_enabled == wallet_enabled) return;
         m_wallet_enabled = wallet_enabled;
         Q_EMIT walletEnabledChanged();
@@ -55,6 +71,7 @@ Q_SIGNALS:
 private:
     const Mode m_mode;
     bool m_wallet_enabled;
+    const bool m_animations_enabled;
 };
 
 #endif // BITCOIN_QML_APPMODE_H

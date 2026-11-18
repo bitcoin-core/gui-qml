@@ -7,7 +7,7 @@
 #include <common/args.h>
 #include <init.h>
 #include <univalue.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QFile>
@@ -24,13 +24,13 @@
 namespace {
 struct Fixture {
     QTemporaryDir directory;
-    ManualRoutedExecution transport;
+    ManualStartupExecution transport;
     std::deque<std::function<void()>> gui;
     std::unique_ptr<OnboardingOptionsModel> model;
-    Fixture(){model=std::make_unique<OnboardingOptionsModel>(std::vector<std::string>{"bitcoin-qt","-regtest","-datadir="+directory.path().toStdString()},false,nullptr,execution::SnapshotServices{transport.scheduler,[this](auto fn){gui.push_back(std::move(fn));}});}
+    Fixture(){model=std::make_unique<OnboardingOptionsModel>(std::vector<std::string>{"bitcoin-qt","-regtest","-datadir="+directory.path().toStdString()},false,nullptr,[this](auto fn){gui.push_back(std::move(fn));}, &transport.executor());}
     ~Fixture(){model.reset();transport.drain();while(publish()){}transport.drain();if(!transport.quiescent())QTest::qFail("Setup owner did not fully drain",__FILE__,__LINE__);}
     bool publish(){if(gui.empty())return false;auto fn=std::move(gui.front());gui.pop_front();fn();return true;}
-    bool settle(){for(int i=0;i<4096;++i){if(transport.stepNext()||publish())continue;return transport.transportIdle();}return false;}
+    bool settle(){for(int i=0;i<4096;++i){if(transport.step(execution::Lane::Core)||transport.step(execution::Lane::Utility)||publish())continue;return transport.quiescent();}return false;}
     bool ready(){if(!settle())return false;model->setPrune(true);model->setPruneSizeGB(1);return settle()&&model->canFinish();}
 };
 }
@@ -96,7 +96,7 @@ private Q_SLOTS:
     }
     void shutdownRetainsThePhysicalSetupOutcome_data(){QTest::addColumn<int>("outcome");QTest::newRow("success")<<0;QTest::newRow("known-failure")<<1;QTest::newRow("unknown-throw")<<2;}
     void shutdownRetainsThePhysicalSetupOutcome(){QFETCH(int,outcome);Fixture f;QVERIFY(f.ready());int calls{0};f.model->setSettingsCommitPort([&](const auto&){++calls;if(outcome==2)throw std::runtime_error("lost setup result");return std::pair{outcome==0,QStringLiteral("write failed")};});
-        const auto receipt=f.model->setupCommitReceipt();QSignalSpy success{f.model.get(),&OnboardingOptionsModel::settingsCommitted},drained{f.model.get(),&OnboardingOptionsModel::shutdownFinished};f.model->commitSettings();QVERIFY(f.transport.step(execution::Lane::Domain));const auto held=f.transport.dispatchNext(execution::Lane::Core);QVERIFY(held);f.model->beginShutdown();QCOMPARE(drained.count(),0);QVERIFY(f.transport.finishWork(*held));QCOMPARE(calls,1);QCOMPARE(receipt->load(),outcome==0?OnboardingOptionsModel::SetupCommitted:outcome==1?OnboardingOptionsModel::SetupFailed:OnboardingOptionsModel::SetupUncertain);QVERIFY(f.settle());QCOMPARE(drained.count(),1);QCOMPARE(success.count(),0);f.model->commitSettings();QVERIFY(f.settle());QCOMPARE(calls,1);
+        const auto receipt=f.model->setupCommitReceipt();QSignalSpy success{f.model.get(),&OnboardingOptionsModel::settingsCommitted},drained{f.model.get(),&OnboardingOptionsModel::shutdownFinished};f.model->commitSettings();QVERIFY(f.transport.step(execution::Lane::Utility));const auto held=f.transport.take(execution::Lane::Core);QVERIFY(held);f.model->beginShutdown();QCOMPARE(drained.count(),0);held();QCOMPARE(calls,1);QCOMPARE(receipt->load(),outcome==0?OnboardingOptionsModel::SetupCommitted:outcome==1?OnboardingOptionsModel::SetupFailed:OnboardingOptionsModel::SetupUncertain);QVERIFY(f.settle());QCOMPARE(drained.count(),1);QCOMPARE(success.count(),0);f.model->commitSettings();QVERIFY(f.settle());QCOMPARE(calls,1);
     }
     void committedSetupIsNotAppliedAgainDuringNodePreparation(){Fixture f;QVERIFY(f.ready());int commits{0};f.model->setSettingsCommitPort([&](const auto&){++commits;return std::pair{true,QString{}};});f.model->commitSettings();QVERIFY(f.settle());QVERIFY(f.model->setupCommitted());ArgsManager args;SetupServerArgs(args,false);SetupQmlGuiArgs(args);args.ForceSetArg("-regtest","1");args.ForceSetArg("-datadir",f.directory.path().toStdString());int preparations{0};QSignalSpy prepared{f.model.get(),&OnboardingOptionsModel::nodePrepared};f.model->prepareNode(args,[&]{++preparations;return true;});QVERIFY(f.settle());QCOMPARE(commits,1);QCOMPARE(preparations,1);QCOMPARE(prepared.count(),1);QVERIFY(prepared.front().front().toBool());QVERIFY(!args.GetPersistentSetting("qml_onboarded").isTrue());}
     void unknownCommitCannotBeRepeated(){Fixture f;QVERIFY(f.ready());int calls{0};f.model->setSettingsCommitPort([&](const auto&)->std::pair<bool,QString>{++calls;throw 7;});f.model->commitSettings();QVERIFY(f.settle());QCOMPARE(f.model->setupCommitReceipt()->load(),OnboardingOptionsModel::SetupUncertain);QVERIFY(!f.model->setupCommitError().isEmpty());f.model->commitSettings();QVERIFY(f.settle());QCOMPARE(calls,1);}

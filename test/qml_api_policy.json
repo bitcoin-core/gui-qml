@@ -215,12 +215,12 @@
           "type": "QString",
           "constant": false
         },
-        "closeToken": {
-          "type": "QString",
-          "constant": false
-        },
         "closeQuestion": {
           "type": "bool",
+          "constant": false
+        },
+        "closePrompt": {
+          "type": "TextEditClosePrompt*",
           "constant": false
         }
       },

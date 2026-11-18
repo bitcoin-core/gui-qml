@@ -16,45 +16,9 @@ SettingsPage {
 
     required property var settingsModel
     property bool onboarding: false
+    readonly property string pruneTargetError: settingsModel.pruneTargetError
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var pruneSetting: coreSettingsModel.entry("prune")
-    readonly property bool hasStorageResult: root.settingsModel
-        && root.settingsModel["storageAvailableText"] !== undefined
-        && root.settingsModel.storageAvailableText.length > 0
-        && !root.settingsModel.storageCheckPending
-    readonly property int availableStorageGB: root.hasStorageResult
-        ? root.settingsModel.storageAvailableGB
-        : 0
-    readonly property int assumedChainstateSizeGB: root.settingsModel
-        && root.settingsModel["assumedChainstateSize"] !== undefined
-        ? root.settingsModel.assumedChainstateSize
-        : 0
-    readonly property int maxPruneSizeGB: root.hasStorageResult
-        ? Math.max(0, root.availableStorageGB - root.assumedChainstateSizeGB)
-        : 0
-    property string pruneTargetText: String(pruneSetting.value)
-    property string pruneTargetError: ""
-
-    signal pruneTargetCommitted(int target)
-
-    function resetPruneTarget() {
-        pruneTargetText = String(pruneSetting.value)
-        pruneTargetError = ""
-    }
-
-    function validatePruneTarget(value) {
-        if (isNaN(value) || value < 1) {
-            return qsTr("Choose a storage limit of at least 1 GB.")
-        }
-        if (root.hasStorageResult && value > root.maxPruneSizeGB) {
-            if (root.maxPruneSizeGB < 1) {
-                return qsTr("There is not enough available storage for reduced storage in this data directory.")
-            }
-            return qsTr("Choose a value between 1 GB and %1 GB for this data directory.").arg(root.maxPruneSizeGB)
-        }
-        return ""
-    }
-
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Block storage")
@@ -74,29 +38,30 @@ SettingsPage {
         TextFieldRow {
             id: pruneTargetRow
             Layout.fillWidth: true
-            title: qsTr("Block storage limit (GB)")
+            title: qsTr("Block storage target (MiB; 1 is manual)")
             enabled: root.pruneSetting.enabled && root.pruneSetting.canEdit
             fieldObjectName: "pruneTargetInput"
             fieldWidth: 80
-            text: root.pruneTargetText
-            validator: IntValidator { bottom: 1 }
-            errorText: root.pruneTargetError
-            supportingText: root.pruneTargetError.length === 0 ? root.pruneSetting.infoText : ""
+            text: root.settingsModel.pruneTargetText
+            errorText: root.settingsModel.pruneTargetError
+            supportingText: root.settingsModel.pruneTargetError.length === 0 ? root.pruneSetting.infoText : ""
             showDivider: false
-            onTextEdited: function(text) {
-                root.pruneTargetText = text
-                root.pruneTargetError = ""
-            }
-            onEditingFinished: {
-                const parsed = parseInt(pruneTargetRow.text)
-                root.pruneTargetError = root.validatePruneTarget(parsed)
-                if (root.pruneTargetError.length === 0) {
-                    root.pruneSetting.value = parsed
-                    root.pruneTargetText = String(parsed)
-                    root.pruneTargetCommitted(parsed)
-                }
-            }
+            onTextEdited: function(text) { root.settingsModel.editPruneTarget(text) }
         }
+    }
+
+    PrimaryButton {
+        objectName: "restoreValidPruneInput"
+        visible: root.settingsModel.pruneTargetError.length > 0
+        text: qsTr("Restore the last valid target")
+        onClicked: root.coreSettingsModel.discardPruneInput()
+    }
+
+    PrimaryButton {
+        objectName: "onboardingConfirmUnpruning"
+        visible: root.onboarding && !root.settingsModel.prune
+        text: qsTr("Allow rebuilding and downloading blocks if this profile was pruned")
+        onClicked: root.settingsModel.confirmUnpruning()
     }
 
     FormSection {

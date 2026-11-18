@@ -124,8 +124,8 @@ This mapping does not certify that intermediate-stage builds are already ordered
 
 | Suite (`test/functional/`) | Stage | Named scenarios and retained boundary |
 | --- | --- | --- |
-| `interface_qml_startup.py` | 1, 2, 4 | Bridge protocol (1); onboarding, blocked-config finish/quit/close, CLI/config/JSON wallet disabling, GUI resets (2); wallet-enabled CLI override (4) |
-| `interface_qml_preinit_onboarding.py` | 2, 4 | Node onboarding, existing-profile onboarding, configuration source and saved settings (2); wallet onboarding, root wallet and explicit walletdir discovery (4) |
+| `interface_qml_startup.py` | 1, 2, 4 | Bridge protocol (1); onboarding, blocked-config finish/quit/close, startup failures from CLI, configuration, datadir, settings-file and saved-preference sources, CLI/config/JSON wallet disabling, GUI resets (2); wallet-enabled CLI override (4) |
+| `interface_qml_preinit_onboarding.py` | 2, 4 | Node onboarding, existing-profile onboarding, configuration source and saved settings, datadir and display unit saved by a real Qt Widgets release (2); wallet onboarding, root wallet and explicit walletdir discovery (4) |
 | `interface_qml_node.py` | 2, 4 | Settings and block history share one node-only restart (2); saved geometry during wallet-shell construction (4) |
 | `interface_qml_peers.py` | 3 | Multi-node disconnect/ban/unban, per-peer isolation and ban persistence across restart |
 | `interface_qml_wallet.py` | 4 | Encrypted creation, backup, close/reload across restart and successful restoration |

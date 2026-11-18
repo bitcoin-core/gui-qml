@@ -4,6 +4,10 @@
 
 #ifndef BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 #define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#include <qml/models/settingseditorsource.h>
+#include <qml/preferenceswatch.h>
+#include <limits>
+#include <algorithm>
 
 #include <common/args.h>
 #include <txdb.h>
@@ -17,11 +21,17 @@
 #include <validation.h>
 
 #include <qml/backendexecutor.h>
+#include <qml/ownedwork.h>
+#include <qml/models/settingseditormodel.h>
 #include <qml/core_settings.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/models/settings_keys.h>
 
+#include <atomic>
+
+#include <QAbstractListModel>
 #include <QObject>
+#include <QPointer>
 #include <QFont>
 #include <QSet>
 #include <QString>
@@ -34,8 +44,52 @@ namespace interfaces {
 class Node;
 }
 
+class SignerDiscoveryModel;
+class OptionsQmlModel;
+struct OptionsLinksState;
+class OptionsTransactionLinks : public QAbstractListModel
+{
+    Q_OBJECT
+    //! The options whose third-party URLs build the links. QML declares the
+    //! view and binds this; the view registers with the options it reads.
+    Q_PROPERTY(OptionsQmlModel* source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(QString txid READ txid WRITE setTxid NOTIFY txidChanged)
+    Q_PROPERTY(QAbstractItemModel* links READ links CONSTANT)
+    Q_PROPERTY(bool pending READ pending NOTIFY resultChanged)
+    Q_PROPERTY(QString error READ error NOTIFY resultChanged)
+public:
+    explicit OptionsTransactionLinks(QObject* parent=nullptr);
+    ~OptionsTransactionLinks() override;
+    OptionsQmlModel* source() const {return m_source;}
+    void setSource(OptionsQmlModel* source);
+    QString txid() const {return m_txid;}
+    void setTxid(const QString& txid);
+    enum Role {HostRole=Qt::UserRole,UrlRole};
+    QAbstractItemModel* links() {return this;}
+    int rowCount(const QModelIndex& parent = {}) const override;
+    QVariant data(const QModelIndex& index,int role=Qt::DisplayRole) const override;
+    QHash<int,QByteArray> roleNames() const override {return {{HostRole,"host"},{UrlRole,"url"}};}
+    bool pending() const {return m_pending;}
+    QString error() const {return m_error;}
+Q_SIGNALS:
+    void sourceChanged();
+    void txidChanged();
+    void resultChanged();
+private:
+    friend class OptionsQmlModel;
+    void refresh();
+    void applyRows(quint64 revision);
+    int m_visible{0};
+    bool m_clearing{false};
+    QPointer<OptionsQmlModel> m_source;
+    std::weak_ptr<OptionsLinksState> m_state;
+    quint64 m_id{0},m_revision{0};
+    QString m_txid,m_error;
+    bool m_pending{false};
+};
+
 /** Model for Bitcoin client options. */
-class OptionsQmlModel : public QObject
+class OptionsQmlModel : public SettingsEditorSource
 {
     Q_OBJECT
     Q_PROPERTY(bool settingsReady READ settingsReady NOTIFY settingsReadyChanged)
@@ -52,8 +106,10 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int maxDbcacheSizeMiB READ maxDbcacheSizeMiB CONSTANT)
     Q_PROPERTY(int minDbcacheSizeMiB READ minDbcacheSizeMiB CONSTANT)
     Q_PROPERTY(int maxScriptThreads READ maxScriptThreads CONSTANT)
-    Q_PROPERTY(int minScriptThreads READ minScriptThreads CONSTANT)
+    Q_PROPERTY(int minScriptThreads READ minScriptThreads NOTIFY threadLimitsChanged)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
+    Q_PROPERTY(QString pruneTargetText READ pruneTargetText NOTIFY pruneTargetInputChanged)
+    Q_PROPERTY(QString pruneTargetError READ pruneTargetError NOTIFY pruneTargetInputChanged)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
@@ -77,7 +133,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QVariantMap coreSettingStatuses READ coreSettingStatuses NOTIFY coreSettingStatusesChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
     Q_PROPERTY(QString languageSummary READ languageSummary NOTIFY languageChanged)
-    Q_PROPERTY(QStringList availableLanguages READ availableLanguages CONSTANT)
+    Q_PROPERTY(QStringList availableLanguages READ availableLanguages NOTIFY availableLanguagesChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(QString displayUnitLabel READ displayUnitLabel NOTIFY displayUnitChanged)
     Q_PROPERTY(QString thirdPartyTransactionUrls READ thirdPartyTransactionUrls WRITE setThirdPartyTransactionUrls NOTIFY thirdPartyTransactionUrlsChanged)
@@ -86,16 +142,32 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(bool hideAmounts READ hideAmounts WRITE setHideAmounts NOTIFY hideAmountsChanged)
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs);
+    explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs,
+                             execution::SnapshotServices services = {}, execution::Executor* executor = nullptr);
 
+    Q_INVOKABLE void refreshDisplaySettings();
     ~OptionsQmlModel() override;
+    bool presentationOpen() const {return !m_stopping;}
+    enum SettingsOperationState {SettingsIdle,SettingsPending,SettingsApplied,SettingsFailed,SettingsUncertain};
+    Q_ENUM(SettingsOperationState)
+    Q_PROPERTY(SettingsOperationState settingsOperationState READ settingsOperationState NOTIFY settingsOperationChanged)
+    Q_PROPERTY(quint64 settingsOperationId READ settingsOperationId NOTIFY settingsOperationChanged)
+    SettingsOperationState settingsOperationState() const {return SettingsOperationState(m_operation_state->load());}
+    quint64 settingsOperationId() const {return m_command_revision;}
     bool settingsReady() const { return m_ready; }
-    bool settingsPending() const { return m_pending; }
-    QString settingsError() const { return m_error; }
+    bool settingsPending() const { return m_pending||m_core_settings.pending()||m_forwarded_signer_pending; }
+    void setSignerDiscoveryModel(SignerDiscoveryModel* model);
+    QString settingsError() const {
+        QString original = m_error.isEmpty() ? m_core_settings.error() : m_error;
+        if (original.isEmpty()) return m_observation_error;
+        if (m_observation_error.isEmpty()) return original;
+        return original + QLatin1Char('\n') + m_observation_error;
+    }
     bool validationPending() const { return m_validation_pending; }
     bool signerPathValidationPending() const { return m_signer_validation_pending; }
     QString signerPathError() const { return m_signer_validation_error; }
     Q_INVOKABLE void requestExternalSignerPathValidation(const QString& path);
+    void close();
     void beginShutdown();
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
@@ -112,6 +184,9 @@ public:
     int minScriptThreads() const { return m_min_script_threads; }
     bool natpmp() const { return m_core_settings.values().natpmp; }
     void setNatpmp(bool new_natpmp);
+    QString pruneTargetText()const{return m_core_settings.pruneTargetText();}
+    QString pruneTargetError()const{return m_core_settings.pruneTargetError();}
+    Q_INVOKABLE void editPruneTarget(const QString& text){m_core_settings.changePruneTargetText(text);}
     bool prune() const { return m_core_settings.values().prune; }
     void setPrune(bool new_prune);
     int pruneSizeGB() const { return m_core_settings.values().prune_size_gb; }
@@ -124,7 +199,6 @@ public:
     void setDataDir(QString new_data_dir);
     QString getDefaultDataDirString();
     QUrl getDefaultDataDirectory();
-    Q_INVOKABLE bool setCustomDataDirArgs(QString path);
     Q_INVOKABLE QString getCustomDataDirString();
     Q_INVOKABLE QString validateCustomDataDir(const QString& path) const;
     Q_INVOKABLE bool selectCustomDataDir(const QString& path);
@@ -159,13 +233,12 @@ public:
     }
     bool restartRequired() const;
     QObject* coreSettings() { return &m_core_settings; }
+    SettingsEditorModel* createSettingsEditor() override;
     QVariantMap coreSettingStatuses() const;
     Q_INVOKABLE QVariantMap coreSettingStatus(const QString& name) const;
-    Q_INVOKABLE QString validateProxyLocation(const QString& location) const;
-    Q_INVOKABLE bool commitProxyLocation(const QString& location);
-    Q_INVOKABLE bool commitTorLocation(const QString& location);
     Q_INVOKABLE QString defaultProxyAddress() const;
-    Q_INVOKABLE QVariantList thirdPartyTransactionLinks(const QString& txid) const;
+    //! A links view registered with these options; the caller owns it.
+    OptionsTransactionLinks* createTransactionLinks();
     QString language() const { return m_language; }
     void setLanguage(const QString& new_language);
     QString languageSummary() const;
@@ -183,14 +256,10 @@ public:
     bool hideAmounts() const { return m_hide_amounts; }
     void setHideAmounts(bool hide);
 
-public Q_SLOTS:
-    void setCustomDataDirString(const QString &new_custom_datadir_string) {
-        m_custom_datadir_string = new_custom_datadir_string;
-    }
-
 Q_SIGNALS:
     void settingsReadyChanged();
     void settingsPendingChanged();
+    void settingsOperationChanged();
     void settingsErrorChanged();
     void validationPendingChanged();
     void signerPathValidationChanged();
@@ -201,9 +270,11 @@ Q_SIGNALS:
     void listenChanged(bool new_listen);
     void maxMempoolSizeMBChanged(int new_max_mempool_size_mb);
     void natpmpChanged(bool new_natpmp);
+    void pruneTargetInputChanged();
     void pruneChanged(bool new_prune);
     void pruneSizeGBChanged(int new_prune_size_gb);
     void scriptThreadsChanged(int new_script_threads);
+    void threadLimitsChanged();
     void serverChanged(bool new_server);
     void customDataDirStringChanged(QString new_custom_datadir_string);
     void dataDirChanged(QString new_data_dir);
@@ -221,6 +292,7 @@ Q_SIGNALS:
     void restartRequiredChanged();
     void coreSettingStatusesChanged();
     void languageChanged();
+    void availableLanguagesChanged();
     void displayUnitChanged(int new_display_unit);
     void thirdPartyTransactionUrlsChanged();
     void moneyFontChoiceChanged();
@@ -228,6 +300,13 @@ Q_SIGNALS:
     void hideAmountsChanged();
 
 private:
+    friend class OptionsTransactionLinks;
+    struct LinksRegistry;
+    std::shared_ptr<LinksRegistry> m_links;
+    quint64 m_next_links{0};
+    void refreshLinks(OptionsTransactionLinks* links);
+    void removeLinks(quint64 id);
+    bool attachLinks(OptionsTransactionLinks& view);
     struct DirtySnapshot {
         bool connection{false};
         bool storage{false};
@@ -241,29 +320,44 @@ private:
     interfaces::Node& m_node;
     ArgsManager& m_args;
     CoreSettingsModel m_core_settings;
-    BackendExecutor m_executor;
+    QList<QPointer<SettingsEditorModel>> m_editors;
+    std::unique_ptr<BackendExecutor> m_executor;
+    execution::SnapshotServices m_services;
+    execution::Executor* const m_application_executor;
+    std::unique_ptr<execution::OwnedWork> m_work;
     struct Snapshot;
     static Snapshot readSnapshot(interfaces::Node& node, ArgsManager& args);
-    void applySnapshot(Snapshot snapshot);
-    void runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command);
+    void applySnapshot(Snapshot snapshot,bool core_adopted=false);
+    void runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command,bool observation=false);
     void setPending(bool pending);
     void setError(const QString& error);
+    void setObservationError(const QString& error);
     void persistGuiSetting(const QString& key, const QVariant& value);
+    void queueSignerValidation();
     void startSignerValidation();
+    std::shared_ptr<std::atomic<int>> m_operation_state{std::make_shared<std::atomic<int>>(SettingsIdle)};
     bool m_ready{false};
     bool m_pending{false};
     int m_pending_commands{0};
     quint64 m_command_revision{0};
     bool m_stopping{false};
-    bool m_applying_snapshot{false};
+    bool m_preference_refresh_requested{false};
+    size_t m_submitting_commands{0};
+    preferences::Watch m_preference_watch{[this] { refreshDisplaySettings(); }};
+    void finishPreferenceRefresh();
+    bool m_shutdown_started{false};
     bool m_validation_pending{false};
     bool m_signer_validation_pending{false};
     bool m_signer_validation_in_flight{false};
     QString m_requested_signer_path;
     quint64 m_signer_validation_revision{0};
-    QString m_error;
+    QString m_error, m_observation_error;
     QString m_default_data_dir;
+    QUrl m_default_data_directory;
     QString m_validated_data_dir;
+    QString m_data_dir_validation_source;
+    quint64 m_data_dir_revision{0};
+    void adoptDataDir(const QString& path);
     QString m_data_dir_validation_error;
     QString m_validated_signer_path;
     QString m_signer_validation_error;
@@ -271,7 +365,7 @@ private:
     // Properties that are exposed to QML.
     int m_dbcache_size_mib{DEFAULT_KERNEL_CACHE / 1_MiB};
     const int m_min_dbcache_size_mib{MIN_DBCACHE_BYTES / 1_MiB};
-    const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE / 1_MiB};
+    const int m_max_dbcache_size_mib{int(std::min<uint64_t>(MAX_DBCACHE_BYTES / 1_MiB, std::numeric_limits<int>::max()))};
     int m_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
     const int m_min_max_mempool_size_mb{
         static_cast<int>((DEFAULT_CLUSTER_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
@@ -280,11 +374,14 @@ private:
         sizeof(void*) <= 4 ? 500 : 99999
     };
     const int m_max_script_threads{MAX_SCRIPTCHECK_THREADS};
-    const int m_min_script_threads{-GetNumCores()};
+    int m_min_script_threads{-1};
     int m_script_threads{DEFAULT_SCRIPTCHECK_THREADS};
     QString m_custom_datadir_string;
+    QString m_custom_datadir_display;
     QString m_dataDir;
     QString m_external_signer_path;
+    QPointer<SignerDiscoveryModel> m_signer_model;
+    bool m_forwarded_signer_pending{false}, m_forwarded_signer_command{false};
     QmlCoreSettings::Values m_initial_core_values;
     int m_initial_dbcache_size_mib{DEFAULT_KERNEL_CACHE / 1_MiB};
     int m_initial_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
@@ -298,6 +395,7 @@ private:
     bool m_hide_amounts{false};
     DirtySnapshot m_core_change_dirty_snapshot;
     QVariantMap m_core_setting_statuses;
+    QmlCoreSettings::StatusProjection m_entry_statuses;
 
     common::SettingsValue currentCoreSettingValue(const QString& name) const;
     bool canEditCoreSetting(const QString& name) const;
@@ -307,7 +405,7 @@ private:
     DirtySnapshot dirtySnapshot() const;
     void emitDirtySignals(const DirtySnapshot& before);
     void applyRuntimeCoreChange(const QmlCoreSettings::Change& change, const DirtySnapshot& before);
-    void buildAvailableLanguages();
+    static QStringList buildAvailableLanguages();
 };
 
 #endif // BITCOIN_QML_MODELS_OPTIONS_MODEL_H

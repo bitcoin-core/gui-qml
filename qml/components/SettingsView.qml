@@ -10,7 +10,6 @@ import org.bitcoincore.qt 1.0
 
 import "../controls"
 import "../pages/settings" as SettingsPages
-import "../pages/wallet" as WalletPages
 
 Page {
     id: root
@@ -22,13 +21,26 @@ Page {
     // that stack when the wallet section is re-selected.
     signal walletSettingsResetRequested()
 
+    //! The settings editor and the navigation guard for its unsaved edits.
+    readonly property SettingsNavigationController navigation: SettingsNavigationController {
+        objectName: "settingsNavigationController"
+        source: ApplicationModels.optionsModel
+        onNavigate: function(section, done, reload) {
+            if (done) root.doneClicked()
+            else root.showSection(section, reload)
+        }
+    }
     property bool showDoneButton: true
     // The active wallet's settings stack is shown in walletSettingsHost when
     // the shell provides one; otherwise the wallet section shows the
     // settings of `wallet`, or its empty state.
     property bool walletSettingsProvided: false
     readonly property Item walletSettingsHost: internal.walletSettingsHost
-    property string activeWalletName: ""
+    property string activeWalletName: wallet !== null ? wallet.name : ""
+    property bool activeWalletRpcContext: wallet !== null
+    property string activeWalletRpcName: wallet !== null ? wallet.rpcName : activeWalletName
+    property bool activeWalletRpcReady: wallet !== null ? wallet.capabilitiesKnown : activeWalletAvailable
+    property bool activeWalletAvailable: wallet !== null && wallet.available
     // Without the desktop wallet shell (the node pages used on Android),
     // the wallet section shows its own settings stack for this wallet.
     property var wallet: null
@@ -40,7 +52,12 @@ Page {
     // choosing a section slides its page over it until Back.
     readonly property bool compact: splitView.isCompact
     readonly property SettingsSidebar sidebar: splitView.primaryItem ? splitView.primaryItem.sidebar : null // qmllint disable missing-property
-    readonly property SettingsPageContainer pageContainer: splitView.detailItem as SettingsPageContainer
+    readonly property SettingsPageContainer pageContainer: splitView.detailItem ? splitView.detailItem.pageContainer : null // qmllint disable missing-property
+    readonly property bool sectionUsesSettingsEditor: root.selectedSectionId === "storage"
+        || root.selectedSectionId === "connection"
+        || root.selectedSectionId === "mempool"
+        || root.selectedSectionId === "external-signer"
+        || (root.selectedSectionId === "about" && root.pageContainer !== null && root.pageContainer.depth > 1)
     readonly property var groupTitles: ({
         "wallet": qsTr("Wallet"),
         "general": qsTr("General"),
@@ -145,7 +162,11 @@ Page {
         return ""
     }
 
-    function selectSection(sectionId, forceReload) {
+    // Navigation that may leave unsaved settings edits asks first.
+    function selectSection(sectionId, forceReload) { root.navigation.request(sectionId, false) }
+
+    // Shows a section without asking; callers have already resolved edits.
+    function applySection(sectionId, forceReload) {
         if (!root.pageContainer) return
         const resolvedId = root.sectionIsVisible(sectionId) ? sectionId : root.firstVisibleSectionId()
         if (resolvedId.length === 0) {
@@ -160,16 +181,20 @@ Page {
     }
 
     function showSectionPage(sectionId, forceReload) {
-        root.selectSection(sectionId, forceReload)
+        root.applySection(sectionId, forceReload)
         if (root.selectedSectionId.length > 0) splitView.showDetail()
     }
 
+    function showSection(sectionId, forceReload) {
+        root.showSectionPage(sectionId, forceReload)
+    }
+
     function ensureVisibleSelection() {
-        if (!root.sectionIsVisible(root.selectedSectionId)) root.selectSection(root.firstVisibleSectionId())
+        if (!root.sectionIsVisible(root.selectedSectionId)) root.applySection(root.firstVisibleSectionId())
     }
 
     function openWalletSettings() {
-        root.showSectionPage("wallet")
+        root.navigation.request("wallet", false)
     }
 
     background: null
@@ -177,11 +202,11 @@ Page {
 
     onSectionsChanged: ensureVisibleSelection()
     onVisibleChanged: {
-        if (visible) root.selectSection(root.selectedSectionId)
+        if (visible) root.showSection(root.selectedSectionId)
     }
 
     Component.onCompleted: {
-        root.selectSection(
+        root.applySection(
             root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
         internal.completed = true
     }
@@ -190,18 +215,6 @@ Page {
         id: internal
         property bool completed: false
         property Item walletSettingsHost: null
-    }
-
-    footer: CoreText {
-        objectName: "settingsOperationStatus"
-        visible: text.length > 0
-        padding: 16
-        wrapMode: Text.WordWrap
-        text: typeof optionsModel === "undefined" ? ""
-            : ApplicationModels.optionsModel.settingsError || (ApplicationModels.optionsModel.settingsReady === false ? qsTr("Loading settings…")
-            : ApplicationModels.optionsModel.settingsPending ? qsTr("Saving settings…") : "")
-        color: ApplicationModels.optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
-        textStyle: Theme.text.caption
     }
 
     contentItem: NavigationSplitView {
@@ -263,8 +276,10 @@ Page {
                         if (sectionId === root.selectedSectionId) {
                             root.pageContainer.resetSection(sectionId)
                             if (sectionId === "wallet") root.walletSettingsResetRequested()
+                            root.showSectionPage(sectionId)
+                            return
                         }
-                        root.showSectionPage(sectionId)
+                        root.navigation.request(sectionId, false)
                     }
                 }
 
@@ -272,19 +287,57 @@ Page {
                     objectName: "settingsDoneButton"
                     visible: root.showDoneButton
                     text: qsTr("Done")
+                    enabled: root.navigation.doneEnabled
                     Layout.alignment: Qt.AlignHCenter
                     Layout.bottomMargin: Theme.space.xl
-                    onClicked: root.doneClicked()
+                    onClicked: root.navigation.request("", true)
                 }
             }
         }
 
-        detailComponent: SettingsPageContainer {
-            objectName: "settingsPageContainer"
-            disabledSectionIds: root.optionsEditable ? []
-                : ["external-signer", "display", "window-behavior", "storage", "connection"]
-            showRootBackButton: splitView.isCompact
-            onRootBackRequested: splitView.showPrimary()
+        detailComponent: ColumnLayout {
+            readonly property alias pageContainer: pageContainer
+            spacing: 0
+
+            SettingsPageContainer {
+                id: pageContainer
+                objectName: "settingsPageContainer"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                disabledSectionIds: root.optionsEditable ? []
+                    : ["external-signer", "display", "window-behavior", "storage", "connection"]
+                showRootBackButton: splitView.isCompact
+                onRootBackRequested: splitView.showPrimary()
+            }
+
+            CoreText {
+                objectName: "settingsOperationStatus"
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                visible: text.length > 0
+                padding: Theme.space.l
+                wrapMode: Text.WordWrap
+                text: typeof optionsModel === "undefined" ? ""
+                    : ApplicationModels.optionsModel.settingsError || (ApplicationModels.optionsModel.settingsReady === false ? qsTr("Loading settings…")
+                    : ApplicationModels.optionsModel.settingsPending ? qsTr("Saving settings…") : "")
+                color: ApplicationModels.optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
+                textStyle: Theme.text.caption
+            }
+
+            SettingsEditorBar {
+                id: settingsEditorBar
+                objectName: "settingsEditorBar"
+                editor: root.navigation.editor
+                visible: settingsEditorBar.hasVisibleContent
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                Layout.leftMargin: Theme.space.xxl
+                Layout.rightMargin: Theme.space.xxl
+                Layout.topMargin: settingsEditorBar.hasVisibleContent ? Theme.space.s : 0
+                Layout.bottomMargin: settingsEditorBar.hasVisibleContent ? Theme.space.l : 0
+                enabled: root.optionsEditable
+                showActions: root.sectionUsesSettingsEditor
+            }
         }
     }
 
@@ -297,28 +350,28 @@ Page {
 
             Component.onCompleted: internal.walletSettingsHost = walletSettingsHost
 
-            SettingsPages.WalletSectionPage {
-                anchors.fill: parent
-                visible: !root.walletSettingsProvided && !ownWalletSettings.active
-                onSelectWalletRequested: root.selectWalletRequested()
-            }
-
             Loader {
                 id: ownWalletSettings
                 anchors.fill: parent
-                active: !root.walletSettingsProvided && root.wallet !== null
-                sourceComponent: WalletPages.WalletSettingsStack {
-                    wallet: root.wallet
-                    // Sub-pages belong to the wallet they were opened for.
-                    onWalletChanged: resetToRoot()
-                    onSelectWalletRequested: root.selectWalletRequested()
+                active: AppMode.walletEnabled && !root.walletSettingsProvided
+                source: active ? "../pages/wallet/WalletSettingsHost.qml" : ""
+                readonly property WalletSettingsPort port: item as WalletSettingsPort
+                Binding {
+                    target: ownWalletSettings.port
+                    property: "wallet"
+                    value: root.wallet
+                    when: ownWalletSettings.status === Loader.Ready
+                }
+                Connections {
+                    target: ownWalletSettings.port
+                    function onSelectWalletRequested() { root.selectWalletRequested() }
                 }
             }
 
             Connections {
                 target: root
                 function onWalletSettingsResetRequested() {
-                    if (ownWalletSettings.item) (ownWalletSettings.item as WalletPages.WalletSettingsStack).resetToRoot()
+                    if (ownWalletSettings.port) ownWalletSettings.port.resetRequested()
                 }
             }
         }
@@ -326,7 +379,7 @@ Page {
 
     Component {
         id: externalSignerPage
-        SettingsPages.ExternalSignerSettingsPage {}
+        SettingsPages.ExternalSignerSettingsPage { editor: root.navigation.editor }
     }
 
     Component {
@@ -341,12 +394,12 @@ Page {
 
     Component {
         id: storagePage
-        SettingsPages.StorageSettingsPage { settingsModel: ApplicationModels.optionsModel }
+        SettingsPages.EffectiveSettingsPage { editor: root.navigation.editor; settingsEditable: root.optionsEditable; section: "storage" }
     }
 
     Component {
         id: connectionPage
-        SettingsPages.ConnectionSettingsPage { settingsModel: ApplicationModels.optionsModel }
+        SettingsPages.EffectiveSettingsPage { editor: root.navigation.editor; settingsEditable: root.optionsEditable; section: "connection" }
     }
 
     Component {
@@ -357,14 +410,16 @@ Page {
 
     Component {
         id: mempoolPage
-        SettingsPages.MempoolSettingsPage {}
+        SettingsPages.EffectiveSettingsPage { editor: root.navigation.editor; settingsEditable: root.optionsEditable; section: "mempool" }
     }
 
     Component {
         id: rpcConsolePage
 
         SettingsPages.SettingsRpcConsoleView {
-            walletName: root.activeWalletName
+            walletName: root.activeWalletRpcName
+            walletContext: root.activeWalletRpcContext
+            targetAvailable: !root.activeWalletRpcContext || (root.activeWalletAvailable && root.activeWalletRpcReady)
         }
     }
 
@@ -376,6 +431,6 @@ Page {
 
     Component {
         id: aboutPage
-        SettingsPages.AboutSettingsPage {}
+        SettingsPages.AboutSettingsPage { editor: root.navigation.editor }
     }
 }

@@ -12,6 +12,8 @@
 #include <QThread>
 
 #include <functional>
+#include <future>
+#include <memory>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -45,6 +47,34 @@ inline void WaitForThreadJoins(QObject* receiver, std::function<void()> done)
     auto& registry = async_join_detail::GetRegistry();
     registry.drain_callbacks.emplace_back(receiver, std::move(done));
     registry.notifyIfDrained();
+}
+
+inline void JoinThreadAsync(std::function<void()> join, QObject* receiver, std::function<void()> done)
+{
+    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    ++async_join_detail::GetRegistry().pending_joins;
+    std::thread([join = std::move(join), app = QCoreApplication::instance(),
+                 receiver_guard = QPointer<QObject>{receiver}, done = std::move(done)]() mutable {
+        join();
+        QMetaObject::invokeMethod(app, [receiver_guard, done = std::move(done)] {
+            --async_join_detail::GetRegistry().pending_joins;
+            if (receiver_guard) done();
+            async_join_detail::GetRegistry().notifyIfDrained();
+        }, Qt::QueuedConnection);
+    }).detach();
+}
+
+// Register the join now so application teardown can see it. The returned
+// callback releases the join once the worker's owners have drained.
+inline std::function<void()> JoinThreadAfterDrain(std::function<void()> join, QObject* receiver, std::function<void()> done)
+{
+    const auto drained = std::make_shared<std::promise<void>>();
+    auto ready = drained->get_future().share();
+    JoinThreadAsync([join = std::move(join), ready = std::move(ready)] {
+        ready.wait();
+        join();
+    }, receiver, std::move(done));
+    return [drained] { drained->set_value(); };
 }
 
 inline void JoinThreadAsync(QThread* worker_thread, QObject* receiver, std::function<void()> done)

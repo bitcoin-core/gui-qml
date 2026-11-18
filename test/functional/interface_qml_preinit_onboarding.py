@@ -27,7 +27,17 @@ from qml_test_harness import (
     dump_qml_tree,
     setup_datadir,
 )
+from qml_process_checks import check_gui_exit
+from qml_qt_release_lib import (
+    compat_bitcoin_qt_or_skip,
+    launch_bitcoin_qt,
+    process_output,
+    stop_bitcoin_qt,
+    wait_for_rpc_or_process_exit,
+)
 from qml_wallet_test_lib import (
+    RPC_PASS,
+    RPC_USER,
     find_bitcoind,
     pick_unused_port,
     rpc_call,
@@ -196,6 +206,98 @@ def prepare_existing_profile_with_explicit_walletdir(tmpdir, wallet_name):
         stop_bitcoind(bitcoind, rpc_port)
 
     return datadir, rpc_port, walletdir
+
+
+# Bitcoin-Qt stores the display unit as its own serialized BitcoinUnit type.
+BITCOIN_QT_BTC_UNIT = "DisplayBitcoinUnit=@Variant(\\0\\0\\0\\x7f\\0\\0\\0\\fBitcoinUnit\\0\\0)"
+BITCOIN_QT_SAT_UNIT = "DisplayBitcoinUnit=@Variant(\\0\\0\\0\\x7f\\0\\0\\0\\fBitcoinUnit\\0\\x3)"
+
+
+def write_bitcoin_qt_settings(bitcoin_qt, tmpdir, home, chain_args, conf_lines):
+    """Run a released Bitcoin-Qt once and return the settings file it wrote."""
+    rpc_port = pick_unused_port()
+    datadir = os.path.join(tmpdir, "bitcoin_qt_" + (chain_args[0].lstrip("-") if chain_args else "main"))
+    config_home = os.path.join(tmpdir, "bitcoin_qt_config")
+    os.makedirs(datadir, exist_ok=True)
+    with open(os.path.join(datadir, "bitcoin.conf"), "w", encoding="utf8") as conf:
+        conf.write("\n".join(conf_lines + [f"rpcport={rpc_port}"]) + "\n")
+    process = launch_bitcoin_qt(bitcoin_qt, datadir, datadir, config_home=config_home, home=home, extra_args=chain_args)
+    try:
+        wait_for_rpc_or_process_exit(process, rpc_port, datadir)
+    finally:
+        stop_bitcoin_qt(process, rpc_port)
+    assert process.returncode == 0, process_output(process, datadir)
+    name = "Bitcoin-Qt-regtest" if chain_args == ["-regtest"] else "Bitcoin-Qt"
+    path = os.path.join(config_home, "Bitcoin", f"{name}.conf")
+    assert os.path.isfile(path), path
+    return path
+
+
+def run_bitcoin_qt_settings_adoption_flow():
+    """A Bitcoin-Qt user's datadir and display unit carry over without loss."""
+    bitcoin_qt = compat_bitcoin_qt_or_skip()
+    if not bitcoin_qt:
+        return 77
+    harness = QmlTestHarness(
+        use_datadir_arg=False,
+        reset_settings=False,
+        start_onboarded=False,
+        extra_args=["-regtest", "-disablewallet"],
+    )
+    tmpdir = harness.tmpdir
+    gui = None
+    try:
+        common = ["server=1", "listen=0", "connect=0", "dnsseed=0", "fixedseeds=0", "listenonion=0",
+                  "rpcbind=127.0.0.1", "rpcallowip=127.0.0.1", f"rpcuser={RPC_USER}", f"rpcpassword={RPC_PASS}"]
+        # The default-chain store holds the data directory; the regtest store the unit.
+        # Pruning avoids the default chain's modal disk-space warning.
+        main_store = write_bitcoin_qt_settings(bitcoin_qt, tmpdir, harness.home_dir, [], common + ["prune=550"])
+        regtest_store = write_bitcoin_qt_settings(bitcoin_qt, tmpdir, harness.home_dir, ["-regtest"],
+                                                  ["[regtest]"] + common)
+
+        # Without user input Bitcoin-Qt saves only its defaults. Change the
+        # saved values in its own format, so adoption differs from our defaults.
+        legacy_datadir = os.path.join(tmpdir, "bitcoin_qt_profile")
+        write_datadir(legacy_datadir, pick_unused_port(), pick_unused_port())
+        with open(main_store, encoding="utf8") as store:
+            main_settings = store.read()
+        assert "strDataDir=" in main_settings and BITCOIN_QT_BTC_UNIT in main_settings, main_settings
+        main_settings = "\n".join(f"strDataDir={legacy_datadir}" if line.startswith("strDataDir=") else line
+                                  for line in main_settings.splitlines()) + "\n"
+        with open(regtest_store, encoding="utf8") as store:
+            regtest_settings = store.read()
+        assert BITCOIN_QT_BTC_UNIT in regtest_settings, regtest_settings
+        regtest_settings = regtest_settings.replace(BITCOIN_QT_BTC_UNIT, BITCOIN_QT_SAT_UNIT)
+
+        # -test-settings-dir selects INI files there; the syntax is Bitcoin-Qt's native Linux format.
+        target = os.path.join(harness.config_home, "Bitcoin")
+        os.makedirs(target, exist_ok=True)
+        for name, text in (("Bitcoin-Qt.ini", main_settings), ("Bitcoin-Qt-regtest.ini", regtest_settings)):
+            with open(os.path.join(target, name), "w", encoding="utf8") as store:
+                store.write(text)
+
+        harness.start()
+        gui = finish_existing_profile_preinit_and_reconnect(harness, legacy_datadir, expect_custom_storage=False)
+        assert_node_shell_visible(gui)
+        gui.click("nodeSettingsButton")
+        gui.wait_for_page("settingsView")
+        gui.wait_for_property("settingsView", "optionsEditable", True)
+        gui.click("settingsSidebar_display")
+        gui.wait_for_property("settingsView", "selectedSectionId", "display")
+        gui.wait_for_property("displayUnitPicker", "currentValue", 3)
+
+        process = harness.process
+        gui.request_quit()
+        process.wait(timeout=30)
+        _, stderr = process.communicate(timeout=5)
+        # An unregistered BitcoinUnit loses the stored value with a Qt warning.
+        check_gui_exit(process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
+    except Exception:
+        if gui is not None:
+            dump_qml_tree(gui)
+        raise
+    finally:
+        harness.stop()
 
 
 def assert_saved_connection_settings_visible(gui):
@@ -488,13 +590,129 @@ def run_qml_onboarded_override_reloads_saved_settings_flow():
         cleanup_test_directory(tmpdir)
 
 
+def run_native_startup_failure_reopens_saved_setup_flow():
+    """The actual Core DNS failure must not make partial setup permanent."""
+    from qml_process_checks import check_gui_exit, unexpected_gui_stderr
+    tmpdir = create_test_directory(prefix="qml_setup_recovery_", dir="/tmp")
+    datadir = setup_datadir(tmpdir)
+    write_settings_json(datadir, {"qml_onboarded": True, "proxy": "no-such-host.invalid:9050", "prune": 550})
+    failed = QmlTestHarness(datadir=datadir, tmpdir=tmpdir, reset_settings=False,
+                           start_onboarded=False, extra_args=["-regtest", "-disablewallet", "-lang=en"])
+    recovered = None
+    try:
+        failed.start()
+        failed.driver.wait_for_property("nodeRuntimeDialog", "opened", True, timeout_ms=30000)
+        assert "Invalid -proxy address or hostname" in failed.driver.get_property("nodeRuntimeDialogMessage", "text")
+        try:
+            failed.driver.click("nodeRuntimeDialogButtonOk")
+        except ConnectionError:
+            # Failure shutdown may close the bridge before the click reply.
+            pass
+        failed.process.wait(timeout=20)
+        settings = read_settings_json(datadir)
+        assert settings.get("qml_onboarded") is False, settings
+        assert settings.get("proxy") == "no-such-host.invalid:9050", settings
+        failed.stop(cleanup=False)
+        stdout, stderr = failed.process.communicate()
+        print("Original failure stdout:\n" + stdout.decode("utf8", errors="replace"), flush=True)
+        stderr = stderr.decode("utf8", errors="replace")
+        print("Original failure stderr:\n" + stderr, flush=True)
+        assert failed.process.returncode == 1, (failed.process.returncode, stderr)
+        expected = "Invalid -proxy address or hostname: 'no-such-host.invalid:9050'"
+        unexpected = unexpected_gui_stderr(stderr, socket_path=failed.socket_path)
+        assert all(line in (expected, "Error: " + expected) for line in unexpected), unexpected
+        print("Retained native startup failure: exit=1; marker=false; proxy intent unchanged", flush=True)
+
+        recovered = QmlTestHarness(datadir=datadir, tmpdir=tmpdir, reset_settings=False,
+                                  start_onboarded=False, extra_args=["-regtest", "-disablewallet", "-lang=en"])
+        recovered.start()
+        gui = recovered.driver
+        click_existing_profile_to_connection(gui, datadir)
+        gui.click("connectionSettingsButton")
+        gui.wait_for_page("connectionSettingsPage")
+        gui.click("proxySettingsRow")
+        gui.wait_for_page("proxySettingsPage")
+        gui.wait_for_property("proxyEnableSwitch", "checked", True)
+        gui.click("proxyEnableSwitch")
+        gui.wait_for_property("proxyEnableSwitch", "checked", False)
+        gui.wait_for_property("proxySettingsPage", "proxyDraft.pending", False)
+        gui.wait_for_property("proxySettingsSaveButton", "enabled", True)
+        gui.click("proxySettingsSaveButton")
+        gui.wait_for_page("connectionSettingsPage")
+        # A visible underlying page during the stack transition does not prove
+        # the asynchronous draft was applied. Observe its authoritative model.
+        gui.wait_for_property("connectionSettingsPage", "settingsModel.proxyEnabled", False)
+        gui.wait_for_property("connectionSettingsPage", "coreSettingsModel.pending", False)
+        gui.click("onboardingConnectionSettingsCloseButton")
+        gui.wait_for_property("onboardingConnectionSettingsPopup", "visible", False)
+        click_onboarding_button(gui, "onboardingConnectionButton")
+        gui = recovered.wait_for_main_window_reconnect()
+        assert_node_shell_visible(gui)
+        settings = read_settings_json(datadir)
+        assert settings.get("qml_onboarded") is True, settings
+        assert settings.get("proxy") is False, settings
+        assert settings.get("proxy-prev") == "no-such-host.invalid:9050", settings
+        assert settings.get("prune") == 550, settings
+        recovered.stop(cleanup=False)
+        _, stderr = recovered.process.communicate()
+        check_gui_exit(recovered.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=recovered.socket_path)
+        print("Recovered original saved setup: actual Core ready; marker=true; exact550MiB retained; exit=0", flush=True)
+    except Exception:
+        print("Retained actual setup settings: " + repr(read_settings_json(datadir)), flush=True)
+        for label, harness in (("original", failed), ("recovery", recovered)):
+            if harness is None:
+                continue
+            if harness.driver is not None:
+                dump_qml_tree(harness.driver)
+            harness.stop(cleanup=False)
+            stdout, stderr = harness.process.communicate()
+            print(f"{label} process diagnostic exit={harness.process.returncode}\n" + stdout.decode("utf8", errors="replace") + stderr.decode("utf8", errors="replace"), flush=True)
+        raise
+    finally:
+        failed.stop(cleanup=False)
+        if recovered is not None:
+            recovered.stop(cleanup=False)
+        cleanup_test_directory(tmpdir)
+
+
+
+def run_reset_retains_original_backup_through_finish():
+    """A single reset handoff must retain the actual pre-reset Core settings."""
+    from qml_process_checks import check_gui_exit
+    tmpdir = create_test_directory(prefix="qml_reset_receipt_", dir="/tmp")
+    datadir = setup_datadir(tmpdir)
+    original = {"qml_onboarded": True, "prune": 953, "dbcache": 512, "wallet": []}
+    write_settings_json(datadir, original)
+    harness = QmlTestHarness(datadir=datadir, tmpdir=tmpdir, reset_settings=True,
+                             start_onboarded=False, extra_args=["-regtest", "-disablewallet", "-lang=en"])
+    try:
+        harness.start()
+        click_existing_profile_to_connection(harness.driver, datadir, expect_custom_storage=False)
+        click_onboarding_button(harness.driver, "onboardingConnectionButton")
+        gui = harness.wait_for_main_window_reconnect()
+        assert_node_shell_visible(gui)
+        with open(os.path.join(datadir, "regtest", "settings.json.bak"), encoding="utf8") as backup:
+            actual = {key: value for key, value in json.load(backup).items() if key != "_warning_"}
+        assert actual == original, (actual, original)
+        assert read_settings_json(datadir).get("qml_onboarded") is True
+        harness.stop(cleanup=False)
+        _, stderr = harness.process.communicate()
+        check_gui_exit(harness.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
+        print("Reset receipt: original backup retained; marker=true; process exit=0; stderr inspected", flush=True)
+    finally:
+        harness.stop(cleanup=False)
+        cleanup_test_directory(tmpdir)
+
 if __name__ == "__main__":
     raise SystemExit(run_scenarios('Pre-init onboarding engine and persisted configuration boundaries', [
         scenario("wallet-onboarding", 4, run_wallet_enabled_flow),
         scenario("node-onboarding", 2, run_wallet_disabled_flow),
+        scenario("reset-retains-original-backup", 2, run_reset_retains_original_backup_through_finish),
+        scenario("native-startup-failure-recovery", 2, run_native_startup_failure_reopens_saved_setup_flow),
         scenario("existing-profile-onboarding", 2, run_existing_profile_full_onboarding_flow),
         scenario("configured-datadir-source", 2, run_configured_datadir_preserves_config_source_flow),
         scenario("root-wallet-discovery", 4, run_existing_profile_preserves_root_wallet_discovery_flow),
         scenario("explicit-walletdir-discovery", 4, run_existing_profile_detects_explicit_walletdir_flow),
         scenario("onboarded-override-settings", 2, run_qml_onboarded_override_reloads_saved_settings_flow),
+        scenario("bitcoin-qt-settings-adoption", 2, run_bitcoin_qt_settings_adoption_flow),
     ]))

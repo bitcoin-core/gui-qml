@@ -38,6 +38,7 @@ add_executable(bitcoinqml_bootstrap_tests
   test_bootstrap.cpp
   ../qml/backendexecutor.cpp
   ../qml/execution.cpp
+  ../qml/executor.cpp
   ../qml/quithandler.h
 )
 target_include_directories(bitcoinqml_bootstrap_tests PRIVATE ..)
@@ -372,6 +373,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/presentationservices.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/presentationservices.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/executor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/qrimageprovider.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/globalsettings.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/motionpreference.h

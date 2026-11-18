@@ -6,6 +6,7 @@
 #include <qml/quithandler.h>
 #include <qml/startupdialog.h>
 #include <qml/startupeffects.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <test/mocks/manualexecutionenvironment.h>
 
@@ -177,8 +178,12 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
     struct Interfaces { std::unique_ptr<Token> init, node, chain; };
     auto holder = std::make_shared<Interfaces>();
     QStringList order; std::vector<QThread*> threads;
-    QSemaphore actor_release, cleanup_release;
+    QSemaphore actor_release, cleanup_release, thread_exit_release, worker_exit_release;
     std::atomic_bool actor_entered{false}, actor_finished{false}, cleanup_entered{false};
+    std::atomic_bool thread_exit_entered{false}, actors_joined{false};
+    std::atomic_bool worker_exit_entered{false}, worker_exit_released{false};
+    execution::Executor executor{execution::Executor::Config{}};
+    auto queue = executor.makeQueue(execution::Lane::Core);
     BackendExecutor factory{execution::Options{}}, actor{execution::Options{}};
     startup::Run({factory.scheduler(), presentation::QueuedPost()}, [&] {
         holder->init = std::make_unique<Token>("init", &order, &threads, nullptr, nullptr);
@@ -187,19 +192,55 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
         return true;
     });
     actor.submit(this, [&] { actor_entered = true; actor_release.acquire(); actor_finished = true; }, [] {});
-    bool released_actor{false}, released_cleanup{false}, ordered{true}; int cleanup_heartbeats{0};
+    bool released_actor{false}, released_cleanup{false}, released_thread_exit{false}, ordered{true};
+    bool released_worker_exit{false};
+    int cleanup_heartbeats{0};
+    QVERIFY(queue.post([&] {
+        struct WorkerExit {
+            std::atomic_bool& entered;
+            std::atomic_bool& released;
+            QSemaphore& release;
+            ~WorkerExit()
+            {
+                entered = true;
+                released = release.tryAcquire(1, 5000);
+            }
+        };
+        thread_local WorkerExit exit{worker_exit_entered, worker_exit_released, worker_exit_release}; // NOLINT(bitcoin-nontrivial-threadlocal): Tests thread exit.
+        actors_joined = true;
+    }));
     QTimer heartbeat;
     connect(&heartbeat, &QTimer::timeout, this, [&] {
         if (actor_entered && !released_actor) { released_actor = true; actor_release.release(); }
+        if (worker_exit_entered && !released_worker_exit) {
+            released_worker_exit = true;
+            worker_exit_release.release();
+        }
         if (cleanup_entered && !released_cleanup && ++cleanup_heartbeats >= 2) {
-            ordered = actor_finished && actor.isDrained() && factory.isDrained();
+            ordered = actor_finished && actor.isDrained() && factory.isDrained() &&
+                actors_joined && worker_exit_released && !queue.post([] {});
             released_cleanup = true; cleanup_release.release();
+        }
+        if (thread_exit_entered && !released_thread_exit) {
+            released_thread_exit = true;
+            thread_exit_release.release();
         }
     });
     heartbeat.start(0);
-    startup::DrainThenRetire([holder] { holder->chain.reset(); holder->node.reset(); holder->init.reset(); });
+    startup::DrainThenRetire([&] {
+        struct ThreadExit {
+            std::atomic_bool& entered;
+            QSemaphore& release;
+            ~ThreadExit() { entered = true; release.acquire(); }
+        };
+        thread_local ThreadExit exit{thread_exit_entered, thread_exit_release}; // NOLINT(bitcoin-nontrivial-threadlocal): Tests thread exit.
+        holder->chain.reset();
+        holder->node.reset();
+        holder->init.reset();
+    }, [&] { executor.stopAndJoin(); });
     heartbeat.stop();
-    QVERIFY(ordered); QVERIFY(released_actor); QVERIFY(released_cleanup); QVERIFY(cleanup_heartbeats >= 2);
+    QVERIFY2(worker_exit_released, "Qt stopped processing events while joining the application executor");
+    QVERIFY(ordered); QVERIFY(released_actor); QVERIFY(released_cleanup); QVERIFY(released_thread_exit); QVERIFY(cleanup_heartbeats >= 2);
     QCOMPARE(order, QStringList({"chain", "node", "init"}));
     QCOMPARE(threads.size(), size_t{3}); for (auto* thread : threads) QVERIFY(thread != QThread::currentThread());
     QVERIFY(!holder->chain && !holder->node && !holder->init);

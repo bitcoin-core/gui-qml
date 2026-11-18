@@ -51,7 +51,7 @@ public:
 
     SerialQueue makeQueue(Lane lane, UtilityWorker utility = UtilityWorker::IO);
 
-    // Call from the owner thread, outside executor work and drain callbacks.
+    // Call from outside executor work and drain callbacks, one caller at a time.
     // The app finishes feature cleanup before closing the remaining queues.
     void stopAndJoin();
 

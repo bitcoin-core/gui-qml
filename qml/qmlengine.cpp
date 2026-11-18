@@ -97,11 +97,11 @@ std::unique_ptr<QQmlApplicationEngine> CreatePreInitEngine(const NetworkStyle* n
 
 std::unique_ptr<QQmlApplicationEngine> CreateMainEngine(
     const NetworkStyle* network_style,
-    std::shared_ptr<execution::Scheduler> qr_scheduler)
+    std::shared_ptr<execution::SerialQueue> qr_queue)
 {
     auto engine = CreateQmlEngine();
     engine->addImageProvider(QStringLiteral("images"), new ImageProvider{network_style});
     engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider{
-        std::move(qr_scheduler), QRImageProvider::RenderImage, engine.get()});
+        std::move(qr_queue), QRImageProvider::RenderImage, engine.get()});
     return engine;
 }

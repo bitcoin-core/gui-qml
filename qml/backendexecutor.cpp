@@ -4,6 +4,7 @@
 
 #include <qml/backendexecutor.h>
 #include <qml/asyncjoin.h>
+#include <qml/executor.h>
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -135,10 +136,13 @@ struct BackendExecutor::ExecutorState {
     }
 };
 
-BackendExecutor::BackendExecutor(QObject* parent) : BackendExecutor(std::nullopt, parent, CleanupAffinity::Independent) {}
-BackendExecutor::BackendExecutor(execution::Options limits, QObject* parent, CleanupAffinity cleanup_affinity) : BackendExecutor(std::make_optional(limits), parent, cleanup_affinity) {}
+BackendExecutor::BackendExecutor(QObject* parent) : BackendExecutor(std::nullopt, parent, CleanupAffinity::Independent, {}) {}
+BackendExecutor::BackendExecutor(execution::Options limits, QObject* parent, CleanupAffinity cleanup_affinity,
+                                 std::shared_ptr<execution::SerialQueue> priority)
+    : BackendExecutor(std::make_optional(limits), parent, cleanup_affinity, std::move(priority)) {}
 
-BackendExecutor::BackendExecutor(std::optional<execution::Options> limits, QObject* parent, CleanupAffinity cleanup_affinity)
+BackendExecutor::BackendExecutor(std::optional<execution::Options> limits, QObject* parent, CleanupAffinity cleanup_affinity,
+                                 std::shared_ptr<execution::SerialQueue> priority)
     : QObject(parent), m_state(std::make_shared<ExecutorState>()), m_worker(new BackendExecutorWorker), m_thread(new QThread)
 {
     Q_ASSERT(QCoreApplication::instance());
@@ -149,28 +153,34 @@ BackendExecutor::BackendExecutor(std::optional<execution::Options> limits, QObje
         m_group = std::make_shared<BackendExecutionGroup>();
         // Keep the legacy GUI-completion worker independent of migrated Core
         // reads: legacy operations may wait for transferred handles to retire.
-        // Stable indexes: compatibility, Core, Domain, Control, Cleanup.
-        for (size_t i{0}; i < 4; ++i) workers.emplace_back(new BackendExecutorWorker, new QThread);
+        // Compatibility, Core, Domain, optional Control and Cleanup.
+        workers.emplace_back(new BackendExecutorWorker, new QThread); // Core
+        workers.emplace_back(new BackendExecutorWorker, new QThread); // Domain
+        if (!priority) workers.emplace_back(new BackendExecutorWorker, new QThread);
+        if (cleanup_affinity == CleanupAffinity::Independent) workers.emplace_back(new BackendExecutorWorker, new QThread);
         m_group->workers = workers;
         for (const auto& [worker, thread] : workers) {
             worker->ready_for_group_shutdown = [group = m_group](QThread* ready_thread) { group->workerReady(ready_thread); };
         }
         m_scheduler = std::make_shared<execution::TaskQueue>(
-            [group = m_group, cleanup_affinity](execution::Lane lane, execution::Phase, execution::TaskId, std::function<void()> turn) {
+            [group = m_group, cleanup_affinity, priority = std::move(priority)](
+                execution::Lane lane, execution::Phase, execution::TaskId, std::function<void()> turn) {
+                auto run = [group, turn = std::move(turn)] {
+                    turn();
+                    group->requestCheck();
+                };
+                if (lane == execution::Lane::Control && priority) return priority->post(std::move(run));
                 size_t index{0};
                 switch (lane) {
                 case execution::Lane::Core: index = 1; break;
                 case execution::Lane::Domain: index = 2; break;
                 case execution::Lane::Control: index = 3; break;
-                case execution::Lane::Cleanup: index = cleanup_affinity == CleanupAffinity::Core ? 1 : 4; break;
+                case execution::Lane::Cleanup: index = cleanup_affinity == CleanupAffinity::Core ? 1 : group->workers.size() - 1; break;
                 case execution::Lane::Priority:
                 case execution::Lane::Rpc:
                 case execution::Lane::Utility: return false;
                 }
-                return QMetaObject::invokeMethod(group->workers[index].first, [group, turn = std::move(turn)] {
-                    turn();
-                    group->requestCheck();
-                }, Qt::QueuedConnection);
+                return QMetaObject::invokeMethod(group->workers[index].first, std::move(run), Qt::QueuedConnection);
             }, *limits, 1);
     } else {
         m_scheduler = std::make_shared<execution::TaskQueue>(

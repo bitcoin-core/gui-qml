@@ -62,6 +62,10 @@ Page {
         }
     }
 
+    signal exitAllowed()
+    signal exitCancelled()
+    function requestExit() { root.exitAllowed() }
+
     signal back
 
     background: null

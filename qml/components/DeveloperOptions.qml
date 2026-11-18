@@ -9,6 +9,9 @@ import "../controls"
 
 ColumnLayout {
     id: root
+    property SettingsEditorModel editor: null
+    readonly property SettingsEntryModel cacheEntry: editor ? editor.entry("dbcache") : null
+    readonly property SettingsEntryModel threadsEntry: editor ? editor.entry("par") : null
     property bool showRestartNotice: false
     property int surfaceLevel: 0
     property string dbcacheText: String(ApplicationModels.optionsModel.dbcacheSizeMiB)
@@ -35,22 +38,26 @@ ColumnLayout {
             Layout.fillWidth: true
             title: qsTr("Database cache size (MiB)")
             dividerColor: Theme.color.surface(root.surfaceLevel + 2)
-            enabled: (root.coreStatuses.dbcache || ({})).canEdit !== false
-            supportingText: (root.coreStatuses.dbcache || ({})).infoText || ""
-            errorText: root.dbcacheError
+            enabled: root.cacheEntry ? root.cacheEntry.editable : (root.coreStatuses.dbcache || ({})).canEdit !== false
+            supportingText: root.cacheEntry ? root.cacheEntry.information : (root.coreStatuses.dbcache || ({})).infoText || ""
+            errorText: root.cacheEntry ? root.cacheEntry.error : root.dbcacheError
             fieldObjectName: "developerDbcacheField"
             fieldWidth: 88
-            maximumLength: 5
-            text: root.dbcacheText
-            validator: IntValidator {
+            maximumLength: root.cacheEntry ? 32769 : 10
+            text: root.cacheEntry ? root.cacheEntry.text : root.dbcacheText
+            validator: root.cacheEntry ? null : legacyCacheValidator
+            IntValidator {
+                id: legacyCacheValidator
                 bottom: ApplicationModels.optionsModel.minDbcacheSizeMiB
                 top: ApplicationModels.optionsModel.maxDbcacheSizeMiB
             }
             onTextEdited: function(text) {
+                if (root.cacheEntry) { root.cacheEntry.editText(text); return }
                 root.dbcacheText = text
                 root.dbcacheError = ""
             }
             onEditingFinished: {
+                if (root.cacheEntry) return
                 const value = parseInt(dbcacheRow.text)
                 if (isNaN(value) || value < ApplicationModels.optionsModel.minDbcacheSizeMiB
                         || value > ApplicationModels.optionsModel.maxDbcacheSizeMiB) {
@@ -69,22 +76,26 @@ ColumnLayout {
             Layout.fillWidth: true
             title: qsTr("Script verification threads")
             showDivider: false
-            enabled: (root.coreStatuses.par || ({})).canEdit !== false
-            supportingText: (root.coreStatuses.par || ({})).infoText || ""
-            errorText: root.scriptThreadsError
+            enabled: root.threadsEntry ? root.threadsEntry.editable : (root.coreStatuses.par || ({})).canEdit !== false
+            supportingText: root.threadsEntry ? root.threadsEntry.information : (root.coreStatuses.par || ({})).infoText || ""
+            errorText: root.threadsEntry ? root.threadsEntry.error : root.scriptThreadsError
             fieldObjectName: "developerScriptThreadsField"
             fieldWidth: 88
-            maximumLength: 5
-            text: root.scriptThreadsText
-            validator: IntValidator {
+            maximumLength: root.threadsEntry ? 32769 : 10
+            text: root.threadsEntry ? root.threadsEntry.text : root.scriptThreadsText
+            validator: root.threadsEntry ? null : legacyThreadValidator
+            IntValidator {
+                id: legacyThreadValidator
                 bottom: ApplicationModels.optionsModel.minScriptThreads
                 top: ApplicationModels.optionsModel.maxScriptThreads
             }
             onTextEdited: function(text) {
+                if (root.threadsEntry) { root.threadsEntry.editText(text); return }
                 root.scriptThreadsText = text
                 root.scriptThreadsError = ""
             }
             onEditingFinished: {
+                if (root.threadsEntry) return
                 const value = parseInt(scriptThreadsRow.text)
                 if (isNaN(value) || value < ApplicationModels.optionsModel.minScriptThreads
                         || value > ApplicationModels.optionsModel.maxScriptThreads) {

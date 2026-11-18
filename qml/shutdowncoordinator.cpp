@@ -4,14 +4,41 @@
 
 #include <qml/initexecutor.h>
 #include <qml/shutdowncoordinator.h>
-#include <qml/backendexecutor.h>
+#include <QPointer>
+
+void QmlShutdownCoordinator::addBeforeInterruptTask(std::function<void(std::function<void()>)> begin)
+{
+    addTask(std::move(begin), true);
+}
+
+void QmlShutdownCoordinator::addAfterInterruptTask(std::function<void(std::function<void()>)> begin)
+{
+    addTask(std::move(begin), false);
+}
+
+void QmlShutdownCoordinator::addTask(std::function<void(std::function<void()>)> begin, bool before_interrupt)
+{
+    Q_ASSERT(!m_shutdown_requested);
+    const QPointer<QmlShutdownCoordinator> observer{this};
+    const auto completed = std::make_shared<bool>(false);
+    auto& participants = before_interrupt ? m_before_interrupt_participants : m_after_interrupt_participants;
+    participants.emplace_back([observer, completed, before_interrupt, begin = std::move(begin)] {
+        begin([observer, completed, before_interrupt] {
+            if (!observer) return;
+            QMetaObject::invokeMethod(observer, [observer, completed, before_interrupt] {
+                if (!observer) return;
+                const bool draining = before_interrupt ? observer->m_draining_before_interrupt : observer->m_draining_after_interrupt;
+                if (!draining || std::exchange(*completed, true)) return;
+                observer->participantFinished(before_interrupt);
+            }, Qt::QueuedConnection);
+        });
+    });
+}
 
 QmlShutdownCoordinator::QmlShutdownCoordinator(QmlInitExecutor& executor, QObject* parent)
     : QObject(parent), m_executor(executor)
 {
-    connect(&executor, &QmlInitExecutor::shutdownResult, this, [this] {
-        BackendExecutor::shutdownAll(this, [this] { Q_EMIT finished(); });
-    });
+    connect(&executor, &QmlInitExecutor::shutdownResult, this, &QmlShutdownCoordinator::finished);
     connect(&executor, &QmlInitExecutor::interruptResult, this, &QmlShutdownCoordinator::drainAfterInterrupt);
 }
 
@@ -19,6 +46,7 @@ void QmlShutdownCoordinator::requestShutdown()
 {
     if (m_shutdown_requested) return;
     m_shutdown_requested = true;
+    for (const auto& fence : m_stop_hooks) fence();
     Q_EMIT shutdownStarted();
     m_pending_participants = m_before_interrupt_participants.size();
     if (m_pending_participants == 0) {

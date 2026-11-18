@@ -57,6 +57,22 @@ private Q_SLOTS:
         QCOMPARE(model->numPeers(), static_cast<int>(qmltest::Call(m_app, &interfaces::Node::getNodeCount, ConnectionDirection::Both)));
     }
 
+    // #1138: a Core question that arrives while the window is minimized must
+    // un-minimize it, or the node waits behind a message nobody can see.
+    void runtimeQuestionRestoresTheMinimizedNativeWindow()
+    {
+        auto* window=m_app.window();QVERIFY(window);window->showMinimized();QTRY_VERIFY(window->windowStates().testFlag(Qt::WindowMinimized));QVERIFY(window->isVisible());
+        auto answer=std::async(std::launch::async,[]{return uiInterface.ThreadSafeQuestion(Untranslated("Original minimized-window question"),"",CClientUIInterface::MSG_ERROR|CClientUIInterface::BTN_ABORT);});
+        const auto release=qScopeGuard([&]{m_app.nodeModel().answerRuntimeDialog(CClientUIInterface::BTN_OK);window->showNormal();});
+        QTRY_VERIFY(m_app.nodeModel().runtimeDialogVisible());
+        QTRY_VERIFY(!window->windowStates().testFlag(Qt::WindowMinimized));QVERIFY(window->isVisible());
+        QVERIFY(qmltest::WaitForVisible(m_app,"nodeRuntimeDialogButtonOk"));
+        QCOMPARE(m_app.nodeModel().runtimeDialogMessage(),QStringLiteral("Original minimized-window question"));
+        QVERIFY(qmltest::Click(m_app,"nodeRuntimeDialogButtonOk"));
+        QTRY_VERIFY(answer.wait_for(std::chrono::milliseconds{0})==std::future_status::ready);
+        QVERIFY(answer.get());QTRY_VERIFY(!m_app.nodeModel().runtimeDialogVisible());
+    }
+
     void navigationStaysResponsiveDuringRpc()
     {
         auto* model = &m_app.nodeModel();

@@ -34,8 +34,8 @@ WalletShellPage {
     readonly property Item walletSettingsHost: settingsLoader.item ? (settingsLoader.item as SettingsView).walletSettingsHost : null
     readonly property SettingsView settingsView: settingsLoader.item as SettingsView
     modalNavigationBlocked: settingsView !== null
-        && (settingsView.settingsNavigationPending
-            || (settingsView.settingsEditor !== null && settingsView.settingsEditor.closeQuestion))
+        && (settingsView.navigation.pending
+            || (settingsView.navigation.editor !== null && settingsView.navigation.editor.closeQuestion))
     readonly property alias walletViews: walletViews
 
     ButtonGroup { id: navigationTabs }

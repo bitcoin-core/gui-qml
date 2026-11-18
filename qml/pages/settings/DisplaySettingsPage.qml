@@ -4,8 +4,8 @@
 
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+
 import org.bitcoincore.qt 1.0
-import QtQuick.Controls 2.15
 
 import "../../controls"
 import "../../components"
@@ -16,6 +16,7 @@ SettingsPage {
     readonly property bool systemReducesMotion: MotionPreference.mode === "reduced"
     title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
+    onVisibleChanged: if (visible) ApplicationModels.optionsModel.refreshDisplaySettings()
 
     Shortcut { id: hideAmountsShortcut; sequence: qsTr("Ctrl+Shift+M"); enabled: false }
 

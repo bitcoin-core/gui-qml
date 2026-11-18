@@ -13,4 +13,5 @@ QtObject {
     readonly property bool isMobile: !isDesktop
     readonly property string state: isDesktop ? "DESKTOP" : "MOBILE"
     readonly property bool walletEnabled: true
+    readonly property bool animationsEnabled: true
 }

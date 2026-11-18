@@ -354,9 +354,10 @@ DialogPopup {
                     // it explicitly so `visibleActions[index]` resolves.
                     required property int index
 
-                    readonly property AlertAction alertAction: root.visibleActions[index]
-                    readonly property bool neutralAction: alertAction.role === AlertAction.Cancel
-                        || alertAction.role === AlertAction.Neutral
+                    // Null while a shrinking action list retires this delegate.
+                    readonly property AlertAction alertAction: index < root.visibleActions.length ? root.visibleActions[index] : null
+                    readonly property bool neutralAction: alertAction !== null && (alertAction.role === AlertAction.Cancel
+                        || alertAction.role === AlertAction.Neutral)
                     readonly property Item button: neutralAction ? neutralButton : primaryButton
 
                     width: actionRow.stacked ? actionRow.width
@@ -365,16 +366,16 @@ DialogPopup {
 
                     enabled: alertAction !== null && alertAction.enabled
                     function triggerAction() {
-                        root.trigger(alertAction)
+                        if (alertAction) root.trigger(alertAction)
                     }
 
                     NeutralButton {
                         id: neutralButton
                         anchors.fill: parent
                         visible: actionDelegate.neutralAction
-                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
-                        text: actionDelegate.alertAction.text
-                        enabled: actionDelegate.alertAction.enabled
+                        objectName: visible && actionDelegate.alertAction ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction ? actionDelegate.alertAction.text : ""
+                        enabled: actionDelegate.enabled
                         buttonSize: NeutralButton.Large
                         onClicked: actionDelegate.triggerAction()
                     }
@@ -384,10 +385,10 @@ DialogPopup {
                         anchors.fill: parent
                         horizontalPadding: Theme.space.xl
                         visible: !actionDelegate.neutralAction
-                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
-                        text: actionDelegate.alertAction.text
-                        enabled: actionDelegate.alertAction.enabled
-                        destructive: actionDelegate.alertAction.role === AlertAction.Destructive
+                        objectName: visible && actionDelegate.alertAction ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction ? actionDelegate.alertAction.text : ""
+                        enabled: actionDelegate.enabled
+                        destructive: actionDelegate.alertAction !== null && actionDelegate.alertAction.role === AlertAction.Destructive
                         onClicked: actionDelegate.triggerAction()
                     }
                 }

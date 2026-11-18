@@ -28,6 +28,9 @@ OnboardingView {
     primaryButtonText: qsTr("Start")
     primaryButtonObjectName: "onboardingConnectionButton"
     onBackClicked: root.back()
+    // Pre-init setup can only finish once its model admits the commit;
+    // otherwise a click would be dropped silently.
+    primaryButtonEnabled: root.settingsModel.canFinish !== false
     onPrimaryClicked: root.next()
 
     childView: RowLayout {
