@@ -10,9 +10,11 @@ import org.bitcoincore.qt 1.0
 ColumnLayout {
     id: root
 
-    property var amount
+    property BitcoinAmount amount
     property string errorText: ""
     property bool showErrorMessage: true
+    readonly property string effectiveErrorText: errorText || (amount ? amount.inputError : "")
+    property bool readOnly: false
     property string labelText: qsTr("Amount")
     property string accessibleName: labelText
     property alias inputObjectName: amountInput.objectName
@@ -27,40 +29,34 @@ ColumnLayout {
     signal inputTextChanged
     signal textEdited
     signal editingFinished(string value)
-    signal pasteRequested()
+    // A pasted payment URI. With interceptPaste it is imported, not inserted.
+    signal paymentUriPasted(string text)
 
     function syncFromAmount(force) {
-        amountInput.syncFromAmount(force)
+        if (root.amount && (force || !amountInput.activeFocus)) root.amount.resetInput()
     }
 
-    function paymentUri(text) {
-        const trimmedText = String(text).trim()
-        return root.interceptPaste && trimmedText.toLowerCase().startsWith("bitcoin:")
-            ? trimmedText
-            : ""
-    }
-
-    function pastedPaymentUri(previousText, currentText) {
-        const clipboardText = Clipboard.text()
-        const uri = paymentUri(clipboardText)
-        if (uri.length === 0 || previousText === currentText) return ""
-
-        let offset = String(currentText).indexOf(clipboardText)
-        while (offset !== -1) {
-            const prefix = String(currentText).slice(0, offset)
-            const suffix = String(currentText).slice(offset + clipboardText.length)
-            if (String(previousText).startsWith(prefix)
-                    && String(previousText).endsWith(suffix)
-                    && prefix.length + suffix.length <= String(previousText).length) {
-                return uri
-            }
-            offset = String(currentText).indexOf(clipboardText, offset + 1)
+    function paste(primary) {
+        const text = primary ? Clipboard.selectionText() : Clipboard.text()
+        if (!text.length || !root.enabled || root.readOnly || !root.amount) return
+        if (root.interceptPaste && BitcoinUri.isPaymentUri(text)) {
+            root.paymentUriPasted(text)
+            return
         }
-        return ""
+        const cursor = root.amount.paste(text, Math.min(amountInput.selectionStart, amountInput.selectionEnd),
+            Math.max(amountInput.selectionStart, amountInput.selectionEnd))
+        amountInput.restoreFromModel()
+        if (cursor >= 0) amountInput.cursorPosition = Math.min(cursor, amountInput.length)
+        root.inputTextChanged()
+        root.textEdited()
     }
 
-    function paste() {
-        amountInput.paste()
+    TextEditMenu {
+        id: editMenu
+        textInput: amountInput
+        pasteEnabled: root.enabled && !root.readOnly && !!root.amount
+        menuObjectName: root.inputObjectName + "ContextMenu"
+        onPasteRequested: (primary) => root.paste(primary)
     }
 
     function amountInputPlaceholder(unit) {
@@ -68,20 +64,6 @@ ColumnLayout {
         if (unit === BitcoinAmount.MicroBTC) return "0.00"
         if (unit === BitcoinAmount.MilliBTC) return "0.00000"
         return "0.00000000"
-    }
-
-    function amountInputPattern(unit) {
-        if (unit === BitcoinAmount.SAT) return /^0*\d{0,16}$/
-        if (unit === BitcoinAmount.MicroBTC) return /^0*\d{0,13}(\.\d{0,2})?$/
-        if (unit === BitcoinAmount.MilliBTC) return /^0*\d{0,10}(\.\d{0,5})?$/
-        return /^0*\d{0,7}(\.\d{0,8})?$/
-    }
-
-    function amountInputMaximumLength(unit) {
-        if (unit === BitcoinAmount.SAT) return 16
-        if (unit === BitcoinAmount.MicroBTC) return 17
-        if (unit === BitcoinAmount.MilliBTC) return 17
-        return 17
     }
 
     function flippedDisplayUnit(unit) {
@@ -109,67 +91,24 @@ ColumnLayout {
 
         TextField {
             id: amountInput
-            property bool syncingFromAmount: false
-            property string lastAcceptedText: ""
-
-            function amountDisplay() {
-                return root.amount ? root.amount.display : ""
+            function restoreFromModel() {
+                text = Qt.binding(function() { return root.amount ? root.amount.inputText : "" })
             }
-
-            // Keep user draft text while focused, then pull from BitcoinAmount
-            // after format() so the field shows the clean canonical display.
-            function syncFromAmount(force) {
-                if (!force && activeFocus) return
-                const display = amountDisplay()
-                if (text === display) {
-                    lastAcceptedText = display
-                    return
-                }
-                syncingFromAmount = true
-                text = display
-                lastAcceptedText = display
-                syncingFromAmount = false
-            }
-
-            function restoreLastAcceptedText() {
-                if (text === lastAcceptedText) return
-                syncingFromAmount = true
-                text = lastAcceptedText
-                syncingFromAmount = false
-            }
-
-            function commitAmountText() {
-                if (root.amount && root.amount.display !== text) {
-                    root.amount.display = text
-                }
-            }
-
             function finishAmountEditing() {
-                commitAmountText()
-                if (root.amount) {
-                    root.amount.format()
-                    root.syncFromAmount(true)
-                }
+                if (root.amount) root.amount.format()
                 root.editingFinished(text)
             }
 
+            // A native paste of a payment URI is imported; other URI text
+            // is not an amount, so the field keeps its previous text.
             function handlePaymentUriInput() {
-                const uri = root.pastedPaymentUri(lastAcceptedText, text)
-                if (uri.length === 0) {
-                    // Paste interception disables the validator so native
-                    // context-menu paste can be observed. Reject URI-like text
-                    // unless it is the exact text currently on the clipboard.
-                    if (!root.interceptPaste || String(text).toLowerCase().indexOf("bitcoin:") === -1) return false
-                    restoreLastAcceptedText()
-                    return true
-                }
-                const previousDisplay = amountDisplay()
-                restoreLastAcceptedText()
-                root.pasteRequested()
-                if (amountDisplay() !== previousDisplay) root.syncFromAmount(true)
+                if (!root.interceptPaste) return false
+                const uri = BitcoinUri.pastedPaymentUri(root.amount ? root.amount.inputText : "", text, Clipboard.text())
+                if (!uri.length && text.toLowerCase().indexOf("bitcoin:") < 0) return false
+                restoreFromModel()
+                if (uri.length) root.paymentUriPasted(uri)
                 return true
             }
-
             Accessible.name: root.accessibleName
             anchors.left: lbl.right
             anchors.right: unitToggle.left
@@ -186,77 +125,30 @@ ColumnLayout {
 
             Keys.onPressed: (event) => {
                 if (root.interceptPaste && event.matches(StandardKey.Paste)) {
-                    root.pasteRequested()
+                    root.paste(false)
                     event.accepted = true
                 }
             }
 
-            text: ""
-            Component.onCompleted: root.syncFromAmount(true)
-
-            onTextChanged: {
-                if (handlePaymentUriInput()) return
-                if (!syncingFromAmount) {
-                    if (root.amount && root.amountInputPattern(root.amount.unit).test(String(text))) {
-                        lastAcceptedText = text
-                    }
-                    root.inputTextChanged()
-                }
-            }
-
+            text: root.amount ? root.amount.inputText : ""
             onTextEdited: {
                 if (handlePaymentUriInput()) return
-                // The validator is disabled while paste interception is active
-                // so an URI inserted beside the current amount reaches this
-                // handler. Preserve the same numeric validation by restoring
-                // the last model value before an invalid edit is committed.
-                if (root.interceptPaste
-                        && root.amount
-                        && !root.amountInputPattern(root.amount.unit).test(String(text))) {
-                    restoreLastAcceptedText()
-                    return
-                }
-                lastAcceptedText = text
-                commitAmountText()
+                if (root.amount) root.amount.editInput(text)
+                root.inputTextChanged()
                 root.textEdited()
             }
-
             onEditingFinished: finishAmountEditing()
-
-            onActiveFocusChanged: {
-                if (!activeFocus) {
-                    finishAmountEditing()
-                }
+            onActiveFocusChanged: if (!activeFocus) finishAmountEditing()
+            // Intercept long native commits before business validation; the model
+            // refuses the exact original input instead of parsing a cut prefix.
+            maximumLength: root.interceptPaste ? 2147483647 : 129
+            readOnly: root.readOnly
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton | Qt.MiddleButton
+                onPressed: (mouse) => editMenu.pointerPressed(mouse)
             }
 
-            validator: root.interceptPaste ? null : amountValidator
-
-            RegularExpressionValidator {
-                id: amountValidator
-                regularExpression: root.amount
-                    ? root.amountInputPattern(root.amount.unit)
-                    : /^(0|[1-9]\d{0,7})(\.\d{0,8})?$/
-            }
-            maximumLength: root.interceptPaste
-                ? 2048 + (root.amount ? root.amountInputMaximumLength(root.amount.unit) : 17)
-                : (root.amount ? root.amountInputMaximumLength(root.amount.unit) : 17)
-
-            Connections {
-                target: root
-                function onAmountChanged() {
-                    root.syncFromAmount(true)
-                }
-            }
-
-            Connections {
-                target: root.amount ? root.amount : null
-                function onDisplayChanged() {
-                    amountInput.syncFromAmount(false)
-                }
-                function onUnitChanged() {
-                    root.syncFromAmount(true)
-                }
-            }
         }
 
         AmountUnitButton {
@@ -264,10 +156,10 @@ ColumnLayout {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             opacity: root.enabled ? 1.0 : 0.5
-            enabled: root.enabled && !!root.amount
+            enabled: root.enabled && !!root.amount && root.amount.inputAcceptable
             unit: root.amount ? root.amount.unit : BitcoinAmount.BTC
             onClicked: {
-                amountInput.commitAmountText()
+                root.amount.format()
                 ApplicationModels.optionsModel.displayUnit = root.flippedDisplayUnit(root.amount.unit)
             }
         }
@@ -276,7 +168,7 @@ ColumnLayout {
     RowLayout {
         id: errorRow
         Layout.fillWidth: true
-        visible: root.showErrorMessage && root.errorText.length > 0
+        visible: root.showErrorMessage && root.effectiveErrorText.length > 0
 
         Icon {
             source: "image://images/alert-filled"
@@ -286,7 +178,7 @@ ColumnLayout {
 
         CoreText {
             id: errorTextLabel
-            text: root.errorText
+            text: root.effectiveErrorText
             textStyle: Theme.text.description
             color: Theme.color.dangerText
             horizontalAlignment: Text.AlignLeft
