@@ -6,12 +6,15 @@
 
 import json
 import os
+import subprocess
 import tempfile
 import threading
 import time
 from pathlib import Path
 from qml_driver import QmlDriverError
-from qml_process_checks import check_gui_exit
+from qml_process_checks import check_gui_exit, unexpected_gui_stderr
+from qml_smoke_lib import wait_until
+from qml_wallet_test_lib import RPC_PASS, RPC_USER, rpc_call, wait_for_rpc
 from qml_scenarios import (
     gui_process,
     run_scenarios,
@@ -23,8 +26,209 @@ from qml_test_harness import (
     click_onboarding_button,
     complete_preinit_onboarding,
     dump_qml_tree,
+    qml_qpa_platform,
+    qsettings_sandbox_args,
     walk_onboarding_to_connection,
 )
+
+
+DESKTOP_PAYMENT_ADDRESS = "bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9"
+
+
+def unicode_startup_profile():
+    """The real process argv and Core profile retain non-ASCII path identity."""
+    with tempfile.TemporaryDirectory(prefix="u8-") as temporary:
+        profile = Path(temporary) / "caf\u00e9-\u94b1\u5305-\U0001f600"
+        profile.mkdir()
+        with gui_process(tmpdir=str(profile), no_listen_arg=False,
+                         extra_args=["-nolisten", f"-rpcuser={RPC_USER}", f"-rpcpassword={RPC_PASS}"]) as harness:
+            wait_for_rpc(harness.rpc_port)
+            actual = Path(rpc_call(harness.rpc_port, "getrpcinfo")["logpath"]).resolve()
+            assert actual.is_relative_to(Path(harness.datadir).resolve()), actual
+            assert profile.name in actual.parts, actual
+            assert actual.is_file(), actual
+            assert rpc_call(harness.rpc_port, "getblockchaininfo")["chain"] == "regtest"
+
+
+def desktop_payment(label, amount="0.01000000"):
+    return f"bitcoin:{DESKTOP_PAYMENT_ADDRESS}?amount={amount}&label={label}&message=explicit-inspection-only"
+
+
+def desktop_mailbox(gui, count):
+    gui.wait_for_object("desktopRequestsBar", timeout_ms=30000)
+    gui.wait_for_property("desktopRequestsBar", "mailbox.pendingCount", count, timeout_ms=10000)
+    assert not gui.get_property("desktopRequestsBar", "mailbox.hasInspection"), "Ingress must not create a Source inspection"
+    assert not gui.get_property("desktopRequestsBar", "mailbox.canContinue"), "Ingress must not authorize a wallet action"
+
+
+def desktop_transfer(stdout, status, count, allow_inspected=False):
+    """Inspect the gated Native startup observation, never inventing a receipt."""
+    prefix = "R40_TRANSFER_JSON "
+    lines = [line[len(prefix):] for line in stdout.decode("utf8", errors="strict").splitlines() if line.startswith(prefix)]
+    assert len(lines) == 1, lines
+    record = json.loads(lines[0])
+    assert record["version"] == 1 and record["status"] == status, record
+    keys, receipts = record["producer_keys"], record["receipts"]
+    assert len(keys) == len(receipts) == count and len(set(keys)) == count, record
+    assert all(isinstance(key, str) and 0 < len(key) <= 128 for key in keys), record
+    for index, receipt in enumerate(receipts):
+        for name in ("delivery", "inspection"):
+            value = receipt[name]
+            assert isinstance(value, str) and 0 < len(value) <= 20 and value.isdecimal(), record
+            assert str(int(value)) == value and 0 <= int(value) < 2**64, record
+        assert keys[index].endswith(f":{index}"), record
+        assert int(receipt["delivery"]) == index + 1, record
+        assert type(receipt["disposition"]) is int, record
+        if allow_inspected and receipt["disposition"] == 1:  # Version1 Disposition::Accepted.
+            assert int(receipt["inspection"]) > 0, record
+        else:
+            assert receipt["disposition"] == 0 and receipt["inspection"] == "0", record  # Version1 Disposition::Queued.
+    return record
+
+
+def desktop_intent_primary_arguments():
+    """Ready inspects one retained input at a time without choosing a wallet target."""
+    harness = QmlTestHarness(no_listen_arg=False, extra_args=[f"-rpcuser={RPC_USER}", f"-rpcpassword={RPC_PASS}", "-nolisten"])
+    source = Path(harness.tmpdir) / "request from file.uri"
+    source.write_text(desktop_payment("file-source", "0.02000000"), encoding="utf8")
+    harness.extra_args.extend([desktop_payment("uri-source"), str(source)])
+    try:
+        harness.start()
+        gui = harness.driver
+        gui.wait_for_object("desktopRequestsBar", timeout_ms=30000)
+        wait_for_rpc(harness.rpc_port)
+        assert rpc_call(harness.rpc_port, "listwallets") == []
+        assert rpc_call(harness.rpc_port, "getrawmempool") == []
+        # Ready admits only one standalone inspection. The next original input
+        # waits until that presentation retires; neither selects a wallet target.
+        original_sources = set()
+        for remaining, label, amount in [(1, "uri-source", 1000000), (0, "file-source", 2000000)]:
+            gui.wait_for_property("desktopRequestsBar", "mailbox.hasInspection", True, timeout_ms=10000)
+            gui.wait_for_property("desktopRequestsBar", "mailbox.inspection.publicLabel", label, timeout_ms=10000)
+            gui.wait_for_property("desktopRequestsBar", "mailbox.inspectionPending", False, timeout_ms=10000)
+            gui.wait_for_property("desktopRequestsBar", "mailbox.pendingCount", remaining, timeout_ms=10000)
+            assert gui.get_property("desktopRequestsBar", "mailbox.inspection.error") == ""
+            assert gui.get_property("desktopRequestsBar", "mailbox.inspection.address") == DESKTOP_PAYMENT_ADDRESS
+            assert gui.get_property("desktopRequestsBar", "mailbox.inspection.publicLabel") == label
+            assert gui.get_property("desktopRequestsBar", "mailbox.inspection.amount") == amount
+            assert gui.get_enum_property("desktopRequestsBar", "mailbox.inspection.state")["key"] == "Inspecting"
+            assert gui.get_enum_property("desktopRequestsBar", "mailbox.inspection.sourceKind")["key"] == "PaymentSource"
+            assert gui.get_enum_property("desktopRequestsBar", "mailbox.inspection.outcome")["key"] == "NoOutcome"
+            original = gui.get_property("desktopRequestsBar", "mailbox.inspection.requestId")
+            assert original > 0 and original not in original_sources
+            original_sources.add(original)
+            assert not gui.get_property("desktopRequestsBar", "mailbox.inspection.canApply")
+            assert not gui.get_property("desktopRequestsBar", "mailbox.inspection.canReview")
+            assert not gui.get_property("desktopRequestContinue", "enabled")
+            gui.click("desktopRequestCloseInspection")
+            if remaining == 0:
+                gui.wait_for_property("desktopRequestsBar", "mailbox.hasInspection", False, timeout_ms=10000)
+        assert rpc_call(harness.rpc_port, "listwallets") == []
+        assert rpc_call(harness.rpc_port, "getrawmempool") == []
+        gui.request_quit()
+        stdout, stderr = harness.process.communicate(timeout=30)
+        check_gui_exit(harness.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
+        desktop_transfer(stdout, "primary", 2)
+    finally:
+        harness.stop()
+
+
+def desktop_intent_profile_isolation():
+    """Separate profile listeners and original queues can run concurrently."""
+    with gui_process(no_listen_arg=False, extra_args=["-disablewallet", "-nolisten", desktop_payment("first-profile")]) as first:
+        desktop_mailbox(first.driver, 1)
+        with gui_process(no_listen_arg=False, extra_args=["-disablewallet", "-nolisten", desktop_payment("second-profile-a"), desktop_payment("second-profile-b")]) as second:
+            desktop_mailbox(second.driver, 2)
+            assert first.process.poll() is None
+            assert first.driver.get_property("desktopRequestsBar", "mailbox.pendingCount") == 1
+            second.driver.click("desktopRequestDismiss")
+            second.driver.wait_for_property("desktopRequestsBar", "mailbox.pendingCount", 1, timeout_ms=10000)
+            assert first.driver.get_property("desktopRequestsBar", "mailbox.pendingCount") == 1
+        assert first.process.poll() is None
+
+
+def desktop_intent_secondary_forwarding(wallet_enabled=False):
+    """A second real GUI forwards once and exits before local settings/Core effects."""
+    wallet_args = [] if wallet_enabled else ["-disablewallet"]
+    with gui_process(extra_args=[*wallet_args, f"-rpcuser={RPC_USER}", f"-rpcpassword={RPC_PASS}"]) as primary:
+        gui = primary.driver
+        wait_for_rpc(primary.rpc_port)
+        if not wallet_enabled:
+            assert_node_shell_visible(gui)
+        else:
+            wait_until(lambda: gui.get_enum_property("desktopRequestsBar", "mailbox.state")["key"] == "Ready", "original desktop receiver readiness")
+        shared_settings = Path(primary.datadir) / "regtest" / "settings.json"
+        assert shared_settings.is_file(), "The primary must finish its real settings commit before this barrier"
+        original_settings = shared_settings.read_bytes()
+        original_config = (Path(primary.datadir) / "bitcoin.conf").read_bytes()
+        with tempfile.TemporaryDirectory(prefix="qml_forward_") as temporary:
+            directory = Path(temporary)
+            config = directory / "config"
+            organization = config / "BitcoinCore"
+            organization.mkdir(parents=True)
+            for name in ("BitcoinCore-App", "BitcoinCore-App-regtest"):
+                (organization / f"{name}.conf").write_text("[General]\nr40_preserved=original-value\n", encoding="utf8")
+            before = {str(path.relative_to(config)): path.read_bytes() for path in config.rglob("*") if path.is_file()}
+            home = directory / "home"
+            home.mkdir()
+            source = directory / "forwarded file.uri"
+            source.write_text(desktop_payment("secondary-file"), encoding="utf8")
+            bridge = directory / "secondary.sock"
+            local_effects = [directory / "secondary-settings.json", directory / "secondary.pid", directory / "secondary-core.log"]
+            environment = dict(os.environ)
+            environment["QT_QPA_PLATFORM"] = qml_qpa_platform()
+            environment["HOME"] = str(home)
+            settings_args = qsettings_sandbox_args(environment, str(config))
+            command = [primary.gui_binary, f"-datadir={primary.datadir}", "-regtest", "-disablewallet", "-nolisten", "-qml_onboarded=1",
+                       f"-test-automation={bridge}", *settings_args, "-resetguisettings", f"-settings={local_effects[0]}",
+                       f"-pid={local_effects[1]}", f"-debuglogfile={local_effects[2]}", desktop_payment("secondary-uri"), source.as_uri()]
+            print("Starting secondary GUI: " + " ".join(command), flush=True)
+            secondary = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                stdout, stderr = secondary.communicate(timeout=30)
+            except subprocess.TimeoutExpired as expired:
+                print(f"R40_SECONDARY_WATCHDOG pid={secondary.pid} timeout=30 exit={secondary.poll()}", flush=True)
+                print("Secondary watchdog stdout:\n" + (expired.output or b"").decode("utf8", errors="replace"), flush=True)
+                print("Secondary watchdog stderr:\n" + (expired.stderr or b"").decode("utf8", errors="replace"), flush=True)
+                print("Secondary watchdog paths: " + json.dumps({str(path): path.exists() for path in [bridge, *local_effects]}), flush=True)
+                raise
+            finally:
+                if secondary.poll() is None:
+                    secondary.terminate()
+                    try:
+                        cleanup_stdout, cleanup_stderr = secondary.communicate(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        secondary.kill()
+                        cleanup_stdout, cleanup_stderr = secondary.communicate(timeout=10)
+                    print(f"R40_SECONDARY_CLEANUP pid={secondary.pid} exit={secondary.returncode}", flush=True)
+                    print("Secondary cleanup stdout:\n" + cleanup_stdout.decode("utf8", errors="replace"), flush=True)
+                    print("Secondary cleanup stderr:\n" + cleanup_stderr.decode("utf8", errors="replace"), flush=True)
+            text = stdout.decode("utf8", errors="replace")
+            print("Secondary stdout:\n" + text, flush=True)
+            print("Secondary stderr:\n" + stderr.decode("utf8", errors="replace"), flush=True)
+            check_gui_exit(secondary.returncode, stderr.decode("utf8", errors="replace"), socket_path=str(bridge))
+            desktop_transfer(stdout, "forwarded", 2, allow_inspected=wallet_enabled)
+            if wallet_enabled:
+                gui.wait_for_object("desktopRequestsBar", timeout_ms=30000)
+                gui.wait_for_property("desktopRequestsBar", "mailbox.inspection.publicLabel", "secondary-uri", timeout_ms=10000)
+                gui.wait_for_property("desktopRequestsBar", "mailbox.inspectionPending", False, timeout_ms=10000)
+                gui.wait_for_property("desktopRequestsBar", "mailbox.pendingCount", 1, timeout_ms=10000)
+                assert gui.get_enum_property("desktopRequestsBar", "mailbox.inspection.outcome")["key"] == "NoOutcome"
+                assert not gui.get_property("desktopRequestsBar", "mailbox.inspection.canApply")
+                assert not gui.get_property("desktopRequestsBar", "mailbox.inspection.canReview")
+                assert not gui.get_property("desktopRequestContinue", "enabled")
+                assert rpc_call(primary.rpc_port, "listwallets") == []
+                assert rpc_call(primary.rpc_port, "getrawmempool") == []
+            else:
+                desktop_mailbox(gui, 2)
+            assert not bridge.exists(), "Secondary role discovery must precede bridge/window startup"
+            assert not any(path.exists() for path in local_effects), [(str(path), path.exists()) for path in local_effects]
+            after = {str(path.relative_to(config)): path.read_bytes() for path in config.rglob("*") if path.is_file()}
+            assert after == before, "Forwarding must precede both default and chain QSettings reset/write"
+            assert shared_settings.read_bytes() == original_settings, "Secondary must not rewrite the primary's Core settings"
+            assert (Path(primary.datadir) / "bitcoin.conf").read_bytes() == original_config
+            assert rpc_call(primary.rpc_port, "getblockchaininfo")["chain"] == "regtest"
+            assert primary.process.poll() is None
 
 
 def bridge_smoke():
@@ -46,6 +250,74 @@ def bridge_smoke():
                 assert any(message in str(error).lower() for message in messages), str(error)
             else:
                 raise AssertionError("The bridge must report an invalid request")
+
+
+def runtime_block_write_failure_exit_status():
+    """A real Core AbortNode failure must survive normal GUI teardown."""
+    harness = QmlTestHarness(extra_args=["-disablewallet", f"-rpcuser={RPC_USER}", f"-rpcpassword={RPC_PASS}"])
+    modes = {}
+    result = {}
+    worker = None
+
+    def restore_modes():
+        for path, mode in modes.items():
+            if path.exists():
+                path.chmod(mode)
+
+    def generate():
+        try:
+            result["value"] = rpc_call(harness.rpc_port, "generatetodescriptor", [1, "raw(51)"])
+        except Exception as error:
+            result["error"] = str(error)
+
+    try:
+        harness.start()
+        gui = harness.driver
+        assert_node_shell_visible(gui)
+        wait_for_rpc(harness.rpc_port)
+        assert rpc_call(harness.rpc_port, "getblockchaininfo")["chain"] == "regtest"
+        blocks = Path(harness.datadir) / "regtest" / "blocks"
+        files = sorted(blocks.glob("blk*.dat"))
+        assert files, "Initialized Core must own a real block file before the permission barrier"
+        for path in [blocks, *files]:
+            modes[path] = path.stat().st_mode & 0o777
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        try:
+            with files[0].open("r+b"):
+                pass
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("Environment did not enforce the disposable block-file permission barrier")
+        worker = threading.Thread(target=generate, name="runtime-fatal-rpc")
+        worker.start()
+        gui.wait_for_property("nodeRuntimeDialog", "opened", True, timeout_ms=30000)
+        message = gui.get_property("nodeRuntimeDialogMessage", "text")
+        assert "Failed to write block." in message, message
+        # Core has already failed. Restore the disposable files before release,
+        # so ordinary teardown cannot add a second unrelated storage failure.
+        restore_modes()
+        try:
+            gui.click("nodeRuntimeDialogButtonOk")
+        except ConnectionError:
+            pass  # Core may close the bridge before the reply reaches us.
+        harness.process.wait(timeout=30)
+        worker.join(timeout=10)
+        assert not worker.is_alive(), "The original public RPC continuation did not finish"
+        stdout, stderr = harness.process.communicate()
+        text = stderr.decode("utf8", errors="replace")
+        print("Runtime storage-failure stdout:\n" + stdout.decode("utf8", errors="replace"), flush=True)
+        print("Runtime storage-failure stderr:\n" + text, flush=True)
+        print(f"R36_RUNTIME_FATAL app_exit={harness.process.returncode} rpc={result!r}", flush=True)
+        assert harness.process.returncode == 1, (harness.process.returncode, text)
+        unexpected = unexpected_gui_stderr(text, socket_path=harness.socket_path)
+        assert unexpected and all("Failed to write block." in line for line in unexpected), unexpected
+    finally:
+        restore_modes()
+        harness.stop()
+        if worker is not None:
+            worker.join(timeout=10)
+            assert not worker.is_alive(), "Core RPC remained blocked after shutdown"
 
 
 def onboarding_smoke():
@@ -244,6 +516,7 @@ def close_connection_settings(gui):
 
 def set_switch(gui, object_name, desired):
     if gui.get_property(object_name, "checked") != desired:
+        gui.wait_for_property(object_name, "enabled", True)
         gui.click(object_name)
         gui.wait_for_property(object_name, "checked", desired, timeout_ms=2000)
 
@@ -282,12 +555,19 @@ def run_window_behavior_reset(hide_tray_icon):
                 gui.click("settingsSidebar_window-behavior")
                 gui.wait_for_page("windowBehaviorSettingsPage", timeout_ms=5000)
 
+                # Page visibility does not imply that its asynchronous preference
+                # read has published. A disabled click owns no user command.
+                gui.wait_for_property("windowBehaviorSettingsPage", "windowBehaviorModel.settingsReady", True)
+                gui.wait_for_property("windowBehaviorSettingsPage", "windowBehaviorModel.persistencePending", False)
+                assert gui.get_property("windowBehaviorSettingsPage", "windowBehaviorModel.persistenceError") in (None, "")
                 # Write through the GUI so Qt chooses the platform's effective
                 # organization and the redirected -test-settings-dir store.
                 if phase == "save":
                     set_switch(gui, "showTrayIconSwitch", not hide_tray_icon)
                     set_switch(gui, "minimizeToTraySwitch", not hide_tray_icon)
                     set_switch(gui, "minimizeOnCloseSwitch", True)
+                    gui.wait_for_property("windowBehaviorSettingsPage", "windowBehaviorModel.persistencePending", False)
+                    assert gui.get_property("windowBehaviorSettingsPage", "windowBehaviorModel.persistenceError") in (None, "")
                 expected = {
                     "showTrayIconSwitch": phase == "reset" or not hide_tray_icon,
                     "minimizeToTraySwitch": phase != "reset" and not hide_tray_icon,
@@ -351,7 +631,18 @@ def run_first_reset_onboarding(tmpdir, custom_datadir):
             dump_qml_tree(gui)
         raise
     finally:
-        harness.stop(cleanup=False)
+        try:
+            if harness.process is not None and harness.process.poll() is None and harness.driver is not None:
+                harness.driver.request_quit()
+                harness.process.wait(timeout=10)
+        finally:
+            harness.stop(cleanup=False)
+            if harness.process is not None:
+                stdout, stderr = harness.process.communicate(timeout=5)
+                print(f"First reset GUI exit: {harness.process.returncode}", flush=True)
+                print("First reset GUI stdout:\n" + stdout.decode("utf8", errors="replace"), flush=True)
+                print("First reset GUI stderr:\n" + stderr.decode("utf8", errors="replace"), flush=True)
+                check_gui_exit(harness.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
 
 
 def run_second_reset_onboarding(tmpdir, custom_datadir):
@@ -382,7 +673,18 @@ def run_second_reset_onboarding(tmpdir, custom_datadir):
             dump_qml_tree(gui)
         raise
     finally:
-        harness.stop(cleanup=False)
+        try:
+            if harness.process is not None and harness.process.poll() is None and harness.driver is not None:
+                harness.driver.request_quit()
+                harness.process.wait(timeout=10)
+        finally:
+            harness.stop(cleanup=False)
+            if harness.process is not None:
+                stdout, stderr = harness.process.communicate(timeout=5)
+                print(f"Second reset GUI exit: {harness.process.returncode}", flush=True)
+                print("Second reset GUI stdout:\n" + stdout.decode("utf8", errors="replace"), flush=True)
+                print("Second reset GUI stderr:\n" + stderr.decode("utf8", errors="replace"), flush=True)
+                check_gui_exit(harness.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
 
 
 def reset_onboarding_connection():
@@ -396,6 +698,12 @@ def reset_onboarding_connection():
 if __name__ == "__main__":
     raise SystemExit(run_scenarios('GUI startup and configuration process scenarios', [
         scenario("bridge-protocol", 1, bridge_smoke),
+        scenario("unicode-startup-profile", 1, unicode_startup_profile),
+        scenario("desktop-intent-primary-arguments", 8, desktop_intent_primary_arguments),
+        scenario("desktop-intent-secondary-forwarding", 8, desktop_intent_secondary_forwarding),
+        scenario("desktop-intent-secondary-forwarding-wallet-enabled", 8, desktop_intent_secondary_forwarding, wallet_enabled=True),
+        scenario("desktop-intent-profile-isolation", 8, desktop_intent_profile_isolation),
+        scenario("runtime-block-write-failure-exit-status", 4, runtime_block_write_failure_exit_status),
         scenario("onboarding", 2, onboarding_smoke),
         scenario("blocked-startup-finish", 2, run_case, "finish"),
         scenario("blocked-startup-quit", 2, run_case, "quit"),

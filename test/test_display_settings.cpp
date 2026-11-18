@@ -10,6 +10,8 @@
 #include <qml/globalsettings.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/bitcoinamount.h>
+#include <QLocale>
 #include <qml/models/settings_keys.h>
 
 // Tests for display-settings persistence (language, display unit)
@@ -23,6 +25,9 @@ private Q_SLOTS:
     void init();
     void cleanup();
 
+    void unitAndLocaleChangesPreserveCanonicalAmount_data();
+    void unitAndLocaleChangesPreserveCanonicalAmount();
+    void incompleteInputSurvivesDisplayChange();
     void globalSettingsMigrateOutsidePerChainSettings();
     void displayUnit_defaultIsBtc();
     void displayUnit_persistsToQSettings();
@@ -51,6 +56,27 @@ void DisplaySettingsTests::cleanup()
     settings.beginGroup(TEST_GROUP);
     settings.remove("");
     settings.endGroup();
+}
+
+void DisplaySettingsTests::unitAndLocaleChangesPreserveCanonicalAmount_data()
+{
+    QTest::addColumn<QString>("locale");QTest::addColumn<int>("unit");
+    for(const auto& locale:{QStringLiteral("en_US"),QStringLiteral("de_DE"),QStringLiteral("fr_FR"),QStringLiteral("ar_EG")})for(int unit=0;unit<4;++unit)
+        QTest::newRow(qPrintable(locale+QString::number(unit)))<<locale<<unit;
+}
+void DisplaySettingsTests::unitAndLocaleChangesPreserveCanonicalAmount()
+{
+    QFETCH(QString,locale);QFETCH(int,unit);const auto original=QLocale();const auto restore=qScopeGuard([&]{QLocale::setDefault(original);});QLocale::setDefault(QLocale{locale});
+    BitcoinAmount amount;amount.setSatoshi(123456789);QSignalSpy canonical{&amount,&BitcoinAmount::amountChanged};
+    amount.setUnit(static_cast<BitcoinAmount::Unit>(unit));QCOMPARE(amount.satoshi(),qint64{123456789});QCOMPARE(canonical.size(),0);QVERIFY(amount.inputAcceptable());
+    BitcoinAmount reparsed;reparsed.setUnit(static_cast<BitcoinAmount::Unit>(unit));reparsed.editInput(amount.inputText());QVERIFY(reparsed.inputAcceptable());QCOMPARE(reparsed.satoshi(),amount.satoshi());
+    amount.setUnit(BitcoinAmount::Unit::BTC);QCOMPARE(amount.satoshi(),qint64{123456789});QCOMPARE(canonical.size(),0);
+}
+void DisplaySettingsTests::incompleteInputSurvivesDisplayChange()
+{
+    BitcoinAmount amount;amount.setSatoshi(50000000);amount.editInput(QStringLiteral("."));
+    const auto literal=amount.inputText();QVERIFY(!amount.inputAcceptable());
+    amount.setUnit(BitcoinAmount::Unit::SAT);QCOMPARE(amount.inputText(),literal);QCOMPARE(amount.satoshi(),qint64{50000000});QVERIFY(!amount.inputAcceptable());
 }
 
 void DisplaySettingsTests::globalSettingsMigrateOutsidePerChainSettings()
@@ -163,4 +189,4 @@ BITCOINQML_REGISTER_QT_TEST(DisplaySettingsTests)
 #else
 QTEST_MAIN(DisplaySettingsTests)
 #endif
-#include "test_display_settings.moc"
+#include <test_display_settings.moc>

@@ -57,4 +57,4 @@ BITCOINQML_REGISTER_QT_TEST(GuiArgsTests)
 #else
 QTEST_MAIN(GuiArgsTests)
 #endif
-#include "test_guiargs.moc"
+#include <test_guiargs.moc>

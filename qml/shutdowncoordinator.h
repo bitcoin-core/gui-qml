@@ -33,6 +33,16 @@ public:
     }
 
     void requestShutdown();
+    // Acknowledge actual asynchronous retirement before interrupting Core.
+    // The completion may arrive from any thread and is consumed once on GUI.
+    void addBeforeInterruptTask(std::function<void(std::function<void()>)> begin);
+    // These callbacks only close admission. They must not emit UI signals or
+    // start draining: all producers must be fenced before focus can change.
+    void addAdmissionFence(std::function<void()> fence)
+    {
+        Q_ASSERT(!m_shutdown_requested);
+        m_admission_fences.push_back(std::move(fence));
+    }
     bool isStopping() const { return m_shutdown_requested; }
 
 Q_SIGNALS:
@@ -57,6 +67,7 @@ private:
     void participantFinished(bool before_interrupt);
 
     QmlInitExecutor& m_executor;
+    std::vector<std::function<void()>> m_admission_fences;
     std::vector<std::function<void()>> m_after_interrupt_participants;
     std::vector<std::function<void()>> m_before_interrupt_participants;
     size_t m_pending_participants{0};

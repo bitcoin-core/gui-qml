@@ -99,6 +99,7 @@ TestCase {
 
     function init() {
         testSetup.failOnWarnings()
+        testWindow.visible = true
         testWindow.width = 640
         testWindow.height = 520
         nodeModel.setWarningsForTest([])
@@ -314,6 +315,55 @@ TestCase {
             wait(25)
         }
         verify(popup.lastInformationValueLineCount > 1)
+    }
+
+    function test_delayed_original_button_cannot_answer_a_successor() {
+        nodeModel.setRuntimeDialogForTest("Original", "First question", DialogButtonBox.Ok, true)
+        const original = nodeModel.runtimePrompt
+        const first = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem, {prompt: original})
+        verify(first !== null)
+        tryCompare(first, "opened", true)
+        const oldButton = waitForChild(first.contentItem, "nodeRuntimeDialogButtonOk")
+        verify(oldButton !== null)
+        nodeModel.setRuntimeDialogForTest("Successor", "Second question", DialogButtonBox.Ok, true)
+        const successor = nodeModel.runtimePrompt
+        verify(successor !== original)
+        const second = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem, {prompt: successor})
+        verify(second !== null)
+        tryCompare(second, "opened", true)
+        oldButton.clicked() // Already queued original handler; no new pointer lookup.
+        compare(nodeModel.runtimePrompt, successor)
+        compare(nodeModel.runtimeDialogVisible, true)
+        const currentButton = waitForChild(second.contentItem, "nodeRuntimeDialogButtonOk")
+        verify(currentButton !== null)
+        currentButton.clicked()
+        compare(nodeModel.runtimeDialogVisible, false)
+    }
+
+    function test_question_reveals_its_hidden_native_window() {
+        testWindow.hide()
+        compare(testWindow.visible, false)
+        nodeModel.setRuntimeDialogForTest("Original", "Reachable question", DialogButtonBox.Ok, true)
+        const popup = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem, {prompt: nodeModel.runtimePrompt})
+        verify(popup !== null)
+        tryCompare(testWindow, "visible", true)
+        tryCompare(popup, "opened", true)
+        verify(waitForChild(popup.contentItem, "nodeRuntimeDialogButtonOk") !== null)
+    }
+
+    function test_retired_popup_resolves_only_its_original_prompt() {
+        nodeModel.setRuntimeDialogForTest("Original", "Retiring question", DialogButtonBox.Ok, true)
+        const original = nodeModel.runtimePrompt
+        const popup = runtimeDialogComponent.createObject(testWindow.contentItem, {prompt: original})
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        popup.destroy()
+        tryCompare(nodeModel, "runtimeDialogVisible", false)
+        nodeModel.setRuntimeDialogForTest("Successor", "New question", DialogButtonBox.Ok, true)
+        const successor = nodeModel.runtimePrompt
+        original.unavailable()
+        compare(nodeModel.runtimePrompt, successor)
+        compare(nodeModel.runtimeDialogVisible, true)
     }
 
     function test_runtime_dialog_opens_from_node_model_and_answers() {

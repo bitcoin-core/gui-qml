@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test QML shutdown while load_on_startup wallets are loading."""
 
+import json
 import os
 import re
 import signal
@@ -227,6 +228,10 @@ class FatalShutdownTests(unittest.TestCase):
     def check_fatal_exit(self, phase, acknowledgement):
         harness = WalletFlowHarness("qml_fatal_shutdown", 0)
         try:
+            if phase == "initialize":
+                settings_path = Path(harness.gui_settings_path)
+                settings_path.parent.mkdir(parents=True, exist_ok=True)
+                settings_path.write_text(json.dumps({"qml_onboarded": True}), encoding="utf8")
             harness.start_gui(extra_args=["-disablewallet", f"-test-fatal-exception={phase}"])
             gui = harness.driver
             wait_for_rpc(harness.gui_rpc_port)
@@ -257,6 +262,9 @@ class FatalShutdownTests(unittest.TestCase):
             _, stderr = harness.gui_process.communicate(timeout=10)
             stderr = stderr.decode("utf-8", errors="replace")
             self.assertEqual(harness.gui_process.returncode, 1, stderr)
+            if phase == "initialize":
+                # A runaway permits diagnostics/exit, never another Core write.
+                self.assertIs(json.loads(settings_path.read_text(encoding="utf8"))["qml_onboarded"], True)
             debug_log = (Path(harness.gui_datadir) / "regtest" / "debug.log").read_text(encoding="utf-8")
             self.assertIn(message, debug_log)
             self.assertIn("Runaway exception", debug_log)

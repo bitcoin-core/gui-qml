@@ -6,6 +6,7 @@
 #define BITCOIN_QML_DATADIR_H
 
 #include <util/fs.h>
+#include <qml/settingsnamespace.h>
 
 #include <QString>
 
@@ -19,11 +20,14 @@ enum class GuiDataDirSource {
     Default,
     Settings,
     LegacySettings,
+    Invalid,
 };
 
 struct GuiDataDir {
     QString path;
     GuiDataDirSource source{GuiDataDirSource::Default};
+    QString error;
+    bool stored{false};
 };
 
 struct StorageSpaceResult {
@@ -41,15 +45,18 @@ QString DefaultDataDirString();
 QString NormalizeLocalPath(QString path);
 fs::path QStringToPath(const QString& path);
 
-GuiDataDir ReadGuiDataDirWithSource();
+GuiDataDir ReadGuiDataDirWithSource(const UiPreferencesNamespace* identity = nullptr);
 QString ReadGuiDataDir();
 bool IsDefaultDataDir(const QString& path);
 QString ValidateCustomDataDir(const QString& path);
 StorageSpaceResult CheckStorageSpace(const QString& path);
 bool EnsureDataDir(const QString& path, QString* error = nullptr);
-[[nodiscard]] bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr);
-[[nodiscard]] bool PersistDefaultDataDirSelection(QString* error = nullptr);
+[[nodiscard]] bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr, bool consume_legacy = true, const UiPreferencesNamespace* identity = nullptr);
+[[nodiscard]] bool PersistDefaultDataDirSelection(QString* error = nullptr, bool consume_legacy = true, const UiPreferencesNamespace* identity = nullptr);
 bool ResetGuiSettings(ArgsManager& args, QString* error = nullptr);
+
+/** Path as shown to the user (Android document-tree URIs become storage paths). */
+QString DisplayPath(QString path);
 
 bool HasExplicitDataDirArg(const ArgsManager& args);
 // The caller handles explicit -datadir precedence before checking the resolved directory.

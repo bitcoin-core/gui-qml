@@ -11,6 +11,7 @@ import org.bitcoincore.qt 1.0
 import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/wallet" as WalletPages
+import "../../qml/pages/node" as NodePages
 
 TestCase {
     id: testCase
@@ -37,6 +38,9 @@ TestCase {
         height: 700
         visible: true
     }
+
+    Component { id: displayAmount; BitcoinAmount { unit: optionsModel.displayUnit } }
+    Component { id: shortcutConsole; NodePages.CommandConsole { width: 700; height: 600; tabActive: true } }
 
     Component {
         id: containerComponent
@@ -130,6 +134,7 @@ TestCase {
 
     function init() {
         testSetup.failOnWarnings()
+        rpcConsoleModel.setCompletionSuggestionsForTest([])
         firstCreated = 0
         firstDestroyed = 0
         pushedCreated = 0
@@ -141,6 +146,8 @@ TestCase {
         nodeModel.mempoolInformationAvailable = true
         Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
+        tryCompare(Theme, "blockclocksize", 5 / 12)
+        optionsModel.resetSettingsEditorsForTest()
         optionsModel.settingsReady = true
         optionsModel.settingsPending = false
         optionsModel.settingsError = ""
@@ -166,6 +173,145 @@ TestCase {
         onionSetting.address = onionSetting.defaultAddress()
         testNetworkTrafficTower.active = false
         testDebugLogModel.active = false
+    }
+
+    function readyEditor(view) { tryCompare(view.settingsEditor, "fresh", true) }
+    function editSetting(view, key, value) { const input = findChild(view, key + "SettingInput"); verify(input !== null); input.text = value; input.textEdited(); tryCompare(view.settingsEditor.entry(key), "text", value); tryCompare(view.settingsEditor, "inputPending", false) }
+    function saveSettings(view) { tryCompare(view.settingsEditor, "canSave", true); const before = view.settingsEditor.saveResult.operationId; findChild(view, "settingsSaveBatchButton").clicked(); tryVerify(() => view.settingsEditor.saveResult.persisted && view.settingsEditor.saveResult.operationId !== before); tryCompare(view.settingsEditor, "busy", false) }
+
+    function publishSettingsDomain() {
+        for (let turn = 0; turn < 128; ++turn) {
+            if (!optionsModel.stepControlledSettingsDomainForTest()) {
+                verify(optionsModel.publishControlledSettingsForTest())
+                return
+            }
+        }
+        fail("Controlled settings Domain did not become idle")
+    }
+
+    function clickSettingsControl(button, enabled) {
+        verify(button !== null)
+        tryVerify(() => button.width > 0 && button.height > 0)
+        compare(button.enabled, enabled)
+        settingsWindow.requestActivate()
+        tryCompare(settingsWindow, "active", true)
+        for (let item = button; item !== null; item = item.parent) {
+            verify(item.visible)
+            if (item.clip) {
+                const center = button.mapToItem(item, button.width / 2, button.height / 2)
+                verify(center.x >= 0 && center.y >= 0 && center.x < item.width && center.y < item.height)
+            }
+        }
+        mouseClick(button, button.width / 2, button.height / 2)
+    }
+
+    function clickDoneControl(view, enabled) {
+        clickSettingsControl(findChild(view, "settingsDoneButton"), enabled)
+    }
+
+    function test_settingsDoneCapturesOnlySafeNavigation_data() {
+        return [{ tag: "held-initial-read", state: "loading" },
+                { tag: "dirty-consent", state: "dirty" },
+                { tag: "held-save-review", state: "saving" }]
+    }
+
+    function test_settingsDoneCapturesOnlySafeNavigation(data) {
+        verify(optionsModel.beginControlledSettingsForTest())
+        let view = null
+        let doneCalls = 0
+        try {
+            view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.doneClicked.connect(() => { doneCalls += 1 })
+            publishSettingsDomain() // Actual initial read is queued but held.
+            const editor = view.settingsEditor
+            compare(editor.phase, SettingsEditorModel.Loading)
+            compare(editor.busy, true)
+            compare(editor.dirty, false)
+            compare(optionsModel.settingsWritesForTest(), 0)
+            if (data.state === "loading") {
+                clickDoneControl(view, true)
+                compare(doneCalls, 1)
+                compare(editor.busy, true) // Navigation did not cancel/finish the read.
+                compare(optionsModel.settingsWritesForTest(), 0)
+                verify(optionsModel.settleControlledSettingsForTest())
+                compare(editor.fresh, true)
+            } else {
+                verify(optionsModel.settleControlledSettingsForTest())
+                compare(editor.fresh, true)
+                editor.entry("dbcache").editText("512")
+                publishSettingsDomain()
+                compare(editor.entry("dbcache").text, "512")
+                compare(editor.dirty, true)
+                compare(editor.canSave, true)
+                if (data.state === "dirty") {
+                    clickDoneControl(view, true)
+                    publishSettingsDomain()
+                    compare(doneCalls, 0)
+                    compare(editor.closeQuestion, true)
+                    compare(optionsModel.settingsWritesForTest(), 0)
+                    editor.answerClose(editor.closeToken, SettingsEditorModel.KeepEditing)
+                    publishSettingsDomain()
+                    compare(editor.closeQuestion, false)
+                    compare(editor.entry("dbcache").text, "512")
+                    compare(editor.dirty, true)
+                    compare(view.settingsNavigationPending, false)
+                } else {
+                    editor.save()
+                    compare(findChild(view, "settingsDoneButton").enabled, false) // Busy ingress, before Domain.
+                    publishSettingsDomain() // Hold the original Core review.
+                    compare(editor.phase, SettingsEditorModel.Checking)
+                    clickDoneControl(view, false)
+                    compare(doneCalls, 0)
+                    compare(editor.busy, true)
+                    compare(optionsModel.settingsWritesForTest(), 0)
+                    verify(optionsModel.settleControlledSettingsForTest())
+                    compare(editor.saveResult.persisted, true)
+                    compare(editor.saveResult.outcomeKnown, true)
+                    compare(optionsModel.settingsWritesForTest(), 1)
+                    compare(editor.entry("dbcache").committedText, "512")
+                }
+            }
+        } finally {
+            verify(optionsModel.endControlledSettingsForTest())
+        }
+    }
+
+    function test_displayUnitCommandKeepsCanonicalAmount_data() {
+        return [{tag: "BTC", unit: 0}, {tag: "mBTC", unit: 1}, {tag: "bits", unit: 2}, {tag: "sat", unit: 3}]
+    }
+    function test_displayUnitCommandKeepsCanonicalAmount(data) {
+        const amount = createTemporaryObject(displayAmount, host)
+        verify(amount !== null)
+        amount.satoshi = 123456789
+        const view = createTemporaryObject(settingsViewComponent, host)
+        verify(view !== null)
+        const picker = findChild(view, "displayUnitPicker")
+        verify(picker !== null)
+        picker.activated(data.unit)
+        compare(picker.currentValue, data.unit)
+        compare(amount.unit, data.unit)
+        compare(amount.satoshi, 123456789)
+        optionsModel.displayUnit = 3 - data.unit
+        compare(picker.currentValue, 3 - data.unit)
+        compare(amount.satoshi, 123456789)
+    }
+    function test_developerCacheUsesTheSharedTypedBatch() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("about"); readyEditor(view)
+        const row = findChild(view, "aboutDeveloperRow")
+        verify(row !== null); row.clicked()
+        tryVerify(() => findChild(view, "settingsDeveloper") !== null)
+        const input = findChild(view, "developerDbcacheField")
+        verify(input !== null)
+        input.text = "1636"; input.textEdited()
+        tryCompare(view.settingsEditor.entry("dbcache"), "text", "1636")
+        tryCompare(view.settingsEditor, "inputPending", false)
+        compare(optionsModel.settingsWritesForTest(), 0)
+        saveSettings(view)
+        compare(view.settingsEditor.entry("dbcache").nextStartText, "1636")
+        compare(optionsModel.settingsWritesForTest(), 1)
     }
 
     function test_pendingSettingsAndSaveErrorRemainVisible() {
@@ -203,7 +349,7 @@ TestCase {
         for (const section of ["wallet", "network-traffic", "mempool", "rpc-console", "debug-log", "about"]) {
             view.selectSection(section)
             compare(view.pageContainer.currentItem.enabled, true, section)
-            if (section === "mempool") compare(findChild(view, "mempoolSizeLimitInput").enabled, false)
+            if (section === "mempool") compare(findChild(view, "maxmempoolSettingInput").enabled, false)
         }
         view.selectSection("wallet")
         const walletStack = findChild(view, "walletSettingsStack")
@@ -222,55 +368,42 @@ TestCase {
     }
 
     function test_pendingSavePreservesPushedProxyDraft() {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
-            { "wallet": testWalletModel })
-        view.selectSection("connection")
-        findChild(view, "proxySettingsRow").clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-        const proxyPage = view.pageContainer.currentItem
-        const save = findChild(proxyPage, "proxySettingsSaveButton")
-        settingsWindow.requestActivate()
-        tryCompare(settingsWindow, "active", true)
-        tryCompare(view.pageContainer.stack, "busy", false)
-        mouseClick(findChild(proxyPage, "proxyEnableSwitch"))
-        tryCompare(proxyPage, "draftProxyEnabled", true)
-        const input = findChild(proxyPage, "proxyAddressInput")
-        input.forceActiveFocus()
-        tryCompare(input, "activeFocus", true)
-        input.selectAll()
-        keyClick(Qt.Key_Backspace)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem, {wallet: testWalletModel})
+        view.selectSection("connection"); readyEditor(view)
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "proxySettingInput")
+        settingsWindow.requestActivate(); tryCompare(settingsWindow, "active", true)
+        input.forceActiveFocus(); tryCompare(input, "activeFocus", true)
+        input.selectAll(); keyClick(Qt.Key_Backspace)
         const address = "10.0.0.1:9050"
-        for (let index = 0; index < address.length; ++index) keyClick(address.charAt(index))
-        compare(input.text, address)
-        compare(proxyPage.draftProxyAddress, address)
-        verify(proxyPage.proxyDraftDirty)
-        verify(save.enabled)
-        view.selectSection("display")
-        findChild(view, "displayLanguageRow").clicked()
-        tryCompare(view.pageContainer, "depth", 2)
+        for (let i = 0; i < address.length; ++i) keyClick(address.charAt(i))
+        tryCompare(view.settingsEditor.entry("proxy"), "text", address)
+        tryCompare(view.settingsEditor, "dirty", true)
+        view.selectSection("display"); tryCompare(view.settingsEditor, "closeQuestion", true)
+        compare(view.selectedSectionId, "connection")
+        findChild(view, "settingsCloseKeep").clicked(); tryCompare(view.settingsEditor, "closeQuestion", false)
         optionsModel.settingsPending = true
-        compare(view.pageContainer.currentItem.enabled, false)
-        view.selectSection("connection")
-        compare(view.pageContainer.currentItem, proxyPage)
-        compare(save.enabled, false)
-        compare(proxyPage.draftProxyAddress, "10.0.0.1:9050")
-        verify(proxyPage.proxyDraftDirty)
+        tryCompare(page, "enabled", false)
+        compare(view.settingsEditor.entry("proxy").text, address)
+        compare(findChild(view, "settingsSaveBatchButton").enabled, false)
+        optionsModel.settingsPending = false; tryCompare(page, "enabled", true)
+        compare(view.pageContainer.currentItem, page)
+        compare(view.settingsEditor.entry("proxy").text, address)
+        saveSettings(view)
+        compare(view.settingsEditor.entry("proxy").nextStartText, address)
+        compare(optionsModel.settingsWritesForTest(), 1)
         view.selectSection("wallet")
         const walletStack = findChild(view, "walletSettingsStack")
-        verify(walletStack !== null)
-        findChild(walletStack, "walletPasswordRow").clicked()
+        verify(walletStack !== null); walletStack.openPassword(false)
         tryCompare(walletStack, "depth", 2)
         compare(walletStack.currentItem.enabled, true)
         view.selectSection("connection")
-        optionsModel.settingsPending = false
-        tryCompare(save, "enabled", true)
-        compare(view.pageContainer.currentItem, proxyPage)
-        compare(view.pageContainer.depth, 2)
-        compare(proxyPage.draftProxyAddress, address)
-        verify(proxyPage.proxyDraftDirty)
-        mouseClick(save)
-        tryCompare(view.pageContainer, "depth", 1)
-        compare(optionsModel.coreSettings.entry("proxy").address, "10.0.0.1:9050")
+        compare(view.pageContainer.currentItem, page)
+        compare(view.settingsEditor.entry("proxy").text, address)
+    }
+
+    function finishSignerDiscovery() {
+        tryVerify(function() { walletController.advanceSignerForTest(); return !walletController.signers.pending })
     }
 
     function test_pendingSavePreservesEditorFocus_data() {
@@ -283,7 +416,10 @@ TestCase {
     }
 
     function test_pendingSavePreservesEditorFocus(data) {
+        settingsWindow.requestActivate()
+        tryCompare(settingsWindow, "active", true)
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        readyEditor(view)
         const editor = findChild(view, data.control)
         editor.forceActiveFocus(data.reason)
         tryCompare(editor, "activeFocus", true)
@@ -304,63 +440,147 @@ TestCase {
     }
 
     function test_signerPendingDoesNotShowStaleConnectedDevice() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "Old device"
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "Old device", "")
+        finishSignerDiscovery()
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         view.selectSection("external-signer")
+        readyEditor(view)
         const page = view.pageContainer.currentItem
         const input = findChild(page, "externalSignerPathInput")
         const indicator = findChild(page, "externalSignerStatusIndicator")
         const check = findChild(page, "externalSignerCheckDeviceButton")
+        finishSignerDiscovery()
         verify(page.signerConnected)
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "new-hwi"
-        verify(optionsModel.signerPathValidationPending)
+        const initialScans = walletController.signerEnumerationCalls
+        const successor = walletController.alternateSignerExecutableForTest()
+        verify(successor !== executable)
+        input.text = successor
+        input.textEdited()
+        // Uncommitted text does not replace the effective configuration/device.
+        compare(walletController.signers.effectivePath, executable)
+        verify(page.signerConnected)
+        compare(walletController.signerEnumerationCalls, initialScans)
+        tryCompare(check, "text", "Save and check")
+        tryCompare(check, "enabled", true)
+        clickSettingsControl(check, true)
+        tryVerify(() => view.settingsEditor.saveResult.persisted)
+        tryVerify(() => view.settingsEditor.saveResult.outcomeKnown)
+        compare(optionsModel.settingsWritesForTest(), 1)
+        compare(view.settingsEditor.entry("signer").committedText, successor)
+        tryVerify(() => walletController.signers.pending)
         compare(page.signerConnected, false)
-        compare(page.signerStatusText, "Checking signer path…")
         tryCompare(indicator, "color", Theme.color.neutral7)
+        finishSignerDiscovery()
+        compare(walletController.signerConfigurationWrites, 1)
+        compare(walletController.signerEnumerationCalls, initialScans + 1)
+        compare(walletController.signers.effectivePath, successor)
+        verify(page.signerConnected)
+        compare(check.text, "Check device")
+    }
+
+    function test_pendingSignerInputCannotRefreshTheEffectiveDevice() {
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "Original device", "")
+        finishSignerDiscovery()
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer"); readyEditor(view); finishSignerDiscovery()
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "externalSignerPathInput")
+        const check = findChild(page, "externalSignerCheckDeviceButton")
+        const scans = walletController.signerEnumerationCalls
+        input.text = executable + " --pending-edit"; input.textEdited()
+        verify(view.settingsEditor.inputPending)
         compare(check.enabled, false)
-        input.editingFinished()
-        input.editingFinished()
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        // Validation completes, then saving the new command completes.
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        compare(optionsModel.externalSignerPath, "new-hwi")
-        compare(page.signerConnected, false)
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        optionsModel.settingsPending = false
-        compare(walletController.externalSignerRefreshCalls, initialScans + 1)
-        compare(page.checkAfterSave, false)
+        check.clicked()
+        tryCompare(view.settingsEditor, "inputPending", false)
+        finishSignerDiscovery()
+        compare(check.text, "Save and check")
+        compare(walletController.signerEnumerationCalls, scans)
+        compare(walletController.signerConfigurationWrites, 0)
+        compare(walletController.signers.effectivePath, executable)
+        compare(optionsModel.settingsWritesForTest(), 0)
     }
 
     function test_invalidSignerValidationAndFailedSaveDoNotRescan() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.canCreateExternalSignerWallet = true
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "Old device", "")
+        finishSignerDiscovery()
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         view.selectSection("external-signer")
+        readyEditor(view)
         const page = view.pageContainer.currentItem
         const input = findChild(page, "externalSignerPathInput")
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "/missing/hwi"
-        input.editingFinished()
-        optionsModel.finishSignerPathValidationForTest("Signer does not exist.")
+        const check = findChild(page, "externalSignerCheckDeviceButton")
+        finishSignerDiscovery()
+        const initialScans = walletController.signerEnumerationCalls
+        input.text = "/missing/r15/hwi"; input.textEdited(); tryCompare(check, "text", "Save and check"); check.clicked()
+        finishSignerDiscovery()
+        tryVerify(() => view.settingsEditor.error.length > 0)
+        verify(findChild(page, "externalSignerEditErrorText").text.indexOf("does not exist") >= 0)
+        compare(walletController.signers.effectivePath, executable)
+        compare(walletController.signerEnumerationCalls, initialScans)
+        input.text = executable + " --different"; input.textEdited()
+        optionsModel.rejectSettingsForTest("Save failed.")
+        tryCompare(view.settingsEditor.entry("signer"), "text", executable + " --different")
+        tryCompare(view.settingsEditor, "inputPending", false)
+        tryCompare(check, "text", "Save and check")
+        check.clicked(); tryCompare(view.settingsEditor, "error", "Save failed."); finishSignerDiscovery()
+        compare(findChild(page, "externalSignerEditErrorText").text, "Save failed.")
+        compare(walletController.signers.effectivePath, executable)
+        compare(walletController.signerEnumerationCalls, initialScans)
+    }
+
+    function test_commandLineSignerRemainsUsableAndCanRefresh() {
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "CLI device", "", true)
+        finishSignerDiscovery()
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer"); readyEditor(view); finishSignerDiscovery()
+        const page = view.pageContainer.currentItem
+        verify(findChild(page, "externalSignerPathInput").readOnly)
+        verify(page.signerConnected)
+        const check = findChild(page, "externalSignerCheckDeviceButton")
+        verify(check.enabled)
+        const scans = walletController.signerEnumerationCalls
+        check.clicked(); finishSignerDiscovery()
+        compare(walletController.signerEnumerationCalls, scans + 1)
+        compare(walletController.signerConfigurationWrites, 0)
+        verify(page.signerStatusText.indexOf("CLI device") >= 0)
+    }
+
+    function test_cachedSignerSectionRefreshesOnReturn() {
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "Device", "")
+        finishSignerDiscovery()
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer"); readyEditor(view); finishSignerDiscovery()
+        const page = view.pageContainer.currentItem
+        verify(page.signerConnected)
+        const scans = walletController.signerEnumerationCalls
+        view.selectSection("display")
+        walletController.setSignerFixtureForTest(executable, "", "", "", false, false)
+        compare(walletController.signerEnumerationCalls, scans)
+        view.selectSection("external-signer")
         compare(page.signerConnected, false)
-        compare(page.signerStatusText, "Signer does not exist.")
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        input.text = "new-hwi"
-        input.editingFinished()
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        optionsModel.settingsError = "Save failed."
-        optionsModel.settingsPending = false
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        compare(page.checkAfterSave, false)
+        finishSignerDiscovery()
+        compare(walletController.signerEnumerationCalls, scans + 1)
+        compare(page.signerConnected, false)
+        verify(page.signerStatusText.indexOf("No external signer") >= 0)
+    }
+
+    function test_lockedDeviceReasonIsVisibleAndRecoveryDoesNotRequireReentry() {
+        const executable = walletController.signerExecutableForTest()
+        walletController.setSignerFixtureForTest(executable, "00000001", "Device", "Unlock using promptpin and sendpin.")
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer"); readyEditor(view); finishSignerDiscovery()
+        const page = view.pageContainer.currentItem
+        compare(page.signerConnected, false)
+        compare(page.signerStatusText, "Unlock using promptpin and sendpin.")
+        walletController.setSignerFixtureForTest(executable, "00000001", "Device", "", false, false)
+        findChild(page, "externalSignerCheckDeviceButton").clicked(); finishSignerDiscovery()
+        verify(page.signerConnected)
+        compare(page.signerStatusText, "Detected external signer: Device")
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {
@@ -509,7 +729,7 @@ TestCase {
         compare(networkTrafficSentRow.bottomPadding, 16)
         compare(networkTrafficRangePicker.model.length, 4)
         networkTrafficRangePicker.selected(1, networkTrafficRangePicker.model[1])
-        compare(testNetworkTrafficTower.lastFilterWindowSize, 360)
+        tryCompare(testNetworkTrafficTower, "lastFilterWindowSize", 360)
 
         view.selectSection("debug-log")
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
@@ -521,7 +741,7 @@ TestCase {
         view.selectSection("network-traffic")
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         compare(findChild(view, "debugLogView"), debugLogPage)
-        compare(networkTrafficPage.trafficGraphScale, 3600)
+        tryCompare(networkTrafficPage, "trafficGraphScale", 3600)
         tryCompare(testNetworkTrafficTower, "active", true)
         tryCompare(testDebugLogModel, "active", false)
 
@@ -785,6 +1005,176 @@ TestCase {
         compare(view.groupTitles.advanced, "Advanced")
     }
 
+    function test_rpc_namespace_is_independent_of_canonical_presentation_identity() {
+        const oldName = testWalletModel.name
+        try {
+            testWalletModel.name = "savings"
+            testWalletModel.setRpcNamespace("savings/")
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem, { wallet: testWalletModel })
+            view.selectSection("rpc-console")
+            const page = findChild(view, "rpcConsoleSettingsPage")
+            verify(page !== null)
+            compare(view.activeWalletName, "savings")
+            compare(page.walletName, "savings/")
+            compare(page.walletContext, true)
+            const input = findChild(page, "consoleInput")
+            verify(input !== null)
+            input.text = "getwalletinfo"
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.lastTarget, "wallet")
+            compare(rpcConsoleModel.lastWalletName, "savings/")
+            compare(testWalletModel.name, "savings")
+        } finally {
+            testWalletModel.clearRpcNamespace()
+            testWalletModel.name = oldName
+        }
+    }
+
+    function test_rpc_context_distinguishes_an_unnamed_wallet() {
+        const oldName = testWalletModel.name
+        const oldAvailable = testWalletModel.available
+        try {
+            testWalletModel.name = ""
+            testWalletModel.available = true
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+                { wallet: testWalletModel })
+            view.selectSection("rpc-console")
+            const page = findChild(view, "rpcConsoleSettingsPage")
+            verify(page !== null)
+            const input = findChild(page, "consoleInput")
+            verify(input !== null)
+            compare(page.walletContext, true)
+            compare(page.walletName, "")
+            input.text = "getwalletinfo"
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.lastTarget, "wallet")
+            compare(rpcConsoleModel.lastWalletName, "")
+            view.wallet = null
+            compare(page.walletContext, false)
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.lastTarget, "node")
+        } finally {
+            testWalletModel.name = oldName
+            testWalletModel.available = oldAvailable
+        }
+    }
+
+    function test_unavailable_rpc_wallet_never_becomes_a_node_request() {
+        const oldAvailable = testWalletModel.available
+        try {
+            testWalletModel.available = true
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+                { wallet: testWalletModel })
+            view.selectSection("rpc-console")
+            const page = findChild(view, "rpcConsoleSettingsPage")
+            verify(page !== null)
+            const input = findChild(page, "consoleInput")
+            verify(input !== null)
+            input.text = "getwalletinfo"
+            const before = rpcConsoleModel.commandCount
+            testWalletModel.available = false
+            compare(page.walletContext, true)
+            compare(page.targetAvailable, false)
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.commandCount, before)
+            compare(input.text, "getwalletinfo")
+            testWalletModel.available = true
+            compare(page.targetAvailable, true)
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.commandCount, before + 1)
+            compare(rpcConsoleModel.lastTarget, "wallet")
+        } finally {
+            testWalletModel.available = oldAvailable
+        }
+    }
+
+    function test_desktop_rpc_endpoint_kind_is_explicit_data() {
+        return [
+            { tag: "named", label: "Friendly wallet", rpc: "original/", available: true },
+            { tag: "default", label: "", rpc: "", available: true },
+            { tag: "unavailable", label: "Original wallet", rpc: "original/", available: false }
+        ]
+    }
+
+    function test_desktop_rpc_endpoint_kind_is_explicit(data) {
+        // DesktopWallets supplies scalar endpoint facts while its wallet
+        // settings stack is hosted separately. No name can encode endpoint kind.
+        const view = createTemporaryObject(settingsViewComponent, host, {
+            activeWalletName: data.label, activeWalletRpcName: data.rpc,
+            activeWalletRpcContext: true, activeWalletRpcReady: true,
+            activeWalletAvailable: data.available
+        })
+        compare(view.wallet, null)
+        view.selectSection("rpc-console")
+        const page = findChild(view, "rpcConsoleSettingsPage")
+        verify(page !== null)
+        compare(page.walletContext, true)
+        compare(page.walletName, data.rpc)
+        compare(page.targetAvailable, data.available)
+        const input = findChild(page, "consoleInput")
+        const before = rpcConsoleModel.commandCount
+        input.text = "getwalletinfo"
+        page.consoleItem.submitCommand()
+        compare(rpcConsoleModel.commandCount, before + (data.available ? 1 : 0))
+        if (data.available) {
+            compare(rpcConsoleModel.lastTarget, "wallet")
+            compare(rpcConsoleModel.lastWalletName, data.rpc)
+        } else {
+            compare(input.text, "getwalletinfo")
+            input.text = "stop"
+            page.consoleItem.submitCommand()
+            compare(rpcConsoleModel.commandCount, before + 1)
+            compare(rpcConsoleModel.lastTarget, "node")
+            compare(page.walletContext, true)
+            compare(page.walletName, data.rpc)
+        }
+    }
+
+    function test_clear_shortcut_preserves_draft_with_native_autocomplete_data() {
+        return [ { tag: "ordinary", popup: false }, { tag: "autocomplete", popup: true } ]
+    }
+
+    function test_clear_shortcut_preserves_draft_with_native_autocomplete(data) {
+        const window = testCase.Window.window
+        const console = createTemporaryObject(shortcutConsole, window.contentItem)
+        verify(console !== null)
+        compare(console.Window.window, window)
+        verify(console.visible)
+        const input = findChild(console, "consoleInput")
+        const popup = findChild(console, "consoleAutocompletePopup")
+        verify(input !== null); verify(popup !== null)
+        verify(input.visible)
+        window.requestActivate()
+        tryCompare(window, "active", true)
+        verify(testSetup.replaceText(input, "getblock"))
+        tryCompare(input, "activeFocus", true)
+        const beforeCommands = rpcConsoleModel.commandCount
+        const beforeClear = rpcConsoleModel.clearCount
+        const modifier = Qt.platform.os === "osx" ? Qt.MetaModifier : Qt.ControlModifier
+        try {
+            rpcConsoleModel.setCompletionSuggestionsForTest(data.popup ? ["getblockcount", "getblockhash"] : [])
+            tryCompare(popup, "opened", data.popup)
+            keyClick(Qt.Key_L, modifier)
+            tryCompare(rpcConsoleModel, "clearCount", beforeClear + 1)
+            compare(rpcConsoleModel.commandCount, beforeCommands)
+            compare(input.text, "getblock")
+            if (data.popup) {
+                keyClick(Qt.Key_Escape)
+                tryCompare(popup, "visible", false)
+                compare(input.activeFocus, true)
+                compare(input.text, "getblock")
+                compare(rpcConsoleModel.commandCount, beforeCommands)
+                keyClick(Qt.Key_L, modifier)
+                tryCompare(rpcConsoleModel, "clearCount", beforeClear + 2)
+                compare(rpcConsoleModel.commandCount, beforeCommands)
+                compare(input.text, "getblock")
+            }
+        } finally {
+            rpcConsoleModel.setCompletionSuggestionsForTest([])
+            popup.close()
+        }
+    }
+
     function test_rpcConsoleUsesSettingsContainerAndTracksVisibility() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
@@ -990,12 +1380,7 @@ TestCase {
         const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
         verify(dbcacheField !== null)
         verify(scriptThreadsField !== null)
-        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
-        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
-        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
-        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
-        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
-        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+        // The settings editor supplies these values; see test_developerCacheUsesTheSharedTypedBatch.
     }
 
     function test_displayPageUsesInlineGenericPickers() {
@@ -1032,7 +1417,7 @@ TestCase {
             "Satoshi, the smallest unit (1 sat = 0.00000001 BTC)")
 
         themePicker.selected(0, "Light")
-        compare(Theme.dark, false)
+        tryCompare(Theme, "dark", false)
 
         compare(blockStatusSizePicker.subtitleRole, "description")
         compare(blockStatusSizePicker.iconRole, "icon")
@@ -1051,7 +1436,7 @@ TestCase {
         compare(blockStatusSizePicker.itemAtIndex(0).implicitHeight, 52)
         compare(blockStatusSizePicker.itemAtIndex(1).implicitHeight, 52)
         blockStatusSizePicker.activated(1 / 2)
-        compare(Theme.blockclocksize, 1 / 2)
+        tryCompare(Theme, "blockclocksize", 1 / 2)
         compare(blockStatusSizePicker.currentText, "Showcase")
 
         compare(moneyFontPicker.subtitleRole, "description")
@@ -1139,136 +1524,69 @@ TestCase {
 
     function test_mempoolPageUsesStandardFormRows() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
-        view.selectSection("mempool")
-
-        const transactionsRow = findChild(view, "mempoolTransactionsRow")
-        const memoryUsedRow = findChild(view, "mempoolMemoryUsedRow")
-        const sizeLimitRow = findChild(view, "mempoolSizeLimitRow")
-        const sizeLimitInput = findChild(view, "mempoolSizeLimitInput")
-
-        verify(transactionsRow !== null)
-        verify(memoryUsedRow !== null)
-        verify(sizeLimitRow !== null)
-        verify(sizeLimitInput !== null)
-        compare(transactionsRow.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
-        compare(transactionsRow.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
-        compare(memoryUsedRow.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
-
-        sizeLimitRow.text = "512"
-        sizeLimitRow.editingFinished()
-        compare(optionsModel.maxMempoolSizeMB, 512)
-        compare(sizeLimitRow.errorText, "")
-
-        sizeLimitRow.text = "0"
-        sizeLimitRow.editingFinished()
-        compare(optionsModel.maxMempoolSizeMB, 512)
-        verify(sizeLimitRow.errorText.length > 0)
+        verify(view !== null); view.selectSection("mempool"); readyEditor(view)
+        const transactions = findChild(view, "mempoolTransactionsRow")
+        const memory = findChild(view, "mempoolMemoryUsedRow")
+        const limit = findChild(view, "effectiveSetting_maxmempool")
+        verify(transactions !== null); verify(memory !== null); verify(limit !== null)
+        compare(transactions.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(transactions.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(memory.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(limit.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
+        editSetting(view, "maxmempool", "512")
+        compare(optionsModel.settingsWritesForTest(), 0)
+        saveSettings(view)
+        compare(view.settingsEditor.entry("maxmempool").nextStartText, "512")
+        editSetting(view, "maxmempool", "0")
+        tryCompare(view.settingsEditor, "canSave", true)
+        compare(view.settingsEditor.entry("maxmempool").error, "")
+        // Core's documented zero value means no memory limit.
+        saveSettings(view); compare(view.settingsEditor.entry("maxmempool").nextStartText, "0")
+        editSetting(view, "maxmempool", "0x")
+        compare(view.settingsEditor.canSave, false)
+        verify(view.settingsEditor.entry("maxmempool").error.length > 0)
+        compare(optionsModel.settingsWritesForTest(), 2)
     }
 
     function test_mempoolPollingAndRestartNoticeFollowVisibility() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
-        compare(nodeModel.mempoolInfoPollingActive, false)
-
-        view.selectSection("mempool")
-        const mempoolPage = findChild(view, "mempoolSettingsPage")
-        const restartNotice = findChild(view, "mempoolRestartNotice")
-        verify(mempoolPage !== null)
-        verify(restartNotice !== null)
-        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
-        compare(restartNotice.visible, false)
-
-        optionsModel.mempoolSettingsDirty = true
-        tryCompare(restartNotice, "visible", true)
-
-        view.selectSection("display")
-        tryCompare(nodeModel, "mempoolInfoPollingActive", false)
-        compare(findChild(view, "mempoolSettingsPage"), mempoolPage)
-
-        view.selectSection("mempool")
-        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
-        view.visible = false
-        tryCompare(nodeModel, "mempoolInfoPollingActive", false)
-        view.visible = true
-        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
-
-        view.destroy()
-        wait(0)
-        compare(nodeModel.mempoolInfoPollingActive, false)
+        verify(view !== null); compare(nodeModel.mempoolInfoPollingActive, false)
+        view.selectSection("mempool"); readyEditor(view)
+        const page = findChild(view, "mempoolSettingsPage")
+        const notice = findChild(view, "settingsRestartNotice")
+        verify(page !== null); verify(notice !== null)
+        tryCompare(nodeModel, "mempoolInfoPollingActive", true); compare(notice.visible, false)
+        editSetting(view, "maxmempool", "512"); saveSettings(view)
+        tryCompare(notice, "visible", true)
+        view.selectSection("display"); tryCompare(nodeModel, "mempoolInfoPollingActive", false)
+        compare(findChild(view, "mempoolSettingsPage"), page)
+        compare(notice.visible, true) // Required restart is global, not tab-local.
+        view.selectSection("mempool"); tryCompare(nodeModel, "mempoolInfoPollingActive", true)
+        view.visible = false; tryCompare(nodeModel, "mempoolInfoPollingActive", false)
+        view.visible = true; tryCompare(nodeModel, "mempoolInfoPollingActive", true)
+        view.destroy(); wait(0); compare(nodeModel.mempoolInfoPollingActive, false)
     }
 
     function test_connectionProxyPageUsesRedesignedFormAndDraftCommit() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
-        view.selectSection("connection")
-
-        const proxySettingsRow = findChild(view, "proxySettingsRow")
-        verify(proxySettingsRow !== null)
-        proxySettingsRow.clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-
-        const proxyPage = findChild(view, "proxySettingsPage")
-        const defaultProxySection = findChild(view, "defaultProxySection")
-        const torProxySection = findChild(view, "torProxySection")
-        const proxySwitch = findChild(view, "proxyEnableSwitch")
-        const proxyAddressRow = findChild(view, "proxyAddressRow")
-        const saveButton = findChild(view, "proxySettingsSaveButton")
-
-        verify(proxyPage !== null)
-        verify(defaultProxySection !== null)
-        verify(torProxySection !== null)
-        verify(proxySwitch !== null)
-        verify(proxyAddressRow !== null)
-        verify(saveButton !== null)
-        compare(saveButton.text, "Save")
-        compare(saveButton.enabled, false)
-        compare(saveButton.parent, torProxySection.parent)
-        verify(saveButton.y >= torProxySection.y + torProxySection.height)
-        compare(proxyAddressRow.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
-        compare(proxyAddressRow.enabled, false)
-
-        proxySwitch.checked = true
-        proxySwitch.toggled()
-        compare(proxyPage.draftProxyEnabled, true)
-        compare(proxyAddressRow.enabled, true)
-
-        proxySwitch.checked = false
-        proxySwitch.toggled()
-        compare(proxyPage.proxyDraftDirty, false)
-        compare(saveButton.enabled, false)
-
-        proxySwitch.checked = true
-        proxySwitch.toggled()
-        compare(proxyPage.proxyDraftDirty, true)
-        compare(saveButton.enabled, true)
-
-        proxyAddressRow.text = ""
-        proxyAddressRow.textEdited(proxyAddressRow.text)
-        verify(proxyPage.draftProxyValidationError.length > 0)
-        compare(saveButton.enabled, false)
-
-        proxyAddressRow.text = "10.0.0.1:9050"
-        proxyAddressRow.textEdited(proxyAddressRow.text)
-        compare(proxyPage.proxyDraftDirty, true)
-        compare(proxyPage.draftProxyValidationError, "")
-        compare(saveButton.enabled, true)
-
-        proxyPage.back()
-        tryCompare(view.pageContainer, "depth", 2)
-        const discardPopup = findChild(settingsWindow.contentItem, "discardProxyChangesPopup")
-        verify(discardPopup !== null)
-        tryCompare(discardPopup, "opened", true)
-        const cancelButton = findChild(settingsWindow.contentItem, "discardProxyChangesCancelButton")
-        verify(cancelButton !== null)
-        cancelButton.clicked()
-        tryCompare(discardPopup, "opened", false)
-
-        saveButton.clicked()
-        tryCompare(view.pageContainer, "depth", 1)
-        const proxySetting = optionsModel.coreSettings.entry("proxy")
-        compare(proxySetting.enabled, true)
-        compare(proxySetting.address, "10.0.0.1:9050")
+        verify(view !== null); view.selectSection("connection"); readyEditor(view)
+        const page = findChild(view, "connectionSettingsPage")
+        const row = findChild(page, "effectiveSetting_proxy")
+        const input = findChild(page, "proxySettingInput")
+        const save = findChild(view, "settingsSaveBatchButton")
+        verify(page !== null); verify(row !== null); verify(input !== null); verify(save !== null)
+        compare(row.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(save.enabled, false)
+        editSetting(view, "proxy", "10.0.0.1:9050")
+        tryCompare(view.settingsEditor, "canSave", true)
+        compare(optionsModel.settingsWritesForTest(), 0)
+        view.selectSection("display"); tryCompare(view.settingsEditor, "closeQuestion", true)
+        compare(view.selectedSectionId, "connection")
+        findChild(view, "settingsCloseKeep").clicked(); tryCompare(view.settingsEditor, "closeQuestion", false)
+        compare(input.text, "10.0.0.1:9050")
+        saveSettings(view)
+        compare(view.settingsEditor.entry("proxy").nextStartText, "10.0.0.1:9050")
+        compare(optionsModel.settingsWritesForTest(), 1)
     }
 
     function test_settingsViewCanInstantiateEveryVisibleTopLevelDestination() {
@@ -1333,7 +1651,9 @@ TestCase {
                 compare(signerPathRow.bottomPadding, 16)
                 compare(signerFooter.text,
                     "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-                compare(signerStatusIndicator.color, Theme.color.danger)
+                // Discovery reports asynchronously; the indicator stays neutral until then.
+                finishSignerDiscovery()
+                tryCompare(signerStatusIndicator, "color", signerPage.signerConnected ? Theme.color.success : Theme.color.danger)
                 compare(checkDeviceButton.text, "Check device")
                 compare(signerPathInput.height, Theme.size.control)
                 compare(signerPathInput.Accessible.name, "Signer path")
