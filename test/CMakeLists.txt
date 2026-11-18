@@ -140,6 +140,7 @@ if(ENABLE_WALLET)
     test_signertransaction.cpp
     test_signerdiscovery.cpp
     test_coinslistmodel.cpp
+    test_psbtfee.cpp
     test_psbtqmlmodel.cpp
     test_psbtwork.cpp
     test_paymentimport.cpp
