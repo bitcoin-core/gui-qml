@@ -17,6 +17,8 @@ private Q_SLOTS:
     void localized_amounts_data();
     void localized_amounts();
     void localized_default_and_canonical_are_independent();
+    void canonical_signed_boundaries_data();
+    void canonical_signed_boundaries();
     void format_btc_basic();
     void format_btc_negative();
     void format_btc_thinSpaceSeparators();
@@ -64,6 +66,35 @@ void QmlBitcoinUnitsTests::localized_default_and_canonical_are_independent()
     QLocale::setDefault(previous);
     QCOMPARE(localized, QString{"1,23456789"});
     QCOMPARE(canonical, QString{"1.23456789"});
+}
+
+void QmlBitcoinUnitsTests::canonical_signed_boundaries_data()
+{
+    QTest::addColumn<int>("unit");
+    QTest::addColumn<qint64>("amount");
+    QTest::addColumn<QString>("canonical");
+    QTest::addColumn<QString>("grouped");
+    const auto minimum = std::numeric_limits<qint64>::min();
+    const auto maximum = std::numeric_limits<qint64>::max();
+    QTest::newRow("btc-minimum") << 0 << minimum << QStringLiteral("-92233720368.54775808") << QStringLiteral("-92\u2009233\u2009720\u2009368.54775808");
+    QTest::newRow("btc-maximum") << 0 << maximum << QStringLiteral("92233720368.54775807") << QStringLiteral("92\u2009233\u2009720\u2009368.54775807");
+    QTest::newRow("milli-minimum") << 1 << minimum << QStringLiteral("-92233720368547.75808") << QStringLiteral("-92\u2009233\u2009720\u2009368\u2009547.75808");
+    QTest::newRow("milli-maximum") << 1 << maximum << QStringLiteral("92233720368547.75807") << QStringLiteral("92\u2009233\u2009720\u2009368\u2009547.75807");
+    QTest::newRow("micro-minimum") << 2 << minimum << QStringLiteral("-92233720368547758.08") << QStringLiteral("-92\u2009233\u2009720\u2009368\u2009547\u2009758.08");
+    QTest::newRow("micro-maximum") << 2 << maximum << QStringLiteral("92233720368547758.07") << QStringLiteral("92\u2009233\u2009720\u2009368\u2009547\u2009758.07");
+    QTest::newRow("sat-minimum") << 3 << minimum << QStringLiteral("-9223372036854775808") << QStringLiteral("-9\u2009223\u2009372\u2009036\u2009854\u2009775\u2009808");
+    QTest::newRow("sat-maximum") << 3 << maximum << QStringLiteral("9223372036854775807") << QStringLiteral("9\u2009223\u2009372\u2009036\u2009854\u2009775\u2009807");
+}
+
+void QmlBitcoinUnitsTests::canonical_signed_boundaries()
+{
+    QFETCH(int, unit); QFETCH(qint64, amount); QFETCH(QString, canonical); QFETCH(QString, grouped);
+    const auto display_unit = QmlBitcoinUnits::fromDisplayUnit(unit);
+    QCOMPARE(QmlBitcoinUnits::format(display_unit, amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER), canonical);
+    QCOMPARE(QmlBitcoinUnits::format(display_unit, amount), grouped);
+    QCOMPARE(QmlBitcoinUnits::format(display_unit, amount, false, QmlBitcoinUnits::SeparatorStyle::ALWAYS), grouped);
+    const auto signed_canonical = amount < 0 ? canonical : QStringLiteral("+") + canonical;
+    QCOMPARE(QmlBitcoinUnits::format(display_unit, amount, true, QmlBitcoinUnits::SeparatorStyle::NEVER), signed_canonical);
 }
 
 void QmlBitcoinUnitsTests::format_btc_basic()
@@ -121,4 +152,4 @@ BITCOINQML_REGISTER_QT_TEST(QmlBitcoinUnitsTests)
 #else
 QTEST_MAIN(QmlBitcoinUnitsTests)
 #endif
-#include "test_qmlbitcoinunits.moc"
+#include <test_qmlbitcoinunits.moc>

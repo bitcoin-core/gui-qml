@@ -87,6 +87,7 @@ public:
     std::function<void()> start_shutdown_fn;
     std::function<bool()> shutdown_requested_fn;
     std::function<common::SettingsValue(const std::string&)> get_persistent_setting_fn;
+    std::function<bool(const std::string&)> is_setting_ignored_fn;
     std::function<void(const std::string&, const common::SettingsValue&)> update_rw_setting_fn;
     std::function<void(const std::string&, const common::SettingsValue&)> force_setting_fn;
     std::function<void(bool)> map_port_fn;
@@ -110,6 +111,8 @@ public:
     std::function<bool()> is_initial_block_download_fn;
     std::function<bool()> get_network_active_fn;
     std::function<CFeeRate()> get_dust_relay_fee_fn;
+    std::function<UniValue(const std::string&, const UniValue&, const std::string&)> execute_rpc_fn;
+    std::function<std::optional<Coin>(const COutPoint&)> get_unspent_output_fn;
     std::function<node::TransactionError(CTransactionRef, CAmount, CFeeRate, std::string&)> broadcast_transaction_fn;
     std::function<interfaces::WalletLoader&()> wallet_loader_fn;
     std::function<std::unique_ptr<interfaces::Handler>(MessageBoxFn)> handle_message_box_fn;
@@ -128,6 +131,7 @@ public:
         CallCounter startShutdown{"startShutdown"};
         CallCounter shutdownRequested{"shutdownRequested"};
         CallCounter getPersistentSetting{"getPersistentSetting"};
+        CallCounter isSettingIgnored{"isSettingIgnored"};
         CallCounter updateRwSetting{"updateRwSetting"};
         CallCounter forceSetting{"forceSetting"};
         CallCounter mapPort{"mapPort"};
@@ -151,6 +155,8 @@ public:
         CallCounter isInitialBlockDownload{"isInitialBlockDownload"};
         CallCounter getNetworkActive{"getNetworkActive"};
         CallCounter getDustRelayFee{"getDustRelayFee"};
+        CallCounter executeRpc{"executeRpc"};
+        CallCounter getUnspentOutput{"getUnspentOutput"};
         CallCounter broadcastTransaction{"broadcastTransaction"};
         CallCounter walletLoader{"walletLoader"};
         CallCounter handleMessageBox{"handleMessageBox"};
@@ -172,6 +178,7 @@ public:
     void appShutdown() override { InvokeVoid(calls.appShutdown, app_shutdown_fn); }
     void startShutdown() override { InvokeVoid(calls.startShutdown, start_shutdown_fn); }
     bool shutdownRequested() override { return Invoke(calls.shutdownRequested, shutdown_requested_fn, false); }
+    bool isSettingIgnored(const std::string& name) override { return Invoke(calls.isSettingIgnored, is_setting_ignored_fn, false, name); }
     common::SettingsValue getPersistentSetting(const std::string& name) override { return Invoke(calls.getPersistentSetting, get_persistent_setting_fn, common::SettingsValue{}, name); }
     void updateRwSetting(const std::string& name, const common::SettingsValue& value) override
     {
@@ -208,6 +215,8 @@ public:
     bool isInitialBlockDownload() override { return Invoke(calls.isInitialBlockDownload, is_initial_block_download_fn, false); }
     bool getNetworkActive() override { return Invoke(calls.getNetworkActive, get_network_active_fn, false); }
     CFeeRate getDustRelayFee() override { return Invoke(calls.getDustRelayFee, get_dust_relay_fee_fn, CFeeRate{}); }
+    UniValue executeRpc(const std::string& method, const UniValue& params, const std::string& uri) override { return Invoke(calls.executeRpc, execute_rpc_fn, UniValue{}, method, params, uri); }
+    std::optional<Coin> getUnspentOutput(const COutPoint& outpoint) override { return Invoke(calls.getUnspentOutput, get_unspent_output_fn, std::optional<Coin>{}, outpoint); }
     node::TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, CFeeRate max_tx_fee_rate, std::string& err_string) override { return Invoke(calls.broadcastTransaction, broadcast_transaction_fn, node::TransactionError{}, std::move(tx), max_tx_fee, max_tx_fee_rate, err_string); }
     interfaces::WalletLoader& walletLoader() override
     {

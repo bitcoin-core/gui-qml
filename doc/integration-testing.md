@@ -30,7 +30,8 @@ stage 9. Earlier stages should not depend on helpers that require a loaded walle
 Keep shared process/UI helpers in `fixture/test_util.h` and wallet setup helpers
 in `fixture/test_wallet.h`. RPC is useful for arranging chain/wallet state and
 checking results; exercise the UI or public model operation under test directly.
-The nine CTest entries retain function/data-row isolation and may run in parallel.
+The nine stages have ten CTest entries because wallet sending has two shards.
+The entries retain function/data-row isolation and may run in parallel.
 Directories, CTest entries and report filenames use descriptive group names, such
 as `node_setup`, `bitcoinqml_integration_node_setup` and
 `integration-node_setup.xml`. The runner's `--stage=1..9` option selects the
@@ -164,6 +165,10 @@ only PSBT/replacement, or `--case signed-foreign-psbt` to select one journey.
 See [test bridge usage](test-bridge.md#running-tests) for selection and diagnostics.
 
 ## Sanitizers
+
+CI runs the unit, QML and process tests in one sanitizer job and the
+integration tests in two others. Both existing wallet-sending shards run
+in the second integration job. Each job uploads its own test reports.
 
 Reuse the existing build directory, generator and compiler cache. For example:
 

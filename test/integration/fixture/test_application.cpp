@@ -5,8 +5,12 @@
 #include <test/integration/fixture/test_application.h>
 
 #include <qml/models/nodemodel.h>
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
+#ifdef ENABLE_WALLET
 #include <qml/models/walletlistmodel.h>
 #include <qml/walletqmlcontroller.h>
+#endif
 #include <util/translation.h>
 
 #include <QByteArray>
@@ -77,7 +81,9 @@ int TestApplication::runTests(const char* executable, const QStringList& extra_a
     m_runtime_tests = std::move(tests);
     auto arguments = RegtestArguments(m_profile);
     arguments.append(extra_arguments);
+#ifdef ENABLE_WALLET
     arguments.append(m_wallet_mode == WalletMode::Enabled ? "-disablewallet=0" : "-disablewallet=1");
+#endif
     std::vector<QByteArray> encoded_arguments{QByteArray{executable}};
     for (const auto& argument : arguments) encoded_arguments.push_back(argument.toUtf8());
     std::vector<char*> argv;
@@ -104,11 +110,15 @@ void TestApplication::executeTests(const std::function<int()>& tests)
 bool TestApplication::waitForWallets()
 {
     if (m_wallet_mode == WalletMode::Disabled) return true;
+#ifdef ENABLE_WALLET
     auto* controller = qobject_cast<WalletQmlController*>(engine().rootContext()->contextProperty("walletController").value<QObject*>());
     auto* wallets = qobject_cast<WalletListModel*>(engine().rootContext()->contextProperty("walletListModel").value<QObject*>());
     return controller && wallets && QTest::qWaitFor([&] {
         return controller->initialized() && wallets->walletDirLoaded();
     }, 30'000);
+#else
+    return false;
+#endif
 }
 
 void TestApplication::qmlEngineCreated(QQmlApplicationEngine& engine)

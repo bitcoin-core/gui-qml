@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <qml/backendexecutor.h>
 #include <qml/networkstyle.h>
 #include <qml/qmlengine.h>
 
@@ -141,13 +142,15 @@ void QmlEngineTests::preInitEngine_loadsLocalImages()
 
 void QmlEngineTests::mainEngine_blocksNetwork()
 {
-    const auto engine = CreateMainEngine(m_network_style.get());
+    BackendExecutor executor{execution::Options{}};
+    const auto engine = CreateMainEngine(m_network_style.get(), executor.scheduler());
     VerifyNetworkBlocked(*engine);
 }
 
 void QmlEngineTests::mainEngine_loadsLocalImages()
 {
-    const auto engine = CreateMainEngine(m_network_style.get());
+    BackendExecutor executor{execution::Options{}};
+    const auto engine = CreateMainEngine(m_network_style.get(), executor.scheduler());
     VerifyImageLoads(*engine, BUNDLED_IMAGE);
     VerifyImageLoads(*engine, PROVIDER_IMAGE);
     VerifyImageLoads(*engine, QR_IMAGE);
@@ -159,4 +162,4 @@ BITCOINQML_REGISTER_QT_TEST(QmlEngineTests)
 #else
 QTEST_MAIN(QmlEngineTests)
 #endif
-#include "test_qmlengine.moc"
+#include <test_qmlengine.moc>

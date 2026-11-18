@@ -135,7 +135,8 @@ private Q_SLOTS:
         });
         QTRY_VERIFY(result.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready);
         QVERIFY(answered);
-        QVERIFY(!m_app.nodeModel().runtimeDialogVisible());
+        // The dialog is removed by a GUI publication after Core got its answer.
+        QTRY_VERIFY(!m_app.nodeModel().runtimeDialogVisible());
         QVERIFY(!result.get());
     }
 

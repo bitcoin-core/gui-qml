@@ -50,6 +50,8 @@ TestCase {
     function test_theme_and_open_close() {
         const tooltip = createTemporaryObject(tooltipComponent, this)
         verify(tooltip !== null)
+        // This case asserts the animated open/close path.
+        tooltip.motionEnabled = true
         compare(tooltip.backgroundColor, Theme.color.surface1)
         compare(tooltip.borderColor, Theme.color.menuBorder)
         compare(tooltip.visible, false)

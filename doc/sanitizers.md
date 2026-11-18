@@ -11,11 +11,19 @@ information. It does not depend on runtime symbolization. It applies to the
 app, its tests and Core's Qt library. The remaining integer checks and Core's
 runtime suppression files retain their usual behavior.
 
+Core's current `SplitMix64` implementation is a free function, so its
+deliberate unsigned wrap does not match Core's inherited
+`InsecureRandomContext::SplitMix64` runtime rule. The app's runtime file adds
+the exact free-function name. Core's inline `bitset_detail::PopCount` helper
+also has no function symbol for its inherited rule, so the runtime file matches
+its source header. The sanitizer controls below remain in place.
+
 With app tests enabled, these builds add
 `bitcoinqml_sanitizer_suppression_tests` to CTest. The test verifies that Qt's
-hash succeeds while unrelated unsigned overflow, signed overflow and implicit
-truncation fail. It also verifies that unsigned overflow in a neighboring
-function and signed overflow in a function matching the rule still fail.
+hash and Core's `SplitMix64` wrap succeed while unrelated unsigned overflow,
+signed overflow and implicit truncation fail. It also verifies that unsigned
+overflow in a neighboring function and signed overflow in a function matching
+the rule still fail.
 On Linux builds with address or leak sanitization, an intentional leak in a
 copy of the probe named `bitcoin-core-app` must also fail. This also catches an
 accidental executable-wide app suppression.
@@ -38,6 +46,12 @@ python3 build-asan/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-asa
 The helper preserves Core's runtime options and writes the combined suppression
 file inside the build directory. The sanitizer probe verifies that unrelated
 application allocations still trigger LeakSanitizer with these rules active.
+
+Qt 6.4 Quick Test retains application-global QML engine allocations after its
+per-file engines are destroyed. The QML-labeled CTest entries therefore run
+with LeakSanitizer scanning disabled, but keep AddressSanitizer and Undefined
+Behavior Sanitizer enabled. Unit, integration, lifecycle and functional tests
+continue to run with leak detection, including the intentional-leak control.
 
 The full sanitizer configuration remains
 `address,float-divide-by-zero,integer,undefined`. Continue using the pinned

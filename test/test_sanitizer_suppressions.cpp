@@ -8,6 +8,11 @@
 #include <cstring>
 #include <limits>
 
+[[gnu::noinline]] std::uint64_t SplitMix64(std::uint64_t value)
+{
+    return value + 0x9e3779b97f4a7c15ULL;
+}
+
 namespace {
 void UnsignedOverflow()
 {
@@ -59,7 +64,11 @@ void hash()
 int main(int argc, char** argv)
 {
     if (argc != 2) return 2;
-    if (std::strcmp(argv[1], "qt-hash") == 0) {
+    if (std::strcmp(argv[1], "splitmix") == 0) {
+        volatile std::uint64_t value{std::numeric_limits<std::uint64_t>::max()};
+        volatile auto result = SplitMix64(value);
+        (void)result;
+    } else if (std::strcmp(argv[1], "qt-hash") == 0) {
         volatile quint64 value{std::numeric_limits<quint64>::max()};
         volatile auto result = qHash(static_cast<quint64>(value));
         (void)result;

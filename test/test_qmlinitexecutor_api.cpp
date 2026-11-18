@@ -519,7 +519,7 @@ void QmlInitExecutorApiTests::initializeRegistersBeforeResultOnWorker()
         QVERIFY(registration_complete_at_result_emission.load());
         QCOMPARE(registration_count.load(), 1);
         QCOMPARE(node.calls.shutdownRequested.load(), 2);
-        QCOMPARE(registration_thread.load(), initialization_thread.load());
+        QVERIFY(registration_thread.load() == initialization_thread.load());
         QVERIFY(registration_thread.load() != QCoreApplication::instance()->thread());
         QCOMPARE(cleanup_count.load(), 0);
     }
@@ -613,7 +613,8 @@ void QmlInitExecutorApiTests::registrationFailureCleansUpOnWorker()
         QCOMPARE(runaway_spy.takeFirst().at(0).toString(), QString{"registration failed"});
         QVERIFY(cleanup_preceded_exception.load());
         QVERIFY(cleanup_thread.load() != QCoreApplication::instance()->thread());
-        QCOMPARE(cleanup_thread.load(), registration_thread.load());
+        // QCOMPARE can format the pointers, and this worker has exited.
+        QVERIFY(cleanup_thread.load() == registration_thread.load());
     }
     QTRY_COMPARE_WITH_TIMEOUT(cleanup_count.load(), 1, SIGNAL_TIMEOUT);
 }

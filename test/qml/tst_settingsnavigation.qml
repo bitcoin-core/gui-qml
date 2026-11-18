@@ -939,15 +939,15 @@ TestCase {
         mouseClick(decreaseButton)
         compare(rpcConsole.outputFontPixelSize, 13)
         const consoleHeightBeforeDismiss = rpcConsole.height
-        const footerBottomBeforeDismiss = helpFooter.mapToItem(page, 0, helpFooter.height).y
+        // In its layout: a wide font makes the page scroll.
+        const footerBottomBeforeDismiss = helpFooter.y + helpFooter.height
         mouseClick(warningCloseButton)
         tryCompare(warning, "visible", false)
         compare(page.warningVisible, false)
         tryCompare(rpcConsole, "height",
                    consoleHeightBeforeDismiss + warning.implicitHeight + page.contentSpacing)
         tryVerify(function() {
-            return Math.abs(helpFooter.mapToItem(page, 0, helpFooter.height).y
-                            - footerBottomBeforeDismiss) < 0.5
+            return Math.abs(helpFooter.y + helpFooter.height - footerBottomBeforeDismiss) < 0.5
         })
 
         view.selectSection("about")

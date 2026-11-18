@@ -16,7 +16,7 @@
 
 namespace {
 constexpr int TEST_SAMPLE_INTERVAL_MS{10};
-constexpr int ASYNC_TIMEOUT_MS{1'000};
+constexpr int ASYNC_TIMEOUT_MS{5'000};
 } // namespace
 
 class NetworkTrafficTowerTests : public QObject

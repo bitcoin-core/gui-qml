@@ -75,11 +75,13 @@ TestCase {
         const reasons = {
             "singleton": ["Theme", "SizeClass"],
             "not drawn by itself": ["AlertAction", "AppSettings", "MenuCommand", "AppFolderDialog",
-                "DesktopMenuActions", "DesktopNativeMenuBar"],
+                "DesktopMenuActions", "DesktopNativeMenuBar", "TextEditMenu", "WalletSettingsPort",
+                "WalletCreationPort", "WalletCreationHost", "RequestDetailsHost"],
             "base type or part of a shown control": ["BitcoinAmountDigit", "BitcoinAmountDigitBase",
                 "BitcoinAmountDisplayLabelBase", "LabeledField", "FieldBorderRings", "SurfaceGradientBorder",
                 "TransactionFlowRibbon", "BitcoinAmountColumn", "BitcoinAmountUnitGlyph", "MonospaceOutputRow",
                 "NodeInformationRow", "NodeWarningRow"],
+            "legacy control kept for existing callers": ["TextButton"],
             "acts for real (opens the browser)": ["ExternalPopup"],
             "feature-specific menu": ["TransactionActionsMenu", "PaymentRequestActionsMenu", "PeerActionsMenu",
                 "SendCreateOptionsPopup"],
@@ -91,7 +93,11 @@ TestCase {
                 "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
-                "NodeWarningsPopup", "OnboardingSettingsPopup", "SendRecipientCard"]
+                "NodeWarningsPopup", "OnboardingSettingsPopup", "WalletOperationWarnings", "WalletShellPage",
+                "DesktopRequestsBar", "EffectiveSettingRow", "ReceiveEditorCloseQuestion",
+                "ReceiveEditorFields", "ReceiveRequestEditorCard", "ReceiveRequestModal", "SavedRequestSharing",
+                "SendRecipientCard", "SettingsEditorBar", "TransactionEntriesList", "WalletBackupConfirmation",
+                "WalletOperationDialog"]
         }
         const exemptions = {}
         for (const reason in reasons) {

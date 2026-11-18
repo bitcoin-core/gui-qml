@@ -18,6 +18,7 @@ def main():
     env = os.environ.copy()
     env["UBSAN_OPTIONS"] = env.get("UBSAN_OPTIONS", "") + ":halt_on_error=1:print_stacktrace=1"
     cases = {
+        "splitmix": None,
         "qt-hash": None,
         "unsigned": "runtime error: unsigned integer overflow",
         "signed": "runtime error: signed integer overflow",

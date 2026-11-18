@@ -13,7 +13,8 @@ LabeledField {
     property alias text: input.text
     property alias placeholderText: input.placeholderText
     property alias inputObjectName: input.objectName
-    property alias readOnly: input.readOnly
+    property bool readOnly: false
+    readonly property alias field: input
     readonly property alias inputActiveFocus: input.activeFocus
     property var textStyle: Theme.text.description
     property bool interceptPaste: false
@@ -22,28 +23,32 @@ LabeledField {
 
     signal textEdited()
     signal editingFinished()
-    signal pasteRequested()
+    // A pasted payment URI. With interceptPaste it is imported, not inserted.
+    signal paymentUriPasted(string text)
 
-    function paymentUri(text) {
-        const trimmed = String(text).trim()
-        return interceptPaste && trimmed.toLowerCase().startsWith("bitcoin:") ? trimmed : ""
+    function paste(primary) {
+        const text = primary ? Clipboard.selectionText() : Clipboard.text()
+        if (!text.length || !root.enabled || root.readOnly) return
+        if (root.interceptPaste && BitcoinUri.isPaymentUri(text)) {
+            root.paymentUriPasted(text)
+            return
+        }
+        const start = Math.min(input.selectionStart, input.selectionEnd)
+        input.syncingFromModel = true
+        input.remove(start, Math.max(input.selectionStart, input.selectionEnd))
+        input.insert(start, text)
+        input.cursorPosition = start + text.length
+        input.syncingFromModel = false
+        root.textEdited()
     }
-
-    function pastedPaymentUri(previousText, currentText) {
-        const clipboardText = Clipboard.text()
-        const uri = paymentUri(clipboardText)
-        if (!uri.length || previousText === currentText) return ""
-        const offset = String(currentText).indexOf(clipboardText)
-        if (offset < 0) return ""
-        const prefix = String(currentText).slice(0, offset)
-        const suffix = String(currentText).slice(offset + clipboardText.length)
-        return String(previousText).startsWith(prefix)
-            && String(previousText).endsWith(suffix) ? uri : ""
-    }
-
-    function paste() { input.paste() }
-
     onPaymentUriRestoreTextChanged: if (interceptPaste) input.syncFromModel()
+    TextEditMenu {
+        id: editMenu
+        textEdit: input
+        pasteEnabled: root.enabled && !root.readOnly
+        menuObjectName: root.inputObjectName + "ContextMenu"
+        onPasteRequested: (primary) => root.paste(primary)
+    }
 
     TextArea {
         id: input
@@ -56,15 +61,15 @@ LabeledField {
             syncingFromModel = false
         }
 
+        // A native paste (such as a platform menu) of a payment URI.
         function handlePaymentUriInput() {
-            const uri = root.pastedPaymentUri(root.paymentUriRestoreText, text)
+            if (!root.interceptPaste) return false
+            const uri = BitcoinUri.pastedPaymentUri(root.paymentUriRestoreText, text, Clipboard.text())
             if (!uri.length) return false
             syncFromModel()
-            root.pasteRequested()
-            syncFromModel()
+            root.paymentUriPasted(uri)
             return true
         }
-
         Layout.fillWidth: true
         Layout.preferredHeight: Math.max(56, contentHeight + topPadding + bottomPadding)
         topPadding: 14
@@ -79,12 +84,18 @@ LabeledField {
         placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
         background: Item {}
         selectByMouse: true
+        readOnly: root.readOnly
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton | Qt.MiddleButton
+            onPressed: (mouse) => editMenu.pointerPressed(mouse)
+        }
         Accessible.name: root.label
         Accessible.description: root.errorText.length ? root.errorText : root.supportingText
 
         Keys.onPressed: (event) => {
             if (root.interceptPaste && event.matches(StandardKey.Paste)) {
-                root.pasteRequested()
+                root.paste(false)
                 event.accepted = true
             }
         }

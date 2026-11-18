@@ -28,4 +28,8 @@ import QtQuick 2.15
         enabled: Theme.motion.animated
         ColorAnimation { duration: Theme.motion.normal }
     }
+    Behavior on visible {
+        enabled: Theme.motion.animated
+        NumberAnimation { duration: 150 }
+    }
 }

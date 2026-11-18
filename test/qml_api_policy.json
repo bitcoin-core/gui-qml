@@ -1,0 +1,422 @@
+{
+  "version": 1,
+  "authority": "Current migrated contracts, QT6_ARCHITECTURE_FOUNDATION and QT6_QML_MODEL_API. Presentation interest/source configuration are the only listed writable projection exceptions.",
+  "base": "f1c03c3dfccd42f4b89f0322e08d5de5d60f95a1",
+  "classes": {
+    "NodeModel": {
+      "header": "qml/models/nodemodel.h",
+      "requires_wallet": false,
+      "writer_guard": "required",
+      "writable": {},
+      "required": {
+        "lifecyclePhase": {
+          "type": "nodelifecycle::Phase",
+          "constant": false
+        },
+        "networkBackendAvailable": {
+          "type": "bool",
+          "constant": false
+        },
+        "networkActionReady": {
+          "type": "bool",
+          "constant": false
+        },
+        "networkActionPending": {
+          "type": "bool",
+          "constant": false
+        },
+        "runtimePrompt": {
+          "type": "RuntimePromptModel*",
+          "constant": false
+        },
+        "startupDiagnosticsPending": {
+          "type": "bool",
+          "constant": false
+        },
+        "initialSyncComplete": {
+          "type": "bool",
+          "constant": false
+        },
+        "blockTipHeight": {
+          "type": "int",
+          "constant": false
+        }
+      },
+      "scope": "All notifiers/moc/source/public method types; writer prohibition for listed authoritative observations. Other setters are independently owned by the C++ caller audit.",
+      "interface_values": [
+        "interfaces::BlockAndHeaderTipInfo"
+      ]
+    },
+    "PeerDetailsModel": {
+      "header": "qml/models/peerdetailsmodel.h",
+      "writable": {},
+      "required": {
+        "connectionId": {
+          "type": "QString",
+          "constant": true
+        },
+        "connected": {
+          "type": "bool",
+          "constant": false
+        },
+        "canDisconnect": {
+          "type": "bool",
+          "constant": false
+        },
+        "canBan": {
+          "type": "bool",
+          "constant": false
+        }
+      },
+      "requires_wallet": false
+    },
+    "PeerSelectionModel": {
+      "header": "qml/models/peerselectionmodel.h",
+      "writable": {
+        "source": "setSource",
+        "autoSelectFirst": "setAutoSelectFirst"
+      },
+      "required": {
+        "source": {
+          "type": "PeerListSortProxy*",
+          "constant": false
+        },
+        "autoSelectFirst": {
+          "type": "bool",
+          "constant": false
+        },
+        "selectedDetails": {
+          "type": "PeerDetailsModel*",
+          "constant": false
+        },
+        "connectionId": {
+          "type": "QString",
+          "constant": false
+        },
+        "connected": {
+          "type": "bool",
+          "constant": false
+        },
+        "phase": {
+          "type": "Phase",
+          "constant": false
+        }
+      },
+      "requires_wallet": false
+    },
+    "ReceiveAuthorizationPrompt": {
+      "header": "qml/models/receivereservationmodel.h",
+      "writable": {},
+      "required": {
+        "token": {
+          "type": "QString",
+          "constant": true
+        },
+        "active": {
+          "type": "bool",
+          "constant": false
+        },
+        "errorText": {
+          "type": "QString",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "ReceiveReservationModel": {
+      "header": "qml/models/receivereservationmodel.h",
+      "writable": {},
+      "required": {
+        "phase": {
+          "type": "Phase",
+          "constant": false
+        },
+        "reservationId": {
+          "type": "QString",
+          "constant": false
+        },
+        "address": {
+          "type": "QString",
+          "constant": false
+        },
+        "busy": {
+          "type": "bool",
+          "constant": false
+        },
+        "prompt": {
+          "type": "ReceiveAuthorizationPrompt*",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "RequestSharingModel": {
+      "header": "qml/models/requestsharingmodel.h",
+      "writable": {
+        "active": "setActive"
+      },
+      "required": {
+        "requestId": {
+          "type": "QString",
+          "constant": true
+        },
+        "phase": {
+          "type": "SharingInterest",
+          "constant": false
+        },
+        "active": {
+          "type": "bool",
+          "constant": false
+        },
+        "canCopyUri": {
+          "type": "bool",
+          "constant": false
+        },
+        "canCopyQr": {
+          "type": "bool",
+          "constant": false
+        },
+        "canExportQr": {
+          "type": "bool",
+          "constant": false
+        },
+        "disabledReason": {
+          "type": "QString",
+          "constant": false
+        },
+        "lastOperation": {
+          "type": "ShareOperationModel*",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "SettingsEditorModel": {
+      "header": "qml/models/settingseditormodel.h",
+      "writable": {},
+      "required": {
+        "editorId": {
+          "type": "QString",
+          "constant": true
+        },
+        "phase": {
+          "type": "Phase",
+          "constant": false
+        },
+        "busy": {
+          "type": "bool",
+          "constant": false
+        },
+        "canSave": {
+          "type": "bool",
+          "constant": false
+        },
+        "saveResult": {
+          "type": "SettingsSaveResult",
+          "constant": false
+        },
+        "lastSaveId": {
+          "type": "QString",
+          "constant": false
+        },
+        "closeToken": {
+          "type": "QString",
+          "constant": false
+        },
+        "closeQuestion": {
+          "type": "bool",
+          "constant": false
+        }
+      },
+      "requires_wallet": false
+    },
+    "SettingsEntryModel": {
+      "header": "qml/models/settingseditormodel.h",
+      "writable": {},
+      "required": {
+        "key": {
+          "type": "QString",
+          "constant": true
+        },
+        "text": {
+          "type": "QString",
+          "constant": false
+        },
+        "editable": {
+          "type": "bool",
+          "constant": false
+        },
+        "dirty": {
+          "type": "bool",
+          "constant": false
+        },
+        "error": {
+          "type": "QString",
+          "constant": false
+        }
+      },
+      "requires_wallet": false
+    },
+    "ShareOperationModel": {
+      "header": "qml/models/requestsharingmodel.h",
+      "writable": {},
+      "required": {
+        "operationId": {
+          "type": "QString",
+          "constant": true
+        },
+        "phase": {
+          "type": "Phase",
+          "constant": false
+        },
+        "busy": {
+          "type": "bool",
+          "constant": false
+        },
+        "outcomeKnown": {
+          "type": "bool",
+          "constant": false
+        },
+        "result": {
+          "type": "ShareResult",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "WalletOperationModel": {
+      "header": "qml/models/walletoperationmodel.h",
+      "writable": {},
+      "required": {
+        "operationId": {
+          "type": "QString",
+          "constant": true
+        },
+        "phase": {
+          "type": "Phase",
+          "constant": false
+        },
+        "busy": {
+          "type": "bool",
+          "constant": false
+        },
+        "outcomeKnown": {
+          "type": "bool",
+          "constant": false
+        },
+        "result": {
+          "type": "WalletOperationResult",
+          "constant": false
+        },
+        "resultWallet": {
+          "type": "WalletQmlModel*",
+          "constant": false
+        },
+        "canOpenResult": {
+          "type": "bool",
+          "constant": false
+        },
+        "prompt": {
+          "type": "WalletOperationPrompt*",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "WalletOperationPrompt": {
+      "header": "qml/models/walletoperationmodel.h",
+      "writable": {},
+      "required": {
+        "promptId": {
+          "type": "QString",
+          "constant": true
+        },
+        "operationId": {
+          "type": "QString",
+          "constant": true
+        },
+        "kind": {
+          "type": "Kind",
+          "constant": true
+        },
+        "message": {
+          "type": "QString",
+          "constant": false
+        },
+        "busy": {
+          "type": "bool",
+          "constant": false
+        },
+        "error": {
+          "type": "WalletOperationError",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "WalletReceiveModel": {
+      "header": "qml/models/walletreceivemodel.h",
+      "writable": {},
+      "required": {
+        "editor": {
+          "type": "PaymentRequestEditorModel*",
+          "constant": false
+        },
+        "reservation": {
+          "type": "ReceiveReservationModel*",
+          "constant": true
+        },
+        "available": {
+          "type": "bool",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    },
+    "WalletSelectionModel": {
+      "header": "qml/models/walletselectionmodel.h",
+      "writable": {},
+      "required": {
+        "selectedWallet": {
+          "type": "WalletQmlModel*",
+          "constant": false
+        },
+        "pending": {
+          "type": "bool",
+          "constant": false
+        },
+        "pendingTargetId": {
+          "type": "QString",
+          "constant": false
+        },
+        "error": {
+          "type": "QString",
+          "constant": false
+        }
+      },
+      "requires_wallet": true
+    }
+  },
+  "domain_headers": [
+    "qml/persistenteditor.h",
+    "qml/paymentimportflow.h",
+    "qml/walletopeningstate.h",
+    "qml/desktopintent.h"
+  ],
+  "value_includes": [
+    "QString",
+    "algorithm",
+    "array",
+    "bitset",
+    "cstddef",
+    "cstdint",
+    "limits",
+    "optional",
+    "string",
+    "utility",
+    "memory",
+    "compare",
+    "deque",
+    "vector"
+  ]
+}

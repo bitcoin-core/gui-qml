@@ -12,6 +12,7 @@
         <file>controls/DialogPopup.qml</file>
         <file>components/DebugLogTitlesHeader.qml</file>
         <file>components/DesktopMenuActions.qml</file>
+        <file>components/DesktopRequestsBar.qml</file>
         <file>components/DesktopNativeMenuBar.qml</file>
         <file>components/MenuCommand.qml</file>
         <file>components/DeveloperOptions.qml</file>
@@ -36,6 +37,9 @@
         <file>components/SettingsPageContainer.qml</file>
         <file>components/SettingsSidebar.qml</file>
         <file>components/SettingsView.qml</file>
+        <file>components/SettingsEditorBar.qml</file>
+        <file>components/EffectiveSettingRow.qml</file>
+        <file>pages/settings/EffectiveSettingsPage.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>controls/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
@@ -45,8 +49,16 @@
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestDeleteConfirmation.qml</file>
         <file>components/PaymentRequestModal.qml</file>
+        <file>components/RequestDetailsHost.qml</file>
+        <file>components/ReceiveRequestModal.qml</file>
+        <file>components/ReceiveRequestEditorCard.qml</file>
+        <file>components/ReceiveEditorFields.qml</file>
+        <file>components/ReceiveEditorCloseQuestion.qml</file>
+        <file>components/SavedRequestSharing.qml</file>
         <file>components/OnboardingSettingsPopup.qml</file>
         <file>components/WalletCreationModal.qml</file>
+        <file>components/WalletCreationHost.qml</file>
+        <file>components/WalletCreationPort.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
         <file>components/PaymentRequestField.qml</file>
         <file>controls/SearchBar.qml</file>
@@ -56,6 +68,7 @@
         <file>controls/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
+        <file>components/TransactionEntriesList.qml</file>
         <file>components/TransactionActionsMenu.qml</file>
         <file>components/TransactionDetailsGrid.qml</file>
         <file>components/TransactionFlowNode.qml</file>
@@ -63,6 +76,7 @@
         <file>components/TransactionFlowLayout.js</file>
         <file>controls/LabeledBitcoinAddressField.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
+        <file>components/WalletOperationDialog.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AppFolderDialog.qml</file>
         <file>controls/CaretRightIcon.qml</file>
@@ -73,6 +87,7 @@
         <file>controls/ContextMenuPicker.qml</file>
         <file>controls/ContextMenuToggle.qml</file>
         <file>controls/CopyButton.qml</file>
+        <file>controls/TextEditMenu.qml</file>
         <file>controls/ActivityCalendar.qml</file>
         <file>controls/PrimaryButton.qml</file>
         <file>controls/DropdownButton.qml</file>
@@ -109,6 +124,8 @@
         <file>controls/OverflowMenuButton.qml</file>
         <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
+        <file>controls/WalletShellPage.qml</file>
+        <file>controls/WalletSettingsPort.qml</file>
         <file>controls/PasswordTextField.qml</file>
         <file>controls/PopupPicker.qml</file>
         <file>controls/QRImage.qml</file>
@@ -130,15 +147,18 @@
         <file>components/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
+        <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueRow.qml</file>
+        <file>controls/WalletOperationWarnings.qml</file>
         <file>components/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/NodeRunner.qml</file>
+        <file>pages/node/NodeShell.qml</file>
         <file>pages/node/Peers.qml</file>
         <file>pages/node/PeersView.qml</file>
         <file>pages/node/PeerDetails.qml</file>
@@ -179,7 +199,6 @@
         <file>pages/settings/ConnectionSettingsPage.qml</file>
         <file>pages/settings/DisplaySettingsPage.qml</file>
         <file>pages/settings/ExternalSignerSettingsPage.qml</file>
-        <file>pages/settings/MempoolSettingsPage.qml</file>
         <file>pages/settings/NetworkTrafficSettingsPage.qml</file>
         <file>pages/settings/ProxySettingsPage.qml</file>
         <file>pages/settings/SettingsRpcConsoleView.qml</file>
@@ -202,26 +221,25 @@
         <file>pages/wallet/CreateWalletForm.qml</file>
         <file>pages/wallet/WalletCreationTypePage.qml</file>
         <file>pages/wallet/WalletCreationReadyPage.qml</file>
+        <file>pages/wallet/WalletCreationOutcomePage.qml</file>
         <file>pages/wallet/WalletCreationFlow.qml</file>
         <file>pages/wallet/ExternalSignerWalletForm.qml</file>
         <file>pages/wallet/WalletCreationExternalReadyPage.qml</file>
         <file>pages/wallet/WalletImportErrorPage.qml</file>
         <file>pages/wallet/WalletImportCompletePage.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/WalletSettingsHost.qml</file>
         <file>pages/wallet/WalletSettingsStack.qml</file>
         <file>pages/wallet/WalletView.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
+        <file>pages/wallet/ReceiveWorkspace.qml</file>
+        <file>pages/wallet/ReceiveViewHost.qml</file>
         <file>pages/wallet/SendTransactionReview.qml</file>
         <file>pages/wallet/SpeedUpOverlay.qml</file>
         <file>pages/wallet/SignVerifyMessage.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletPasswordSettings.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
-        <file>themes/CoreDark.qml</file>
-        <file>themes/CoreLight.qml</file>
-        <file>themes/CoreTypeSet.qml</file>
-        <file>themes/Palette.qml</file>
-        <file>themes/TypeSet.qml</file>
         <file>pages/wallet/WalletNavigationTab.qml</file>
         <file>components/NodeInformationRow.qml</file>
         <file>components/NodeWarningRow.qml</file>
@@ -231,6 +249,11 @@
         <file>controls/BitcoinAmountUnitGlyph.qml</file>
         <file>controls/BitcoinAmountColumn.qml</file>
         <file>pages/node/PeerDetailsTable.qml</file>
+        <file>themes/CoreDark.qml</file>
+        <file>themes/CoreLight.qml</file>
+        <file>themes/CoreTypeSet.qml</file>
+        <file>themes/Palette.qml</file>
+        <file>themes/TypeSet.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="alert-filled">res/icons/alert-filled.png</file>

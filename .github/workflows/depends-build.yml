@@ -163,6 +163,13 @@ jobs:
           ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}" \
             --output-junit "${PWD}/${BUILD_DIR}/test-reports/ctest.xml"
 
+      # A crashed test child prints no stack; macOS keeps its crash report.
+      - name: Collect macOS crash reports
+        if: always() && runner.os == 'macOS'
+        run: |
+          mkdir -p "${BUILD_DIR}/test-reports/crash-reports"
+          find ~/Library/Logs/DiagnosticReports -name 'bitcoinqml_*' -exec cp {} "${BUILD_DIR}/test-reports/crash-reports/" \; || true
+
       - name: Upload test reports and failed profiles
         uses: actions/upload-artifact@v7
         if: always()

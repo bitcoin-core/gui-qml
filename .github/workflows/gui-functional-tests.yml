@@ -147,7 +147,7 @@ jobs:
           export BITCOIN_QT_RUNNER="xvfb-run -a"
           python3 test/functional/interface_qml_startup.py
           python3 test/functional/interface_qml_preinit_onboarding.py
-          python3 test/functional/interface_qml_node.py
+          QML_TEST_QPA_PLATFORM=xcb xvfb-run -a python3 test/functional/interface_qml_node.py
           python3 test/functional/interface_qml_peers.py
           python3 test/functional/interface_qml_wallet.py
           python3 test/functional/interface_qml_wallet_compat.py

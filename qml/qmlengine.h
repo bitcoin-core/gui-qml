@@ -10,6 +10,7 @@
 #include <memory>
 
 class NetworkStyle;
+namespace execution { class Scheduler; }
 
 //! Every QML engine must be created through this function so that it cannot
 //! access the network.
@@ -17,6 +18,8 @@ std::unique_ptr<QQmlApplicationEngine> CreateQmlEngine();
 
 std::unique_ptr<QQmlApplicationEngine> CreateInitErrorEngine();
 std::unique_ptr<QQmlApplicationEngine> CreatePreInitEngine(const NetworkStyle* network_style);
-std::unique_ptr<QQmlApplicationEngine> CreateMainEngine(const NetworkStyle* network_style);
+std::unique_ptr<QQmlApplicationEngine> CreateMainEngine(
+    const NetworkStyle* network_style,
+    std::shared_ptr<execution::Scheduler> qr_scheduler);
 
 #endif // BITCOIN_QML_QMLENGINE_H

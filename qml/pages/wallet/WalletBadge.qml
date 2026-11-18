@@ -13,7 +13,7 @@ Button {
     objectName: "walletBadge"
 
     property string balance: ""
-    property var balanceSatoshi: 0
+    property real balanceSatoshi: 0
     property bool loading: false
     property bool noWalletLoaded: false
     property bool noWalletsFound: false

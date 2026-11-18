@@ -72,6 +72,19 @@ jobs:
             container_options: ''
           - name: 'Address, leak, undefined and integer sanitizers'
             mode: asan
+            sanitizer_shard: base
+            image: ubuntu-24.04
+            container_image: mirror.gcr.io/ubuntu:24.04
+            container_options: '--cap-add SYS_PTRACE'
+          - name: 'Address, leak, undefined and integer sanitizers (integration 1/2)'
+            mode: asan
+            sanitizer_shard: integration-1
+            image: ubuntu-24.04
+            container_image: mirror.gcr.io/ubuntu:24.04
+            container_options: '--cap-add SYS_PTRACE'
+          - name: 'Address, leak, undefined and integer sanitizers (integration 2/2)'
+            mode: asan
+            sanitizer_shard: integration-2
             image: ubuntu-24.04
             container_image: mirror.gcr.io/ubuntu:24.04
             container_options: '--cap-add SYS_PTRACE'
@@ -129,6 +142,7 @@ jobs:
       - name: Run sanitizer tests and real GUI lifecycle
         if: matrix.mode == 'asan'
         env:
+          SANITIZER_SHARD: ${{ matrix.sanitizer_shard }}
           QT_QUICK_BACKEND: software
           QML_DISABLE_DISK_CACHE: '1'
         run: |
@@ -140,18 +154,44 @@ jobs:
           export XDG_RUNTIME_DIR
           XDG_RUNTIME_DIR=$(mktemp -d /tmp/qml-ci-XXXXXX)
           trap 'rm -rf -- "$XDG_RUNTIME_DIR"' EXIT
-          python3 build-check/bitcoin/test/with_sanitizer_env.py ctest --test-dir build-check --output-on-failure --output-junit "$PWD/build-check/ctest.xml"
-          python3 build-check/bitcoin/test/with_sanitizer_env.py python3 test/functional/interface_qml_shutdown.py --case 'onboarding-*' --case 'wallet-loading-*'
+          first_integration='^bitcoinqml_integration_(foundation|node_setup|node_tools|wallet_management|wallet_activity)$'
+          case "$SANITIZER_SHARD" in
+            base) selection=(-LE '^(integration|qml)$') ;;
+            integration-1) selection=(-L '^integration$' -R "$first_integration") ;;
+            integration-2) selection=(-L '^integration$' -E "$first_integration") ;;
+            *) echo "Unknown sanitizer shard: $SANITIZER_SHARD" >&2; exit 2 ;;
+          esac
+          status=0
+          python3 ci/with_sanitizer_env.py --build-dir build-check ctest --test-dir build-check \
+            --parallel 2 -V --output-on-failure --output-junit "$PWD/build-check/ctest.xml" "${selection[@]}" || status=1
+          if test "$SANITIZER_SHARD" = base; then
+            # Qt 6.4 Quick Test retains QML engine allocations after its engines
+            # are destroyed. Keep ASan/UBSan coverage without treating that
+            # dependency-owned process-lifetime cache as an application leak.
+            LSAN_OPTIONS="${LSAN_OPTIONS}:detect_leaks=0" \
+              python3 ci/with_sanitizer_env.py --build-dir build-check ctest --test-dir build-check \
+                --parallel 2 -V --output-on-failure --output-junit "$PWD/build-check/ctest-qml.xml" -L '^qml$' || status=1
+            # Root ignores the file permissions that the startup suite relies on.
+            useradd --create-home guitest
+            chown -R guitest build-check "$XDG_RUNTIME_DIR"
+            for suite in test/functional/interface_qml_startup.py test/functional/interface_qml_shutdown.py test/functional/interface_qml_backend_guarantees.py; do
+              runuser -u guitest -- env HOME=/home/guitest PYTHONDONTWRITEBYTECODE=1 \
+                python3 ci/with_sanitizer_env.py --build-dir build-check python3 "$suite" || status=1
+            done
+          fi
+          exit "$status"
       - name: Upload diagnostics
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: app-${{ matrix.mode }}-diagnostics
+          name: app-${{ matrix.mode }}${{ matrix.sanitizer_shard && format('-{0}', matrix.sanitizer_shard) || '' }}-diagnostics
           path: |
             build-check/clang-tidy/
             build-check/ctest.xml
+            build-check/ctest-qml.xml
             build-check/Testing/Temporary/
             build-check/test-profiles/
+            build-check/test-reports/
           if-no-files-found: ignore
 
   linux:
@@ -170,8 +210,7 @@ jobs:
             svg_package: 'libqt6svg6-dev'
             cmake_env: 'cmake -E env CXXFLAGS="-Werror -Wno-error=free-nonheap-object -Wno-error=redundant-move -Wno-error=restrict -Wno-error=stringop-overread -Wno-error=maybe-uninitialized"'
             # Qt 6.2's offscreen plugin cannot capture software-rendered images.
-            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb'
-            test_wrapper: 'xvfb-run -a'
+            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb -DQML_TEST_USE_XVFB=ON'
           - job_name: 'Ubuntu 24.04, Qt 6.4'
             image: ubuntu-24.04
             effects_package: ''
@@ -199,6 +238,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            tzdata \
             cmake \
             ninja-build \
             pkg-config \
@@ -237,18 +277,30 @@ jobs:
             ${{ matrix.cmake_options }}
 
       - name: Build
+        id: build
         run: cmake --build build --parallel
 
       - name: Check QML warnings
         if: matrix.image == 'ubuntu-26.04'
-        run: cmake --build build --target qml_lint
+        run: |
+          cmake --build build --target qml_lint
+          python3 test/qml_api_schema.py --source-root . --build-dir build --output build/test-reports/qml-api-schema.json
 
-      - name: Run tests
+      - name: Run non-integration tests
         if: env.BUILD_APP_TESTS == 'ON'
         run: |
           mkdir -p build/test-reports
-          ${{ matrix.test_wrapper }} ctest --test-dir build --output-on-failure \
+          ctest --test-dir build --parallel 4 --output-on-failure -LE '^integration$' \
             --output-junit "${PWD}/build/test-reports/ctest.xml"
+
+      - name: Run integration tests
+        if: ${{ !cancelled() && env.BUILD_APP_TESTS == 'ON' && steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p build/test-reports
+          test_jobs="$(nproc)"
+          if (( test_jobs > 4 )); then test_jobs=4; fi
+          ctest --test-dir build --output-on-failure -L '^integration$' \
+            --parallel "${test_jobs}" --output-junit "${PWD}/build/test-reports/ctest-integration.xml"
 
       - name: Upload test reports and failed profiles
         uses: actions/upload-artifact@v7

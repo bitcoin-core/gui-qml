@@ -337,7 +337,13 @@ void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
     dial.complete();
     window.show();
     QTRY_VERIFY(dial.paint_count.load() > 0);
-    QTest::qWait(50);
+    // Frames already requested paint after rendering is turned off; on a slow
+    // machine they come later than a fixed wait. Let painting settle first.
+    QTRY_VERIFY(([&] {
+        const int paints{dial.paint_count.load()};
+        QTest::qWait(100);
+        return dial.paint_count.load() == paints;
+    })());
 
     dial.setRenderingActive(false);
     const int paints_before{dial.paint_count.load()};

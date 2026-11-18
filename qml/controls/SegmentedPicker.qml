@@ -73,7 +73,8 @@ TabBar {
                 : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
             width: Math.max(0, (root.availableWidth - root.spacing * (root.model.length - 1)) / Math.max(1, root.model.length))
             height: root.availableHeight
-            activeFocusOnTab: checked
+            // Roving tab stop; a focused segment stays a stop until focus leaves it.
+            activeFocusOnTab: checked || activeFocus
             autoExclusive: true
             checked: index === root.currentIndex
             text: root.optionText(modelData)

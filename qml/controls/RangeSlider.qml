@@ -10,6 +10,8 @@ Controls.RangeSlider {
 
     property alias minValue: root.from
     property alias maxValue: root.to
+    property real selectedLower: minValue
+    property real selectedUpper: maxValue
     property alias lowerValue: root.first.value
     property alias upperValue: root.second.value
     property bool valuesHidden: false
@@ -22,8 +24,8 @@ Controls.RangeSlider {
     padding: 0
     from: 0
     to: 100
-    first.value: from
-    second.value: to
+    first.value: selectedLower
+    second.value: selectedUpper
     stepSize: 0
     snapMode: Controls.RangeSlider.NoSnap
     live: true
