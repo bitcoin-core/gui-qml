@@ -6,7 +6,6 @@
 #define BITCOIN_QML_MODELS_CORE_SETTINGS_MODEL_H
 
 #include <qml/core_settings.h>
-#include <qml/snapshotquery.h>
 #include <qml/ownedwork.h>
 #include <atomic>
 #include <memory>
@@ -105,7 +104,7 @@ public:
     explicit CoreSettingsModel(QObject* parent=nullptr);
     CoreSettingsModel(QmlCoreSettings::Values values,QmlCoreSettings::StatusProjection statuses={},QObject* parent=nullptr);
     ~CoreSettingsModel() override;
-    void configureServices(execution::SnapshotServices services, execution::Executor* executor = nullptr);
+    void configureServices(presentation::Post post, execution::Executor* executor = nullptr, execution::Lane lane = execution::Lane::Core);
     void close();
     void whenEffectsDrained(std::function<void()> done){if(m_work)m_work->close(std::move(done));else if(done)done();}
     void whenEffectQueuesDrained(std::function<void()> done) { m_work->whenQueuesDrained(std::move(done)); }
@@ -172,7 +171,7 @@ private:
     friend class CoreProxyDraft;
     struct State;
     using Mutation=std::function<QmlCoreSettings::Change(QmlCoreSettings::Session&)>;
-    void initializeServices(execution::SnapshotServices services, execution::Executor* executor = nullptr);
+    void initializeServices(presentation::Post post, execution::Executor* executor = nullptr, execution::Lane lane = execution::Lane::Core);
     quint64 mutate(ChangeOrigin origin,Mutation mutation,Completion completion={},std::optional<quint64> expected_user={},std::optional<quint64> expected_context={});
     CoreSettingEntryModel* ensureEntry(const QString& key);
     void notifyChange(const QmlCoreSettings::Change& change);
@@ -184,7 +183,7 @@ private:
     QSet<QString> m_empty_touched;
     std::shared_ptr<State> m_native;
     std::shared_ptr<const CoreSettingsProjection> m_projection;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     std::shared_ptr<execution::Executor> m_owned_executor;
     std::unique_ptr<execution::OwnedWork> m_work;
     std::shared_ptr<std::atomic<quint64>> m_context{std::make_shared<std::atomic<quint64>>(0)};

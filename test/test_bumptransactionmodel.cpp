@@ -5,7 +5,8 @@
 #include <QtTest/QtTest>
 
 #include <test/mocks/mockwallet.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/walletsession.h>
 #include <test/mocks/signertransactions.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <wallet/coincontrol.h>
@@ -53,25 +54,39 @@ std::shared_ptr<MockWallet> MakeBumpableWallet()
     return wallet;
 }
 struct Fixture {
-    ManualRoutedExecution commands, retirement;
+    ManualStartupExecution commands, retirement;
     std::shared_ptr<walletopening::Session> opening;
     std::deque<std::function<void()>> publications;
     std::unique_ptr<BumpTransactionModel> model;
     explicit Fixture(const std::shared_ptr<MockWallet>& wallet, walletbump::Services bump_services = {}) {
-        opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            WalletSessionQueues(commands.executor(), retirement.executor()));
         opening->start(wallet); commands.drain(); opening->take();
         model = std::make_unique<BumpTransactionModel>();
-        model->setOpening(opening, {commands.scheduler, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }}, std::move(bump_services));
+        model->setOpening(opening, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }, std::move(bump_services));
     }
-    ~Fixture() { if (model) model->close(); commands.drain(); model.reset(); opening->retire(); commands.drain(); retirement.drain(); }
+    ~Fixture() {
+        if (model) model->close();
+        commands.drain();
+        model.reset();
+        opening->stop(false, {});
+        do {
+            commands.drain();
+            retirement.drain();
+        } while (!commands.quiescent() || !retirement.quiescent());
+        opening.reset();
+        commands.drain();
+        retirement.drain();
+    }
     void publish() { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } }
     void admitCommitNative() {
         // M04 authorizes the exact review on Domain before admitting the
         // Native command. Hold that effect and its receipt independently.
-        for (int turn = 0; turn < 16 && commands.nextLane() == execution::Lane::Domain; ++turn)
-            QVERIFY(commands.step(execution::Lane::Domain));
-        QCOMPARE(commands.nextLane(), std::optional{execution::Lane::Core});
+        for (int turn = 0; turn < 16 && commands.hasWork(execution::Lane::Utility); ++turn)
+            QVERIFY(commands.step(execution::Lane::Utility));
+        QVERIFY(commands.hasWork(execution::Lane::Core));
     }
     void finish() {
         for (int turn = 0; turn < 16; ++turn) {
@@ -79,7 +94,7 @@ struct Fixture {
             publish();
             // A published review deliberately owns a reserved Native cleanup
             // receipt. Settled delivery does not imply physical retirement.
-            if (commands.transportIdle() && publications.empty()) return;
+            if (commands.quiescent() && publications.empty()) return;
         }
         throw std::logic_error{"fee-bump fixture did not settle"};
     }
@@ -146,7 +161,7 @@ private Q_SLOTS:
         QCOMPARE(wallet->reads, 0);
         QVERIFY(fixture.commands.step(execution::Lane::Core));
         QCOMPARE(wallet->reads, 1); QVERIFY(!observation->result());
-        for (int turn = 0; turn < 8 && !observation->result(); ++turn) QVERIFY(fixture.commands.step(execution::Lane::Domain));
+        for (int turn = 0; turn < 8 && !observation->result(); ++turn) QVERIFY(fixture.commands.step(execution::Lane::Utility));
         QVERIFY(observation->result()); QVERIFY(fixture.model->busy());
         fixture.finish();
         QCOMPARE(fixture.model->state(), BumpTransactionModel::Uncertain);
@@ -288,18 +303,72 @@ private Q_SLOTS:
         QTest::newRow("before-native")<<0;QTest::newRow("held-outcome")<<1;QTest::newRow("published-review")<<2;
     }
     void quietCloseRetiresPreparedReviewBeforeFacadeDestruction() {
-        QFETCH(int,stage);auto wallet=MakeBumpableWallet();
-        wallet->create_bump_transaction_fn=[](const Txid&,const wallet::CCoinControl&,std::vector<bilingual_str>&,CAmount& old_fee,CAmount& new_fee,CMutableTransaction& tx){
-            old_fee=500;new_fee=1000;tx=*signerfixture::Review().GetUnsignedTx();return true;
+        QFETCH(int, stage);
+        using execution::Lane;
+        auto wallet = MakeBumpableWallet();
+        ManualStartupExecution worker;
+        const auto core = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Core));
+        const auto outcomes = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        const auto cleanup = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        auto opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{cleanup, [core, outcomes](auto done) {
+                core->close();
+                core->whenDrained([outcomes, done = std::move(done)] {
+                    outcomes->close();
+                    outcomes->whenDrained(done);
+                });
+            }, core, outcomes});
+        std::deque<std::function<void()>> gui;
+        const auto publish = [&] {
+            while (!gui.empty()) {
+                auto turn = std::move(gui.front());
+                gui.pop_front();
+                turn();
+            }
         };
-        Fixture fixture{wallet};QVERIFY(fixture.model->requestPrepareFeeBump(TEST_TXID,1));
-        if(stage==1)fixture.commands.drain();
-        if(stage==2){fixture.finish();QCOMPARE(fixture.model->state(),BumpTransactionModel::NeedsConfirmation);}
-        QSignalSpy notices{fixture.model.get(),&BumpTransactionModel::stateChanged};
-        fixture.model->close();fixture.opening->retire();fixture.finish();fixture.commands.drain();fixture.retirement.drain();
-        QCOMPARE(fixture.model->state(),BumpTransactionModel::Closed);QVERIFY(!fixture.model->busy());QCOMPARE(notices.count(),0);
-        QCOMPARE(wallet->calls.createBumpTransaction.load(),1);QCOMPARE(wallet->calls.commitBumpTransaction.load(),0);
-        QCOMPARE(fixture.commands.scheduler->pending(),size_t{0});QVERIFY(fixture.commands.quiescent());
+        BumpTransactionModel model;
+        bool drained{false};
+        const auto stop = qScopeGuard([&] {
+            model.close();
+            opening->stop(false, [&] { drained = true; });
+            worker.drain();
+            publish();
+            QVERIFY(drained);
+        });
+        QVERIFY(opening->start(wallet));
+        worker.drain();
+        opening->take();
+        model.setOpening(opening, [&](auto turn) { gui.push_back(std::move(turn)); });
+        QVERIFY(model.requestPrepareFeeBump(TEST_TXID, 1));
+        if (stage == 0) QCOMPARE(wallet->calls.createBumpTransaction.load(), 0);
+        if (stage > 0) {
+            worker.drain();
+            QCOMPARE(wallet->calls.createBumpTransaction.load(), 1);
+            QCOMPARE(model.state(), BumpTransactionModel::Preparing);
+        }
+        if (stage == 2) {
+            publish();
+            worker.drain();
+            publish();
+            QCOMPARE(model.state(), BumpTransactionModel::NeedsConfirmation);
+        }
+        QSignalSpy notices{&model, &BumpTransactionModel::stateChanged};
+        model.close();
+        opening->stop(false, [&] { drained = true; });
+        worker.drain();
+        publish();
+        QVERIFY(drained);
+        QVERIFY(worker.quiescent());
+        QVERIFY(gui.empty());
+        QVERIFY(!core->post([] {}));
+        QVERIFY(!outcomes->post([] {}));
+        QCOMPARE(model.state(), BumpTransactionModel::Closed);
+        QVERIFY(!model.busy());
+        QCOMPARE(notices.count(), 0);
+        QCOMPARE(wallet->calls.createBumpTransaction.load(), 1);
+        QCOMPARE(wallet->calls.commitBumpTransaction.load(), 0);
     }
     void longCapturedPasswordKeepsOriginalCommitAndLockOwnership_data() {
         QTest::addColumn<bool>("close_first");
@@ -353,23 +422,22 @@ private Q_SLOTS:
         QVERIFY(model.requestPrepareFeeBump(TEST_TXID, 1));
         QCOMPARE(model.state(), BumpTransactionModel::Preparing);
         QCOMPARE(wallet->calls.createBumpTransaction.load(), 0);
-        QVERIFY(fixture.commands.step(execution::Lane::Domain)); // Begin replacement owner action.
+        QVERIFY(fixture.commands.step(execution::Lane::Utility)); // Begin replacement owner action.
         QCOMPARE(wallet->calls.createBumpTransaction.load(), 0);
         QCOMPARE(model.state(), BumpTransactionModel::Preparing);
-        QVERIFY(fixture.commands.step(execution::Lane::Domain)); // Admit its captured Core effect.
+        QVERIFY(fixture.commands.hasWork(execution::Lane::Core));
         QCOMPARE(wallet->calls.createBumpTransaction.load(), 0);
         QVERIFY(fixture.publications.empty());
         QVERIFY(fixture.commands.step(execution::Lane::Core));
         QCOMPARE(wallet->calls.createBumpTransaction.load(), 1);
         QCOMPARE(model.state(), BumpTransactionModel::Preparing);
         QVERIFY(fixture.publications.empty());
-        QVERIFY(fixture.commands.step(execution::Lane::Domain));
+        QVERIFY(fixture.commands.step(execution::Lane::Utility));
         QCOMPARE(fixture.publications.size(), size_t{1});
         fixture.publish();
         QCOMPARE(model.state(), BumpTransactionModel::Preparing);
         QVERIFY(model.busy());
-        QVERIFY(fixture.commands.step(execution::Lane::Domain)); // Install approved candidate in Domain.
-        QVERIFY(fixture.commands.step(execution::Lane::Domain)); // Deliver installation outcome.
+        QVERIFY(fixture.commands.step(execution::Lane::Utility)); // Install approved candidate in Domain.
         QCOMPARE(model.state(), BumpTransactionModel::Preparing);
         QCOMPARE(fixture.publications.size(), size_t{1});
         fixture.publish();
@@ -403,7 +471,7 @@ private Q_SLOTS:
         QCOMPARE(wallet->calls.commitBumpTransaction.load(), 1);
         QVERIFY(!owner->result());
         for (int turn = 0; turn < 16 && !owner->result(); ++turn)
-            QVERIFY(fixture.commands.step(execution::Lane::Domain));
+            QVERIFY(fixture.commands.step(execution::Lane::Utility));
         QVERIFY(owner->result()); QVERIFY(owner->result()->value);
         const auto result = *owner->result()->value;
         QVERIFY(result.committed);
@@ -424,10 +492,10 @@ private Q_SLOTS:
             id = Txid::FromUint256(uint256::ONE); return true;
         };
         Fixture fixture{wallet}; bool fail{false};
-        fixture.model->setOpening(fixture.opening, {fixture.commands.scheduler, [&fixture, &fail](std::function<void()> turn) {
+        fixture.model->setOpening(fixture.opening, [&fixture, &fail](std::function<void()> turn) {
             if (std::exchange(fail, false)) throw std::runtime_error{"GUI transport unavailable"};
             fixture.publications.push_back(std::move(turn));
-        }});
+        });
         QVERIFY(fixture.model->requestPrepareFeeBump(TEST_TXID, 1)); fixture.finish();
         fail = true; QVERIFY(fixture.model->requestConfirmFeeBump()); fixture.commands.drain();
         QVERIFY(fixture.model->busy());

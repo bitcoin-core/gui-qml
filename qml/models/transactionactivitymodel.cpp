@@ -146,7 +146,7 @@ struct TransactionActivityModel::Owner {
 };
 struct TransactionActivityModel::Job {
     std::shared_ptr<Owner> owner;
-    std::shared_ptr<execution::ResourceLease> lease;
+    std::shared_ptr<void> lease;
     std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<Mailbox> mailbox;
     std::shared_ptr<std::atomic_bool> cancelled;
@@ -303,10 +303,10 @@ void TransactionActivityModel::schedulePreview()
     if (m_detail_txid.isEmpty() || !m_core_state || !m_published || !m_opening || !m_opening->available()) return;
     auto owner = std::make_shared<Owner>(); auto held = m_opening->holdValues([owner] { owner->clear(); }); if (!held) return;
     auto job = std::make_shared<Job>(); job->owner = owner; job->opening = m_opening; job->mailbox = m_mailbox; job->cancelled = m_cancelled;
-    job->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease)); job->selected = m_detail_txid; job->unit = m_display_unit;
+    job->lease = std::move(held); job->selected = m_detail_txid; job->unit = m_display_unit;
     job->detail_generation = m_detail_generation; job->projection_generation = m_projection_generation;
     owner->input = m_core_state; owner->previous = m_published; owner->requests = m_wallet_model->receiveRequests()->snapshot();
-    execution::Submit(*m_opening->scheduler(), [job] {
+    m_opening->postDomain([job] {
         if (job->cancelled->load()) return;
         const auto& snapshot = *job->owner->input; const auto found = snapshot.records.constFind(job->selected);
         const auto row = job->owner->previous->snapshot->rows.find(QStringLiteral("tx:") + job->selected);
@@ -318,7 +318,7 @@ void TransactionActivityModel::schedulePreview()
         auto view = std::make_shared<activityview::Snapshot>(); view->selected_txid = job->selected; view->raw = job->owner->previous->snapshot->raw;
         prepareDetails(*view, buildDetails(job->selected, *row->second, value, job->owner->requests, job->unit, true), job->unit, *row->second);
         job->owner->preview = view->selected_details; job->owner->preview_view = std::move(view); job->mailbox->publish(job, true);
-    }, [] {}, {}, {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    }, [] {}, {});
 }
 void TransactionActivityModel::schedule()
 {
@@ -349,6 +349,13 @@ activityexport::Files TransactionActivityModel::activityFiles() const
     auto files = activityexport::LocalFiles(m_export_installs);
     const std::weak_ptr<walletopening::Session> opening = m_opening;
     files.available = [opening] { const auto original = opening.lock(); return original && original->available(); };
+    if (m_opening) files.utility = m_opening->utilityQueue();
+    if (files.utility) {
+        files.value_cleanup = [opening](auto cleanup) -> std::shared_ptr<void> {
+            const auto original = opening.lock();
+            return original ? original->holdValues(std::move(cleanup)) : nullptr;
+        };
+    }
     return files;
 }
 void TransactionActivityModel::startWork()
@@ -359,7 +366,7 @@ void TransactionActivityModel::startWork()
     auto held = m_opening->holdValues([owner] { owner->clear(); });
     if (!held) { m_loading = false; m_load_error = tr("Activity presentation is unavailable."); Q_EMIT loadingChanged(); return; }
     auto job = std::make_shared<Job>();
-    job->owner = owner; job->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease));
+    job->owner = owner; job->lease = std::move(held);
     job->opening = m_opening; job->mailbox = m_mailbox; job->cancelled = m_cancelled;
     job->work = std::exchange(m_pending, {}); job->work.revisions = m_reader_revisions; job->selected = m_detail_txid;
     job->unit = m_display_unit; job->generation = m_generation; job->detail_generation = m_detail_generation;
@@ -367,9 +374,8 @@ void TransactionActivityModel::startWork()
     owner->input = m_core_state; owner->previous = m_published;
     owner->requests = m_wallet_model->receiveRequests()->snapshot();
     m_active = job; m_work_pending = true;
-    const auto admitted = execution::Submit(*m_opening->scheduler(), [job] { planned(job); }, [] {},
-        [job](std::exception_ptr) { job->owner->error = tr("Activity planning could not be completed."); job->mailbox->publish(job); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    const auto admitted = m_opening->postDomain([job] { planned(job); }, [] {},
+        [job](std::exception_ptr) { job->owner->error = tr("Activity planning could not be completed."); job->mailbox->publish(job); });
     if (!admitted) { owner->error = tr("Activity could not be updated. Try again."); m_mailbox->publish(job); }
 }
 void TransactionActivityModel::planned(const std::shared_ptr<Job>& job)
@@ -608,9 +614,8 @@ void TransactionActivityModel::project(const std::shared_ptr<Job>& job)
         owner.request_matches.clear(); owner.fulfilled.clear(); owner.next_row = {};
         job->mailbox->publish(job); return;
     }
-    const auto admitted = execution::Submit(*job->opening->scheduler(), [job] { project(job); }, [] {},
-        [job](std::exception_ptr) { job->owner->error = tr("Activity could not be updated. Try again."); job->mailbox->publish(job); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    const auto admitted = job->opening->postDomain([job] { project(job); }, [] {},
+        [job](std::exception_ptr) { job->owner->error = tr("Activity could not be updated. Try again."); job->mailbox->publish(job); });
     if (!admitted) { owner.error = tr("Activity could not be updated. Try again."); job->mailbox->publish(job); }
 }
 void TransactionActivityModel::receive()
@@ -742,7 +747,7 @@ quint64 TransactionActivityModel::requestCopyRawTransaction(const QString& txid)
     auto owner = std::make_shared<Owner>();
     auto held = m_opening->holdValues([owner] { owner->clear(); });
     if (!held) return 0;
-    auto job = std::make_shared<Job>(); job->owner = owner; job->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease));
+    auto job = std::make_shared<Job>(); job->owner = owner; job->lease = std::move(held);
     owner->previous = m_detail_hold;
     const auto ticket = ++m_copy_ticket;
     const QPointer<TransactionActivityModel> observer{this};
@@ -754,9 +759,9 @@ quint64 TransactionActivityModel::requestCopyRawTransaction(const QString& txid)
             if (observer && !observer->m_stopped && observer->m_opening->observationOpen()) Q_EMIT observer->copyFinished(ticket, copied, copied ? QString{} : tr("The raw transaction could not be copied."));
         }, Qt::QueuedConnection);
     };
-    const auto submitted = execution::Submit(*m_opening->scheduler(), [job, txid] {
+    const auto submitted = m_opening->postDomain([job, txid] {
         return std::make_shared<const QString>(job->owner->previous->snapshot->raw(txid));
-    }, complete, [complete](std::exception_ptr) { complete({}); }, {execution::Lane::Domain, {}, execution::WorkClass::Action});
+    }, complete, [complete](std::exception_ptr) { complete({}); }, execution::WorkClass::Action);
     return submitted ? ticket : 0;
 }
 
@@ -769,19 +774,19 @@ quint64 TransactionActivityModel::requestEntryDetails(const QString& side, int r
     auto owner = std::make_shared<Owner>();
     auto held = m_opening->holdValues([owner] { owner->clear(); }); if (!held) return 0;
     auto job = std::make_shared<Job>(); job->owner = owner; job->opening = m_opening; job->mailbox = m_mailbox;
-    job->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease)); job->detail_generation = m_detail_generation;
+    job->lease = std::move(held); job->detail_generation = m_detail_generation;
     owner->previous = m_detail_hold; m_entry_active = job; m_entry_error.clear();
     const auto ticket = ++m_entry_ticket;
     const auto publish = [job] {
         { std::lock_guard lock{job->mailbox->mutex}; if (job->mailbox->closed) return; job->mailbox->entry = job; }
         try { job->mailbox->notify(); } catch (...) { }
     };
-    const auto admitted = execution::Submit(*m_opening->scheduler(), [job, side, row] {
+    const auto admitted = m_opening->postDomain([job, side, row] {
         const auto& snapshot = *job->owner->previous->snapshot;
         const auto entries = side == QLatin1String("inputs") ? snapshot.full_inputs : side == QLatin1String("outputs") ? snapshot.full_outputs : snapshot.full_actions;
         auto lines = std::make_shared<const QVariantList>(FlowEntryDocument(entries->at(row)));
         auto view = std::make_shared<activityview::Snapshot>(); view->entry_document = std::move(lines); job->owner->view = std::move(view);
-    }, publish, [job, publish](std::exception_ptr) { job->owner->error = tr("The entry details could not be prepared."); publish(); }, {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    }, publish, [job, publish](std::exception_ptr) { job->owner->error = tr("The entry details could not be prepared."); publish(); });
     if (!admitted) { m_entry_active.reset(); m_entry_error = tr("Entry details could not be loaded. Try again."); Q_EMIT entryDetailsChanged(); return 0; }
     Q_EMIT entryDetailsChanged(); return ticket;
 }

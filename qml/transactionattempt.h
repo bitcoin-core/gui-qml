@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 
+namespace execution { class SerialQueue; }
 namespace walletprepare { enum class Error; }
 
 namespace transactionattempt {
@@ -53,7 +54,7 @@ struct CurrentFacts {
 enum class Transition { Accepted, Stale, Ignored };
 
 // Immutable value returned by the serialized attempt owner for GUI
-// projection. The owner mutates its Preparation only on the Domain lane.
+// projection. The owner mutates its Preparation only on its worker queue.
 struct Snapshot {
     Kind kind{Kind::Payment};
     std::uint64_t sequence{0};
@@ -147,7 +148,7 @@ private:
     std::shared_ptr<const walletreview::Snapshot> m_candidate;
 };
 
-/** Serializes preparation-state decisions on an injected Domain executor.
+/** Serializes preparation-state decisions on the opening's Utility queue.
  * This value owner has no QObject, GUI callback, wallet handle, or Core effect.
  * Callers pass captured facts and receive immutable projection snapshots.
  */
@@ -156,7 +157,7 @@ class Owner final
 public:
     using Completion = std::function<void(Result)>;
 
-    explicit Owner(std::shared_ptr<execution::Scheduler> scheduler);
+    explicit Owner(std::shared_ptr<execution::SerialQueue> utility);
     execution::SubmitResult begin(StartInput input, Completion done);
     execution::SubmitResult beginReplacement(ReplacementStart input, Completion done);
     execution::SubmitResult intentChanged(std::uint64_t revision, Completion done);
@@ -184,12 +185,9 @@ private:
     };
     using Mutation = std::function<Result(State&)>;
     static Snapshot project(State& state);
-    static execution::SubmitResult submit(const std::shared_ptr<State>& state,
-                                      const std::shared_ptr<execution::Scheduler>& scheduler,
-                                      execution::ResourceKey key, Mutation mutation, Completion done);
+    execution::SubmitResult submit(Mutation mutation, Completion done) const;
 
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
-    const execution::ResourceKey m_key;
+    const std::shared_ptr<execution::SerialQueue> m_utility;
     const std::shared_ptr<State> m_state{std::make_shared<State>()};
 };
 

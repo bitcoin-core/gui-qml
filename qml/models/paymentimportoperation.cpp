@@ -72,6 +72,7 @@ void PaymentImportOperation::close()
 {
     if (std::exchange(m_closed, true)) return;
     if (const auto owner = std::exchange(m_owner, {})) owner->close();
+    if (m_export_services.utility && m_export) m_export->retire();
     m_snapshot.inspection.reset(); m_snapshot.child_result.reset();
 }
 void PaymentImportOperation::cancel()

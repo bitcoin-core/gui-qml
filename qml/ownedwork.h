@@ -4,8 +4,7 @@
 #ifndef BITCOIN_QML_OWNEDWORK_H
 #define BITCOIN_QML_OWNEDWORK_H
 #include <qml/executor.h>
-#include <qml/snapshotquery.h>
-#include <qml/retainedsnapshot.h>
+#include <qml/execution.h>
 #include <qml/guipresentation.h>
 #include <QObject>
 #include <QPointer>
@@ -22,8 +21,7 @@ namespace execution {
  * effects. Domain records outcomes before GUI notification; quiet close drops
  * GUI packets, while accepted effects and their Native cleanup keep running.
  * The ledger drain means no accepted effect can still use its borrowed interface.
- * Retained payload retirement belongs to the common scheduler drain; composition
- * keeps the original public-interface owner alive through that final drain.
+ * The executor drains retained values before the application releases native interfaces.
  */
 class OwnedWork final : public QObject
 {
@@ -43,8 +41,8 @@ class OwnedWork final : public QObject
         }
     };
     struct Queues : std::enable_shared_from_this<Queues> {
-        explicit Queues(Executor& executor)
-            : core(executor.makeQueue(Lane::Core)), outcomes(executor.makeQueue(Lane::Utility)) {}
+        Queues(Executor& executor, Lane lane)
+            : core(executor.makeQueue(lane)), outcomes(executor.makeQueue(Lane::Utility)) {}
         bool submit(Lane lane, std::shared_ptr<Task> task)
         {
             const auto self = shared_from_this();
@@ -82,35 +80,30 @@ class OwnedWork final : public QObject
         void publish() override { if(packet->error)failed(packet->error);else done(std::as_const(*packet->value)); }
     };
 public:
-    explicit OwnedWork(SnapshotServices services, Executor* executor = nullptr)
-        : m_services(std::move(services)), m_ledger(std::make_shared<Ledger>()),
-          m_queues(executor ? std::make_shared<Queues>(*executor) : nullptr)
-    {
-        m_services.post = presentation::ReliablePost(std::move(m_services.post));
-    }
+    explicit OwnedWork(Executor& executor, presentation::Post post = {}, Lane lane = Lane::Core)
+        : m_post(presentation::ReliablePost(std::move(post))), m_ledger(std::make_shared<Ledger>()),
+          m_queues(std::make_shared<Queues>(executor, lane)) {}
     ~OwnedWork() override { close(); }
 
     using QueuePost = std::function<bool(Lane, std::shared_ptr<Task>)>;
     QueuePost queuePost() const
     {
-        if (!m_queues) return {};
         return [queues = m_queues](Lane lane, std::shared_ptr<Task> task) {
             return queues->submit(lane, std::move(task));
         };
     }
     template<typename Work,typename Done,typename Failed>
-    bool submit(Work work,Done done,Failed failed,TaskSpec spec={}) {
+    bool submit(Work work,Done done,Failed failed,Lane lane=Lane::Core) {
         using Value=std::invoke_result_t<Work>;
         using Pending=Result<Value,Done,Failed>;
         const auto queues = m_queues;
         using Packet = typename Pending::Packet;
-        auto packet = queues ? std::make_shared<Packet>()
-            : RetainSnapshot<Packet>(m_services.scheduler, [] { return std::make_unique<Packet>(); });
-        if(!packet||!m_ledger->begin()) { failed(std::make_exception_ptr(NotStarted{NotStarted::Cause::Transport}));return false; }
+        auto packet = std::make_shared<Packet>();
+        if(!m_ledger->begin()) { failed(std::make_exception_ptr(NotStarted{NotStarted::Cause::Transport}));return false; }
         const auto id=++m_next;
         m_operations.emplace(id,std::make_shared<Pending>(packet,std::move(done),std::move(failed)));
         const QPointer<OwnedWork> observer{this}; const auto ledger=m_ledger;
-        const auto complete=[ledger,observer,id,post=m_services.post] {
+        const auto complete=[ledger,observer,id,post=m_post] {
             ledger->finish();
             try {post([observer,id] {if(observer)observer->publish(id);});} catch (...) {
                 // The retained operation still owns the actual outcome. Quiet
@@ -119,8 +112,7 @@ public:
         };
         auto task = MakeTask([packet, work = std::move(work)]() mutable { packet->value = work(); },
             complete, [packet, complete](std::exception_ptr error) { packet->error = error; complete(); });
-        const bool submitted = queues ? queues->submit(spec.lane, std::move(task))
-                                      : bool(m_services.scheduler->submit(std::move(task), spec));
+        const bool submitted = queues->submit(lane, std::move(task));
         if (!submitted) {
             packet->error = std::make_exception_ptr(NotStarted{NotStarted::Cause::Transport});
             complete();
@@ -128,18 +120,15 @@ public:
         return submitted;
     }
     template<typename Value,typename Starter,typename Done,typename Failed>
-    bool submitAsync(Starter starter,Done done,Failed failed,std::shared_ptr<Scheduler> action={}) {
+    bool submitAsync(Starter starter,Done done,Failed failed) {
         using Pending=Result<Value,Done,Failed>;
-        const bool shared = m_queues && !action;
-        if (!action) action = m_services.scheduler;
         using Packet = typename Pending::Packet;
-        auto packet = shared ? std::make_shared<Packet>()
-            : RetainSnapshot<Packet>(action, [] { return std::make_unique<Packet>(); });
-        if(!packet||!m_ledger->begin()){failed(std::make_exception_ptr(NotStarted{NotStarted::Cause::Transport}));return false;}
+        auto packet = std::make_shared<Packet>();
+        if(!m_ledger->begin()){failed(std::make_exception_ptr(NotStarted{NotStarted::Cause::Transport}));return false;}
         const auto id=++m_next;const QPointer<OwnedWork> observer{this};const auto ledger=m_ledger;
         m_operations.emplace(id,std::make_shared<Pending>(packet,std::move(done),std::move(failed)));
         const auto completed=std::make_shared<std::atomic<bool>>(false);
-        const auto complete=[packet,completed,ledger,observer,id,post=m_services.post](std::optional<Value> value,std::exception_ptr error) {
+        const auto complete=[packet,completed,ledger,observer,id,post=m_post](std::optional<Value> value,std::exception_ptr error) {
             if(completed->exchange(true))return;
             packet->value=std::move(value);packet->error=error;ledger->finish();
             try{post([observer,id]{if(observer)observer->publish(id);});}catch(...){}
@@ -154,11 +143,7 @@ public:
     {
         m_operations.clear();
         const auto queues = m_queues;
-        const auto post = m_services.post;
-        if (!queues) {
-            m_ledger->close(drained ? [post, drained = std::move(drained)] { post(drained); } : std::function<void()>{});
-            return;
-        }
+        const auto post = m_post;
         // Accepted async work can still post another stage. Only close the
         // queues once the original operations have produced their outcomes.
         if (!std::exchange(m_queues_closing, true)) m_ledger->close([queues] { queues->close(); });
@@ -169,7 +154,6 @@ public:
     // publication is still held.
     void whenQueuesDrained(std::function<void()> done)
     {
-        assert(m_queues);
         m_queues->outcomes.whenDrained(std::move(done));
     }
 private:
@@ -177,7 +161,7 @@ private:
         const auto found=m_operations.find(id);if(found==m_operations.end())return;
         const auto operation=std::move(found->second);m_operations.erase(found);operation->publish();
     }
-    SnapshotServices m_services;
+    const presentation::Post m_post;
     std::shared_ptr<Ledger> m_ledger;
     const std::shared_ptr<Queues> m_queues;
     bool m_queues_closing{false};

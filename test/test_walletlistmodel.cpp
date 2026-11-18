@@ -6,6 +6,7 @@
 
 #include <interfaces/handler.h>
 #include <interfaces/wallet.h>
+#include <qml/execution.h>
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <scheduler.h>
@@ -16,7 +17,6 @@
 #include <QSettings>
 #include <QLocale>
 #include <QThread>
-#include <test/mocks/manualexecutionenvironment.h>
 #include <atomic>
 #include <deque>
 
@@ -27,6 +27,7 @@ public:
     std::vector<std::pair<std::string, std::string>> wallet_dir_entries;
     std::atomic<int> reads{0};
     std::atomic<QThread*> read_thread{nullptr};
+    std::function<void()> during_read;
     bool fail_read{false};
 
     void registerRpcs() override {}
@@ -57,6 +58,7 @@ public:
     std::vector<std::pair<std::string, std::string>> listWalletDir() override
     {
         ++reads; read_thread.store(QThread::currentThread());
+        if (during_read) during_read();
         if (fail_read) throw std::runtime_error("directory failed");
         return wallet_dir_entries;
     }
@@ -77,21 +79,45 @@ bool AwaitCatalog(WalletListModel& model)
     return QTest::qWaitFor([&] { return !model.projectionPending(); }, 5000) && model.readError().isEmpty();
 }
 struct CatalogExecution {
-    ManualRoutedExecution work;
-    std::deque<std::function<void()>> publications;
-    ~CatalogExecution() { work.scheduler->close(); settle(); }
-    execution::SnapshotServices services()
+    using Lane = execution::Lane;
+    using Turns = std::deque<std::function<void()>>;
+    Turns core, utility, publications;
+    std::optional<Lane> reject;
+    execution::Executor executor{[this](Lane lane, execution::UtilityWorker worker, auto turn) {
+        if (reject == lane) { reject.reset(); return false; }
+        if (lane == Lane::Core) core.push_back(std::move(turn));
+        else if (lane == Lane::Utility && worker == execution::UtilityWorker::IO) utility.push_back(std::move(turn));
+        else return false;
+        return true;
+    }};
+
+    ~CatalogExecution() { settle(); }
+    presentation::Post post()
     {
-        return {work.scheduler, [this](auto turn) { publications.push_back(std::move(turn)); }};
+        return [this](auto turn) { publications.push_back(std::move(turn)); };
     }
-    bool publishNext()
+    static bool step(Turns& turns)
     {
-        if (publications.empty()) return false;
-        auto turn = std::move(publications.front()); publications.pop_front(); turn(); return true;
+        if (turns.empty()) return false;
+        auto turn = std::move(turns.front());
+        turns.pop_front();
+        turn();
+        return true;
     }
+    bool publishNext() { return step(publications); }
+    void publishAll() { while (publishNext()) {} }
+    void drain() { while (step(core) || step(utility)) {} }
     void settle()
     {
-        do { work.drain(); while (publishNext()) {} } while (!work.transportIdle());
+        do { drain(); publishAll(); } while (!core.empty() || !utility.empty());
+    }
+    bool retire(WalletListModel& model)
+    {
+        model.close();
+        const auto retired = std::make_shared<bool>(false);
+        model.whenRetired([retired] { *retired = true; });
+        settle();
+        return *retired && model.phase() == WalletListModel::ReaderPhase::Stopped;
     }
 };
 } // namespace
@@ -137,6 +163,7 @@ private Q_SLOTS:
     void manualOlderFailureCannotReplaceNewerDiscovery();
     void manualStopFencesReadAndPublication_data();
     void manualStopFencesReadAndPublication();
+    void catalogRetirementWaitsForRunningDirectoryRead();
     void manualInterleavedPublicationRequiresExactDiffBase();
     void exactFacadeRoleSurvivesOldFacadeDestruction();
 };
@@ -677,21 +704,21 @@ void WalletListModelTests::manualCatalogOwnsPhasesAndRetainsPriorRows_data()
 void WalletListModelTests::manualCatalogOwnsPhasesAndRetainsPriorRows()
 {
     QFETCH(int, scenario);
-    ManualExecutionEnvironment environment;
+    CatalogExecution environment;
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"beta", "sqlite"}, {"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, {environment.scheduler, [&](auto turn) { environment.post(std::move(turn)); }}};
+    WalletListModel model{node, environment.executor, environment.post()};
     QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
     QSignalSpy changed{&model, &QAbstractItemModel::dataChanged};
     model.listWalletDir(); QCOMPARE(loader.reads.load(), 0); QCOMPARE(model.rowCount(), 0);
-    QVERIFY(environment.step()); QCOMPARE(loader.reads.load(), 1); QCOMPARE(model.rowCount(), 0);
-    QVERIFY(environment.step()); QCOMPARE(model.rowCount(), 0); QVERIFY(model.projectionPending());
+    QVERIFY(environment.step(environment.core)); QCOMPARE(loader.reads.load(), 1); QCOMPARE(model.rowCount(), 0);
+    QVERIFY(environment.step(environment.utility)); QCOMPARE(model.rowCount(), 0); QVERIFY(model.projectionPending());
     QVERIFY(environment.publishNext()); QCOMPARE(model.rowCount(), 2); QVERIFY(!model.projectionPending());
     QCOMPARE(model.data(model.index(0), WalletListModel::NameRole).toString(), QStringLiteral("alpha"));
     const auto reads = loader.reads.load(); const auto resets = reset.size();
     const QPersistentModelIndex stable{model.index(0)};
-    if (scenario == 1) environment.rejectNext(true);
+    if (scenario == 1) environment.reject = execution::Lane::Core;
     if (scenario == 2) loader.fail_read = true;
     if (scenario == 1 || scenario == 2) model.listWalletDir();
     else model.setWalletInfo("alpha", 123, 1);
@@ -708,7 +735,7 @@ void WalletListModelTests::manualCatalogOwnsPhasesAndRetainsPriorRows()
         if (scenario == 0) { QCOMPARE(changed.size(), 1); QCOMPARE(stable.data(WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{123}); }
         else { QVERIFY(!model.readError().isEmpty()); QCOMPARE(stable.data(WalletListModel::BalanceKnownRole).toBool(), false); }
     }
-    model.close(); environment.drain(); environment.publishAll(); QVERIFY(environment.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 
@@ -718,19 +745,19 @@ void WalletListModelTests::manualRefreshBurstReadsDirectoryOnce()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"beta", "sqlite"}, {"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Idle);
     QVERIFY(!model.fresh()); QVERIFY(!model.walletDirLoaded());
     for (int i = 0; i < 16; ++i) model.refresh();
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Scheduled);
     QVERIFY(model.projectionPending()); QCOMPARE(loader.reads.load(), 0);
-    QCOMPARE(environment.work.queuedCountIf([](const auto& turn) { return turn.lane == execution::Lane::Core; }), 1);
-    QVERIFY(environment.work.step(execution::Lane::Core));
+    QCOMPARE(environment.core.size(), size_t{1});
+    QVERIFY(environment.step(environment.core));
     QCOMPARE(loader.reads.load(), 1); QCOMPARE(model.rowCount(), 0);
     QVERIFY(environment.publishNext());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Applying);
     QVERIFY(model.projectionPending()); QVERIFY(!model.fresh()); QCOMPARE(model.rowCount(), 0);
-    QVERIFY(environment.work.step(execution::Lane::Domain));
+    QVERIFY(environment.step(environment.utility));
     QVERIFY(environment.publishNext());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current);
     QVERIFY(model.fresh()); QVERIFY(!model.projectionPending()); QCOMPARE(model.rowCount(), 2);
@@ -743,7 +770,7 @@ void WalletListModelTests::manualRefreshBurstReadsDirectoryOnce()
     QVERIFY(!model.projectionPending()); QVERIFY(model.fresh());
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{7});
     QCOMPARE(model.data(model.index(0), WalletListModel::OperationIdRole).toString(), QStringLiteral("operation-7"));
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualRejectedDiscoveryRetainsOrderedInputsForRetry()
@@ -752,12 +779,12 @@ void WalletListModelTests::manualRejectedDiscoveryRetainsOrderedInputsForRetry()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"named", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
-    environment.work.rejectLane(execution::Lane::Core);
+    WalletListModel model{node, environment.executor, environment.post()};
+    environment.reject = execution::Lane::Core;
     model.refresh(); environment.settle();
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Failed);
     QVERIFY(!model.projectionPending()); QVERIFY(!model.fresh()); QVERIFY(!model.readError().isEmpty());
-    QCOMPARE(loader.reads.load(), 0); QCOMPARE(model.rowCount(), 0); QVERIFY(environment.work.transportIdle());
+    QCOMPARE(loader.reads.load(), 0); QCOMPARE(model.rowCount(), 0); QVERIFY(environment.core.empty() && environment.utility.empty());
     // A later ordinary registry observation retries the retained discovery;
     // there is no polling loop and no lost default-wallet identity or metadata.
     model.setWalletLoadState({}, WalletListModel::LoadState::Open);
@@ -769,7 +796,7 @@ void WalletListModelTests::manualRejectedDiscoveryRetainsOrderedInputsForRetry()
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QString{});
     QCOMPARE(model.data(model.index(0), WalletListModel::LoadStateRole).toInt(), int(WalletListModel::LoadState::Open));
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{21});
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
@@ -778,8 +805,8 @@ void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
-    model.refresh(); QVERIFY(environment.work.step(execution::Lane::Core));
+    WalletListModel model{node, environment.executor, environment.post()};
+    model.refresh(); QVERIFY(environment.step(environment.core));
     QCOMPARE(loader.reads.load(), 1);
     loader.wallet_dir_entries = {{"beta", "sqlite"}};
     for (int i = 0; i < 16; ++i) model.refresh();
@@ -789,7 +816,7 @@ void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
     model.setWalletInfo({}, 42, 2);
     model.setOperationId({}, "default-opening");
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::ReadingWithPendingWork);
-    QVERIFY(environment.work.step(execution::Lane::Domain));
+    QVERIFY(environment.step(environment.utility));
     QVERIFY(environment.publishNext());
     QVERIFY(model.projectionPending()); QVERIFY(!model.fresh());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Scheduled);
@@ -803,7 +830,7 @@ void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
     QCOMPARE(model.data(model.index(1), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
     model.setWalletLoadState({}, WalletListModel::LoadState::Closed); environment.settle();
     QCOMPARE(model.rowCount(), 1); QCOMPARE(loader.reads.load(), 2);
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWork()
@@ -812,7 +839,7 @@ void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWor
     std::weak_ptr<walletcatalog::Reader> weak;
     int reads{0};
     walletcatalog::Phase before{walletcatalog::Phase::Idle}, after{walletcatalog::Phase::Idle};
-    auto reader = std::make_shared<walletcatalog::Reader>(environment.work.scheduler, [&] {
+    auto reader = std::make_shared<walletcatalog::Reader>(environment.executor, [&] {
         ++reads;
         if (reads == 1) {
             const auto owner = weak.lock();
@@ -829,9 +856,9 @@ void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWor
     }, [] {});
     weak = reader;
     reader->request(walletcatalog::Input{walletcatalog::Input::Kind::Directory});
-    QVERIFY(environment.work.step(execution::Lane::Core));
+    QVERIFY(environment.step(environment.core));
     QCOMPARE(reads, 1); QCOMPARE(before, walletcatalog::Phase::Reading); QCOMPARE(after, walletcatalog::Phase::ReadingWithPendingWork);
-    QVERIFY(environment.work.step(execution::Lane::Domain));
+    QVERIFY(environment.step(environment.utility));
     {
         const auto update = reader->take();
         QCOMPARE(update.observation.phase, walletcatalog::Phase::Scheduled); QVERIFY(!update.observation.fresh);
@@ -839,7 +866,7 @@ void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWor
         QCOMPARE(update.snapshot->rows.front().name, QStringLiteral("alpha"));
         reader->published(update.snapshot);
     }
-    environment.work.drain();
+    environment.drain();
     {
         const auto update = reader->take();
         QCOMPARE(reads, 2); QCOMPARE(update.observation.phase, walletcatalog::Phase::Current); QVERIFY(update.observation.fresh);
@@ -848,8 +875,10 @@ void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWor
         QCOMPARE(update.snapshot->rows.front().load_state, walletcatalog::LoadState::Open);
         QCOMPARE(update.snapshot->rows.back().name, QStringLiteral("beta"));
     }
-    reader->close(); environment.settle();
-    QCOMPARE(reader->observation().phase, walletcatalog::Phase::Stopped); QVERIFY(environment.work.quiescent());
+    reader->close();
+    bool retired{false}; reader->whenRetired([&] { retired = true; });
+    environment.settle();
+    QCOMPARE(reader->observation().phase, walletcatalog::Phase::Stopped); QVERIFY(retired);
 }
 
 void WalletListModelTests::manualFailedDiscoveryRetainsStaleRowsAndRecovers()
@@ -858,7 +887,7 @@ void WalletListModelTests::manualFailedDiscoveryRetainsStaleRowsAndRecovers()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.refresh(); environment.settle();
     QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
     const QPersistentModelIndex original{model.index(0)};
@@ -878,7 +907,7 @@ void WalletListModelTests::manualFailedDiscoveryRetainsStaleRowsAndRecovers()
     QCOMPARE(loader.reads.load(), 3); QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current);
     QVERIFY(model.fresh()); QVERIFY(model.readError().isEmpty()); QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualBackendAvailabilityPreventsDiscovery_data()
@@ -894,7 +923,7 @@ void WalletListModelTests::manualBackendAvailabilityPreventsDiscovery()
     CatalogExecution environment;
     MockNode node; FakeWalletLoader loader;
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.setBackendAvailability(availability); model.refresh(); environment.settle();
     QCOMPARE(model.backendAvailability(), availability); QCOMPARE(loader.reads.load(), 0);
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Idle);
@@ -903,7 +932,7 @@ void WalletListModelTests::manualBackendAvailabilityPreventsDiscovery()
     model.setBackendAvailability(WalletListModel::BackendAvailability::Available); environment.settle();
     QCOMPARE(loader.reads.load(), 1); QVERIFY(model.walletDirLoaded()); QVERIFY(model.fresh());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current); QCOMPARE(model.rowCount(), 0);
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualBackendAvailabilityDoesNotChangeRowLoadState()
@@ -912,7 +941,7 @@ void WalletListModelTests::manualBackendAvailabilityDoesNotChangeRowLoadState()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.refresh(); model.setWalletLoadState({}, WalletListModel::LoadState::Open); environment.settle();
     model.setBackendAvailability(WalletListModel::BackendAvailability::Disabled); environment.settle();
     QCOMPARE(loader.reads.load(), 1); QCOMPARE(model.rowCount(), 1);
@@ -921,7 +950,7 @@ void WalletListModelTests::manualBackendAvailabilityDoesNotChangeRowLoadState()
     model.setBackendAvailability(WalletListModel::BackendAvailability::Available); environment.settle();
     QCOMPARE(loader.reads.load(), 2); QVERIFY(model.fresh());
     QCOMPARE(model.data(model.index(0), WalletListModel::LoadStateRole).toInt(), int(WalletListModel::LoadState::Open));
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsence()
@@ -930,7 +959,7 @@ void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsenc
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"", "sqlite"}, {"named", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.refresh(); environment.settle();
     const auto row = [&] { return model.index(0); };
     QCOMPARE(model.data(row(), WalletListModel::NameRole).toString(), QString{});
@@ -954,7 +983,7 @@ void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsenc
     QCOMPARE(model.data(row(), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{0});
     QCOMPARE(model.data(row(), WalletListModel::KeySchemeKindRole).toInt(), 2);
     QCOMPARE(loader.reads.load(), 1);
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualDefaultWalletObservationBeforeDiscovery()
@@ -963,7 +992,7 @@ void WalletListModelTests::manualDefaultWalletObservationBeforeDiscovery()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"other", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.setWalletLoadState({}, WalletListModel::LoadState::Open); model.setWalletInfo({}, 12, 1); environment.settle();
     QCOMPARE(model.rowCount(), 0); QCOMPARE(loader.reads.load(), 0); QVERIFY(!model.fresh());
     model.refresh(); environment.settle();
@@ -973,7 +1002,7 @@ void WalletListModelTests::manualDefaultWalletObservationBeforeDiscovery()
     model.setWalletLoadState({}, WalletListModel::LoadState::Closed); environment.settle();
     QCOMPARE(model.rowCount(), 1); QCOMPARE(loader.reads.load(), 1);
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("other"));
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualOlderFailureCannotReplaceNewerDiscovery()
@@ -982,17 +1011,17 @@ void WalletListModelTests::manualOlderFailureCannotReplaceNewerDiscovery()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.refresh(); environment.settle();
-    loader.fail_read = true; model.refresh(); QVERIFY(environment.work.step(execution::Lane::Core));
+    loader.fail_read = true; model.refresh(); QVERIFY(environment.step(environment.core));
     loader.fail_read = false; loader.wallet_dir_entries = {{"beta", "sqlite"}}; model.refresh();
-    QVERIFY(environment.work.step(execution::Lane::Domain)); QVERIFY(environment.publishNext());
+    QVERIFY(environment.step(environment.utility)); QVERIFY(environment.publishNext());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Scheduled);
     QVERIFY(model.readError().isEmpty()); QVERIFY(model.projectionPending()); QVERIFY(!model.fresh());
     environment.settle(); QCOMPARE(loader.reads.load(), 3);
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current); QVERIFY(model.fresh()); QVERIFY(model.readError().isEmpty());
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::manualStopFencesReadAndPublication_data()
@@ -1008,17 +1037,61 @@ void WalletListModelTests::manualStopFencesReadAndPublication()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
     model.refresh();
-    if (read_finished) QVERIFY(environment.work.step(execution::Lane::Core));
+    if (read_finished) QVERIFY(environment.step(environment.core));
+    bool retired{false};
+    model.whenRetired([&] { retired = true; });
     model.close();
+    QVERIFY(!retired);
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Stopping); QVERIFY(!model.fresh()); QVERIFY(!model.projectionPending());
     model.refresh(); model.setWalletLoadState({}, WalletListModel::LoadState::Open);
     environment.settle();
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Stopped);
     QCOMPARE(loader.reads.load(), read_finished ? 1 : 0); QCOMPARE(reset.size(), 0); QCOMPARE(model.rowCount(), 0);
-    QVERIFY(environment.work.quiescent());
+    QVERIFY(retired);
+}
+
+void WalletListModelTests::catalogRetirementWaitsForRunningDirectoryRead()
+{
+    MockNode node;
+    FakeWalletLoader loader;
+    ConfigureExpectedWalletLoader(node, loader);
+    loader.wallet_dir_entries = {{"alpha", "sqlite"}};
+    QSemaphore entered, release;
+    loader.during_read = [&] { entered.release(); release.acquire(); };
+    execution::Executor executor{execution::Executor::Config{}};
+    auto core = executor.makeQueue(execution::Lane::Core);
+    const auto core_thread = std::make_shared<std::atomic<QThread*>>(nullptr);
+    QVERIFY(core.post([core_thread] { *core_thread = QThread::currentThread(); }));
+    WalletListModel model{node, executor, presentation::QueuedPost()};
+    QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
+    std::atomic_bool retired{false};
+    model.whenRetired([&] { retired = true; });
+    const auto stop = qScopeGuard([&] {
+        release.release();
+        model.close();
+        QVERIFY(QTest::qWaitFor([&] { return retired.load(); }, 5000));
+        executor.stopAndJoin();
+    });
+
+    model.refresh();
+    QVERIFY(entered.tryAcquire(1, 5000));
+    QVERIFY(loader.read_thread.load() == core_thread->load());
+    QVERIFY(loader.read_thread.load() != QThread::currentThread());
+    model.close();
+    bool heartbeat{false};
+    QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+    QTRY_VERIFY(heartbeat);
+    QVERIFY(!retired.load());
+    QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Stopping);
+    release.release();
+    QTRY_VERIFY(retired.load());
+    QTRY_COMPARE(model.phase(), WalletListModel::ReaderPhase::Stopped);
+    QCOMPARE(loader.reads.load(), 1);
+    QCOMPARE(reset.size(), 0);
+    QCOMPARE(model.rowCount(), 0);
 }
 
 void WalletListModelTests::manualInterleavedPublicationRequiresExactDiffBase()
@@ -1027,21 +1100,21 @@ void WalletListModelTests::manualInterleavedPublicationRequiresExactDiffBase()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"alpha", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     model.refresh(); model.setWalletInfo("alpha", 1, 0); environment.settle();
     QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
     model.setWalletInfo("alpha", 2, 0);
-    QVERIFY(environment.work.step(execution::Lane::Core)); QVERIFY(environment.work.step(execution::Lane::Domain));
+    QVERIFY(environment.step(environment.core)); QVERIFY(environment.step(environment.utility));
     model.setWalletInfo("alpha", 1, 0);
-    QVERIFY(environment.work.step(execution::Lane::Core));
+    QVERIFY(environment.step(environment.core));
     // The second diff was built against balance 1 while balance 2 had not yet
-    // reached GUI. Publish balance 2 before delivering the second Domain turn.
+    // reached GUI. Publish balance 2 before delivering the second Utility turn.
     QVERIFY(environment.publishNext());
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{2});
-    QVERIFY(environment.work.step(execution::Lane::Domain)); environment.settle();
+    QVERIFY(environment.step(environment.utility)); environment.settle();
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{1});
     QCOMPARE(reset.size(), 1); QCOMPARE(loader.reads.load(), 1); QVERIFY(!model.projectionPending());
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
@@ -1050,7 +1123,7 @@ void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
     MockNode node; FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
-    WalletListModel model{node, environment.services()};
+    WalletListModel model{node, environment.executor, environment.post()};
     auto old_facade = std::make_unique<WalletQmlModel>();
     auto new_facade = std::make_unique<WalletQmlModel>();
     model.refresh(); model.setOpenWallet({}, old_facade.get()); environment.settle();
@@ -1065,7 +1138,7 @@ void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
     new_facade.reset(); environment.settle();
     QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), nullptr);
     QCOMPARE(changed.size(), 2); QCOMPARE(loader.reads.load(), 1);
-    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
+    QVERIFY(environment.retire(model));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

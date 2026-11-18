@@ -16,8 +16,6 @@
 #include <optional>
 #include <vector>
 
-namespace walletopening { class Session; }
-
 namespace walletbump {
 struct Prepared {
     Txid original;
@@ -54,7 +52,7 @@ struct Services {
     psbtpolicy::Read admission;
 };
 Preparation Prepare(interfaces::Wallet& wallet, const QString& txid, unsigned int target,
-                    const std::shared_ptr<walletopening::Session>& opening);
+                    std::shared_ptr<Prepared> review);
 Commit Execute(interfaces::Wallet& wallet, const Prepared& review, std::optional<SecureString> passphrase,
                secretinput::Captured captured = {}, const Services& services = {});
 Commit ObserveOutcome(interfaces::Wallet& wallet, const Commit& original);

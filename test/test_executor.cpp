@@ -4,6 +4,7 @@
 
 #include <qml/execution.h>
 #include <qml/executor.h>
+#include <qml/retainedvalue.h>
 #include <test/qt_test_registry.h>
 
 #include <QtTest/QtTest>
@@ -49,6 +50,8 @@ private Q_SLOTS:
         QVERIFY(!queue.post([&] { order.push_back(-1); }));
         QCOMPARE(pending.size(), 1U);
         runNext();
+        QCOMPARE(order, (std::vector{1}));
+        runNext();
         QCOMPARE(order, (std::vector{1, 2}));
         runNext();
         QCOMPARE(order, (std::vector{1, 2, 3, 4}));
@@ -57,6 +60,46 @@ private Q_SLOTS:
         QVERIFY(other.post([&] { order.push_back(6); }));
         runNext();
         QCOMPARE(order, (std::vector{1, 2, 3, 4, 5, 6}));
+    }
+
+    void utilityQueuesTakeTurns()
+    {
+        using namespace execution;
+        std::deque<std::function<void()>> pending;
+        Executor executor{[&](Lane, UtilityWorker, std::function<void()> task) {
+            pending.push_back(std::move(task));
+            return true;
+        }};
+        auto first = executor.makeQueue(Lane::Utility);
+        auto second = executor.makeQueue(Lane::Utility);
+        std::vector<int> order;
+        QVERIFY(first.post([&] { order.push_back(1); }));
+        QVERIFY(first.post([&] { order.push_back(3); }));
+        QVERIFY(second.post([&] { order.push_back(2); }));
+        while (!pending.empty()) {
+            auto task = std::move(pending.front());
+            pending.pop_front();
+            task();
+        }
+        QCOMPARE(order, (std::vector{1, 2, 3}));
+    }
+
+    void customDispatchOwnsPendingWorkAfterStop()
+    {
+        using namespace execution;
+        std::function<void()> pending;
+        bool ran{};
+        {
+            Executor executor{[&](Lane, UtilityWorker, std::function<void()> task) {
+                pending = std::move(task);
+                return true;
+            }};
+            auto queue = executor.makeQueue(Lane::Core);
+            QVERIFY(queue.post([&] { ran = true; }));
+        }
+        QVERIFY(!ran);
+        pending();
+        QVERIFY(ran);
     }
 
     void captureRetirementCanCloseAndPrecedesDrain()
@@ -191,6 +234,55 @@ private Q_SLOTS:
         QVERIFY(admitted);
         QVERIFY(!queue.post([] {}));
         QCOMPARE(completed.load(), accepted);
+    }
+
+    void refusedCoreTaskReleasesClosingOutcomeQueue()
+    {
+        using namespace execution;
+        int deliveries{0}, drains{0};
+        std::deque<std::function<void()>> utility;
+        std::shared_ptr<SerialQueue> outcomes;
+        Executor executor{[&](Lane lane, UtilityWorker, std::function<void()> turn) {
+            if (lane == Lane::Core) {
+                outcomes->close();
+                outcomes->whenDrained([&] { ++drains; });
+                return false;
+            }
+            utility.push_back(std::move(turn));
+            return true;
+        }};
+        outcomes = std::make_shared<SerialQueue>(executor.makeQueue(Lane::Utility));
+        auto cleanup = std::make_shared<ValueCleanupQueue>(outcomes);
+        auto core = executor.makeQueue(Lane::Core);
+        const auto result = cleanup->postWithOutcome(core, MakeTask([] {}, [&] { ++deliveries; }, {}));
+        QCOMPARE(result.rejection, Rejection::Transport);
+        QCOMPARE(drains, 0);
+        QCOMPARE(utility.size(), size_t{1});
+        auto notify = std::move(utility.front());
+        utility.pop_front();
+        notify();
+        QCOMPARE(drains, 1);
+        QCOMPARE(deliveries, 0);
+        QVERIFY(utility.empty());
+    }
+
+    void shutdownRetiresAcceptedValuesOnTheirUtilityWorker()
+    {
+        using namespace execution;
+        Executor executor{Executor::Config{}};
+        auto queue = std::make_shared<SerialQueue>(executor.makeQueue(Lane::Utility));
+        auto cleanup = std::make_shared<ValueCleanupQueue>(queue);
+        std::thread::id utility, retired;
+        QVERIFY(queue->post([&] { utility = std::this_thread::get_id(); }));
+        auto hold = cleanup->hold([&] { retired = std::this_thread::get_id(); });
+        QVERIFY(hold);
+        queue->close();
+        QVERIFY(!cleanup->hold([] {}));
+        auto core = executor.makeQueue(Lane::Core);
+        QVERIFY(core.post([hold = std::move(hold)] {}));
+        executor.stopAndJoin();
+        QVERIFY(utility != std::thread::id{});
+        QVERIFY(retired == utility);
     }
 
     void stopJoinsThreadLocalDestruction()

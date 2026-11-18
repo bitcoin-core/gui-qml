@@ -55,12 +55,12 @@ FeeSelectionModel::FeeSelectionModel(QObject* parent) : QObject(parent), m_input
     connect(m_rate, &FeeRateEntry::edited, this, &FeeSelectionModel::editRate);
 }
 FeeSelectionModel::~FeeSelectionModel() { close(); }
-void FeeSelectionModel::setServices(execution::SnapshotServices services)
+void FeeSelectionModel::setServices(presentation::Post post, execution::SnapshotQuery<feepolicy::Snapshot>::Post submit)
 {
-    if (m_closed || m_query || !services.scheduler) return;
-    m_services = std::move(services); if (!m_services.post) m_services.post = presentation::QueuedPost();
+    if (m_closed || m_query || !submit) return;
+    if (!post) post = presentation::QueuedPost();
     const QPointer<FeeSelectionModel> observer{this}; const auto input = m_input;
-    m_query = std::make_shared<execution::SnapshotQuery<feepolicy::Snapshot>>(m_services.scheduler, [input] {
+    m_query = std::make_shared<execution::SnapshotQuery<feepolicy::Snapshot>>([input] {
         feepolicy::Snapshot value; CAmount minimum; QHash<unsigned int, CAmount> rates; QChar decimal;
         { std::lock_guard lock{input->mutex}; value = input->desired; minimum = input->minimum; rates = input->rates; decimal = input->decimal; }
         if (value.manual_mode && !value.manual_rate) {
@@ -82,7 +82,8 @@ void FeeSelectionModel::setServices(execution::SnapshotServices services)
         }
         value.preset = value.manual_mode ? 3 : value.target == 2 ? 0 : value.target == 10 ? 2 : 1;
         value.target_index = NearestTarget(value.target); return value;
-    }, [post = m_services.post, observer] { post([observer] { if (observer) observer->publishPolicy(); }); }, execution::Lane::Domain);
+    }, [post = std::move(post), observer] { post([observer] { if (observer) observer->publishPolicy(); }); },
+        std::move(submit));
     request(false);
 }
 void FeeSelectionModel::refresh()

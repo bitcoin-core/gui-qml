@@ -2,9 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/paymentrequesteditormodel.h>
-#include <qml/atomicsharedptr.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedsnapshot.h>
+#include <qml/retainedvalue.h>
 #include <QPointer>
 #include <QScopeGuard>
 #include <QUuid>
@@ -77,15 +76,12 @@ struct PaymentRequestEditorModel::State : std::enable_shared_from_this<State> {
     State(QString editor_id, QString entity_id, int64_t id, uint64_t view, bool erase, Ports ports,
           std::optional<requestedit::Editor::Values> initial, std::shared_ptr<Mailbox> mailbox, std::function<void()> notify)
         : editor({editor_id.toStdString(), entity_id.toStdString()}), id(id), view(view), erase(erase), ports(std::move(ports)),
-          scope(this->ports.execution.scheduler->openActionScope()), key(this->ports.execution.scheduler->allocateKey()),
           initial(std::move(initial)), mailbox(std::move(mailbox)), notify(std::move(notify)) {}
     requestedit::Editor editor;
     int64_t id;
     const uint64_t view;
     const bool erase;
     const Ports ports;
-    ownership::AtomicSharedPtr<execution::Scheduler> scope;
-    const execution::ResourceKey key;
     std::optional<requestedit::Editor::Values> initial;
     requestedit::Source source;
     TextEditError error, rejected_error;
@@ -103,16 +99,18 @@ struct PaymentRequestEditorModel::State : std::enable_shared_from_this<State> {
     const std::shared_ptr<Mailbox> mailbox;
     const std::function<void()> notify;
     ~State() { mailbox->drained.store(true); try { notify(); } catch (...) {} }
-    execution::SubmitResult postUsing(const std::shared_ptr<execution::Scheduler>& target, std::function<void(State&)> command, bool original = false)
+    bool post(std::function<void(State&)> command, bool original = false)
     {
-        if (!target) return {{}, execution::Rejection::Closed};
-        const auto self = shared_from_this();
-        return execution::Submit(*target, [self, command = std::move(command), original] {
-            if (self->mailbox->retired.load() && !original) self->retire(); else command(*self);
-        }, [] {}, {}, {execution::Lane::Domain, key, execution::WorkClass::Action});
+        auto work = [self = shared_from_this(), command = std::move(command), original] {
+            if (self->mailbox->retired.load() && !original) self->retire();
+            else command(*self);
+        };
+        const auto task = execution::MakeTask(std::move(work), [] {}, {});
+        return ports.postWork([task] {
+            task->execute();
+            task->deliver();
+        });
     }
-    execution::SubmitResult ingress(std::function<void(State&)> command) { return postUsing(ports.execution.scheduler, std::move(command)); }
-    execution::SubmitResult post(std::function<void(State&)> command) { return postUsing(scope.load(), std::move(command)); }
     bool publicConflict() const
     {
         if (!source.used || erase) return false;
@@ -202,18 +200,18 @@ struct PaymentRequestEditorModel::State : std::enable_shared_from_this<State> {
         if (again) read();
     }
     void save(requestedit::Inputs inputs, requestedit::Source captured, Writer writer,
-              std::shared_ptr<execution::Scheduler> action, uint64_t request, std::optional<uint64_t> close_token);
+              uint64_t request, std::optional<uint64_t> close_token);
     void finish(const requestedit::Intent& intent, requestedit::Write outcome, bool reconcile);
     void reconcile();
     void retire()
     {
         if (validation_admitted.load()) return;
-        loading_input = {}; initial.reset(); editor.retire(); scope.store({}); publish();
+        loading_input = {}; initial.reset(); editor.retire(); publish();
     }
 };
 
 void PaymentRequestEditorModel::State::save(requestedit::Inputs inputs, requestedit::Source captured,
-    Writer writer, std::shared_ptr<execution::Scheduler> action, uint64_t request, std::optional<uint64_t> close_token)
+    Writer writer, uint64_t request, std::optional<uint64_t> close_token)
 {
     const auto consumed = qScopeGuard([this] {
         validation_admitted.store(false);
@@ -241,9 +239,9 @@ void PaymentRequestEditorModel::State::save(requestedit::Inputs inputs, requeste
     reading = false; publish();
     const auto self = shared_from_this();
     try {
-        if (writer && writer(intent, [self, intent, action](requestedit::Write result) {
-            (void)action; self->finish(intent, std::move(result), false);
-        }, action)) return;
+        if (writer && writer(intent, [self, intent](requestedit::Write result) {
+            self->finish(intent, std::move(result), false);
+        })) return;
         walletrequests::Result result; result.error = walletrequests::Error::Rejected;
         finish(intent, {std::move(result), {}}, false);
     } catch (...) {
@@ -287,7 +285,7 @@ void PaymentRequestEditorModel::State::finish(const requestedit::Intent& intent,
         if (actual.record) source = requestedit::PrepareSource(actual.record, view);
     }
     if (actual.erased) editor.retire();
-    if (mailbox->retired.load() || actual.erased) scope.store({}); else read();
+    if (!mailbox->retired.load() && !actual.erased) read();
     publish();
 }
 
@@ -305,20 +303,22 @@ void PaymentRequestEditorModel::State::reconcile()
 PaymentRequestEditorModel::PaymentRequestEditorModel(int64_t id, uint64_t view, bool erase, Ports ports,
     std::optional<requestedit::Editor::Values> initial, QObject* parent)
     : QObject(parent), m_editor_id(QUuid::createUuid().toString(QUuid::WithoutBraces)),
-      m_entity_id(id > 0 ? QStringLiteral("request/%1").arg(id) : QStringLiteral("draft/%1").arg(m_editor_id)), m_execution(ports.execution)
+      m_entity_id(id > 0 ? QStringLiteral("request/%1").arg(id) : QStringLiteral("draft/%1").arg(m_editor_id)), m_post(presentation::ReliablePost(std::move(ports.post)))
 {
-    m_execution.post = presentation::ReliablePost(std::move(m_execution.post)); ports.execution = m_execution;
     m_mailbox = std::make_shared<Mailbox>(); const QPointer<PaymentRequestEditorModel> observer{this};
-    m_owner = execution::RetainSnapshot<std::shared_ptr<State>>(m_execution.scheduler,
+    const auto value_cleanup = ports.value_cleanup;
+    const bool can_post = bool(ports.postWork);
+    auto make_state =
         [editor = m_editor_id, entity = m_entity_id, id, view, erase, ports = std::move(ports), initial = std::move(initial),
-         mailbox = m_mailbox, observer, post = m_execution.post]() mutable {
+         mailbox = m_mailbox, observer, post = m_post]() mutable {
             return std::make_unique<std::shared_ptr<State>>(std::make_shared<State>(editor, entity, id, view, erase, std::move(ports), std::move(initial), mailbox,
                 [mailbox, observer, post] {
                     if (mailbox->notice_pending.exchange(true)) return;
                     try { post([mailbox, observer] { mailbox->notice_pending.store(false); if (observer) observer->publish(); }); }
                     catch (...) { mailbox->notice_pending.store(false); throw; }
                 }));
-        });
+        };
+    if (value_cleanup && can_post) m_owner = execution::RetainValues<std::shared_ptr<State>>(value_cleanup, std::move(make_state));
     if (m_owner) m_state = std::shared_ptr<State>{m_owner, m_owner->get()}; else m_retired = true;
     connect(&m_label, &TextEditInput::edited, this, [this](const QString& value) { edit(requestedit::Label, {value}); });
     connect(&m_message, &TextEditInput::edited, this, [this](const QString& value) { edit(requestedit::Message, {value}); });
@@ -369,7 +369,7 @@ bool PaymentRequestEditorModel::reject(const QString& command, TextEditError fai
 bool PaymentRequestEditorModel::submit(std::function<void(State&)> command, const QString& name)
 {
     bool admitted{false};
-    { const auto state = m_state.lock(); admitted = available() && state && bool(state->ingress(std::move(command))); }
+    { const auto state = m_state.lock(); admitted = available() && state && state->post(std::move(command)); }
     if (admitted) { m_immediate_error = {}; return true; }
     return reject(name, {m_retired ? TextEditError::Closed : TextEditError::Refused, tr("The change could not be applied. Try again.")});
 }
@@ -454,7 +454,7 @@ void PaymentRequestEditorModel::publish()
     }
     if (!m_closed_notified && phase() == Closed) { m_closed_notified = true; Q_EMIT closed(m_editor_id); }
     if (!guard) return;
-    if (std::exchange(m_publish_again, false)) m_execution.post([guard] { if (guard) guard->publish(); });
+    if (std::exchange(m_publish_again, false)) m_post([guard] { if (guard) guard->publish(); });
 }
 
 QString PaymentRequestEditorModel::baseRevision() const { return QString::number(m_projection ? m_projection->editor.baseRevision() : 0); }
@@ -523,19 +523,20 @@ void PaymentRequestEditorModel::saveCommand(std::optional<uint64_t> close_token)
     if (busy() || !available() || !valid() || m_next_save == UINT64_MAX || m_input == UINT64_MAX) {
         reject(QStringLiteral("save"), {TextEditError::Refused, tr("This request cannot be saved until its fields are complete and checked.")}); return;
     }
-    auto action = m_execution.scheduler->openActionScope(); Writer writer; bool admitted{false};
+    Writer writer;
+    bool admitted{false};
     const QPointer<PaymentRequestEditorModel> guard{this};
     const auto captured = m_projection->source; const auto inputs = m_inputs;
     const auto request = m_next_save + 1;
     {
         const auto state = m_state.lock();
-        try { if (action && state && state->ports.admitWrite) writer = state->ports.admitWrite(); } catch (...) {}
+        try { if (state && state->ports.admitWrite) writer = state->ports.admitWrite(); } catch (...) {}
         if (!guard) return;
-        if (action && writer && state && !state->validation_admitted.exchange(true)) {
-            admitted = bool(state->postUsing(action,
-                [inputs, captured, writer = std::move(writer), action, request, close_token](State& owner) mutable {
-                    owner.save(inputs, captured, std::move(writer), action, request, close_token);
-                }, true));
+        if (state && writer && !state->validation_admitted.exchange(true)) {
+            admitted = state->post(
+                [inputs, captured, writer = std::move(writer), request, close_token](State& owner) mutable {
+                    owner.save(inputs, captured, std::move(writer), request, close_token);
+                }, true);
             if (!admitted) state->validation_admitted.store(false);
         }
     }

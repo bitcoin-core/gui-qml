@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/flowdetailsmodel.h>
+
 #include <qml/flowpresentation.h>
 #include <qml/bitcoinunits.h>
 #include <qml/guipresentation.h>
@@ -72,19 +73,19 @@ void FlowDetailRowsModel::setSnapshot(std::shared_ptr<const FlowDetailSnapshot> 
 }
 FlowDetailsModel::FlowDetailsModel(QObject* parent) : QObject(parent), m_state(std::make_shared<State>()) {}
 FlowDetailsModel::~FlowDetailsModel() { close(); }
-void FlowDetailsModel::setServices(execution::SnapshotServices services)
+void FlowDetailsModel::setServices(presentation::Post publish, execution::SnapshotQuery<FlowDetailProjection>::Post submit,
+                                   execution::ValueCleanup hold)
 {
-    if (*m_closed || m_query) return;
-    m_services = std::move(services);
-    if (!m_services.scheduler) return;
-    m_services.post = presentation::ReliablePost(std::move(m_services.post));
+    if (*m_closed || m_query || !submit || !hold) return;
+    m_publish = presentation::ReliablePost(std::move(publish));
+    m_submit = std::move(submit);
+    m_hold = std::move(hold);
     const QPointer<FlowDetailsModel> observer{this};
-    m_query = std::make_shared<execution::SnapshotQuery<FlowDetailProjection>>(m_services.scheduler,
-        [state = m_state, scheduler = m_services.scheduler] {
+    m_query = std::make_shared<execution::SnapshotQuery<FlowDetailProjection>>([state = m_state, hold = m_hold] {
             std::shared_ptr<const FlowDetailInput> source; quint64 generation;
             { std::lock_guard lock{state->mutex}; source = state->source; generation = state->generation; }
             if (!source) return FlowDetailProjection{generation, {}};
-            auto snapshot = execution::RetainValues<FlowDetailSnapshot>(scheduler, [&] {
+            auto snapshot = execution::RetainValues<FlowDetailSnapshot>(hold, [&] {
                 auto result = std::make_unique<FlowDetailSnapshot>(); result->source = source; result->generation = source->generation;
                 for (const auto& value : source->flow.value("inputs").toList()) result->inputs.append(BoundedFlowEntry(value.toMap()));
                 for (const auto& value : source->flow.value("outputs").toList()) result->outputs.append(BoundedFlowEntry(value.toMap()));
@@ -92,7 +93,8 @@ void FlowDetailsModel::setServices(execution::SnapshotServices services)
                 return result;
             });
             return FlowDetailProjection{generation, std::move(snapshot)};
-        }, [post = m_services.post, observer] { post([observer] { if (observer) observer->publishSnapshot(); }); }, execution::Lane::Domain);
+        }, [post = m_publish, observer] { post([observer] { if (observer) observer->publishSnapshot(); }); },
+        m_submit);
 }
 void FlowDetailsModel::publishSource(const QVariantMap& flow, const QVariantList& recipients, QObject* context,
                                     quint64 revision, std::shared_ptr<const void> original_anchor, int display_unit)
@@ -106,7 +108,7 @@ void FlowDetailsModel::publishSource(const QVariantMap& flow, const QVariantList
     const auto anchor = std::move(original_anchor);
     const auto original_flow = QVariantMap{flow};
     const auto original_recipients = QVariantList(recipients);
-    const auto scheduler = m_services.scheduler;
+    const auto hold = m_hold;
     const auto state = m_state;
     const auto query = m_query;
     const auto owns = [observer, original_context, generation, revision] {
@@ -117,7 +119,7 @@ void FlowDetailsModel::publishSource(const QVariantMap& flow, const QVariantList
     if (context) m_context_connection = connect(context, &QObject::destroyed, this, &FlowDetailsModel::clearSource);
     m_snapshot.reset(); m_document_command.reset(); m_document_pending = false; m_document_error.clear(); clearRows(false);
     if (!owns()) return;
-    auto source = scheduler && original_context ? execution::RetainValues<FlowDetailInput>(scheduler,
+    auto source = query && original_context ? execution::RetainValues<FlowDetailInput>(hold,
         [original_flow, original_recipients, anchor, generation, display_unit] {
         return std::make_unique<FlowDetailInput>(FlowDetailInput{original_flow, original_recipients, anchor, generation, display_unit});
     }) : std::shared_ptr<const FlowDetailInput>{};
@@ -155,18 +157,24 @@ bool FlowDetailsModel::requestEntryDetails(const QString& side, int row, QObject
     if (row >= entries.size()) return false;
     const auto generation = m_generation;
     const QPointer<FlowDetailsModel> observer{this};
-    auto command = std::make_shared<execution::OwnedCommand<std::shared_ptr<const FlowDetailSnapshot>>>(m_services.scheduler,
-        [post = m_services.post, observer] { post([observer] { if (observer) observer->publishDocument(); }); });
+    auto command = std::make_shared<execution::OwnedCommand<std::shared_ptr<const FlowDetailSnapshot>>>(
+        [post = m_publish, observer] { post([observer] { if (observer) observer->publishDocument(); }); });
     m_document_generation = generation; m_document_command = command; m_document_pending = true; m_document_error.clear();
     const QPointer<FlowDetailsModel> guard{this}; m_document.setSnapshot({});
     if (!guard || *m_closed || generation != m_generation || m_document_command != command) return false;
-    if (!command->start([source, side, row, scheduler = m_services.scheduler] {
-        return execution::RetainValues<FlowDetailSnapshot>(scheduler, [&] {
+    auto work = [source, side, row, hold = m_hold] {
+        return execution::RetainValues<FlowDetailSnapshot>(hold, [&] {
             auto result = std::make_unique<FlowDetailSnapshot>(); result->source = source; result->generation = source->generation;
             const auto full = side == "recipients" ? source->recipients : source->flow.value(side).toList();
             result->document = FlowEntryDocument(side == "recipients" ? QVariant{FormatRecipient(full.at(row).toMap(), source->display_unit)} : full.at(row)); return result;
         });
-    }, {execution::Lane::Domain, {}, execution::WorkClass::Observation})) {
+    };
+    const auto submit = m_submit;
+    const auto started = command->startWith([&](auto done, auto failed) {
+        return submit(execution::MakeTask(std::move(work), std::move(done), std::move(failed)));
+    });
+    if (!guard || *m_closed || generation != m_generation || m_document_command != command) return false;
+    if (!started) {
         m_document_pending = false; m_document_error = tr("Entry details could not be loaded. Try again."); Q_EMIT entryDetailsChanged(); return false;
     }
     Q_EMIT entryDetailsChanged(); return true;

@@ -5,16 +5,29 @@
 #include <QtTest/QtTest>
 
 #include <test/mocks/mocknode.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <qml/models/networktraffictower.h>
+#include <qml/executor.h>
 
+#include <algorithm>
 #include <atomic>
+#include <deque>
+#include <stdexcept>
 
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QThread>
 
 namespace {
+class ManualTrafficTimer final : public TrafficTimer {
+public:
+    std::function<void()> tick;
+    void restart(int,std::function<void()> value) override {tick=std::move(value);}
+    void stop() override {tick={};}
+    void advance(){if(tick)tick();}
+};
 constexpr int TEST_SAMPLE_INTERVAL_MS{10};
 constexpr int ASYNC_TIMEOUT_MS{5'000};
 } // namespace
@@ -29,6 +42,10 @@ private Q_SLOTS:
     void activeControlsPublishingWithoutDiscardingBackgroundHistory();
     void filterWindowChangesPreserveTotalsAndHistory();
     void stopsSamplingWhenDestroyedWhileActive();
+    void manualSamplesAndActivationFence();
+    void manualFailureRejectionAndDrain();
+    void sharedQueuesKeepLateTrafficSnapshotsOutOfTheClosedView_data();
+    void sharedQueuesKeepLateTrafficSnapshotsOutOfTheClosedView();
 };
 
 void NetworkTrafficTowerTests::samplesOnlyAfterInitializationAndNeverAfterShutdown()
@@ -36,7 +53,8 @@ void NetworkTrafficTowerTests::samplesOnlyAfterInitializationAndNeverAfterShutdo
     MockNode node;
     std::atomic<int> calls{0};
     node.get_total_bytes_recv_fn = [&] { ++calls; return int64_t{100}; };
-    NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    execution::Executor executor{execution::Executor::Config{}};
+    NetworkTrafficTower tower{node, executor, TEST_SAMPLE_INTERVAL_MS};
     tower.setActive(true);
     tower.updateFilterWindowSize(1);
     QTest::qWait(TEST_SAMPLE_INTERVAL_MS * 3);
@@ -74,8 +92,9 @@ void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive
         return int64_t{2'000};
     };
 
+    execution::Executor executor{execution::Executor::Config{}};
     {
-        NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+        NetworkTrafficTower tower{node, executor, TEST_SAMPLE_INTERVAL_MS};
         tower.startSampling();
         QSignalSpy received_list_spy{&tower, &NetworkTrafficTower::receivedRateListChanged};
         QSignalSpy sent_list_spy{&tower, &NetworkTrafficTower::sentRateListChanged};
@@ -90,6 +109,7 @@ void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive
         QCOMPARE(sent_list_spy.count(), 0);
     }
 
+    executor.stopAndJoin();
     const int calls_after_destruction{received_calls.load()};
     QTest::qWait(TEST_SAMPLE_INTERVAL_MS * 3);
     QCOMPARE(received_calls.load(), calls_after_destruction);
@@ -110,7 +130,8 @@ void NetworkTrafficTowerTests::activeControlsPublishingWithoutDiscardingBackgrou
         return total_sent.load();
     };
 
-    NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    execution::Executor executor{execution::Executor::Config{}};
+    NetworkTrafficTower tower{node, executor, TEST_SAMPLE_INTERVAL_MS};
     tower.startSampling();
     QSignalSpy received_list_spy{&tower, &NetworkTrafficTower::receivedRateListChanged};
     QSignalSpy sent_list_spy{&tower, &NetworkTrafficTower::sentRateListChanged};
@@ -159,7 +180,8 @@ void NetworkTrafficTowerTests::filterWindowChangesPreserveTotalsAndHistory()
         return int64_t{2'000};
     };
 
-    NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    execution::Executor executor{execution::Executor::Config{}};
+    NetworkTrafficTower tower{node, executor, TEST_SAMPLE_INTERVAL_MS};
     tower.startSampling();
     tower.setActive(true);
     QTRY_VERIFY_WITH_TIMEOUT(received_calls.load() >= 25, ASYNC_TIMEOUT_MS);
@@ -192,17 +214,184 @@ void NetworkTrafficTowerTests::stopsSamplingWhenDestroyedWhileActive()
         return int64_t{2'000};
     };
 
+    execution::Executor executor{execution::Executor::Config{}};
     {
-        NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+        NetworkTrafficTower tower{node, executor, TEST_SAMPLE_INTERVAL_MS};
         tower.startSampling();
         tower.setActive(true);
         QTRY_VERIFY_WITH_TIMEOUT(received_calls.load() >= 3, ASYNC_TIMEOUT_MS);
         QVERIFY(tower.active());
     }
 
+    executor.stopAndJoin();
     const int calls_after_destruction{received_calls.load()};
     QTest::qWait(TEST_SAMPLE_INTERVAL_MS * 3);
     QCOMPARE(received_calls.load(), calls_after_destruction);
+}
+
+void NetworkTrafficTowerTests::manualSamplesAndActivationFence()
+{
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
+    auto timer=std::make_shared<ManualTrafficTimer>();
+    MockNode node;
+    int64_t received{100},sent{200};
+    node.get_total_bytes_recv_fn=[&]{return received;};node.get_total_bytes_sent_fn=[&]{return sent;};
+    NetworkTrafficTower tower{node, transport.executor(), 1000, [&](auto turn) { gui.push_back(std::move(turn)); }, timer};
+    const auto cleanup = qScopeGuard([&] { tower.close(); transport.drain(); });
+    auto deliver = [&] {
+        while (gui.empty()) {
+            if (!transport.step(execution::Lane::Utility)) return false;
+        }
+        return true;
+    };
+    auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
+    auto complete=[&]{return transport.step(execution::Lane::Core)&&deliver()&&publish();};
+    tower.setActive(true);tower.startSampling();QCOMPARE(node.calls.getTotalBytesRecv.load(),0);
+    QVERIFY(complete());
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),0); // Configuration cannot sample inline.
+    QCOMPARE(gui.size(),size_t{1});
+    while (transport.step(execution::Lane::Utility)) {}
+    QVERIFY(transport.quiescent()); // Only the GUI successor can admit a new read.
+    QVERIFY(publish()); // Explicit guarded successor admits the original sample.
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),0);
+    QCOMPARE(tower.totalBytesReceived(), quint64{0}); QCOMPARE(tower.totalBytesSent(), quint64{0});
+    QVERIFY(complete());QCOMPARE(tower.totalBytesReceived(),quint64{100}); QCOMPARE(tower.totalBytesSent(),quint64{200});
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),1);
+    received=140;sent=260;timer->advance();QVERIFY(transport.step(execution::Lane::Core));
+    QCOMPARE(tower.totalBytesReceived(),quint64{100}); QCOMPARE(tower.totalBytesSent(),quint64{200}); QVERIFY(deliver());
+    tower.setActive(false);QVERIFY(publish());QCOMPARE(tower.totalBytesReceived(),quint64{100});
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),2);
+    QCOMPARE(gui.size(),size_t{1});
+    while (transport.step(execution::Lane::Utility)) {}
+    QVERIFY(transport.quiescent());
+    QVERIFY(publish()); // Stale activation completion posts, never recursively executes, its successor.
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),2);
+    // History sampled while inactive survives activation; an older active result cannot publish.
+    QVERIFY(complete());QCOMPARE(node.calls.getTotalBytesRecv.load(),2);
+    received=200;sent=300;timer->advance();QVERIFY(complete());
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),3);
+    tower.setActive(true);QVERIFY(complete());QCOMPARE(tower.totalBytesReceived(),quint64{200});
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),3);
+    QCOMPARE(tower.receivedRateList().size(),2);QCOMPARE(tower.receivedRateList().front(),50.0f);
+    tower.updateFilterWindowSize(1);QVERIFY(complete());QCOMPARE(tower.receivedRateList().front(),60.0f);
+    QCOMPARE(node.calls.getTotalBytesRecv.load(),3);
+    tower.close();QVERIFY(!timer->tick);transport.drain();QVERIFY(transport.quiescent());
+}
+void NetworkTrafficTowerTests::manualFailureRejectionAndDrain()
+{
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
+    auto timer=std::make_shared<ManualTrafficTimer>();
+    MockNode node;
+    bool fail{false};node.get_total_bytes_recv_fn=[&]() -> int64_t {if(fail)throw std::runtime_error("read failed");return 100;};
+    node.get_total_bytes_sent_fn=[]{return int64_t{200};};
+    NetworkTrafficTower tower{node, transport.executor(), 1000, [&](auto turn) { gui.push_back(std::move(turn)); }, timer};
+    const auto cleanup = qScopeGuard([&] { tower.close(); transport.drain(); });
+    auto deliver = [&] {
+        while (gui.empty()) {
+            if (!transport.step(execution::Lane::Utility)) return false;
+        }
+        return true;
+    };
+    auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
+    tower.startSampling();QVERIFY(transport.step(execution::Lane::Core));QVERIFY(deliver());QVERIFY(publish());
+    fail=true;timer->advance();tower.updateFilterWindowSize(2);
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(deliver());QVERIFY(publish());
+    QVERIFY(!tower.readError().isEmpty());QVERIFY(!tower.samplePending());
+    // The coalesced request is an independently controlled presentation turn,
+    // never a recursive submission from the failure callback.
+    while (transport.step(execution::Lane::Utility)) {}
+    QVERIFY(transport.quiescent());
+    QCOMPARE(gui.size(),size_t{1});
+    fail=false;QVERIFY(publish());QVERIFY(tower.samplePending());
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(deliver());QVERIFY(publish());
+    QVERIFY(tower.readError().isEmpty());QVERIFY(!tower.samplePending());
+    transport.reject_core = true;timer->advance();QVERIFY(publish());QVERIFY(!tower.readError().isEmpty());
+    fail=false;timer->advance();QSignalSpy drained{&tower,&NetworkTrafficTower::drained};
+    QSignalSpy history{&tower,&NetworkTrafficTower::receivedRateListChanged};
+    tower.close();tower.beginShutdown();QCOMPARE(drained.size(),0);
+    QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(drained.size(),0);
+    QVERIFY(transport.step(execution::Lane::Utility));
+    transport.drain(); while(publish()){}
+    QCOMPARE(drained.size(),1);QCOMPARE(history.size(),0);QVERIFY(!timer->tick);
+    transport.drain();QVERIFY(transport.quiescent());
+}
+
+void NetworkTrafficTowerTests::sharedQueuesKeepLateTrafficSnapshotsOutOfTheClosedView_data()
+{
+    QTest::addColumn<bool>("outcome_ready");
+    QTest::newRow("core-held") << false;
+    QTest::newRow("gui-held") << true;
+}
+
+void NetworkTrafficTowerTests::sharedQueuesKeepLateTrafficSnapshotsOutOfTheClosedView()
+{
+    QFETCH(bool, outcome_ready);
+    using execution::Lane;
+    ManualStartupExecution transport;
+    std::deque<std::function<void()>> gui;
+    const auto step = [&](Lane lane) { return transport.step(lane); };
+    const auto publish = [&] {
+        while (!gui.empty()) {
+            auto turn = std::move(gui.front());
+            gui.pop_front();
+            turn();
+        }
+    };
+    MockNode node;
+    int64_t received{100};
+    node.get_total_bytes_recv_fn = [&] { return received; };
+    node.get_total_bytes_sent_fn = [] { return int64_t{200}; };
+    auto timer = std::make_shared<ManualTrafficTimer>();
+    NetworkTrafficTower tower{node, transport.executor(), 1000, [&](auto turn) { gui.push_back(std::move(turn)); }, timer};
+    const auto cleanup = qScopeGuard([&] {
+        tower.beginShutdown();
+        while (step(Lane::Core) || step(Lane::Utility)) {}
+        publish();
+    });
+    tower.setActive(true);
+    QVERIFY(step(Lane::Core));
+    QVERIFY(step(Lane::Utility));
+    publish();
+    QCOMPARE(node.calls.getTotalBytesRecv.load(), 0);
+    tower.startSampling();
+    QVERIFY(step(Lane::Core));
+    QCOMPARE(node.calls.getTotalBytesRecv.load(), 1);
+    QCOMPARE(tower.totalBytesReceived(), quint64{0});
+    QVERIFY(step(Lane::Utility));
+    publish();
+    QCOMPARE(tower.totalBytesReceived(), quint64{100});
+
+    received = 150;
+    timer->advance();
+    if (outcome_ready) {
+        QVERIFY(step(Lane::Core));
+        QVERIFY(step(Lane::Utility)); // Hold the result at the GUI boundary.
+    }
+    received = 200;
+    timer->advance();
+    auto stale_tick = timer->tick;
+    QSignalSpy drained{&tower, &NetworkTrafficTower::drained};
+    QSignalSpy history{&tower, &NetworkTrafficTower::receivedRateListChanged};
+    tower.beginShutdown();
+    QVERIFY(!timer->tick);
+    stale_tick();
+    publish();
+    QCOMPARE(drained.count(), 0);
+    if (!outcome_ready) {
+        while (step(Lane::Utility)) {}
+        publish();
+        QCOMPARE(drained.count(), 0);
+        QVERIFY(step(Lane::Core));
+    }
+    QVERIFY(step(Lane::Utility));
+    while (step(Lane::Utility)) {}
+    publish();
+    QCOMPARE(drained.count(), 1);
+    QVERIFY(!step(Lane::Core));
+    QCOMPARE(node.calls.getTotalBytesRecv.load(), 2);
+    QCOMPARE(history.count(), 0);
+    QCOMPARE(tower.totalBytesReceived(), quint64{100});
+    QVERIFY(tower.receivedRateList().isEmpty());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
@@ -210,4 +399,4 @@ BITCOINQML_REGISTER_QT_TEST(NetworkTrafficTowerTests)
 #else
 QTEST_MAIN(NetworkTrafficTowerTests)
 #endif
-#include "test_networktraffictower.moc"
+#include <test_networktraffictower.moc>

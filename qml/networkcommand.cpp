@@ -2,13 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/networkcommand.h>
-#include <qml/atomicsharedptr.h>
+#include <qml/executor.h>
 #include <qml/retainedsnapshot.h>
 
 #include <algorithm>
 #include <atomic>
 #include <limits>
-#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -125,11 +124,7 @@ Projection Command::projection() const
 
 struct Service::Publication {
     mutable std::mutex mutex;
-    bool closed{false};
-    ownership::AtomicSharedPtr<const Projection> value;
-    // Fixed scalar receipt: snapshot-capacity rejection cannot erase an
-    // accepted outcome or leave ingress pending. No structural GUI payload.
-    Projection fallback;
+    Projection value;
 };
 
 struct Service::State {
@@ -137,75 +132,58 @@ struct Service::State {
     // Last destroyed: every original port, effect and retained projection has
     // physically retired before the owner's completion acknowledgment.
     Completion completion;
-    struct Snapshot { Projection value; std::shared_ptr<State> original; };
-    struct Input { Intent intent; std::shared_ptr<execution::Scheduler> action; };
     struct Availability { bool available; uint64_t revision; };
     struct Demand {
         std::optional<Intent> effect;
-        std::shared_ptr<execution::Scheduler> read_scope;
+        bool read{false};
     };
-    const execution::SnapshotServices execution;
+    const Queues queues;
     const Ports ports;
     const std::shared_ptr<Publication> publication;
     const std::function<void()> changed;
     std::weak_ptr<State> owner;
-    ownership::AtomicSharedPtr<execution::Scheduler> lifetime;
-    const execution::ResourceKey domain, native;
     std::atomic_bool stopping{false}, available{false};
     std::atomic<uint64_t> availability{0};
     std::mutex inbox_mutex;
-    std::optional<Input> next;
+    std::optional<Intent> next;
     std::optional<Observation> observation;
     std::optional<Availability> availability_input;
     bool scheduled{false};
+    // If outcome delivery is refused by Utility, Core completes the original
+    // receipt. Serialize that fallback with Utility (including inline posts).
+    std::recursive_mutex reducer_mutex;
     Command command;
-    std::map<uint64_t, std::shared_ptr<execution::Scheduler>> actions;
     uint64_t acknowledged{0};
     bool reading{false}, read_again{false};
 
-    State(execution::SnapshotServices execution, Ports ports, std::shared_ptr<Publication> publication,
-          std::function<void()> changed, std::function<void()> drained)
-        : completion{std::move(drained)}, execution(std::move(execution)), ports(std::move(ports)),
-          publication(std::move(publication)), changed(std::move(changed)),
-          lifetime(this->execution.scheduler->openActionScope()),
-          domain(this->execution.scheduler->allocateKey()), native(this->execution.scheduler->allocateKey()) {}
+    State(Ports ports, std::shared_ptr<Publication> publication,
+          std::function<void()> changed, std::function<void()> drained, Queues queues)
+        : completion{std::move(drained)}, queues(std::move(queues)), ports(std::move(ports)),
+          publication(std::move(publication)), changed(std::move(changed)) {}
 
     void publish()
     {
         auto value = command.projection(); value.acknowledged = acknowledged;
-        const auto scope = lifetime.load();
-        const auto self = owner.lock();
-        const auto retained = scope ? execution::RetainSnapshot<Snapshot>(scope, [&] {
-            return std::make_unique<Snapshot>(Snapshot{value, self});
-        }) : std::shared_ptr<Snapshot>{};
         {
             std::lock_guard lock{publication->mutex};
-            publication->fallback = value;
-            if (!publication->closed) publication->value.store(retained ? std::shared_ptr<const Projection>{retained, &retained->value} : nullptr);
+            publication->value = value;
         }
         try { if (changed) changed(); } catch (...) {} // The actual receipt remains owned.
     }
-    bool wake(const std::shared_ptr<execution::Scheduler>& scope)
+    bool wake()
     {
         { std::lock_guard lock{inbox_mutex}; if (scheduled) return true; scheduled = true; }
         const auto self = owner.lock();
-        if (scope && execution::Submit(*scope, [self] { self->consume(); }, [] {}, {},
-                {execution::Lane::Domain, domain, execution::WorkClass::Action})) return true;
+        const auto turn = [self] { self->consume(); };
+        const bool posted = queues.utility->post(turn);
+        if (posted) return true;
         std::lock_guard lock{inbox_mutex}; scheduled = false;
         return false;
-    }
-    void prune()
-    {
-        for (auto entry = actions.begin(); entry != actions.end();) {
-            const bool running = command.running() && command.running()->id == entry->first;
-            const bool queued = command.queued() && command.queued()->id == entry->first;
-            if (!running && !queued) entry = actions.erase(entry); else ++entry;
-        }
     }
     Demand takeInputs()
     {
         Demand demand;
-        std::optional<Input> input;
+        std::optional<Intent> input;
         std::optional<Observation> observed;
         std::optional<Availability> status;
         {
@@ -214,25 +192,28 @@ struct Service::State {
             status = std::exchange(availability_input, {}); scheduled = false;
         }
         if (stopping) {
-            command.close(); if (input) acknowledged = std::max(acknowledged, input->intent.id);
-            actions.clear(); lifetime.store({}); return demand;
+            command.close();
+            if (input) acknowledged = std::max(acknowledged, input->id);
+            return demand;
         }
         if (status) command.setAvailable(status->available, status->revision);
         if (observed) command.observe(*observed);
         if (input) {
-            acknowledged = std::max(acknowledged, input->intent.id);
-            actions[input->intent.id] = std::move(input->action);
-            demand.effect = command.request(input->intent);
-            prune();
+            acknowledged = std::max(acknowledged, input->id);
+            demand.effect = command.request(*input);
         }
-        if (status && status->available && !command.projection().known) demand.read_scope = lifetime.load();
+        demand.read = status && status->available && !command.projection().known;
         return demand;
     }
-    void consume() { advance(takeInputs()); }
+    void consume()
+    {
+        std::lock_guard lock{reducer_mutex};
+        advance(takeInputs());
+    }
     void advance(Demand demand)
     {
         // Synchronous rejection accounts for known non-execution in this
-        // original Domain turn. It neither calls an asynchronous completion
+        // original Utility turn. It neither calls an asynchronous completion
         // inline nor admits another turn to rescue an accepted outcome.
         // No inbox is consumed in this loop, so only the already owned running
         // intent and its one coalesced successor can be considered here.
@@ -248,16 +229,25 @@ struct Service::State {
             }
             if (!rejected) break;
             demand.effect = command.finish(*rejected);
-            prune();
         }
-        if (demand.read_scope) read(demand.read_scope);
+        if (demand.read) read();
         if (stopping) command.close();
         publish();
     }
+    template <typename Work, typename Done, typename Failed>
+    bool submitNative(Work work, Done done, Failed failed)
+    {
+        auto task = execution::MakeTask(std::move(work), std::move(done), std::move(failed));
+        return queues.core->post([utility = queues.utility, task = std::move(task)] {
+            task->execute();
+            const auto deliver = [task] { task->deliver(); };
+            if (!utility->post(deliver)) deliver();
+        });
+    }
+
     std::optional<Effect> dispatch(Intent intent)
     {
         const auto self = owner.lock();
-        const auto action = actions.at(intent.id);
         const auto work = [self, intent] {
             Effect result; result.id = intent.id;
             try {
@@ -304,14 +294,14 @@ struct Service::State {
             } catch (...) { result.status = result.attempted ? EffectStatus::Uncertain : EffectStatus::NotStarted; }
             return result;
         };
-        const auto done = [self, action](Effect result) {
+        const auto done = [self](Effect result) {
+            std::lock_guard lock{self->reducer_mutex};
             // Reconcile latest ingress before accounting, without starting
             // effects from inside the outcome reducer.
             auto demand = self->takeInputs();
             const auto next_effect = self->command.finish(result);
-            self->prune();
             if (next_effect) demand.effect = next_effect;
-            if (result.status == EffectStatus::Uncertain && !self->stopping) demand.read_scope = action;
+            if (result.status == EffectStatus::Uncertain && !self->stopping) demand.read = true;
             self->advance(std::move(demand));
         };
         const auto failed = [done, id=intent.id](std::exception_ptr error) {
@@ -321,33 +311,33 @@ struct Service::State {
             catch (...) {}
             done(result);
         };
-        if (execution::Submit(*action, work, done, failed, {execution::Lane::Core, native, execution::WorkClass::Action})) return {};
+        if (submitNative(work, done, failed)) return {};
         Effect rejected; rejected.id = intent.id; rejected.status = EffectStatus::NotStarted;
         return rejected;
     }
-    void read(const std::shared_ptr<execution::Scheduler>& scope)
+    void read()
     {
-        if (!scope || stopping || !available) return;
+        if (stopping || !available) return;
         if (reading) { read_again = true; return; }
         reading = true;
         const auto revision = availability.load();
         const auto self = owner.lock();
         struct Read { std::optional<Observation> value; };
-        const auto finish = [self, scope, revision](Read result) {
+        const auto finish = [self, revision](Read result) {
+            std::lock_guard lock{self->reducer_mutex};
             self->reading = false;
             if (!self->stopping && self->availability == revision && result.value) self->command.observe(*result.value);
             else if (!self->stopping && self->availability == revision) self->command.queryUnavailable();
             const bool again = std::exchange(self->read_again, false);
             self->publish();
-            if (again && !self->stopping) self->read(scope);
+            if (again && !self->stopping) self->read();
         };
-        if (!execution::Submit(*scope, [self, revision] {
+        if (!submitNative([self, revision] {
             Read result;
             if (self->stopping || !self->available || self->availability != revision) return result;
             try { result.value = self->ports.observe(); } catch (...) {}
             return result;
-        }, finish, [finish](std::exception_ptr) { finish({}); },
-            {execution::Lane::Core, native, execution::WorkClass::Observation})) {
+        }, finish, [finish](std::exception_ptr) { finish({}); })) {
             // A read that never started has no outcome callback to follow.
             // Account its failure here; only an admitted asynchronous read's
             // completion may dispatch the one coalesced follow-up.
@@ -358,35 +348,33 @@ struct Service::State {
     }
 };
 
-Service::Service(execution::SnapshotServices execution, Ports ports, std::function<void()> changed, std::function<void()> drained)
-    : m_execution(std::move(execution)), m_publication(std::make_shared<Publication>())
+Service::Service(Queues queues, Ports ports, std::function<void()> changed, std::function<void()> drained)
+    : m_publication(std::make_shared<Publication>())
 {
-    if (!m_execution.scheduler || !ports.observe || !ports.set_active || !ports.generation)
+    if (!queues.core || !queues.utility || !queues.retire)
+        throw std::invalid_argument{"Missing network command queue"};
+    if (!ports.observe || !ports.set_active || !ports.generation)
         throw std::invalid_argument{"Missing network command port"};
-    m_owner = execution::RetainSnapshot<State>(m_execution.scheduler, [&] {
-        return std::make_unique<State>(m_execution, std::move(ports), m_publication, std::move(changed), std::move(drained));
+    const auto retire = queues.retire;
+    m_owner = execution::RetainSnapshot<State>(retire, [&] {
+        return std::make_unique<State>(std::move(ports), m_publication,
+            std::move(changed), std::move(drained), std::move(queues));
     });
-    if (m_owner) { m_state = m_owner; m_owner->owner = m_owner; }
-    else {
-        m_publication->fallback.outcome = Outcome::Rejected; m_publication->fallback.error = Error::Admission;
-        if (changed) changed();
-        if (drained) drained();
-    }
+    m_state = m_owner;
+    m_owner->owner = m_owner;
 }
 Service::~Service() { close(); }
 bool Service::request(Intent intent)
 {
     const auto state = m_state.lock();
     if (!state || state->stopping) return false;
-    const auto action = m_execution.scheduler->openActionScope();
-    if (!action) return false;
     {
         std::lock_guard lock{state->inbox_mutex};
-        if (!state->next || intent.id > state->next->intent.id) state->next = State::Input{intent, action};
+        if (!state->next || intent.id > state->next->id) state->next = intent;
     }
-    if (state->wake(action)) return true;
+    if (state->wake()) return true;
     std::lock_guard lock{state->inbox_mutex};
-    if (state->next && state->next->intent.id == intent.id) state->next.reset();
+    if (state->next && state->next->id == intent.id) state->next.reset();
     return false;
 }
 bool Service::observe(Observation observation)
@@ -394,7 +382,7 @@ bool Service::observe(Observation observation)
     const auto state = m_state.lock(); if (!state || state->stopping) return false;
     { std::lock_guard lock{state->inbox_mutex};
       if (!state->observation || observation.generation > state->observation->generation) state->observation = observation; }
-    return state->wake(state->lifetime.load());
+    return state->wake();
 }
 bool Service::setAvailable(bool available, uint64_t revision)
 {
@@ -402,21 +390,16 @@ bool Service::setAvailable(bool available, uint64_t revision)
     if (revision <= state->availability.load()) return false;
     state->available = available; state->availability = revision;
     { std::lock_guard lock{state->inbox_mutex}; state->availability_input = State::Availability{available, revision}; }
-    return state->wake(state->lifetime.load());
+    return state->wake();
 }
 Projection Service::projection() const
 {
     std::lock_guard lock{m_publication->mutex};
-    const auto value = m_publication->value.load();
-    return value ? *value : m_publication->fallback;
+    return m_publication->value;
 }
 void Service::retire()
 {
-    // Release the publication alias before the original owner. Existing task
-    // callbacks retain that owner through their accepted outcome chain; its
-    // pre-reserved Native cleanup then retires ports and the lifetime scope.
-    // Passive observer loss is not an implicit cancellation command.
-    { std::lock_guard lock{m_publication->mutex}; m_publication->closed = true; m_publication->value.store({}); }
+    // Accepted tasks keep their owner and outcome when the observer goes away.
     m_state.reset();
     m_owner.reset();
 }
@@ -424,9 +407,7 @@ void Service::close()
 {
     if (const auto state = m_state.lock()) {
         state->stopping = true;
-        { std::lock_guard lock{m_publication->mutex}; m_publication->closed = true; m_publication->value.store({}); }
-        const auto scope = state->lifetime.exchange({});
-        state->wake(scope);
+        state->wake();
     }
     m_state.reset(); m_owner.reset();
 }

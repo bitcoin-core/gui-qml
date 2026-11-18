@@ -5,6 +5,7 @@
 #define BITCOIN_QML_WALLETREGISTRY_H
 
 #include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <qml/walletnames.h>
 #include <qml/walletpublication.h>
 #include <qml/models/walletqmlmodel.h>
@@ -24,11 +25,13 @@
 #include <set>
 #include <utility>
 
+class WalletRegistry;
+
 class OpenWalletListModel final : public QAbstractListModel
 {
     Q_OBJECT
 public:
-    explicit OpenWalletListModel(std::shared_ptr<execution::Scheduler> scheduler, QObject* parent = nullptr, presentation::Post post = {});
+    OpenWalletListModel(const WalletRegistry& registry, QObject* parent, presentation::Post post);
     ~OpenWalletListModel() override;
     int rowCount(const QModelIndex& parent = {}) const override;
     QModelIndex index(int row, int column = 0, const QModelIndex& parent = {}) const override;
@@ -82,11 +85,11 @@ public:
         std::function<void()> contextChanged;
     };
     struct Services {
-        std::shared_ptr<execution::Scheduler> scheduler;
         std::shared_ptr<QObject> bridge;
         WalletQmlModel* empty{nullptr};
         presentation::Post post;
         std::function<void(std::function<void()>)> shutdown;
+        std::shared_ptr<execution::SerialQueue> value_cleanup{};
     };
     struct Form {
         QPointer<QObject> owner;
@@ -140,6 +143,8 @@ public:
         std::shared_ptr<Retirement> keep_alive;
         std::function<void(std::function<void()>)> post;
         std::function<void(std::function<void()>)> shutdown;
+        std::function<void()> join_when_drained;
+        std::shared_ptr<execution::ValueCleanupQueue> value_cleanup;
         bool started{false}, pumping{false}, batches_done{false}, native_done{false}, completed{false};
         size_t native_backends{0};
         bool retained{true};
@@ -150,10 +155,14 @@ public:
         void enqueue();
         void pump();
         void finish();
+        void notifyRetired();
+        void drainValues(std::function<void()> done);
     };
     WalletRegistry(std::shared_ptr<Host> host, Services services);
+    ~WalletRegistry() override;
     OpenWalletListModel* openWalletModel() const { return m_open_wallet_model; }
     std::shared_ptr<WalletNameRegistry> nameRegistry() const { return m_names_registry; }
+    execution::ValueCleanup valueCleanup() const;
     bool containsExact(WalletQmlModel* wallet) const override;
     std::shared_ptr<walletpublication::CatalogReservation> reserveCreation(const QString& operation_id) override;
     walletpublication::Result publishCreation(const std::shared_ptr<walletpublication::CatalogReservation>& ticket,
@@ -176,7 +185,8 @@ public:
     bool adoptRetirement(WalletQmlModel* model, bool remove);
     void detachPresentation();
     void detachController();
-    void beginRetirement();
+    void beginRetirement(std::shared_ptr<execution::Executor> executor,
+                         std::function<void(std::function<void()>)> notification_retirement);
     void registerForm(QObject* form, std::function<void()> close);
     void forgetForm(QObject* form);
     bool adoptionActive() const { return m_adoption_depth != 0; }
@@ -200,27 +210,12 @@ public:
     void clearCommandOrigin() { m_command_origin.reset(); }
     void clearOrigins() { m_command_origin.reset(); m_notification_origin.reset(); m_publishing_origin.reset(); }
     template <typename T, typename Factory>
-    static std::shared_ptr<T> retain(const std::shared_ptr<execution::Scheduler>& scheduler, Factory factory) {
-        return RetainValue<T>(scheduler, std::move(factory));
+    std::shared_ptr<T> retain(Factory factory) const
+    {
+        try { return execution::RetainValues<T>(valueCleanup(), std::move(factory)); }
+        catch (...) { return {}; }
     }
 private:
-    template <typename T, typename Factory>
-    static std::shared_ptr<T> RetainValue(const std::shared_ptr<execution::Scheduler>& scheduler, Factory factory)
-    {
-        struct Storage { std::unique_ptr<T> value; };
-        const auto storage = std::make_shared<Storage>();
-        const auto key = scheduler->allocateKey();
-        const auto cleanup = execution::Submit(*scheduler, [storage] { storage->value.reset(); }, [] {}, {},
-            {execution::Lane::Cleanup, key, execution::WorkClass::Action}, true);
-        if (!cleanup) return {};
-        auto held = scheduler->borrow(key);
-        scheduler->activateCleanup(cleanup.id);
-        if (!held) return {};
-        const auto lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease));
-        try { storage->value = factory(); }
-        catch (...) { return {}; }
-        return std::shared_ptr<T>{lease, storage->value.get()};
-    }
     const std::shared_ptr<Host> m_host;
     const Services m_services;
     size_t m_adoption_depth{0};

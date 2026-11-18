@@ -19,7 +19,7 @@
 #include <QPointer>
 #include <qml/models/activitysnapshot.h>
 #include <qml/models/activityexportoperation.h>
-#include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <QString>
 
 #include <optional>
@@ -89,7 +89,7 @@ public:
     using CsvResult = activityexport::Result;
     using CsvRequest = activityexport::Request;
     struct Services {
-        execution::SnapshotServices execution;
+        presentation::Post post;
         std::function<QDate()> today;
         std::function<CsvResult(const CsvRequest&)> write;
         std::function<QLocale()> locale{};
@@ -227,7 +227,6 @@ private:
     static QString typeLabel(const activityview::Row& row);
     static activityview::Row present(const activityview::Row& row, const Parameters& parameters);
     Services m_services;
-    execution::SnapshotServices m_execution;
     std::shared_ptr<Mailbox> m_mailbox;
     std::shared_ptr<Job> m_job;
     std::shared_ptr<const activityview::Hold> m_current, m_input, m_applied_input;

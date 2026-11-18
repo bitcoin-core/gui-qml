@@ -64,7 +64,7 @@ public:
         explicit operator bool() const { return intent && rejection == execution::Rejection::None; }
     };
     struct Ports {
-        execution::SnapshotServices execution;
+        presentation::Post post;
         std::function<Admission(walletrequests::Command, std::function<void(const walletrequests::Result&)>)> submit;
         // Bounded native QString handoff. The production adapter reserves and
         // materializes its secure input on the injected executor.

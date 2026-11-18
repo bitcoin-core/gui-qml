@@ -190,7 +190,6 @@ struct CoinsListModel::Backend : std::enable_shared_from_this<Backend> {
         std::function<void(LockResult)> done;
     };
     const std::shared_ptr<walletopening::Session> opening;
-    const execution::SnapshotServices services;
     std::shared_ptr<Input> input{std::make_shared<Input>()};
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const Native>>> native_query;
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const View>>> projection;
@@ -200,8 +199,8 @@ struct CoinsListModel::Backend : std::enable_shared_from_this<Backend> {
     std::shared_ptr<std::atomic<quint64>> lock_revision{std::make_shared<std::atomic<quint64>>(0)};
     std::deque<std::shared_ptr<LockJob>> locks;
     bool read_failed{false};
-    Backend(std::shared_ptr<walletopening::Session> owner, execution::SnapshotServices ports)
-        : opening(std::move(owner)), services(std::move(ports)) {}
+    explicit Backend(std::shared_ptr<walletopening::Session> owner)
+        : opening(std::move(owner)) {}
     void start(std::function<void()> notify) {
         session = std::make_unique<coinselection::Session>([opening = opening](Selection values) {
             return walletopening::RetainValues<Selection>(opening, [values = std::move(values)]() mutable {
@@ -210,7 +209,7 @@ struct CoinsListModel::Backend : std::enable_shared_from_this<Backend> {
         });
         if (!session->ready()) throw std::runtime_error{"Coin selection cleanup could not be reserved"};
         const auto weak = weak_from_this();
-        native_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Native>>>(services.scheduler,
+        native_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Native>>>(
             [opening = opening, revision = lock_revision, selected_revision = selection_epoch] {
                 const auto observed = revision->load(), observed_selection = selected_revision->load();
                 auto wallet = opening->borrow();
@@ -236,10 +235,11 @@ struct CoinsListModel::Backend : std::enable_shared_from_this<Backend> {
                 });
                 if (!value) throw std::runtime_error{"Coin snapshot cleanup could not be reserved"};
                 return std::shared_ptr<const Native>{std::move(value)};
-            }, [weak] { if (const auto self = weak.lock()) self->consumeNative(); });
-        projection = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const View>>>(services.scheduler,
+            }, [weak] { if (const auto self = weak.lock()) self->consumeNative(); },
+            opening->observationPost());
+        projection = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const View>>>(
             [weak] { if (const auto self = weak.lock()) return self->build(); return std::shared_ptr<const View>{}; },
-            std::move(notify), execution::Lane::Domain);
+            std::move(notify), opening->observationPost(execution::Lane::Domain));
     }
     void consumeNative() {
         const auto result = native_query->take(); if (!result) return;
@@ -314,6 +314,14 @@ struct CoinsListModel::Backend : std::enable_shared_from_this<Backend> {
         });
         if (!result) throw std::runtime_error{"Coin view cleanup could not be reserved"};
         return result;
+    }
+    template <typename Value, typename Work>
+    execution::SubmitResult submitCommand(execution::OwnedCommand<Value>& operation, Work work)
+    {
+
+        return operation.startWith([&](auto done, auto failed) {
+            return opening->postDomain(std::move(work), std::move(done), std::move(failed), execution::WorkClass::Action);
+        });
     }
     SelectionResult select(std::optional<COutPoint> outpoint, SelectionMode mode, const std::shared_ptr<const Selection>& replacement) {
         auto intent = coinselection::Session::Intent::Toggle;
@@ -502,32 +510,27 @@ CoinsListModel::CoinsListModel(WalletQmlModel* parent) : QAbstractListModel(pare
     }
 }
 CoinsListModel::~CoinsListModel() { close(); retireValues(); }
-void CoinsListModel::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void CoinsListModel::setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post)
 {
     if (m_stopping || !opening || (m_opening && m_opening != opening) || m_backend) return;
-    m_opening = std::move(opening); m_services = std::move(services);
+    m_opening = std::move(opening); m_post = std::move(post);
     const auto setup = ++m_setup_revision;
-    if (!m_services.scheduler) m_services.scheduler = m_opening->scheduler();
     const QPointer<CoinsListModel> observer{this};
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
+    if (!m_post) m_post = presentation::QueuedPost();
     const auto original_opening = m_opening;
-    const auto ports = m_services;
-    const auto current = [observer, setup, original_opening, ports] {
+    const auto current = [observer, setup, original_opening] {
         return observer && !observer->m_stopping && observer->m_setup_revision == setup &&
-            observer->m_opening == original_opening && observer->m_services.scheduler == ports.scheduler;
+            observer->m_opening == original_opening;
     };
     try {
         auto retired = walletopening::RetainValues<Retired>(original_opening, [] { return std::make_unique<Retired>(); });
-        if (!current()) return;
         if (!retired) throw std::runtime_error{"Coin retirement cleanup could not be reserved"};
         auto rows = walletopening::RetainValues<Rows>(original_opening, [] { return std::make_unique<Rows>(); });
-        if (!current()) return;
         if (!rows) throw std::runtime_error{"Coin presentation cleanup could not be reserved"};
-        auto backend = std::make_shared<Backend>(original_opening, ports);
-        backend->start([post = ports.post, observer, setup] {
+        auto backend = std::make_shared<Backend>(original_opening);
+        backend->start([post = m_post, observer, setup] {
             post([observer, setup] { if (observer && observer->m_setup_revision == setup) observer->publishView(); });
         });
-        if (!current()) return;
         m_retired = std::move(retired); m_rows = std::move(rows); m_backend = std::move(backend);
         m_selection = m_backend->session->selection();
         rebuildView(); if (!current()) return;
@@ -670,7 +673,7 @@ void CoinsListModel::reconcile(quint64 turn)
         }
     }
     if (m_remove_cursor >= 0 || m_insert_cursor < static_cast<int>(target->rows.size())) {
-        try { m_services.post([guard, turn] { if (guard) guard->reconcile(turn); }); }
+        try { m_post([guard, turn] { if (guard) guard->reconcile(turn); }); }
         catch (...) { m_read_error = tr("Coin presentation is waiting for GUI delivery."); Q_EMIT readErrorChanged(); }
         return;
     }
@@ -717,10 +720,9 @@ quint64 CoinsListModel::selectionCommand(std::optional<COutPoint> outpoint, Sele
     if (m_stopping || !m_backend || !m_opening->available() || m_selection_operations.size() >= 16) return 0;
     const auto ticket = m_selection_ticket + 1;
     const QPointer<CoinsListModel> guard{this};
-    auto operation = std::make_shared<execution::OwnedCommand<SelectionResult>>(m_services.scheduler,
-        [post = m_services.post, guard] { post([guard] { if (guard) guard->publishSelections(); }); });
-    if (!operation->start([backend = m_backend, outpoint, mode, replacement] { return backend->select(outpoint, mode, replacement); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Action})) {
+    auto operation = std::make_shared<execution::OwnedCommand<SelectionResult>>(
+        [post = m_post, guard] { post([guard] { if (guard) guard->publishSelections(); }); });
+    if (!m_backend->submitCommand(*operation, [backend = m_backend, outpoint, mode, replacement] { return backend->select(outpoint, mode, replacement); })) {
         m_read_error = tr("Coin selection could not be updated. Try again."); Q_EMIT readErrorChanged(); return 0;
     }
     m_selection_ticket = ticket; ++m_selection_commands; m_last_selection = operation; m_selection_operations.push_back(std::move(operation));
@@ -775,10 +777,9 @@ bool CoinsListModel::markCommand(std::optional<COutPoint> outpoint)
     if (m_stopping) return false;
     if (!m_backend || !m_opening->available() || m_mark_operations.size() >= 16) return refuseMark(!outpoint);
     const QPointer<CoinsListModel> guard{this};
-    auto operation = std::make_shared<execution::OwnedCommand<MarkOutcome>>(m_services.scheduler,
-        [post = m_services.post, guard] { post([guard] { if (guard) guard->publishMarks(); }); });
-    if (!operation->start([backend = m_backend, outpoint] { return backend->mark(outpoint); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Action})) return refuseMark(!outpoint);
+    auto operation = std::make_shared<execution::OwnedCommand<MarkOutcome>>(
+        [post = m_post, guard] { post([guard] { if (guard) guard->publishMarks(); }); });
+    if (!m_backend->submitCommand(*operation, [backend = m_backend, outpoint] { return backend->mark(outpoint); })) return refuseMark(!outpoint);
     m_mark_error.clear(); m_mark_operations.push_back(std::move(operation)); Q_EMIT marksChanged(); return true;
 }
 bool CoinsListModel::toggleMarkById(const QString& id)
@@ -836,8 +837,8 @@ bool CoinsListModel::lockCoins(const QStringList& ids, bool locked, bool marked)
     if (!m_backend || !m_opening->available() || (!marked && ids.empty()) || m_lock_commands.size() >= 16) return refuse();
     const auto action = m_opening->startAction(); if (!action) return refuse();
     const QPointer<CoinsListModel> guard{this};
-    auto command = std::make_shared<execution::OwnedCommand<LockResult>>(m_services.scheduler,
-        [post = m_services.post, guard] { post([guard] { if (guard) guard->publishLocks(); }); });
+    auto command = std::make_shared<execution::OwnedCommand<LockResult>>(
+        [post = m_post, guard] { post([guard] { if (guard) guard->publishLocks(); }); });
     if (!command->startWith([opening = m_opening, backend = m_backend, action, ids, locked, marked](auto done, auto failed) {
         return opening->postDomain([backend, action, ids, locked, marked, done = std::move(done), failed = std::move(failed)] {
             try { backend->enqueueLock(action, ids, locked, done, marked); } catch (...) { failed(std::current_exception()); }

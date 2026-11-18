@@ -2,9 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/walletcreation.h>
+#include <qml/executor.h>
 #include <qml/walletidentity.h>
 #include <qml/walletnames.h>
-#include <qml/retainedsnapshot.h>
 #include <qml/util.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
@@ -19,6 +19,7 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <algorithm>
+#include <cassert>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -28,6 +29,20 @@ namespace {
 QString Text(const char* text) { return QCoreApplication::translate("WalletCreationModel", text); }
 WalletOperationError Error(const char* code, QString message, const char* field = "", QString recovery = {})
 { return {QString::fromLatin1(code), std::move(message), QString::fromLatin1(field), std::move(recovery)}; }
+}
+
+execution::SubmitResult Services::post(execution::Lane lane, std::shared_ptr<execution::Task> task) const
+{
+    assert(lane == execution::Lane::Core || lane == execution::Lane::Utility);
+    if (lane == execution::Lane::Core) {
+        auto delivery = std::make_shared<execution::ValueCleanupQueue>(outcomes);
+        return delivery->postWithOutcome(*core, std::move(task));
+    }
+    const bool accepted = outcomes->post([task = std::move(task)] {
+        task->execute();
+        task->deliver();
+    });
+    return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
 }
 QString JoinWarnings(const std::vector<bilingual_str>& warnings)
 {
@@ -197,9 +212,10 @@ Owner::~Owner()
 }
 std::shared_ptr<Owner> Owner::Make(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
 {
-    auto owner = std::shared_ptr<Owner>(new Owner(std::move(services), std::move(request), std::move(notify), std::move(release), std::move(observation)));
-    auto retained = execution::RetainSnapshot<std::shared_ptr<Owner>>(owner->m_services.execution.scheduler, [owner] { return std::make_unique<std::shared_ptr<Owner>>(owner); });
-    return retained ? std::shared_ptr<Owner>{retained, owner.get()} : nullptr;
+    return services.retain<Owner>([&] {
+        return std::unique_ptr<Owner>{new Owner(std::move(services), std::move(request), std::move(notify),
+            std::move(release), std::move(observation))};
+    });
 }
 Frame Owner::snapshot() const { std::lock_guard lock{m_mutex}; return m_frame; }
 QString Owner::errorText() const { std::lock_guard lock{m_mutex}; return m_actual.error.isEmpty() ? m_frame.error.message : m_actual.error; }
@@ -221,11 +237,11 @@ void Owner::start()
     if (std::exchange(m_started, true)) return;
     m_keep_alive = shared_from_this(); update(Phase::Validating);
     const auto weak = weak_from_this();
-    m_facts = std::make_shared<execution::OwnedCommand<Facts>>(m_services.execution.scheduler, [weak] { if (const auto owner = weak.lock()) owner->factsReady(); });
-    const auto admitted = m_facts->start([self = shared_from_this()] {
+    m_facts = std::make_shared<execution::OwnedCommand<Facts>>([weak] { if (const auto owner = weak.lock()) owner->factsReady(); });
+    const auto admitted = m_services.start(*m_facts, [self = shared_from_this()] {
         if ((self->m_services.shutdown && self->m_services.shutdown->load()) || self->m_cancelled.load()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
         return ReadFacts(*self->m_services.node, self->m_request, self->m_services.open_names);
-    }, {execution::Lane::Core, m_services.execution.scheduler->allocateKey(), execution::WorkClass::Action});
+    });
     if (!admitted) complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created.")));
 }
 void Owner::factsReady()
@@ -243,18 +259,18 @@ void Owner::factsReady()
 void Owner::preparePublication(std::shared_ptr<walletpublication::Release> release)
 {
     const auto self = shared_from_this();
-    const auto admitted = execution::Submit(*m_services.execution.scheduler, [self, release = std::move(release)] {
+    const auto admitted = m_services.post(execution::Lane::Utility, [self, release = std::move(release)] {
         if (!release) { self->complete(Phase::Rejected, Error("PublicationUnavailable", Text("Wallet creation could not start. No wallet was created."))); return; }
         if (self->m_cancelled.load() || self->m_detached.load() || (self->m_services.shutdown && self->m_services.shutdown->load())) { release->release(); self->complete(Phase::Cancelled); return; }
-        auto retained_backend = execution::RetainSnapshot<Backend>(self->m_services.execution.scheduler, [release] { auto value = std::make_unique<Backend>(); value->release = release; return value; });
+        auto retained_backend = self->m_services.retain<Backend>([release] { auto value = std::make_unique<Backend>(); value->release = release; return value; });
         if (!retained_backend) { release->release(); self->complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created."))); return; }
         { std::lock_guard lock{self->m_mutex}; self->m_frame.publication_requested = false; }
         self->update(Phase::Creating);
         const auto weak = self->weak_from_this();
-        self->m_create = std::make_shared<execution::OwnedCommand<NativeResult>>(self->m_services.execution.scheduler, [weak] { if (const auto owner = weak.lock()) owner->created(); });
+        self->m_create = std::make_shared<execution::OwnedCommand<NativeResult>>([weak] { if (const auto owner = weak.lock()) owner->created(); });
         const auto backend = retained_backend;
         { std::lock_guard lock{self->m_mutex}; self->m_backend = std::move(retained_backend); self->m_backend_retained = true; }
-        const auto admitted = self->m_create->start([self, backend] {
+        const auto admitted = self->m_services.start(*self->m_create, [self, backend] {
             if (self->m_cancelled.load()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
             std::unique_ptr<interfaces::Wallet> wallet;
             auto result = Create(*self->m_services.node, self->m_request, self->m_decision, wallet);
@@ -265,9 +281,9 @@ void Owner::preparePublication(std::shared_ptr<walletpublication::Release> relea
                 if (self->m_observation->failed()) { result.incomplete = true; result.error = Text("Wallet storage was created, but its lifecycle observation is unavailable. Check the wallet directory before retrying."); }
             }
             return result;
-        }, {execution::Lane::Core, self->m_services.execution.scheduler->allocateKey(), execution::WorkClass::Action});
+        });
         if (!admitted) self->complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created.")));
-    }, [] {}, {}, {execution::Lane::Domain, m_services.execution.scheduler->allocateKey()});
+    });
     if (!admitted) complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created.")));
 }
 void Owner::created()
@@ -284,16 +300,16 @@ void Owner::created()
     if (m_request.kind != Kind::WatchOnly) { readyToPublish(); return; }
     update(Phase::SettingUp);
     const auto weak = weak_from_this();
-    m_setup = std::make_shared<execution::OwnedCommand<QString>>(m_services.execution.scheduler, [weak] { if (const auto owner = weak.lock()) owner->setupReady(); });
+    m_setup = std::make_shared<execution::OwnedCommand<QString>>([weak] { if (const auto owner = weak.lock()) owner->setupReady(); });
     std::shared_ptr<Backend> backend;
     { std::lock_guard lock{m_mutex}; backend = m_backend; }
-    const auto admitted = m_setup->start([self = shared_from_this(), backend] {
+    const auto admitted = m_services.start(*m_setup, [self = shared_from_this(), backend] {
         QString error;
         try { error = Setup(*backend->get(), self->m_request); }
         catch (...) { error = Text("The wallet file was created, but its keys may not have been set up. Check the wallet directory before trying again."); }
         if (!error.isEmpty()) try { backend->get()->remove(); } catch (...) { error += QLatin1Char('\n') + Text("The incomplete wallet could not be unloaded."); }
         return error;
-    }, {execution::Lane::Core, m_services.execution.scheduler->allocateKey(), execution::WorkClass::Action});
+    });
     if (!admitted) { { std::lock_guard lock{m_mutex}; m_actual.incomplete = true; } complete(Phase::Partial, Error("SetupNotQueued", Text("The wallet file was created, but its setup could not start."), "", Text("Keep the created wallet file; do not repeat creation."))); }
 }
 void Owner::setupReady()
@@ -312,7 +328,7 @@ void Owner::readyToPublish()
 void Owner::publicationConsumed(walletpublication::Availability availability, QString error)
 {
     const auto self = shared_from_this();
-    const auto admitted = execution::Submit(*m_services.execution.scheduler, [self, availability, error = std::move(error)] {
+    const auto admitted = m_services.post(execution::Lane::Utility, [self, availability, error = std::move(error)] {
         if (!self->m_publication_awaited) return;
         self->m_publication_awaited = false;
         {
@@ -325,7 +341,7 @@ void Owner::publicationConsumed(walletpublication::Availability availability, QS
         }
         if (availability == walletpublication::Availability::Available) self->complete(Phase::Succeeded);
         else self->complete(Phase::Partial, Error("PublicationUnavailable", error.isEmpty() ? Text("Wallet storage was created, but its view is unavailable.") : error, "", Text("Keep the created wallet file. Check this result or open that wallet later.")));
-    }, [] {}, {}, {execution::Lane::Domain, m_services.execution.scheduler->allocateKey()});
+    });
     if (!admitted) complete(Phase::Partial, Error("PublicationReceiptUnavailable", Text("The wallet was created, but its result could not be shown.")));
 }
 void Owner::complete(Phase phase, WalletOperationError error)
@@ -366,7 +382,7 @@ void Owner::detach()
     if (frame.phase == Phase::Requested || frame.phase == Phase::Validating) m_cancelled = true;
     if (frame.phase == Phase::Publishing || frame.publication_requested) {
         const auto self = shared_from_this();
-        (void)execution::Submit(*m_services.execution.scheduler, [self] { if (self->m_native_created) self->complete(Phase::Partial, Error("PresentationClosed", Text("Wallet storage was created after the view closed."))); else self->complete(Phase::Cancelled); }, [] {}, {}, {execution::Lane::Domain, m_services.execution.scheduler->allocateKey()});
+        (void)m_services.post(execution::Lane::Utility, [self] { if (self->m_native_created) self->complete(Phase::Partial, Error("PresentationClosed", Text("Wallet storage was created after the view closed."))); else self->complete(Phase::Cancelled); });
     }
 }
 void Owner::reconcilePublication()

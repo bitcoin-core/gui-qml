@@ -20,7 +20,7 @@
 
 struct ActivityDetailModel::Input {
     std::shared_ptr<const activitystore::Snapshot> core, result;
-    std::shared_ptr<execution::ResourceLease> core_lease;
+    std::shared_ptr<void> core_lease;
     std::shared_ptr<const activityview::Hold> previous;
     std::shared_ptr<const walletrequests::Snapshot> requests;
     activityview::Hold hold;
@@ -248,11 +248,11 @@ void ActivityDetailModel::startPreview()
     const auto generation=m_generation;
     auto input=captureInput();
     if (!observer || m_closed || !input || generation!=m_generation) return;
-    auto command=std::make_shared<execution::OwnedCommand<Projection>>(m_opening->scheduler(),[post=m_post,observer] {
+    auto command=std::make_shared<execution::OwnedCommand<Projection>>([post=m_post,observer] {
         post([observer] {if(observer)observer->publishPreview();});
     });
     m_preview_operation=command;
-    const auto admitted=command->start([input] {
+    const auto project = [input] {
         const auto found=input->core->records.constFind(input->txid);
         if(found==input->core->records.cend())throw std::runtime_error("This transaction is no longer available in this wallet.");
         activitystore::Snapshot state;
@@ -269,7 +269,10 @@ void ActivityDetailModel::startPreview()
         state.transaction_revision = input->core->transaction_revision;
         input->result=std::make_shared<const activitystore::Snapshot>(std::move(state));
         return prepare(input);
-    },{execution::Lane::Domain,{},execution::WorkClass::Observation});
+    };
+    const auto admitted = command->startWith([opening = m_opening, project](auto done, auto failed) {
+        return opening->postDomain(project, std::move(done), std::move(failed));
+    });
     if(observer&&!admitted&&m_preview_operation==command)m_preview_operation.reset();
 }
 void ActivityDetailModel::publishPreview()
@@ -303,7 +306,7 @@ void ActivityDetailModel::start()
     }
     m_operation_native_revision = m_opening->transactionRevision();
     if (input->core->transaction_revision != m_operation_native_revision) return;
-    auto command = std::make_shared<execution::OwnedCommand<Projection>>(m_opening->scheduler(), [post=m_post,observer] {
+    auto command = std::make_shared<execution::OwnedCommand<Projection>>([post=m_post,observer] {
         post([observer] { if (observer) observer->publish(); });
     });
     m_operation = command;
@@ -404,18 +407,21 @@ quint64 ActivityDetailModel::requestEntryDetails(const QString& side,int row)
         return value; });
     if (!observer || !active() || !m_error.isEmpty() || m_entry_generation != generation) return 0;
     if (!input) return 0;
-    auto command=std::make_shared<execution::OwnedCommand<Projection>>(m_opening->scheduler(),[post=m_post,observer] {post([observer] {if(observer)observer->publishEntry();});});
+    auto command=std::make_shared<execution::OwnedCommand<Projection>>([post=m_post,observer] {post([observer] {if(observer)observer->publishEntry();});});
     m_entry_operation=command;
     m_entry_error.clear();
     const auto ticket=++m_ticket;
-    const auto admitted=command->start([input,side,row] {
+    const auto project = [input, side, row] {
         const auto& snapshot=*input->previous->snapshot;
         const auto rows=side==QLatin1String("inputs")?snapshot.full_inputs:side==QLatin1String("outputs")?snapshot.full_outputs:snapshot.full_actions;
         auto view=std::make_shared<activityview::Snapshot>();
         view->entry_document=std::make_shared<const QVariantList>(FlowEntryDocument(rows->at(row)));
         input->hold.snapshot=std::move(view);
         return Projection{input->generation, 0, std::shared_ptr<const activityview::Hold>{input,&input->hold}};
-    },{execution::Lane::Domain,{},execution::WorkClass::Observation});
+    };
+    const auto admitted = command->startWith([opening = m_opening, project](auto done, auto failed) {
+        return opening->postDomain(project, std::move(done), std::move(failed));
+    });
     if (!observer || !active() || !m_error.isEmpty() || m_entry_generation != generation || m_entry_operation != command) return 0;
     if(!admitted){m_entry_operation.reset();
         m_entry_error=tr("Entry details could not be loaded right now. Try again after pending operations finish.");
@@ -484,8 +490,8 @@ quint64 ActivityDetailModel::startCopy()
             if(observer&&observer->active()&&observer->m_opening->observationOpen())observer->finishCopy(ticket,copied);
         },Qt::QueuedConnection);
     };
-    const auto admitted=execution::Submit(*m_opening->scheduler(),[copy,txid] {copy->text=copy->hold->snapshot->raw(txid);
-        return true;},complete,[complete](std::exception_ptr) {complete(false);},{execution::Lane::Domain,{},execution::WorkClass::Action});
+    const auto admitted=m_opening->postDomain([copy,txid] {copy->text=copy->hold->snapshot->raw(txid);
+        return true;},complete,[complete](std::exception_ptr) {complete(false);},execution::WorkClass::Action);
     return admitted?ticket:0;
 }
 void ActivityDetailModel::retryPublications() { publishPreview();

@@ -9,6 +9,7 @@
 #include <qml/walletbump.h>
 #include <qml/walletopening.h>
 #include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <qml/transactionattempt.h>
 #include <QObject>
 #include <QString>
@@ -27,7 +28,7 @@ public:
     Q_PROPERTY(BumpTransactionModel::RelayState relayState READ relayState NOTIFY resultChanged)
 
     explicit BumpTransactionModel(QObject* parent = nullptr);
-    void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services,
+    void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post,
                     walletbump::Services bump_services = {});
     void close() override;
     void setDisplayUnit(int unit) override;
@@ -85,7 +86,7 @@ private:
     void clearPresentation();
     void refreshFeePresentation();
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     walletbump::Services m_bump_services;
     std::shared_ptr<transactionattempt::Owner> m_attempt_owner;
     transactionattempt::Snapshot m_attempt_snapshot;

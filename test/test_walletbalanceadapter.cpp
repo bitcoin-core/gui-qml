@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/walletbalanceadapter.h>
 #include <qml/walletopening.h>
 #include <test/mocks/mockwallet.h>
@@ -42,17 +42,33 @@ private Q_SLOTS:
             const std::shared_ptr<State> state;
         };
         const auto state = std::make_shared<State>();
-        BackendExecutor executor{execution::Options{}};
-        const auto release_on_exit = qScopeGuard([&] { state->release.release(); });
+        execution::Executor executor{execution::Executor::Config{}};
+        using execution::Lane;
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
         const auto closed = std::make_shared<std::atomic_bool>(false);
         const auto metadata_ready = std::make_shared<QSemaphore>();
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
         const auto opening = std::make_shared<walletopening::Session>(
-            executor.scheduler(), executor.scheduler(), closed, [metadata_ready] { metadata_ready->release(); });
-        QVERIFY(opening->start(std::make_shared<Wallet>(state)));
+            closed, [metadata_ready] { metadata_ready->release(); }, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{utility, [core](auto done) {
+                core->close();
+                core->whenDrained(std::move(done));
+            }, core, utility});
+        const auto complete = [stopped] { stopped->store(true); };
+        const auto release_on_exit = qScopeGuard([&] {
+            state->release.release();
+            opening->stop(false, complete);
+            QVERIFY(QTest::qWaitFor([&] { return stopped->load(); }, 5000));
+        });
+        std::unique_ptr<interfaces::Wallet> wallet = std::make_unique<Wallet>(state);
+        std::unique_ptr<interfaces::Handler> unload;
+        QVERIFY(opening->start(wallet, unload));
         QTRY_VERIFY(metadata_ready->available() > 0);
         const auto update = opening->take();
         QVERIFY(update && update->metadata);
-        auto reader = std::make_shared<walletbalance::Reader>(executor.scheduler(), walletbalance::WalletRead(opening),
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, walletbalance::WalletRead(opening),
             [state] { ++state->notices; }, closed);
         QCOMPARE(reader->refresh(), execution::Rejection::None);
         QTRY_VERIFY(state->entered.available() > 0);
@@ -61,19 +77,20 @@ private Q_SLOTS:
         QVERIFY(!state->destroyed_thread.load());
         reader->close();
         reader.reset();
-        const auto stopped = std::make_shared<std::atomic_bool>(false);
-        opening->stop(false, [stopped] { stopped->store(true); });
+        const auto core_drained = std::make_shared<std::atomic_bool>(false);
+        core->whenDrained([core_drained] { core_drained->store(true); });
+        opening->stop(false, complete);
         QVERIFY(!stopped->load());
-        executor.shutdown();
-        QVERIFY(!executor.isDrained());
+        QVERIFY(!core_drained->load());
         bool heartbeat{false};
         QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection);
         QTRY_VERIFY(heartbeat); // Must finish while the actual read is held.
         QVERIFY(!state->destroyed_thread.load());
         QVERIFY(!stopped->load());
         state->release.release();
+        QTRY_VERIFY(core_drained->load());
         QTRY_VERIFY(stopped->load());
-        QTRY_VERIFY(executor.isDrained());
+        executor.stopAndJoin();
         QVERIFY(state->destroyed_thread.load());
         QVERIFY(state->destroyed_thread.load() != qApp->thread());
         QCOMPARE(state->notices.load(), 0);

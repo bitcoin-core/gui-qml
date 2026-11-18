@@ -4,7 +4,7 @@
 
 #include <qml/executor.h>
 #include <qml/models/backuppolicyoperation.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
 #include <test/qt_test_registry.h>
 
 #include <QEventLoop>
@@ -30,7 +30,7 @@ bool WaitFor(const std::function<bool()>& ready)
     return ready();
 }
 struct Fixture {
-    ManualExecutionEnvironment environment;
+    ManualNodeObservations environment;
     int inspected{0}, written{0};
     backup::Proposal proposal{"/final.bak", "hash", true};
     backup::WriteResult result;
@@ -38,8 +38,8 @@ struct Fixture {
     backup::Services services()
     {
         backup::Services ports;
-        ports.scheduler = environment.scheduler;
-        ports.post = [this](auto publication) { environment.post(std::move(publication)); };
+        ports.utility = std::make_shared<execution::SerialQueue>(environment.executor().makeQueue(execution::Lane::Utility));
+        ports.post = environment.post();
         ports.wallet_name = [] { return "test-wallet"; };
         ports.inspect = [this](const auto& raw, const auto& name) {
             if (raw.empty() || name != "test-wallet") throw std::runtime_error("invalid command");
@@ -81,7 +81,7 @@ private Q_SLOTS:
         if (moment == 4 || moment == 5) f.proposal.exists = false;
         int publications{0};
         if (moment == 4) ports.post = [&](auto publication) {
-            f.environment.post(std::move(publication));
+            f.environment.post()(std::move(publication));
             if (++publications == 2) available = false;
         };
         if (moment == 5) ports.write = [&](const auto&, bool) { ++f.written; available = false; return backup::WriteResult{}; };
@@ -144,7 +144,7 @@ private Q_SLOTS:
         int publications{0};
         if (moment == 4) {
             f.proposal.exists = false;
-            ports.post = [&](auto publication) { f.environment.post(std::move(publication)); if (++publications == 2) view->retire(); };
+            ports.post = [&](auto publication) { f.environment.post()(std::move(publication)); if (++publications == 2) view->retire(); };
         }
         if (moment == 1) ports.inspect = [&](const auto&, const auto&) { ++f.inspected; view->retire(); return f.proposal; };
         BackupFileOperation operation{"/selected", ports}; view = &operation;
@@ -154,7 +154,6 @@ private Q_SLOTS:
         if (moment != 1 && moment != 4) operation.retire();
         f.drain(); QCOMPARE(operation.phase(), BackupFileOperation::Phase::Retired);
         QCOMPARE(f.written, 0); QCOMPARE(f.outcomes.size(), size_t{1});
-        qInfo("Manual backup retirement schedule: %s", f.environment.trace().c_str());
         QVERIFY(!operation.confirm()); QVERIFY(!operation.cancel());
     }
     void vanishedObserverDoesNotEraseOutcome()
@@ -163,7 +162,7 @@ private Q_SLOTS:
         auto operation = std::make_unique<BackupFileOperation>("/final.bak", f.services());
         QVERIFY(operation->start()); f.environment.drain(); QCOMPARE(f.written, 1);
         operation.reset(); f.drain(); QCOMPARE(f.outcomes.size(), size_t{1});
-        QCOMPARE(f.outcomes.front().phase, backup::Phase::Succeeded); QVERIFY(f.environment.quiescent());
+        QCOMPARE(f.outcomes.front().phase, backup::Phase::Succeeded); QVERIFY(f.environment.turnsIdle() && f.environment.publicationsIdle());
     }
     void reversedNotificationsCannotRestoreOldState()
     {
@@ -182,7 +181,7 @@ private Q_SLOTS:
     void missingServices()
     {
         QFETCH(int, missing); Fixture f; auto services = f.services();
-        switch (missing) { case 0: services.scheduler.reset(); break; case 1: services.post = {}; break;
+        switch (missing) { case 0: services.utility.reset(); break; case 1: services.post = {}; break;
         case 2: services.wallet_name = {}; break; case 3: services.inspect = {}; break; case 4: services.write = {}; break; }
         BackupFileOperation operation{"/selected", services}; QVERIFY(!operation.start());
         QCOMPARE(operation.phase(), BackupFileOperation::Phase::Failed); QVERIFY(!operation.error().isEmpty());
@@ -190,7 +189,7 @@ private Q_SLOTS:
     }
     void admissionFailureDoesNotClaimWrite()
     {
-        Fixture f; f.environment.rejectNext(true); BackupFileOperation operation{"/selected", f.services()};
+        Fixture f; f.environment.rejectNext(execution::Lane::Utility); BackupFileOperation operation{"/selected", f.services()};
         QVERIFY(!operation.start()); QCOMPARE(operation.phase(), BackupFileOperation::Phase::Failed);
         QVERIFY(!operation.error().isEmpty()); f.drain(); QCOMPARE(f.written, 0);
     }
@@ -203,7 +202,7 @@ private Q_SLOTS:
     {
         QFETCH(bool, approve);
         Fixture f; BackupFileOperation operation{"/selected", f.services()}; QVERIFY(operation.start()); f.drain();
-        f.environment.rejectNext(true); QVERIFY(!(approve ? operation.confirm() : operation.cancel())); f.drain();
+        f.environment.rejectNext(execution::Lane::Utility); QVERIFY(!(approve ? operation.confirm() : operation.cancel())); f.drain();
         QVERIFY(operation.confirmationRequired()); QCOMPARE(f.written, 0);
         QVERIFY(approve ? operation.confirm() : operation.cancel()); f.drain(); QCOMPARE(f.written, approve ? 1 : 0);
     }

@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QPointer>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <algorithm>
 #include <array>
@@ -67,14 +68,10 @@ private:
     std::thread m_thread;
 };
 #ifndef WIN32
-// Writes to a FIFO only if a reader is already waiting, so a test never blocks.
-bool FeedWaitingFifo(const QString& path, const QByteArray& bytes)
+// Connects only if a reader is already waiting.
+int OpenWaitingFifo(const QString& path)
 {
-    const int fd = ::open(QFile::encodeName(path).constData(), O_WRONLY | O_NONBLOCK);
-    if (fd < 0) return false;
-    const bool written = ::write(fd, bytes.constData(), size_t(bytes.size())) == bytes.size();
-    ::close(fd);
-    return written;
+    return ::open(QFile::encodeName(path).constData(), O_WRONLY | O_NONBLOCK);
 }
 #endif
 } // namespace
@@ -110,9 +107,21 @@ private Q_SLOTS:
         auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
         QCOMPARE(controller->selectedWallet(), standby);
         QVERIFY(!standby->currentTransaction());
+        const auto export_path = directory.filePath("pending-export.psbt");
+        const QByteArray existing{"keep this destination"};
+        QFile destination{export_path};
+        QVERIFY(destination.open(QIODevice::WriteOnly));
+        QCOMPARE(destination.write(existing), existing.size());
+        destination.close();
+        QVERIFY(original->requestSaveCurrentTransactionAsPsbt(export_path));
+        QTRY_VERIFY(original->fileExportOperation() && original->fileExportOperation()->confirmationRequired());
+
         UniValue request{UniValue::VARR}; request.push_back("original-review");
         qmltest::Rpc(m_app, "unloadwallet", request);
         QTRY_VERIFY_WITH_TIMEOUT(original.isNull(), 30'000);
+        QVERIFY(destination.open(QIODevice::ReadOnly));
+        QCOMPARE(destination.readAll(), existing);
+        destination.close();
         QCOMPARE(controller->selectedWallet(), standby);
         QVERIFY(!standby->currentTransactionCanSend()); QVERIFY(!standby->currentTransactionCanBroadcast());
         QVERIFY(!standby->currentTransaction());
@@ -143,6 +152,26 @@ private Q_SLOTS:
         const auto path = directory.filePath("shutdown.psbt");
         QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size()); file.close();
         QPointer<PsbtQmlModel> model{wallet->importedPsbt()}; QVERIFY(model);
+        {
+            struct Gate { QSemaphore entered, release; };
+            const auto gate = std::make_shared<Gate>();
+            const auto release_on_exit = qScopeGuard([gate] { gate->release.release(); });
+            const auto opening = wallet->opening();
+            QVERIFY(opening);
+            const auto action = opening->startAction();
+            QVERIFY(action);
+            QVERIFY(opening->perform(action, [gate](interfaces::Wallet&) {
+                gate->entered.release();
+                gate->release.acquire();
+                return true;
+            }, [](bool) {}));
+            QVERIFY(gate->entered.tryAcquire(1, 5000));
+
+            QVERIFY(model->requestLoadFromFile(directory.filePath("missing.psbt")));
+            QVERIFY(QTest::qWaitFor([&] { return !model->busy(); }, 5000));
+            QCOMPARE(model->phase(), PsbtQmlModel::Phase::Failed);
+            QVERIFY(model->error().contains(QStringLiteral("Could not open PSBT file")));
+        }
         QVERIFY(model->requestLoadFromFile(path));
         QVERIFY(QTest::qWaitFor([&] { return !model->busy(); }, 5'000));
         QVERIFY(model->loaded()); QVERIFY(model->canSign());
@@ -624,16 +653,42 @@ private Q_SLOTS:
         const auto read = [](const QString& file) { QFile in{file}; return in.open(QIODevice::ReadOnly) ? in.readAll() : QByteArray{}; };
         QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransactionCanSignOnly());
-        QVERIFY(AwaitPsbtSave(*wallet, directory.filePath("reviewed.psbt")));
-        QCOMPARE(read(directory.filePath("reviewed.psbt")), bytes);
+        const auto reviewed_path = directory.filePath("reviewed.psbt");
+        QVERIFY(AwaitPsbtSave(*wallet, reviewed_path));
+        QCOMPARE(read(reviewed_path), bytes);
         QVERIFY(AwaitPsbtAction(*wallet, wallet->requestRecheckCurrentTransaction()));
         QVERIFY(AwaitPsbtSave(*wallet, directory.filePath("rechecked.psbt")));
         QCOMPARE(read(directory.filePath("rechecked.psbt")), bytes);
         const auto sign = StartSend(*wallet, true); QVERIFY(sign);
         QVERIFY(QTest::qWaitFor([&] { return sign->finished(); }, 5'000));
         QCOMPARE(sign->state(), SendOperation::State::SignedOnly);
-        QVERIFY(AwaitPsbtSave(*wallet, directory.filePath("signed.psbt")));
-        const auto signed_bytes = read(directory.filePath("signed.psbt"));
+        const auto signed_path = directory.filePath("signed.psbt");
+        QVERIFY(AwaitPsbtSave(*wallet, signed_path));
+        const auto signed_bytes = read(signed_path);
+        const auto saved = wallet->requestSaveCurrentTransactionAsPsbt(reviewed_path);
+        QVERIFY(saved);
+        QTRY_VERIFY(wallet->fileExportOperation() && wallet->fileExportOperation()->confirmationRequired());
+        QCOMPARE(read(reviewed_path), bytes);
+        {
+            struct Gate { QSemaphore entered, release; };
+            const auto gate = std::make_shared<Gate>();
+            const auto release_on_exit = qScopeGuard([gate] { gate->release.release(); });
+            const auto opening = wallet->opening();
+            QVERIFY(opening);
+            const auto action = opening->startAction();
+            QVERIFY(action);
+            QVERIFY(opening->perform(action, [gate](interfaces::Wallet&) {
+                gate->entered.release();
+                gate->release.acquire();
+                return true;
+            }, [](bool) {}));
+            QVERIFY(gate->entered.tryAcquire(1, 5000));
+
+            QVERIFY(wallet->fileExportOperation()->confirm());
+            QVERIFY(AwaitPsbtAction(*wallet, saved));
+            QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtSaved);
+        }
+        QCOMPARE(read(reviewed_path), signed_bytes);
         QVERIFY(signed_bytes != bytes);
         QVERIFY(qmltest::Rpc(m_app, "finalizepsbt", qmltest::Json("[\"" + signed_bytes.toBase64().toStdString() + "\"]")).find_value("complete").get_bool());
         QCOMPARE(read(path), bytes);
@@ -887,20 +942,52 @@ private Q_SLOTS:
         const auto fifo = directory.filePath("arriving.psbt");
         QCOMPARE(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
         std::promise<void> arrive; bool arrived{false};
-        std::thread writer([fifo, bytes, ready = arrive.get_future()] {
-            ready.wait_for(std::chrono::seconds{4});
-            for (int attempt{0}; attempt < 100 && !FeedWaitingFifo(fifo, bytes); ++attempt) std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        std::promise<bool> connected;
+        auto reader_waiting = connected.get_future();
+        std::promise<bool> written;
+        auto sent = written.get_future();
+        std::atomic_bool stop_writer{false};
+        std::thread writer([fifo, bytes, &stop_writer, ready = arrive.get_future(),
+                            connected = std::move(connected), written = std::move(written)]() mutable {
+            for (int attempt{0}; attempt < 500 && !stop_writer.load(); ++attempt) {
+                const int fd = OpenWaitingFifo(fifo);
+                if (fd >= 0) {
+                    connected.set_value(true);
+                    ready.wait();
+                    const auto count = ::write(fd, bytes.constData(), size_t(bytes.size()));
+                    ::close(fd);
+                    written.set_value(count == bytes.size());
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+            }
+            connected.set_value(false);
+            written.set_value(false);
         });
         const auto cleanup = qScopeGuard([&] {
+            stop_writer = true;
             if (!arrived) arrive.set_value();
             writer.join();
-            FeedWaitingFifo(fifo, {}); // Release any reader still waiting.
+            if (const int fd = OpenWaitingFifo(fifo); fd >= 0) ::close(fd);
         });
         const auto slow = wallet->requestImportPsbtFromFile(fifo);
         QVERIFY(slow); QVERIFY(wallet->psbtActionBusy());
         QVERIFY(progressesGui());
+        QVERIFY(QTest::qWaitFor([&] {
+            return reader_waiting.wait_for(std::chrono::seconds{0}) == std::future_status::ready;
+        }, 5000));
+        QVERIFY(reader_waiting.get());
+        // The file read is already waiting for bytes. An independent wallet
+        // observation can still enter Core before the write releases it.
+        const auto core_entered = std::make_shared<std::atomic_bool>(false);
+        QVERIFY(wallet->opening()->read([core_entered](interfaces::Wallet&) {
+            *core_entered = true;
+            return true;
+        }, [](bool) {}));
+        QVERIFY(QTest::qWaitFor([&] { return core_entered->load(); }, 5000));
         QVERIFY(wallet->psbtActionBusy()); QVERIFY(!wallet->currentTransaction());
         arrived = true; arrive.set_value();
+        QVERIFY(sent.get());
         QVERIFY(AwaitPsbtAction(*wallet, slow));
         QCOMPARE(wallet->psbtImportResult(), WalletQmlModel::PsbtImportResult::WalletCanSign);
 #endif

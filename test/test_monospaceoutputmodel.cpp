@@ -3,10 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/monospaceoutputmodel.h>
-#include <qml/backendexecutor.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/executor.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualstartupexecution.h>
 
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QThread>
@@ -42,7 +44,7 @@ public:
 };
 struct AffinityTrace {
     QThread* gui{QThread::currentThread()};
-    std::atomic<int> source_reads{0}, source_off_gui{0}, effects{0}, cleanup_effects{0}, deliveries{0}, background_on_gui{0};
+    std::atomic<int> source_reads{0}, source_off_gui{0}, cleanup_effects{0}, deliveries{0}, cleanup_on_gui{0};
 };
 class AffinitySource final : public QAbstractListModel {
     const std::shared_ptr<AffinityTrace> m_trace;
@@ -56,61 +58,26 @@ public:
     }
     QHash<int, QByteArray> roleNames() const override { return {{Qt::UserRole, "content"}}; }
 };
-// Observe actual execution of the original production task. Decisions and
-// callbacks still belong to the real scheduler and its original TaskQueue.
-class AffinityScheduler final : public execution::Scheduler {
-    struct ObservedTask final : execution::Task {
-        std::shared_ptr<execution::Task> original;
-        std::shared_ptr<AffinityTrace> trace;
-        execution::Lane lane;
-        ObservedTask(std::shared_ptr<execution::Task> task, std::shared_ptr<AffinityTrace> observation, execution::Lane target)
-            : original(std::move(task)), trace(std::move(observation)), lane(target) {}
-        void observeThread() { if (QThread::currentThread() == trace->gui) ++trace->background_on_gui; }
-        void execute() override { observeThread(); ++trace->effects; if (lane == execution::Lane::Cleanup) ++trace->cleanup_effects; original->execute(); }
-        void notStarted(execution::NotStarted::Cause cause) override { observeThread(); original->notStarted(cause); }
-        void deliver() override { observeThread(); ++trace->deliveries; original->deliver(); }
-    };
-    const std::shared_ptr<execution::Scheduler> m_original;
-    const std::shared_ptr<AffinityTrace> m_trace;
-public:
-    AffinityScheduler(std::shared_ptr<execution::Scheduler> original, std::shared_ptr<AffinityTrace> trace)
-        : m_original(std::move(original)), m_trace(std::move(trace)) {}
-    std::shared_ptr<execution::Scheduler> openActionScope() override {
-        auto scope = m_original->openActionScope();
-        return scope ? std::make_shared<AffinityScheduler>(std::move(scope), m_trace) : std::shared_ptr<execution::Scheduler>{};
-    }
-    execution::SubmitResult submit(std::shared_ptr<execution::Task> task, execution::TaskSpec spec) override {
-        return m_original->submit(std::make_shared<ObservedTask>(std::move(task), m_trace, spec.lane), spec);
-    }
-    execution::SubmitResult reserveCleanup(std::shared_ptr<execution::Task> task, execution::TaskSpec spec) override {
-        return m_original->reserveCleanup(std::make_shared<ObservedTask>(std::move(task), m_trace, spec.lane), spec);
-    }
-    bool activateCleanup(execution::TaskId id) override { return m_original->activateCleanup(id); }
-    execution::Borrow borrow(execution::ResourceKey key) override { return m_original->borrow(key); }
-    execution::ResourceKey allocateKey() override { return m_original->allocateKey(); }
-    size_t pending() const override { return m_original->pending(); }
-    void stopAcceptingWork() override { m_original->stopAcceptingWork(); }
-    bool cancelQueued(execution::TaskId id) override { return m_original->cancelQueued(id); }
-};
 struct Ports {
-    ManualExecutionEnvironment env;
+    ManualNodeObservations env;
     std::deque<std::function<void()>> releases, retries;
     bool reject_retirement{false};
+    std::shared_ptr<execution::SerialQueue> utility{std::make_shared<execution::SerialQueue>(env.executor().makeQueue(execution::Lane::Utility))};
     std::unique_ptr<PresentationServices> presentation;
     PresentationServices* services() {
         if (!presentation) presentation = std::make_unique<PresentationServices>(ports());
         return presentation.get();
     }
     PresentationServices::Ports ports() {
-        return {env.scheduler, [&](auto callback) { env.post(std::move(callback)); },
+        return {env.post(),
             [&](auto release) { if (reject_retirement) return false; releases.push_back(std::move(release)); return true; },
-            [&](auto retry) { retries.push_back(std::move(retry)); }};
+            [&](auto retry) { retries.push_back(std::move(retry)); }, utility};
     }
     void releaseAll() { while (!releases.empty()) { auto release = std::move(releases.front()); releases.pop_front(); release(); } }
     void settle() {
         for (int i = 0; i < 1000; ++i) {
             env.drain(); env.publishAll(); releaseAll(); env.publishAll();
-            if (env.quiescent() && releases.empty()) break;
+            if (env.turnsIdle() && env.publicationsIdle() && releases.empty()) break;
         }
     }
 };
@@ -122,39 +89,65 @@ class MonospaceOutputModelTests : public QObject
 private Q_SLOTS:
     void realDomainExecutionKeepsSourceAndPresentationOnGui()
     {
-        BackendExecutor backend{execution::Options{}};
+        execution::Executor executor{execution::Executor::Config{}};
         const auto trace = std::make_shared<AffinityTrace>();
-        const auto scheduler = std::make_shared<AffinityScheduler>(backend.scheduler(), trace);
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        const auto retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
         AffinitySource source{trace};
-        PresentationServices services{{scheduler,
-            [this](auto callback) { QMetaObject::invokeMethod(this, std::move(callback), Qt::QueuedConnection); },
-            [scheduler](auto release) { return bool(execution::Submit(*scheduler, std::move(release), [] {}, {},
-                {execution::Lane::Cleanup, {}, execution::WorkClass::Action})); }, {}}};
+        PresentationServices services{{
+            [this, trace](auto callback) {
+                if (QThread::currentThread() != trace->gui) ++trace->deliveries;
+                QMetaObject::invokeMethod(this, std::move(callback), Qt::QueuedConnection);
+            },
+            [retirement, trace](auto release) {
+                return retirement->post([trace, release = std::move(release)] {
+                    if (QThread::currentThread() == trace->gui) ++trace->cleanup_on_gui;
+                    release();
+                    ++trace->cleanup_effects;
+                });
+            }, {}, utility}};
         MonospaceOutputModel model;
         model.setServices(&services);
-        const auto cleanup = qScopeGuard([&] { model.close(); backend.shutdown(); });
+        QSemaphore entered, release;
+        std::atomic<QThread*> worker_thread{nullptr};
         std::atomic<int> presentation_off_gui{0};
+        const auto cleanup = qScopeGuard([&] {
+            release.release();
+            model.close();
+            services.close();
+            const auto drained = std::make_shared<std::atomic_bool>(false);
+            utility->whenDrained([drained] { *drained = true; });
+            const bool retired = QTest::qWaitFor([&] { return drained->load() && services.pendingRetirements() == 0; }, 10'000);
+            executor.stopAndJoin();
+            QVERIFY(retired);
+        });
+        QVERIFY(utility->post([&] {
+            worker_thread = QThread::currentThread();
+            entered.release();
+            release.acquire();
+        }));
+        QVERIFY(entered.tryAcquire(1, 5'000));
+        QVERIFY(worker_thread.load() != trace->gui);
         const auto observe_presentation = [&] { if (QThread::currentThread() != trace->gui) ++presentation_off_gui; };
         connect(&model, &MonospaceOutputModel::changed, this, observe_presentation, Qt::DirectConnection);
         connect(&model, &MonospaceOutputModel::countChanged, this, observe_presentation, Qt::DirectConnection);
         connect(&model, &MonospaceOutputModel::searchChanged, this, observe_presentation, Qt::DirectConnection);
         model.setSourceModel(&source);
+        QCOMPARE(model.rowCount(), 0);
+        release.release();
         QTRY_COMPARE_WITH_TIMEOUT(model.rowCount(), 130, 10000);
         model.setSearchText(QStringLiteral("needle"));
         QTRY_COMPARE_WITH_TIMEOUT(model.searchResultCount(), 130, 10000);
         QVERIFY(!model.searchBusy());
         QCOMPARE(trace->source_reads.load(), 130);
         QCOMPARE(trace->source_off_gui.load(), 0);
-        QVERIFY(trace->effects.load() > 0); QVERIFY(trace->deliveries.load() > 0);
-        QCOMPARE(trace->background_on_gui.load(), 0); QCOMPARE(presentation_off_gui.load(), 0);
+        QVERIFY(trace->deliveries.load() > 0);
+        QCOMPARE(presentation_off_gui.load(), 0);
         QCOMPARE(model.data(model.index(129, 0), MonospaceOutputModel::PlainContentRole).toString(), QStringLiteral("worker needle 129"));
         model.close();
         QTRY_COMPARE_WITH_TIMEOUT(services.pendingRetirements(), size_t{0}, 10000);
         QVERIFY(trace->cleanup_effects.load() > 0);
-        backend.shutdown();
-        QTRY_VERIFY_WITH_TIMEOUT(backend.isDrained(), 10000);
-        QCOMPARE(scheduler->pending(), size_t{0});
-        QCOMPARE(trace->background_on_gui.load(), 0);
+        QCOMPARE(trace->cleanup_on_gui.load(), 0);
     }
 
     void configuredRolesPreserveLineMetadataAndModelBounds()
@@ -218,8 +211,10 @@ private Q_SLOTS:
         const auto cleanup = qScopeGuard([&] { model.close(); ports.settle(); ports.services()->retryRetirements(); });
         QCoreApplication::processEvents();
         QVERIFY(model.busy()); QCOMPARE(model.rowCount(), 0);
-        if (stage >= 1) { QVERIFY(ports.env.step()); QCOMPARE(model.rowCount(), 0); }
-        if (stage >= 2) { QVERIFY(ports.env.step()); QCOMPARE(model.rowCount(), 0); }
+        std::function<void()> held_publication;
+        if (stage >= 1) { QVERIFY(ports.env.step(execution::Lane::Utility)); QCOMPARE(model.rowCount(), 0); }
+        if (stage == 1) { held_publication = ports.env.takePublicationBack(); QVERIFY(held_publication); }
+        if (stage == 2) QVERIFY(!ports.env.publicationsIdle());
         if (stage >= 3) { ports.env.publishAll(); QCOMPARE(model.rowCount(), 1); }
         if (stage == 4) { model.setSearchText(QStringLiteral("needle")); QVERIFY(model.searchBusy()); }
         model.setActive(false);
@@ -227,6 +222,7 @@ private Q_SLOTS:
         QSignalSpy count_changed(&model, &MonospaceOutputModel::countChanged);
         QSignalSpy active_changed(&model, &MonospaceOutputModel::activeChanged);
         model.setActive(false);
+        if (held_publication) held_publication();
         ports.settle();
         QVERIFY(!model.active()); QVERIFY(!model.busy()); QVERIFY(!model.searchBusy());
         QCOMPARE(model.rowCount(), 0); QCOMPARE(model.searchResultCount(), 0); QCOMPARE(model.currentSearchRow(), -1);
@@ -235,7 +231,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         ports.settle();
         QCOMPARE(model.rowCount(), 1); QCOMPARE(model.searchResultCount(), stage == 4 ? 1 : 0);
-        QVERIFY(!model.busy()); QVERIFY(!model.searchBusy()); QVERIFY(ports.env.quiescent());
+        QVERIFY(!model.busy()); QVERIFY(!model.searchBusy()); QVERIFY(ports.env.turnsIdle() && ports.env.publicationsIdle());
     }
 
     void multiTurnCaptureSearchNavigationAndSourceReplacement()
@@ -278,7 +274,7 @@ private Q_SLOTS:
         ports.settle();
         QCOMPARE(model.rowCount(), 1); QCOMPARE(model.searchResultCount(), 1); QCOMPARE(model.currentSearchResultIndex(), 0);
         QCOMPARE(model.currentSearchStart(), 12); QCOMPARE(model.currentSearchEnd(), 18);
-        QVERIFY(ports.env.quiescent());
+        QVERIFY(ports.env.turnsIdle() && ports.env.publicationsIdle());
     }
 
     void inactiveViewDiscardsHeldPublication_data()
@@ -304,13 +300,13 @@ private Q_SLOTS:
         if (kind == 1) model.setSearchText(QStringLiteral("needle"));
         if (kind == 2) model.copyAll();
         ports.env.drain();
-        QVERIFY(ports.env.publicationCount() > 0);
+        QVERIFY(!ports.env.publicationsIdle());
         model.setActive(false);
         ports.settle();
         QCOMPARE(model.rowCount(), 0); QCOMPARE(model.searchResultCount(), 0); QCOMPARE(copied.size(), 0);
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("before inactive result"));
         QCOMPARE(ports.services()->pendingRetirements(), size_t{0});
-        QVERIFY(ports.env.quiescent());
+        QVERIFY(ports.env.turnsIdle() && ports.env.publicationsIdle());
     }
 
     void retirementRefusalWaitsForManualRetry()
@@ -336,41 +332,94 @@ private Q_SLOTS:
         ports.releaseAll(); ports.env.publishAll();
         QCOMPARE(ports.services()->pendingRetirements(), size_t{0});
         QCoreApplication::processEvents(); ports.settle();
-        QCOMPARE(model.rowCount(), 1); QVERIFY(!model.busy()); QVERIFY(ports.env.quiescent());
+        QCOMPARE(model.rowCount(), 1); QVERIFY(!model.busy()); QVERIFY(ports.env.turnsIdle() && ports.env.publicationsIdle());
     }
 
     void projectionAndSearchWaitForWorkerAndPresentation()
     {
+        ManualStartupExecution worker;
         Ports ports;
+        ports.utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
         Source source; source.lines = {"first line<br>İstanbul SAVINGS", "last .*+?"};
         MonospaceOutputModel model;
         model.setServices(ports.services()); model.setRichText(true); model.setSourceModel(&source);
-        const auto cleanup = qScopeGuard([&] { model.close(); ports.settle(); ports.services()->retryRetirements(); });
+        const auto settle = [&] {
+            worker.drain();
+            ports.env.publishAll();
+            ports.releaseAll();
+            ports.env.publishAll();
+        };
+        const auto cleanup = qScopeGuard([&] { model.close(); settle(); ports.services()->retryRetirements(); });
         QCoreApplication::processEvents(); // Bounded GUI role capture only.
         QCOMPARE(model.rowCount(), 0);
-        QVERIFY(!ports.env.turnsIdle());
-        ports.env.drain();
+        QVERIFY(!worker.quiescent());
+        QVERIFY(ports.env.turnsIdle());
+        const auto core_submissions = worker.coreSubmissions();
+        worker.drain();
         QCOMPARE(model.rowCount(), 0);
         ports.env.publishAll();
         QCOMPARE(model.rowCount(), 3);
         QCOMPARE(model.data(model.index(1, 0), MonospaceOutputModel::PlainContentRole).toString(), QStringLiteral("İstanbul SAVINGS"));
         model.setSearchText("savings");
         QVERIFY(model.searchBusy()); QCOMPARE(model.searchResultCount(), 0);
-        ports.env.drain(); QCOMPARE(model.searchResultCount(), 0);
+        worker.drain(); QCOMPARE(model.searchResultCount(), 0);
         ports.env.publishAll();
         QCOMPARE(model.searchResultCount(), 1); QCOMPARE(model.currentSearchRow(), 1);
         QCOMPARE(model.currentSearchStart(), 9); QCOMPARE(model.currentSearchEnd(), 16);
-        model.setSearchText(".*+?"); ports.settle();
+        model.setSearchText(".*+?"); settle();
         QCOMPARE(model.searchResultCount(), 1); QCOMPARE(model.currentSearchRow(), 2);
         QCOMPARE(model.currentSearchStart(), 5); QCOMPARE(model.currentSearchEnd(), 9);
         QSignalSpy copied(&model, &MonospaceOutputModel::copyFinished);
         QGuiApplication::clipboard()->setText(QStringLiteral("before"));
-        model.copyAll(); ports.env.drain();
+        model.copyAll(); worker.drain();
         QCOMPARE(copied.size(), 0);
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("before"));
         ports.env.publishAll();
         QCOMPARE(copied.size(), 1); QVERIFY(copied.front().front().toBool());
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("first line\nİstanbul SAVINGS\nlast .*+?"));
+        QCOMPARE(worker.coreSubmissions(), core_submissions);
+        QVERIFY(ports.env.turnsIdle());
+    }
+
+    void retirementWaitsForAcceptedUtilityWorkAfterViewClose()
+    {
+        ManualStartupExecution worker;
+        Ports ports;
+        ports.utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+        Source source;
+        source.lines = {QStringLiteral("original output")};
+        MonospaceOutputModel model;
+        model.setServices(ports.services());
+        model.setSourceModel(&source);
+        QCoreApplication::processEvents();
+        worker.drain();
+        ports.env.publishAll();
+        QCOMPARE(model.rowCount(), 1);
+
+        QSignalSpy copied{&model, &MonospaceOutputModel::copyFinished};
+        QGuiApplication::clipboard()->setText(QStringLiteral("held clipboard"));
+        model.copyAll();
+        QVERIFY(!worker.quiescent());
+        ports.services()->close();
+        QVERIFY(!ports.utility->post([] {}));
+        ports.releaseAll();
+        ports.env.publishAll();
+        QCOMPARE(ports.services()->pendingRetirements(), size_t{0});
+
+        bool retired{false};
+        QObject observer;
+        ports.services()->whenRetired(&observer, [&] { retired = true; });
+        QCoreApplication::processEvents();
+        QVERIFY(!retired);
+        QVERIFY(!ports.retries.empty());
+        worker.drain();
+        auto retry = std::move(ports.retries.front());
+        ports.retries.pop_front();
+        retry();
+        ports.env.publishAll();
+        QVERIFY(retired);
+        QCOMPARE(copied.size(), 0);
+        QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("held clipboard"));
     }
 
     void retirementGateRetainsRejectedHandoffAndWaitsForActualRelease()
@@ -396,7 +445,11 @@ private Q_SLOTS:
         QVERIFY(!done); // Admission alone is not resource retirement.
         QVERIFY(!ports.releases.empty());
         ports.releaseAll();
-        while (!ports.retries.empty()) { auto next = std::move(ports.retries.front()); ports.retries.pop_front(); next(); }
+        ports.env.drain(); // Deliver the closed Utility queue's drain notification.
+        QVERIFY(!ports.retries.empty());
+        auto next = std::move(ports.retries.front());
+        ports.retries.pop_front();
+        next();
         ports.env.publishAll();
         QVERIFY(done); QCOMPARE(ports.services()->pendingRetirements(), size_t{0});
     }

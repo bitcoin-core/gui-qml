@@ -3,8 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/psbtfeeservices.h>
+#include <qml/executor.h>
 #include <qml/psbtdocument.h>
 #include <qml/retainedvalue.h>
+#include <qml/walletopening.h>
 
 #include <coins.h>
 #include <interfaces/node.h>
@@ -76,25 +78,33 @@ psbtfee::Resolution psbtfee::Resolve(const PartiallySignedTransaction& document,
 }
 
 execution::SubmitResult psbtfee::Request(const Services& services, std::shared_ptr<const PartiallySignedTransaction> document,
-                                     std::shared_ptr<const Analysis> seed, std::function<void(Resolution)> publish)
+                                         std::shared_ptr<const Analysis> seed, const std::shared_ptr<FeeRequest>& request,
+                                         const std::shared_ptr<walletopening::Session>& opening)
 {
-    if (!services.scheduler || !services.lookup || !services.post) return {{}, execution::Rejection::Transport};
-    // The GUI only receives aliases. Dropped or obsolete callbacks never free
-    // a PSBT, authenticated output map or raw transaction on the GUI thread.
-    auto output = execution::RetainValues<Resolution>(services.scheduler, [] { return std::make_unique<Resolution>(); });
+    if (!services.lookup || !services.post) return {{}, execution::Rejection::Transport};
+    const auto submit = opening ? opening->observationPost() : nullptr;
+    if (!opening && (!services.core || !services.utility || !services.value_cleanup)) return {{}, execution::Rejection::Transport};
+    if (opening && (!submit || !opening->available())) return {{}, execution::Rejection::Closed};
+    // A retained result owns the PSBT, authenticated output map and raw
+    // transaction on the same cleanup queue even if GUI drops the review.
+    const auto make_output = [] { return std::make_unique<Resolution>(); };
+    auto output = opening ? walletopening::RetainValues<Resolution>(opening, make_output)
+                          : execution::RetainValues<Resolution>(services.value_cleanup, make_output);
     if (!output) return {{}, execution::Rejection::Closed};
-    auto post = [transport = services.post, publish = std::move(publish)](Resolution resolution) {
-        auto value = std::make_shared<Resolution>(std::move(resolution));
-        transport([publish, value] { publish(std::move(*value)); });
+    auto work = [opening, document = std::move(document), seed = std::move(seed),
+                 lookup = services.lookup, policy = services.policy, output] {
+        if (opening && !opening->available()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
+        *output = Resolve(*document, *seed, lookup, policy);
+        auto value = *output;
+        if (value.proof) value.proof = std::shared_ptr<const Analysis>{output, value.proof.get()};
+        if (value.analysis) value.analysis = std::shared_ptr<const psbtwork::Snapshot>{output, value.analysis.get()};
+        if (value.transaction) value.transaction = CTransactionRef{output, value.transaction.get()};
+        return value;
     };
-    return execution::Submit(*services.scheduler,
-        [document = std::move(document), seed = std::move(seed), lookup = services.lookup, policy = services.policy, output] {
-            *output = Resolve(*document, *seed, lookup, policy);
-            auto value = *output;
-            if (value.proof) value.proof = std::shared_ptr<const Analysis>{output, value.proof.get()};
-            if (value.analysis) value.analysis = std::shared_ptr<const psbtwork::Snapshot>{output, value.analysis.get()};
-            if (value.transaction) value.transaction = CTransactionRef{output, value.transaction.get()};
-            return value;
-        },
-        post, [post](std::exception_ptr) { post({{}, false, true}); });
+    return request->startWith([&](auto done, auto failed) {
+        auto task = execution::MakeTask(std::move(work), std::move(done), std::move(failed));
+        if (submit) return submit(std::move(task));
+        auto delivery = std::make_shared<execution::ValueCleanupQueue>(services.utility);
+        return delivery->postWithOutcome(*services.core, std::move(task));
+    });
 }

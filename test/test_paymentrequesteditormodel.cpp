@@ -1,12 +1,15 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <test/mocks/receiveeditortest.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QPointer>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QThread>
 
 namespace {
@@ -16,7 +19,7 @@ struct Fixture {
     ReceiveEditorPorts ports;
     std::unique_ptr<Model> editor;
     explicit Fixture(int64_t id = 17) : editor(std::make_unique<Model>(id, 2, false, ports.editors())) { ports.drain(); }
-    ~Fixture() { editor.reset(); ports.drain(); QVERIFY(ports.execution.quiescent()); }
+    ~Fixture() { editor.reset(); ports.drain(); QVERIFY(ports.quiescent()); }
 };
 }
 class PaymentRequestEditorModelTests : public QObject {
@@ -34,10 +37,10 @@ private Q_SLOTS:
         Model editor{17, 2, false, std::move(services)}; ports.drain(); QCOMPARE(reads, 1); QVERIFY(held);
         auto older = ports.snapshot(17, 2); older.current = false;
         editor.refresh(); ports.drain(); QCOMPARE(reads, 1);
-        QVERIFY(execution::Submit(*ports.execution.scheduler, [done = std::move(held), older] { done(older); }, [] {}, {}, {Lane::Domain}));
+        QVERIFY(ports.editor_work.outcomes.post([done = std::move(held), older] { done(older); }));
         ports.drain(); QCOMPARE(reads, 2); QCOMPARE(editor.phase(), Model::Editing);
         QCOMPARE(editor.message()->text(), QStringLiteral("original message")); QCOMPARE(ports.writes, 0);
-        editor.retire(); ports.drain(); QVERIFY(ports.execution.quiescent());
+        editor.retire(); ports.drain(); QVERIFY(ports.quiescent());
     }
     void saveCapturesEachOriginalFieldAndRetainsSuccessorInput()
     {
@@ -96,14 +99,14 @@ private Q_SLOTS:
     }
     void refusedEditAdmissionIsReplayedOnlyAsPartOfCapturedSave()
     {
-        Fixture f; f.ports.execution.rejectLane(Lane::Domain);
+        Fixture f; f.ports.editor_work.reject_utility = true;
         f.editor->message()->edit("accepted after refusal"); f.ports.drain();
         f.editor->save(); f.ports.drain();
         QCOMPARE(f.ports.writes, 1); QCOMPARE(f.ports.records.at(17).values[requestedit::Message].text, QStringLiteral("accepted after refusal"));
     }
     void acknowledgementOfAnotherFieldDoesNotEraseEarlierRejectedInput()
     {
-        Fixture f; f.ports.execution.rejectLane(Lane::Domain);
+        Fixture f; f.ports.editor_work.reject_utility = true;
         f.editor->message()->edit("first field rejected by transport"); f.ports.drain();
         f.editor->privateNote()->edit("later acknowledged field"); f.ports.drain();
         QCOMPARE(f.editor->message()->text(), QStringLiteral("first field rejected by transport")); QVERIFY(f.editor->dirty());
@@ -180,7 +183,7 @@ private Q_SLOTS:
     void newSaveAfterRootClosureIsRejectedButAnAdmittedSaveFinishes()
     {
         Fixture f; f.editor->message()->edit("original accepted"); f.editor->save();
-        f.ports.execution.scheduler->stopAcceptingWork(); f.ports.drain();
+        f.ports.accepting_edits = false; f.ports.drain();
         QCOMPARE(f.ports.writes, 1); QVERIFY(f.editor->saveResult().requestSaved);
         f.editor->message()->edit("not admitted"); f.editor->save(); f.ports.drain(); QCOMPARE(f.ports.writes, 1);
     }
@@ -189,7 +192,7 @@ private Q_SLOTS:
         Fixture f; f.editor->message()->edit("accepted before retirement"); f.editor->save(); f.editor->retire();
         f.ports.drain(); QCOMPARE(f.ports.writes, 1); QVERIFY(f.editor->saveResult().requestSaved);
         QCOMPARE(f.ports.records.at(17).values[requestedit::Message].text, QStringLiteral("accepted before retirement"));
-        QVERIFY(f.ports.execution.quiescent());
+        QVERIFY(f.ports.quiescent());
     }
     void oldCloseConsentCannotDiscardSuccessorInput()
     {
@@ -232,7 +235,7 @@ private Q_SLOTS:
     {
         Fixture f; f.editor->message()->edit("survives view"); f.editor->save(); f.editor.reset(); f.ports.drain();
         QCOMPARE(f.ports.writes, 1); QCOMPARE(f.ports.records.at(17).values[requestedit::Message].text, QStringLiteral("survives view"));
-        QVERIFY(f.ports.execution.quiescent());
+        QVERIFY(f.ports.quiescent());
     }
     void sourceOversizeFailsClosedWithoutTruncatingSavedData()
     {
@@ -243,34 +246,74 @@ private Q_SLOTS:
     }
     void realThreadsSeparateDomainValidationNativeWriteAndGuiProjection()
     {
-        BackendExecutor executor;
-        const auto scheduler = executor.scheduler(); const auto gui = QThread::currentThread();
-        std::atomic<QThread*> read_thread{nullptr}, write_thread{nullptr}; std::atomic_int writes{0};
-        std::mutex mutex; ReceiveEditorPorts::Source storage;
+        execution::Executor executor{execution::Executor::Config{}};
+        auto core = executor.makeQueue(Lane::Core);
+        auto reads = executor.makeQueue(Lane::Utility);
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        const auto values = std::make_shared<execution::ValueCleanupQueue>(
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility)));
+        const auto gui = QThread::currentThread();
+        std::atomic<QThread*> read_thread{nullptr}, write_thread{nullptr};
+        std::atomic_int writes{0};
+        std::mutex mutex;
+        ReceiveEditorPorts::Source storage;
         { ReceiveEditorPorts seed; storage = seed.records.at(17); }
-        Model::Ports ports; ports.execution = {scheduler, presentation::QueuedPost()};
-        ports.read = [&, scheduler](int64_t, uint64_t, auto done) {
-            return execution::Submit(*scheduler, [&] { read_thread.store(QThread::currentThread()); std::lock_guard lock{mutex}; return storage; },
-                std::move(done), {}, {Lane::Domain});
+        QSemaphore reads_drained, core_drained, utility_drained, values_retired;
+        const auto cleanup = qScopeGuard([&] {
+            reads.close();
+            reads.whenDrained([&] { reads_drained.release(); });
+            const bool drained_reads = reads_drained.tryAcquire(1, 5'000);
+            core.close();
+            core.whenDrained([&] { core_drained.release(); });
+            const bool drained_core = core_drained.tryAcquire(1, 5'000);
+            utility->close();
+            utility->whenDrained([&] { utility_drained.release(); });
+            const bool drained_utility = utility_drained.tryAcquire(1, 5'000);
+            values->close([&] { values_retired.release(); });
+            const bool retired = values_retired.tryAcquire(1, 5'000);
+            executor.stopAndJoin();
+            QVERIFY(drained_reads && drained_core && drained_utility && retired);
+        });
+        Model::Ports ports;
+        ports.postWork = [utility](auto work) { return utility->post(std::move(work)); };
+        ports.value_cleanup = [values](auto release) { return values->hold(std::move(release)); };
+        ports.read = [&](int64_t, uint64_t, auto done) {
+            const bool accepted = reads.post([&, done = std::move(done)] {
+                read_thread = QThread::currentThread();
+                std::lock_guard lock{mutex};
+                utility->post([done, value = storage] { done(value); });
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Closed};
         };
-        ports.admitWrite = [&, scheduler]() -> Model::Writer {
-            const auto original = scheduler->openActionScope(); if (!original) return {};
-            return [&, original](const requestedit::Intent& intent, auto done, const auto&) {
-                return execution::Submit(*original, [&, intent] {
-                    write_thread.store(QThread::currentThread()); ++writes; std::lock_guard lock{mutex};
-                    storage.values = intent.edit.values; ++storage.revision;
-                    requestedit::Write result; result.actual.id = 17; result.actual.request_saved = result.actual.label_saved = true;
-                    result.actual.record = ReceiveEditorPorts::record(storage); return result;
-                }, std::move(done), {}, {Lane::Core});
+        ports.admitWrite = [&]() -> Model::Writer {
+            return [&](const requestedit::Intent& intent, auto done) {
+                const bool accepted = core.post([&, intent, done = std::move(done)] {
+                    write_thread = QThread::currentThread();
+                    ++writes;
+                    std::lock_guard lock{mutex};
+                    storage.values = intent.edit.values;
+                    ++storage.revision;
+                    requestedit::Write result;
+                    result.actual.id = 17;
+                    result.actual.request_saved = result.actual.label_saved = true;
+                    result.actual.record = ReceiveEditorPorts::record(storage);
+                    utility->post([done, result = std::move(result)] { done(result); });
+                });
+                return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Closed};
             };
         };
-        auto editor = std::make_unique<Model>(17, 2, false, std::move(ports)); QTRY_COMPARE(editor->phase(), Model::Editing);
-        editor->message()->edit("threaded write"); editor->save(); QTRY_VERIFY(editor->saveResult().requestSaved);
-        // Lanes own separate queued effects; the worker pool may legally reuse
-        // one physical thread once its previous effect has finished.
-        QCOMPARE(writes.load(), 1); QVERIFY(read_thread.load()); QVERIFY(write_thread.load());
-        QVERIFY(read_thread.load() != gui); QVERIFY(write_thread.load() != gui);
-        QCOMPARE(editor->thread(), gui); editor.reset(); executor.shutdown(); QTRY_VERIFY(executor.isDrained());
+        auto editor = std::make_unique<Model>(17, 2, false, std::move(ports));
+        QTRY_COMPARE(editor->phase(), Model::Editing);
+        editor->message()->edit("threaded write");
+        editor->save();
+        QTRY_VERIFY(editor->saveResult().requestSaved);
+        QCOMPARE(writes.load(), 1);
+        QVERIFY(read_thread.load());
+        QVERIFY(write_thread.load());
+        QVERIFY(read_thread.load() != gui);
+        QVERIFY(write_thread.load() != gui);
+        QVERIFY(read_thread.load() != write_thread.load());
+        QCOMPARE(editor->thread(), gui);
     }
 };
 BITCOINQML_REGISTER_QT_TEST(PaymentRequestEditorModelTests)

@@ -18,7 +18,7 @@ void ReceiveAuthorizationPrompt::invalidate() { if (std::exchange(m_active, fals
 ReceiveReservationModel::ReceiveReservationModel(uint64_t view, Ports ports, QObject* parent)
     : QObject(parent), m_view(view), m_ports(std::move(ports))
 {
-    m_ports.execution.post = presentation::ReliablePost(std::move(m_ports.execution.post));
+    m_ports.post = presentation::ReliablePost(std::move(m_ports.post));
 }
 bool ReceiveReservationModel::refuse(const QString& command, TextEditError error)
 {
@@ -40,7 +40,7 @@ bool ReceiveReservationModel::start(walletrequests::Command command, bool cancel
     struct Binding { std::shared_ptr<const walletrequests::AddressIntent> intent; };
     const auto binding = std::make_shared<Binding>();
     const QPointer<ReceiveReservationModel> observer{this};
-    const auto complete = [observer, post = m_ports.execution.post, binding, sequence, cancellation](const walletrequests::Result& result) {
+    const auto complete = [observer, post = m_ports.post, binding, sequence, cancellation](const walletrequests::Result& result) {
         // Domain owns the result before bounded GUI projection. No GUI callback
         // is needed to finish the command or release an opening Action.
         // Large legacy records stay in the native operation cell and retire on

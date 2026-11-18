@@ -6,7 +6,7 @@
 #include <qml/executor.h>
 #include <qml/models/uipreferences.h>
 #include <qml/qrimageprovider.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <QQmlComponent>
@@ -152,11 +152,11 @@ private Q_SLOTS:
         static const int preferences_type = qmlRegisterType<AppPreferences>("org.bitcoincore.qt", 1, 0, "AppPreferences");
         Q_UNUSED(preferences_type);
         QTemporaryDir directory; QVERIFY(directory.isValid());
-        ManualRoutedExecution preferences_transport;
         std::deque<std::function<void()>> preferences_gui;
+        ManualStartupExecution preferences_transport;
         UiPreferencesNamespace identity; identity.file = directory.filePath(QStringLiteral("preferences.ini"));
-        UiPreferencesStore preferences{{preferences_transport.scheduler,
-            [&](auto turn) { preferences_gui.push_back(std::move(turn)); }}, std::move(identity)};
+        UiPreferencesStore preferences{&preferences_transport.executor(), execution::Lane::Core,
+            [&](auto turn) { preferences_gui.push_back(std::move(turn)); }, std::move(identity)};
         const auto settle_preferences = [&] {
             for (int turn = 0; turn < 1024; ++turn) {
                 preferences_transport.drain();

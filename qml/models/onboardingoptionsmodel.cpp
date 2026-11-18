@@ -49,7 +49,7 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
         m_owned_executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
         executor = m_owned_executor.get();
     }
-    m_work = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{nullptr, m_post}, executor);
+    m_work = std::make_unique<execution::OwnedWork>(*executor, m_post);
     m_settings_namespace=UiPreferencesNamespace::Capture();
     m_backend_drained = !m_owned_executor;
     m_flow_mailbox = std::make_shared<FlowMailbox>();
@@ -82,7 +82,7 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
             });
         });
     m_core_settings.setAdmissionReady(false);
-    m_core_settings.configureServices({nullptr, m_post}, executor);
+    m_core_settings.configureServices(m_post, executor);
     connect(&m_core_settings,&CoreSettingsModel::operationChanged,this,[this]{if(m_stopping)return;const QPointer<OnboardingOptionsModel> guard{this};notifyCanFinish();if(guard&&!m_stopping)Q_EMIT pruneTargetInputChanged();});
     m_argv = std::make_shared<std::vector<std::string>>(std::move(argv));
     m_core_settings.setAfterChangeHandler([this](const QmlCoreSettings::Change& change,CoreSettingsModel::ChangeOrigin origin){
@@ -673,7 +673,7 @@ void OnboardingOptionsModel::startStorageProjection()
         if(revision!=observer->m_storage_projection_revision){observer->queueStorageProjection();return;}
         observer->m_storage_projection_pending=false;observer->m_storage_error_text=tr("Storage requirements could not be calculated.");
         observer->m_storage_info.status=QStringLiteral("error");Q_EMIT observer->storageStatusChanged();if(observer&&!observer->m_stopping)observer->notifyCanFinish();
-    },{execution::Lane::Domain,{},execution::WorkClass::Observation});
+    },execution::Lane::Domain);
 }
 
 QmlOnboardingStorage::State OnboardingOptionsModel::storageState() const

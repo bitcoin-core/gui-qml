@@ -45,9 +45,9 @@ bool SecurityOperationModel::submitCredentials(const QString& prompt, const QStr
                                               const QString& replacement, const QString& confirmation)
 {
     if (prompt != m_id || !canSubmit() || !m_admission || !m_admission()) return false;
-    auto captured_current = secretinput::Capture(m_opening->scheduler(), current);
-    auto captured_replacement = secretinput::Capture(m_opening->scheduler(), replacement);
-    auto captured_confirmation = secretinput::Capture(m_opening->scheduler(), confirmation);
+    auto captured_current = secretinput::Capture(m_opening, current);
+    auto captured_replacement = secretinput::Capture(m_opening, replacement);
+    auto captured_confirmation = secretinput::Capture(m_opening, confirmation);
     if (!captured_current || !captured_replacement || !captured_confirmation) {
         publish(Phase::Failed, tr("The password could not be used. The wallet password was not changed."));
         return false;

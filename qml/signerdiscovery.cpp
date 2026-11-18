@@ -28,8 +28,11 @@ Result Discover(const Ports& ports)
     catch (...) { return Failure(Error::Backend, Text("The signer check failed with an unknown error."), config); }
 }
 Reader::Drain::~Drain() { if (notify) notify(); }
-Reader::Reader(std::shared_ptr<execution::Scheduler> scheduler, std::function<Result()> read, std::function<void()> notify, std::function<void()> drained)
-    : m_scheduler(std::move(scheduler)), m_read(std::move(read)), m_notify(std::move(notify)), m_key(m_scheduler->allocateKey()), m_drain(std::make_shared<Drain>(std::move(drained))) {}
+Reader::Reader(Submit submit, std::function<Result()> read, std::function<void()> notify,
+    std::function<void()> drained)
+    : m_submit(std::move(submit)),
+      m_read(std::move(read)), m_notify(std::move(notify)),
+      m_drain(std::make_shared<Drain>(std::move(drained))) {}
 execution::SubmitResult Reader::request(quint64 revision)
 {
     {
@@ -50,7 +53,8 @@ execution::SubmitResult Reader::wake()
         drain = m_drain;
     }
     const auto self = shared_from_this();
-    const auto result = execution::Submit(*m_scheduler, [self, drain] { self->consume(); }, [drain] {}, [self, drain](std::exception_ptr) { self->rejected(); }, {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    const auto result = m_submit(execution::MakeTask([self, drain] { self->consume(); }, [drain] {},
+        [self, drain](std::exception_ptr) { self->rejected(); }), execution::Lane::Domain);
     if (!result) rejected();
     return result;
 }
@@ -96,8 +100,10 @@ void Reader::consume()
         }
         drain = m_drain;
     }
-    const auto submitted = execution::Submit(*m_scheduler, [self, drain] { return self->m_read(); }, [self, drain, desired](Result result) { self->complete(desired, std::move(result)); },
-        [self, drain, desired](std::exception_ptr) { self->complete(desired, Failure(Error::Backend, Text("The signer check failed."))); }, {execution::Lane::Core, m_key, execution::WorkClass::Observation});
+    const auto submitted = m_submit(execution::MakeTask([self, drain] { return self->m_read(); },
+        [self, drain, desired](Result result) { self->complete(desired, std::move(result)); },
+        [self, drain, desired](std::exception_ptr) { self->complete(desired, Failure(Error::Backend, Text("The signer check failed."))); }),
+        execution::Lane::Core);
     if (!submitted) { m_active.reset(); m_active_flag = false; m_completed = desired; publish({desired, m_source, Phase::Failed, Failure(Error::Rejected, Text("The signer program could not start. Try again.")), false, false}); }
 }
 void Reader::complete(quint64 revision, Result result)

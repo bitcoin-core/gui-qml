@@ -5,6 +5,8 @@
 #define BITCOIN_QML_WALLETCREATION_H
 
 #include <qml/execution.h>
+#include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <qml/secretinput.h>
 #include <qml/snapshotquery.h>
 #include <qml/walletpublication.h>
@@ -23,6 +25,7 @@
 #include <vector>
 
 namespace interfaces { class Node; class Wallet; }
+namespace execution { class SerialQueue; }
 struct bilingual_str;
 struct WalletNameRegistry;
 
@@ -163,10 +166,36 @@ QString Setup(interfaces::Wallet& wallet, const Request& request);
 
 struct Services {
     interfaces::Node* node{nullptr};
-    execution::SnapshotServices execution;
+    presentation::Post gui_post;
     std::shared_ptr<Admission> admission;
     std::shared_ptr<WalletNameRegistry> open_names;
     std::shared_ptr<std::atomic_bool> initialized, shutdown;
+    std::shared_ptr<execution::SerialQueue> core{}, outcomes{};
+    execution::ValueCleanup value_cleanup{};
+
+    secretinput::CaptureResult capture(const QString& text) const
+    {
+        return secretinput::Capture(value_cleanup, text);
+    }
+    template <typename T, typename Factory>
+    std::shared_ptr<T> retain(Factory factory) const
+    {
+        if (!value_cleanup) return {};
+        return execution::RetainValues<T>(value_cleanup, std::move(factory));
+    }
+
+    execution::SubmitResult post(execution::Lane lane, std::shared_ptr<execution::Task> task) const;
+    execution::SubmitResult post(execution::Lane lane, std::function<void()> work) const
+    {
+        return post(lane, execution::MakeTask(std::move(work), [] {}, {}));
+    }
+    template <typename Value, typename Work>
+    execution::SubmitResult start(execution::OwnedCommand<Value>& command, Work work, execution::Lane lane = execution::Lane::Core) const
+    {
+        return command.startWith([this, lane, work = std::move(work)](auto done, auto failed) mutable {
+            return this->post(lane, execution::MakeTask(std::move(work), std::move(done), std::move(failed)));
+        });
+    }
 };
 // Common value/effect contract. Creation and restore/migration remain separate
 // Native owners; a GUI projection cannot execute or inspect their Core work.

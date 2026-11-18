@@ -3,7 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_REQUESTSHARING_H
 #define BITCOIN_QML_REQUESTSHARING_H
-#include <qml/snapshotquery.h>
+#include <qml/execution.h>
+#include <qml/guipresentation.h>
 #include <qml/walletopeningstate.h>
 #include <qml/sourceepoch.h>
 #include <QImage>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <optional>
 
+namespace execution { class SerialQueue; }
 namespace requestimageexport { struct Services; }
 
 class SharingError {
@@ -72,15 +74,28 @@ struct Result {
     Error error{Error::None};
     bool admitted{false}, performed{false};
 };
+using Scope = std::function<execution::SubmitResult(std::shared_ptr<execution::Task>, execution::Lane)>;
 struct Services {
-    execution::SnapshotServices execution;
+    presentation::Post post;
+    Scope submit;
     std::function<execution::SubmitResult(int64_t, std::function<void(Source)>)> read;
     std::function<QImage(const QString&)> render;
     // Necessary native handoff, on GUI only. Its result describes this local
     // adapter effect, not durable clipboard ownership by another OS process.
     std::function<Delivery(Kind, const QString&, const QImage&)> deliver;
     std::shared_ptr<const requestimageexport::Services> files;
+    std::shared_ptr<execution::SerialQueue> utility;
+    std::function<std::shared_ptr<void>()> hold;
 };
+Scope WorkScope(const Services& services, bool retain);
+
+template <typename Work, typename Done>
+execution::SubmitResult Submit(const Scope& scope, Work work, Done done,
+                               std::function<void(std::exception_ptr)> failed, execution::Lane lane)
+{
+    if (!scope) return {{}, execution::Rejection::Closed};
+    return scope(execution::MakeTask(std::move(work), std::move(done), std::move(failed)), lane);
+}
 QString ErrorText(Error error);
 QImage RenderQr(const QString& payload);
 } // namespace requestshare

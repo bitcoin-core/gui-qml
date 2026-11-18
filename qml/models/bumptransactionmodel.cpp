@@ -5,6 +5,7 @@
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/bitcoinunits.h>
 #include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <qml/secretinput.h>
 #include <QPointer>
 
@@ -33,14 +34,13 @@ QString ErrorMessage(walletbump::Error error)
 } // namespace
 
 BumpTransactionModel::BumpTransactionModel(QObject* parent) : FeeBumpOperation(parent) {}
-void BumpTransactionModel::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services,
+void BumpTransactionModel::setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post,
                                       walletbump::Services bump_services)
 {
     if (m_closed || busy() || (m_opening && m_opening != opening)) return;
-    m_opening = std::move(opening); m_services = std::move(services);
+    m_opening = std::move(opening);
+    m_post = post ? std::move(post) : presentation::QueuedPost();
     m_bump_services = std::move(bump_services);
-    if (!m_services.scheduler && m_opening) m_services.scheduler = m_opening->scheduler();
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
 }
 transactionattempt::CurrentFacts BumpTransactionModel::attemptFacts() const
 {
@@ -126,14 +126,21 @@ quint64 BumpTransactionModel::requestPrepareFeeBump(const QString& txid, unsigne
 {
     if (m_closed || busy()) return 0;
     if (m_state == Uncertain || m_state == Committing) return 0;
-    if (!m_opening || !m_opening->available() || !m_services.scheduler) {
+    if (!m_opening || !m_opening->available()) {
         m_error = tr("No wallet available."); m_state = Failed; publish(); return 0;
     }
     const auto action = m_opening->startAction();
     if (!action) return 0;
+    const QPointer<BumpTransactionModel> observer{this};
+    // Reserve the review before close can stop new value cleanup admissions.
+    // An accepted preparation can still build and retire it after close.
+    auto review = walletopening::RetainValues<walletbump::Prepared>(m_opening, [] {
+        return std::make_unique<walletbump::Prepared>();
+    });
+    if (!observer || m_closed) return 0;
     const auto attempt = m_attempt_id + 1, revision = m_view_revision + 1;
     if (m_attempt_owner) m_attempt_owner->close({});
-    auto owner = std::make_shared<transactionattempt::Owner>(m_services.scheduler);
+    auto owner = std::make_shared<transactionattempt::Owner>(m_opening->utilityQueue());
     const transactionattempt::CurrentFacts facts{m_opening->identity(), 0, m_opening->available()};
     const transactionattempt::Ticket ticket{attempt, revision, facts.session, facts.review};
     m_attempt_owner = owner;
@@ -141,9 +148,8 @@ quint64 BumpTransactionModel::requestPrepareFeeBump(const QString& txid, unsigne
     m_attempt_snapshot = {};
     m_attempt_snapshot.kind = transactionattempt::Kind::Replacement;
     m_attempt_snapshot.ticket = ticket;
-    const QPointer<BumpTransactionModel> observer{this};
-    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Preparation>>(m_services.scheduler,
-        [post = m_services.post, observer, attempt, revision] { post([observer, attempt, revision] { if (observer) observer->publishPreparation(attempt, revision); }); });
+    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Preparation>>(
+        [post = m_post, observer, attempt, revision] { post([observer, attempt, revision] { if (observer) observer->publishPreparation(attempt, revision); }); });
     m_attempt_id = attempt; m_view_revision = revision; m_preparation_revision = revision;
     m_prepare_operation = std::move(operation); m_commit_operation.reset(); m_review.reset();
     m_observation_operation.reset(); m_observed_outcome.reset();
@@ -151,8 +157,8 @@ quint64 BumpTransactionModel::requestPrepareFeeBump(const QString& txid, unsigne
     if (!publish()) return 0;
     const transactionattempt::ReplacementStart input{attempt, revision, facts, txid};
     const auto begin = owner->beginReplacement(input,
-        [owner, opening = m_opening, action, operation = m_prepare_operation, ticket, facts, txid, target_blocks,
-         observer, post = m_services.post, attempt, revision](transactionattempt::Result result) mutable {
+        [owner, opening = m_opening, action, operation = m_prepare_operation, ticket, facts, txid, target_blocks, review = std::move(review),
+         observer, post = m_post, attempt, revision](transactionattempt::Result result) mutable {
             if (result.transition != transactionattempt::Transition::Accepted
                 || result.admission_error != transactionattempt::StartError::None) {
                 post([observer, snapshot = std::move(result.snapshot), attempt, revision] () mutable {
@@ -160,10 +166,10 @@ quint64 BumpTransactionModel::requestPrepareFeeBump(const QString& txid, unsigne
                 });
                 return;
             }
-            const auto submitted = operation->startWith([opening, action, txid, target_blocks](auto done, auto failed) {
+            const auto submitted = operation->startWith([opening, action, txid, target_blocks, review = std::move(review)](auto done, auto failed) mutable {
                 return opening->perform(action,
-                    [opening, txid, target_blocks](interfaces::Wallet& wallet) {
-                        return walletbump::Prepare(wallet, txid, target_blocks, opening);
+                    [txid, target_blocks, review = std::move(review)](interfaces::Wallet& wallet) mutable {
+                        return walletbump::Prepare(wallet, txid, target_blocks, std::move(review));
                     }, std::move(done), std::move(failed));
             });
             if (submitted) return;
@@ -203,7 +209,7 @@ void BumpTransactionModel::publishPreparation(quint64 attempt, quint64 revision)
         const auto ticket = m_attempt_ticket;
         const auto facts = transactionattempt::CurrentFacts{ticket.session, ticket.prior_review, m_opening && m_opening->available()};
         if (!owner || !owner->fail(ticket, facts, outcome,
-                [observer = QPointer<BumpTransactionModel>{this}, post = m_services.post, attempt, revision, message](transactionattempt::Result failure) mutable {
+                [observer = QPointer<BumpTransactionModel>{this}, post = m_post, attempt, revision, message](transactionattempt::Result failure) mutable {
                     post([observer, snapshot = std::move(failure.snapshot), attempt, revision, message] () mutable {
                         if (!observer) return;
                         observer->m_error = message;
@@ -222,7 +228,7 @@ void BumpTransactionModel::publishPreparation(quint64 attempt, quint64 revision)
     const auto ticket = m_attempt_ticket;
     const auto facts = transactionattempt::CurrentFacts{ticket.session, ticket.prior_review, m_opening && m_opening->available()};
     if (!owner || !owner->install(ticket, facts, std::move(candidate), attempt,
-            [observer = QPointer<BumpTransactionModel>{this}, post = m_services.post, attempt, revision](transactionattempt::Result installed) mutable {
+            [observer = QPointer<BumpTransactionModel>{this}, post = m_post, attempt, revision](transactionattempt::Result installed) mutable {
                 post([observer, snapshot = std::move(installed.snapshot), attempt, revision] () mutable {
                     if (observer) observer->applyAttempt(std::move(snapshot), attempt, revision, true);
                 });
@@ -259,7 +265,7 @@ void BumpTransactionModel::applyAttempt(transactionattempt::Snapshot snapshot, q
 quint64 BumpTransactionModel::requestConfirmFeeBump() { return confirm({}); }
 quint64 BumpTransactionModel::requestConfirmFeeBumpWithPassphrase(const QString& passphrase) {
     if (m_closed || busy() || m_state != NeedsConfirmation) return 0;
-    const auto captured = secretinput::Capture(m_opening ? m_opening->scheduler() : nullptr, passphrase);
+    const auto captured = secretinput::Capture(m_opening, passphrase);
     if (!captured) { m_error = tr("The password could not be used. Try again."); publish(); return 0; }
     return confirm({}, captured.input);
 }
@@ -275,8 +281,8 @@ quint64 BumpTransactionModel::confirm(std::optional<SecureString> passphrase, se
     if (expected != transactionattempt::Phase::Reviewing && expected != transactionattempt::Phase::NeedsUnlock) return 0;
     const QPointer<BumpTransactionModel> observer{this};
     auto secret = std::make_shared<std::optional<SecureString>>(std::move(passphrase));
-    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Commit>>(m_services.scheduler,
-        [post = m_services.post, observer, attempt, commit] { post([observer, attempt, commit] { if (observer) observer->publishCommit(attempt, commit); }); });
+    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Commit>>(
+        [post = m_post, observer, attempt, commit] { post([observer, attempt, commit] { if (observer) observer->publishCommit(attempt, commit); }); });
     const auto owner = m_attempt_owner;
     const auto ticket = m_attempt_ticket;
     const auto facts = attemptFacts();
@@ -284,7 +290,7 @@ quint64 BumpTransactionModel::confirm(std::optional<SecureString> passphrase, se
     const auto bump_services = m_bump_services;
     const auto submitted = owner->advance(ticket, facts, expected, transactionattempt::Phase::Submitting,
         [owner, opening = m_opening, action, operation, review, secret, captured, bump_services, ticket,
-         facts, observer, post = m_services.post, attempt, revision](transactionattempt::Result transition) mutable {
+         facts, observer, post = m_post, attempt, revision](transactionattempt::Result transition) mutable {
             if (transition.transition != transactionattempt::Transition::Accepted) {
                 post([observer, snapshot = std::move(transition.snapshot), attempt, revision] () mutable {
                     if (observer) observer->applyAttempt(std::move(snapshot), attempt, revision, false);
@@ -338,7 +344,7 @@ void BumpTransactionModel::publishCommit(quint64 attempt, quint64 commit)
     const auto owner = m_attempt_owner;
     if (!owner) { m_state = Uncertain; m_committing = false; publish(); return; }
     const auto submitted = owner->advance(m_attempt_ticket, attemptFacts(), transactionattempt::Phase::Submitting, outcome,
-        [observer = QPointer<BumpTransactionModel>{this}, post = m_services.post, value, attempt,
+        [observer = QPointer<BumpTransactionModel>{this}, post = m_post, value, attempt,
          revision = m_view_revision](transactionattempt::Result transition) mutable {
             post([observer, snapshot = std::move(transition.snapshot), value = std::move(value), attempt, revision] () mutable {
                 if (!observer || observer->m_closed || observer->m_attempt_id != attempt || observer->m_view_revision != revision) return;
@@ -391,8 +397,8 @@ quint64 BumpTransactionModel::requestRecheckFeeBumpOutcome()
     if (!action) return 0;
     const auto attempt = m_attempt_id, commit = m_commit_id, observation = ++m_observation_id;
     const QPointer<BumpTransactionModel> observer{this};
-    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Commit>>(m_services.scheduler,
-        [post = m_services.post, observer, attempt, commit, observation] {
+    auto operation = std::make_shared<execution::OwnedCommand<walletbump::Commit>>(
+        [post = m_post, observer, attempt, commit, observation] {
             post([observer, attempt, commit, observation] { if (observer) observer->publishObservation(attempt, commit, observation); });
         });
     m_observation_operation = operation;

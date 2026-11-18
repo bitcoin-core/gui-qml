@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/signverifymessagemodel.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <qml/secretinput.h>
 #include <QPointer>
@@ -28,21 +29,34 @@ SignVerifyMessageModel::SignVerifyMessageModel(QObject* parent)
     connect(&m_verify_signature_input_text, &TextEditInput::edited, this, &SignVerifyMessageModel::setVerificationSignature);
 }
 
-void SignVerifyMessageModel::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void SignVerifyMessageModel::setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post,
+                                        std::shared_ptr<execution::SerialQueue> outcomes)
 {
     if (m_closed || (m_opening && m_opening != opening) || m_sign_active || m_verify_active) return;
     m_opening = std::move(opening);
-    m_services = std::move(services);
-    if (!m_services.scheduler && m_opening) m_services.scheduler = m_opening->scheduler();
+    m_post = std::move(post);
     const QPointer<SignVerifyMessageModel> observer{this};
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
-    if (!m_services.scheduler) return;
-    m_address_query = std::make_shared<execution::SnapshotQuery<AddressChecks>>(m_services.scheduler,
+    if (!m_post) m_post = presentation::QueuedPost();
+    m_post_observation = {};
+    if (m_opening) {
+        m_post_observation = m_opening->observationPost(execution::Lane::Domain);
+    } else if (outcomes) {
+        m_post_observation = [outcomes = std::move(outcomes)](std::shared_ptr<execution::Task> task) {
+            const bool accepted = outcomes->post([task = std::move(task)] {
+                task->execute();
+                task->deliver();
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+        };
+    }
+    if (!m_post_observation) return;
+    m_address_query = std::make_shared<execution::SnapshotQuery<AddressChecks>>(
         [input = m_address_input] {
             QString sign, verify; quint64 revision;
             { std::lock_guard lock{input->mutex}; sign = input->sign; verify = input->verify; revision = input->revision; }
             return AddressChecks{revision, walletmessage::IsLegacy(sign), walletmessage::IsLegacy(verify)};
-        }, [post = m_services.post, observer] { post([observer] { if (observer) observer->publishAddressValidation(); }); }, execution::Lane::Domain);
+        }, [post = m_post, observer] { post([observer] { if (observer) observer->publishAddressValidation(); }); },
+        m_post_observation);
     requestAddressValidation();
 }
 
@@ -267,8 +281,8 @@ quint64 SignVerifyMessageModel::requestSignMessageWithPassphrase(const QString& 
     setSigningAddress(address); if (!guard || m_closed) return 0;
     setSigningMessage(message); if (!guard || m_closed) return 0;
     if (!m_opening) return sign({});
-    if (!m_opening->available() || !m_services.scheduler) return 0;
-    const auto captured = secretinput::Capture(m_opening->scheduler(), passphrase);
+    if (!m_opening->available()) return 0;
+    const auto captured = secretinput::Capture(m_opening, passphrase);
     if (!captured) {
         m_signing_state = SigningFailed; m_signing_error = tr("The password could not be used. Try again.");
         m_signing_needs_unlock = false; m_signature.clear(); notifySigning(); return 0;
@@ -295,14 +309,14 @@ quint64 SignVerifyMessageModel::sign(std::optional<SecureString> passphrase, sec
         Q_EMIT signingStateChanged();
         return 0;
     }
-    if (!m_opening->available() || !m_services.scheduler) return 0;
+    if (!m_opening->available()) return 0;
     const auto action = m_opening->startAction();
     if (!action) return 0;
     const auto id = m_sign_id + 1, revision = m_sign_revision;
     const QPointer<SignVerifyMessageModel> observer{this};
     auto request = std::make_shared<walletmessage::SignRequest>(walletmessage::SignRequest{m_sign_address, m_sign_message, std::move(passphrase), std::move(captured)});
-    auto operation = std::make_shared<execution::OwnedCommand<walletmessage::SignResult>>(m_services.scheduler,
-        [post = m_services.post, observer, id, revision] { post([observer, id, revision] { if (observer) observer->publishSigning(id, revision); }); });
+    auto operation = std::make_shared<execution::OwnedCommand<walletmessage::SignResult>>(
+        [post = m_post, observer, id, revision] { post([observer, id, revision] { if (observer) observer->publishSigning(id, revision); }); });
     if (!operation->startWith([opening = m_opening, action, request](auto done, auto failed) {
         return opening->perform(action, [request](interfaces::Wallet& wallet) { return walletmessage::Sign(wallet, std::move(*request)); }, std::move(done), std::move(failed));
     })) {
@@ -348,16 +362,20 @@ std::optional<walletmessage::SignResult> SignVerifyMessageModel::signingResult()
 
 quint64 SignVerifyMessageModel::requestVerifyMessage(const QString& address, const QString& message, const QString& signature)
 {
-    if (m_closed || m_verify_active || !m_services.scheduler) return 0;
+    if (m_closed || m_verify_active || !m_post_observation) return 0;
     const QPointer<SignVerifyMessageModel> guard{this};
     setVerificationAddress(address); if (!guard || m_closed) return 0;
     setVerificationMessage(message); if (!guard || m_closed) return 0;
     setVerificationSignature(signature); if (!guard || m_closed) return 0;
     const auto id = m_verify_id + 1, revision = m_verify_revision;
-    auto operation = std::make_shared<execution::OwnedCommand<walletmessage::VerifyResult>>(m_services.scheduler,
-        [post = m_services.post, guard, id, revision] { post([guard, id, revision] { if (guard) guard->publishVerification(id, revision); }); });
-    if (!operation->start([address, message, signature] { return walletmessage::Verify(address, message, signature); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation})) {
+    auto operation = std::make_shared<execution::OwnedCommand<walletmessage::VerifyResult>>(
+        [post = m_post, guard, id, revision] { post([guard, id, revision] { if (guard) guard->publishVerification(id, revision); }); });
+    auto verify = [address, message, signature] { return walletmessage::Verify(address, message, signature); };
+    const auto post_task = m_post_observation;
+    const auto submitted = operation->startWith([&](auto done, auto failed) {
+        return post_task(execution::MakeTask(std::move(verify), std::move(done), std::move(failed)));
+    });
+    if (!submitted) {
         m_verification_state = VerificationFailed; notifyVerification(); return 0;
     }
     m_verify_id = id; m_verify_operation_revision = revision;

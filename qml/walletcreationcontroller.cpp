@@ -30,7 +30,9 @@ bool WalletCreationController::canCreateExternalSignerWallet() const
 WalletCreationModel::Services WalletCreationController::creationServices()
 {
     WalletCreationModel::Services services;
-    services.operation.native = {m_host.node, {m_host.scheduler, m_host.post}, m_host.admission, m_host.registry->nameRegistry(), m_host.names_ready, m_host.shutdown_gate};
+    services.operation.native = {m_host.node, m_host.post, m_host.admission, m_host.registry->nameRegistry(),
+        m_host.names_ready, m_host.shutdown_gate, m_host.catalog_queues.core, m_host.catalog_queues.outcomes,
+        m_host.registry->valueCleanup()};
     services.operation.publisher = m_host.registry; services.operation.projection_parent = this;
     const QPointer<WalletCreationController> controller{this};
     services.signer = [controller] {
@@ -83,7 +85,8 @@ void WalletCreationController::adopt(WalletCreationModel* editor)
 WalletProvisioningCheck* WalletCreationController::createProvisioningCheck()
 {
     if (m_closed || !m_host.registry->retirement()->retained) return nullptr;
-    auto* form = new WalletProvisioningCheck(*m_host.node, {m_host.scheduler, m_host.post}, nullptr, m_host.names_ready, m_host.registry->nameRegistry(), m_host.shutdown_gate);
+    auto* form = new WalletProvisioningCheck(*m_host.node, m_host.post, nullptr,
+        m_host.names_ready, m_host.registry->nameRegistry(), m_host.shutdown_gate, false, m_host.catalog_queues);
     QQmlEngine::setObjectOwnership(form, QQmlEngine::JavaScriptOwnership);
     const QPointer<WalletProvisioningCheck> original{form};
     m_host.registry->registerForm(form, [original] { if (original) original->close(); });
@@ -151,7 +154,7 @@ WalletOperationModel* WalletCreationController::create(WalletCreationModel::Kind
     }
     if (request.transport_error.empty() && (name.size() > 32768 || key.size() > 4096)) request.transport_error = {QStringLiteral("TransportBudget"), tr("This wallet input is too long. No wallet was created."), {}, {}};
     if (kind == WalletCreationModel::Software && request.encrypt && request.transport_error.empty()) {
-        auto captured = secretinput::Capture(m_host.scheduler, passphrase);
+        auto captured = services.operation.native.capture(passphrase);
         if (!captured) request.transport_error = {QStringLiteral("InputUnavailable"), tr("The password could not be used. No wallet was created."), QStringLiteral("credentials"), {}};
         else request.passphrase = request.confirmation = std::move(captured.input);
     }
@@ -210,7 +213,7 @@ WalletOperationModel* WalletCreationController::migrateConfirmed(const QString& 
     walletrestoration::Request request; request.kind = walletrestoration::Kind::Migrate; request.source = path; request.confirmed = true;
     if (path.size() > 32768) request.transport_error = {QStringLiteral("TransportBudget"), tr("This wallet input is too long. Nothing was changed."), {}, {}};
     if (!passphrase.isEmpty() && request.transport_error.empty()) {
-        auto input = secretinput::Capture(m_host.scheduler, passphrase);
+        auto input = operationServices().native.capture(passphrase);
         if (!input) request.transport_error = {QStringLiteral("InputUnavailable"), tr("The password could not be used. The wallet was not updated."), {}, {}};
         else request.passphrase = std::move(input.input);
     }
@@ -226,10 +229,11 @@ void WalletCreationController::clear()
 }
 
 
-void WalletCreationController::setSignerServices(execution::SnapshotServices services)
+void WalletCreationController::setSignerExecutor(execution::Executor& executor, presentation::Post post)
 {
     Q_ASSERT(!m_signers);
-    m_signer_services = std::move(services);
+    m_signer_executor = &executor;
+    m_signer_post = std::move(post);
 }
 
 void WalletCreationController::setSignerPorts(signerdiscovery::Ports ports)
@@ -240,11 +244,12 @@ void WalletCreationController::setSignerPorts(signerdiscovery::Ports ports)
 
 void WalletCreationController::refreshSigners()
 {
-    if (m_closed) return;
+    if (m_closed || !m_signer_executor) return;
     if (!m_signers) {
         SignerDiscoveryModel::Services services;
-        services.discovery = m_signer_services; // Default owns a separate bounded process lane.
-        services.configuration = {m_host.scheduler, m_host.post};
+        services.executor = m_signer_executor;
+        services.discovery_post = m_signer_post ? m_signer_post : m_host.post;
+        services.configuration_post = m_host.post;
         services.retire = m_host.post;
         services.ports = m_signer_ports.configuration ? m_signer_ports : signerdiscovery::PersistentPorts(*m_host.node);
         m_signers = new SignerDiscoveryModel(std::move(services), this);

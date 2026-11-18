@@ -12,7 +12,7 @@ struct Fixture {
     ReceiveEditorPorts ports;
     std::unique_ptr<WalletReceiveModel> receive{std::make_unique<WalletReceiveModel>(2, ports.all())};
     Fixture() { ports.drain(); }
-    ~Fixture() { receive.reset(); ports.drain(); QVERIFY(ports.execution.quiescent()); }
+    ~Fixture() { receive.reset(); ports.drain(); QVERIFY(ports.quiescent()); }
     void ready() { QVERIFY(receive->ensureAddress()); ports.drain(); QVERIFY(receive->reservation()->available()); QVERIFY(receive->editor()->canSave()); }
     std::unique_ptr<RequestOpenOperation> open(const QString& id) { return std::unique_ptr<RequestOpenOperation>{receive->openRequest(id, nullptr)}; }
     void discardClose()

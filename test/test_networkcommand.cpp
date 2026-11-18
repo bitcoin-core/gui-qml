@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/networkcommand.h>
 #include <qml/models/networkmodel.h>
-#include <qml/backendexecutor.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/executor.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <QCoreApplication>
@@ -36,7 +36,12 @@ Effect Applied(uint64_t id, bool active, uint64_t before, uint64_t after)
     return result;
 }
 struct Fixture {
-    ManualRoutedExecution execution;
+    ManualStartupExecution worker;
+    const std::shared_ptr<execution::SerialQueue> retirement_queue =
+        std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    PresentationServices retirement{{{}, [queue = retirement_queue](auto work) {
+        return queue->post(std::move(work));
+    }, {}, retirement_queue}};
     std::deque<std::function<void()>> gui;
     bool active{true}, throw_write{false}, throw_read{false}, throw_post{false}, advance_generation_on_write{true};
     uint64_t generation{1};
@@ -45,10 +50,15 @@ struct Fixture {
     Fixture()
     {
         NetworkModel::Ports ports;
-        ports.execution = {execution.scheduler, [this](auto turn) {
+        ports.queues = {
+            std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Core)),
+            std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility)),
+            retirement.valueRetirement(),
+        };
+        ports.post = [this](auto turn) {
             if (std::exchange(throw_post, false)) throw std::runtime_error{"GUI transport rejected"};
             gui.push_back(std::move(turn));
-        }};
+        };
         ports.observe = [this] {
             ++reads;
             if (std::exchange(throw_read, false)) throw std::runtime_error{"Observation unavailable"};
@@ -64,10 +74,14 @@ struct Fixture {
     ~Fixture() { model.reset(); settle(); }
     void rpc(bool value) { if (active != value) { active = value; ++generation; } }
     void publish() { while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); } }
+    bool step(execution::Lane lane)
+    {
+        return worker.step(lane == execution::Lane::Core ? lane : execution::Lane::Utility);
+    }
     void settle()
     {
         for (int pass = 0; pass < 8; ++pass) {
-            execution.drain(); publish();
+            worker.drain(); publish();
             QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         }
     }
@@ -123,8 +137,8 @@ private Q_SLOTS:
         fixture.advance_generation_on_write = false;
         fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core));
         QCOMPARE(fixture.writes, 1);
         QVERIFY(!fixture.active);
         // The original physical read is held before Domain accounting. The
@@ -154,14 +168,14 @@ private Q_SLOTS:
         Fixture fixture;
         fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        if(domain_consumed)QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        if(domain_consumed)QVERIFY(fixture.step(execution::Lane::Domain));
         QCOMPARE(fixture.writes, 0);
         fixture.model.reset();
         QCOMPARE(fixture.writes, 0);
         fixture.settle();
         QCOMPARE(fixture.writes, 1);
         QVERIFY(!fixture.active);
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.worker.quiescent());
         fixture.settle();
         QCOMPARE(fixture.writes, 1);
     }
@@ -174,9 +188,9 @@ private Q_SLOTS:
         fixture.active = false; // The public value changed before its notice.
         QVERIFY(fixture.model->requestActive(true));
         QCOMPARE(fixture.writes, 0);
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         QCOMPARE(fixture.writes, 0);
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
+        QVERIFY(fixture.step(execution::Lane::Core));
         QCOMPARE(fixture.writes, 1);
         fixture.settle();
         QVERIFY(fixture.active);
@@ -298,7 +312,7 @@ private Q_SLOTS:
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
         QVERIFY(fixture.model->pending());
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         QVERIFY(fixture.model->requestActive(true));
         QCOMPARE(fixture.model->requestId(), quint64{2});
         fixture.publish(); // Only request1 has reached Domain.
@@ -326,31 +340,31 @@ private Q_SLOTS:
     {
         Fixture fixture;
         fixture.model->setAvailable(true);
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        const auto held = fixture.execution.dispatchNext(execution::Lane::Core); QVERIFY(held);
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        const auto held = fixture.worker.take(execution::Lane::Core); QVERIFY(held);
         fixture.model->setAvailable(true);
-        while (fixture.execution.step(execution::Lane::Domain)) {}
-        fixture.execution.rejectLane(execution::Lane::Core);
-        QVERIFY(fixture.execution.finishWork(*held)); fixture.settle();
+        while (fixture.step(execution::Lane::Domain)) {}
+        fixture.worker.reject_core = true;
+        held(); fixture.settle();
         QVERIFY(!fixture.model->known()); QVERIFY(!fixture.model->ready());
         QVERIFY(!fixture.model->pending()); QVERIFY(!fixture.model->error().isEmpty());
         QCOMPARE(fixture.writes, 0); QCOMPARE(fixture.reads, 0);
-        QCOMPARE(fixture.execution.coreSubmissions(), size_t{2});
+        QCOMPARE(fixture.worker.coreSubmissions(), size_t{2});
         fixture.ready();
         QVERIFY(fixture.model->known()); QVERIFY(fixture.model->ready()); QVERIFY(fixture.model->error().isEmpty());
-        QCOMPARE(fixture.reads, 1); QCOMPARE(fixture.execution.coreSubmissions(), size_t{3});
+        QCOMPARE(fixture.reads, 1); QCOMPARE(fixture.worker.coreSubmissions(), size_t{3});
     }
 
     void guiBurstCoalescesWithoutEffectOrGetterLoop()
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        const auto held = fixture.execution.dispatchNext(execution::Lane::Core);
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        const auto held = fixture.worker.take(execution::Lane::Core);
         QVERIFY(held);
         for (int n = 0; n < 100; ++n) QVERIFY(fixture.model->requestActive(n % 2 != 0));
         QCOMPARE(fixture.writes, 0); QCOMPARE(fixture.reads, 1);
-        QVERIFY(fixture.execution.finishWork(*held));
+        held();
         fixture.settle();
         QCOMPARE(fixture.writes, 2); QCOMPARE(fixture.reads, 3);
         QVERIFY(fixture.active); QVERIFY(fixture.model->observedActive());
@@ -362,7 +376,7 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         fixture.rpc(false); fixture.rpc(true);
         fixture.model->observe(fixture.active, fixture.generation);
         fixture.settle();
@@ -376,8 +390,8 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core)); // Captured first result; Domain receipt remains held.
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core)); // Captured first result; Domain receipt remains held.
         QCOMPARE(fixture.writes, 1);
         QVERIFY(fixture.model->requestActive(true));
         fixture.rpc(true); fixture.rpc(false); // Both transitions notify on real Core.
@@ -394,7 +408,7 @@ private Q_SLOTS:
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(true));
         QVERIFY(fixture.model->pending());
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         fixture.rpc(false);
         fixture.model->observe(fixture.active, fixture.generation);
         fixture.settle();
@@ -408,8 +422,8 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core));
         fixture.model->observe(fixture.active, fixture.generation);
         QVERIFY(fixture.model->requestActive(true));
         fixture.settle();
@@ -421,8 +435,8 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core));
         fixture.rpc(true);
         fixture.model->observe(fixture.active, fixture.generation);
         fixture.settle();
@@ -448,7 +462,7 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready(); fixture.throw_write = true;
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         QVERIFY(fixture.model->requestActive(true));
         fixture.settle();
         QCOMPARE(fixture.writes, 1); QVERIFY(!fixture.active);
@@ -464,14 +478,14 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready(); fixture.throw_write = true;
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
-        fixture.execution.rejectLane(execution::Lane::Core);
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core));
+        fixture.worker.reject_core = true;
         fixture.settle();
         QCOMPARE(fixture.model->outcome(), NetworkModel::Uncertain); QVERIFY(!fixture.model->pending());
         QVERIFY(fixture.model->effect().attempted); QCOMPARE(fixture.model->effect().status, EffectStatus::Uncertain);
         QCOMPARE(fixture.writes, 1); QCOMPARE(fixture.reads, 1);
-        QCOMPARE(fixture.execution.coreSubmissions(), size_t{3});
+        QCOMPARE(fixture.worker.coreSubmissions(), size_t{3});
         fixture.model->observe(fixture.active, fixture.generation); fixture.settle();
         QCOMPARE(fixture.model->outcome(), NetworkModel::Uncertain);
         QCOMPARE(fixture.writes, 1);
@@ -482,7 +496,7 @@ private Q_SLOTS:
     void ordinaryRootClosureRejectsFreshIntent()
     {
         Fixture fixture; fixture.ready();
-        fixture.execution.scheduler->stopAcceptingWork();
+        fixture.worker.reject_utility = true;
         QVERIFY(!fixture.model->requestActive(false));
         QVERIFY(!fixture.model->pending());
         QCOMPARE(fixture.model->outcome(), NetworkModel::Rejected);
@@ -496,7 +510,7 @@ private Q_SLOTS:
     void nativeAdmissionRejectionIsKnownAndRetryIsExplicit()
     {
         Fixture fixture; fixture.ready();
-        fixture.execution.rejectLane(execution::Lane::Core);
+        fixture.worker.reject_core = true;
         QVERIFY(fixture.model->requestActive(false));
         fixture.settle();
         QCOMPARE(fixture.writes, 0);
@@ -512,7 +526,7 @@ private Q_SLOTS:
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         fixture.model->setAvailable(false); fixture.model->setAvailable(true);
         QVERIFY(!fixture.model->ready());
         fixture.settle();
@@ -526,6 +540,10 @@ private Q_SLOTS:
         Fixture fixture; fixture.ready();
         fixture.throw_post = true;
         QVERIFY(fixture.model->requestActive(false));
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        fixture.worker.reject_utility = true; // Preserve the accepted receipt if Utility refuses delivery.
+        QVERIFY(fixture.step(execution::Lane::Core));
+        QVERIFY(!fixture.worker.reject_utility);
         fixture.settle();
         QCOMPARE(fixture.writes, 1);
         QVERIFY(!fixture.model->pending());
@@ -537,8 +555,8 @@ private Q_SLOTS:
         Fixture fixture; fixture.ready();
         QSignalSpy drained{fixture.model.get(), &NetworkModel::shutdownFinished};
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
-        QVERIFY(fixture.execution.step(execution::Lane::Core));
+        QVERIFY(fixture.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Core));
         fixture.model->close();
         QVERIFY(!fixture.model->drained());
         fixture.settle();
@@ -548,14 +566,14 @@ private Q_SLOTS:
         QCOMPARE(fixture.model->outcome(), NetworkModel::Closed);
         fixture.model->close(); fixture.settle();
         QCOMPARE(drained.size(), 1);
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.worker.quiescent());
     }
 
     void closeBeforeNativeEffectRecordsNoAttempt()
     {
         Fixture fixture; fixture.ready();
         QVERIFY(fixture.model->requestActive(false));
-        QVERIFY(fixture.execution.step(execution::Lane::Domain));
+        QVERIFY(fixture.step(execution::Lane::Domain));
         fixture.model->close(); fixture.settle();
         QCOMPARE(fixture.writes, 0);
         QVERIFY(!fixture.model->effect().attempted);
@@ -580,10 +598,18 @@ private Q_SLOTS:
         };
         const auto trace = std::make_shared<Trace>();
         auto captured = std::make_shared<Captured>(); captured->trace = trace;
-        BackendExecutor executor{execution::Options{}};
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto retirement_queue = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices retirement{{{}, [retirement_queue](auto work) {
+            return retirement_queue->post(std::move(work));
+        }, {}, retirement_queue}};
         QSemaphore entered, release;
         NetworkModel::Ports ports;
-        ports.execution.scheduler = executor.scheduler();
+        ports.queues = {
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core)),
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility)),
+            retirement.valueRetirement(),
+        };
         const auto native = [trace] { if (QThread::currentThread() == QCoreApplication::instance()->thread()) trace->off_gui = false; };
         ports.observe = [captured, native] { native(); return Observation{captured->trace->active.load(), captured->trace->generation.load()}; };
         ports.generation = [captured, native] { native(); return captured->trace->generation.load(); };
@@ -597,7 +623,7 @@ private Q_SLOTS:
         connect(model.get(), &NetworkModel::changed, &observer, [&] {
             gui_publication = gui_publication && QThread::currentThread() == QCoreApplication::instance()->thread();
         });
-        const auto finish = qScopeGuard([&] { release.release(); executor.shutdown(); });
+        const auto finish = qScopeGuard([&] { release.release(); model.reset(); executor.stopAndJoin(); });
         QEventLoop readiness;
         QTimer timeout; timeout.setSingleShot(true);
         connect(&timeout, &QTimer::timeout, &readiness, &QEventLoop::quit);
@@ -612,13 +638,7 @@ private Q_SLOTS:
         model.reset();
         QCOMPARE(trace->destroyed.load(), 0);
         release.release();
-        QEventLoop drained;
-        QTimer drain_timeout; drain_timeout.setSingleShot(true);
-        connect(&drain_timeout, &QTimer::timeout, &drained, &QEventLoop::quit);
-        connect(&executor, &BackendExecutor::drained, &drained, &QEventLoop::quit);
-        executor.shutdown(); drain_timeout.start(5000);
-        if (!executor.isDrained()) drained.exec();
-        QVERIFY(executor.isDrained());
+        QTRY_COMPARE_WITH_TIMEOUT(trace->destroyed.load(), 1, 5000);
         QCOMPARE(trace->writes.load(), 1); QVERIFY(!trace->active.load());
         QCOMPARE(trace->destroyed.load(), 1);
         QVERIFY(trace->off_gui.load()); QVERIFY(trace->destructor_off_gui.load()); QVERIFY(gui_publication);

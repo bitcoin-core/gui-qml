@@ -2,11 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
+#include <test/mocks/walletsession.h>
 #include <qml/models/receiverequesthistorymodel.h>
 #include <qml/walletrequests.h>
 #include <qml/walletreceipts.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/walletreceiveadapter.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 
@@ -15,6 +16,7 @@
 
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QTemporaryDir>
 #include <QtTest/QtTest>
 
 #include <array>
@@ -99,7 +101,7 @@ struct Wallet : StubWallet {
     }
 };
 struct Fixture {
-    ManualRoutedExecution commands, retirement;
+    ManualStartupExecution commands, retirement;
     std::shared_ptr<Wallet> wallet{std::make_shared<Wallet>()};
     std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<interfaces::Wallet> client;
@@ -108,14 +110,21 @@ struct Fixture {
     QSet<QString> watched;
     std::atomic_bool reader_ready{true};
     explicit Fixture(Store::Encoder encoder = Encode, Store::Decoder decoder = DecodeOne, Store::Prepare prepare = FreezeRecord) {
-        opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        opening = std::make_shared<walletopening::Session>(std::make_shared<std::atomic_bool>(false), [] {},
+            walletopening::Session::Preferences{}, std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            WalletSessionQueues(commands.executor(), retirement.executor()));
         client = opening->start(wallet).borrower; commands.drain();
         store = std::make_shared<Store>(opening, [this] { ++wakes; }, [this](QSet<QString> addresses) { ++watches; watched = std::move(addresses); }, [] { return Entry().date; },
             [this] { return reader_ready.load(); }, Store::Release{}, ReservationStorage{}, std::move(encoder), std::move(decoder), std::move(prepare));
     }
+    void drain() {
+        do {
+            commands.drain();
+            retirement.drain();
+        } while (!commands.quiescent() || !retirement.quiescent());
+    }
     ~Fixture() {
-        store->close(); opening->retire(); client.reset(); commands.drain(); retirement.drain();
+        store->close(); opening->stop(false, {}); client.reset(); drain();
         QVERIFY(commands.quiescent() && retirement.quiescent());
     }
     std::shared_ptr<Operation> settle(Command command) {
@@ -177,7 +186,7 @@ private Q_SLOTS:
         QFETCH(bool, external);
         Fixture f; f.load(); auto command = f.edit(f.record(), "new request note"); command.expected_label = "private";
         const auto operation = f.store->submit(command).operation; QVERIFY(operation);
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         if (external) f.wallet->label = "external address note";
         f.commands.drain(); const auto result = operation->result(); QVERIFY(result); QVERIFY(result->request_saved);
         QCOMPARE(result->error, external ? Error::Changed : Error::None); QCOMPARE(result->label_saved, !external);
@@ -223,7 +232,7 @@ private Q_SLOTS:
         reject_preparation = true;
         const auto admitted = f.store->submit(command, [&] { ++completed; }); QVERIFY(admitted);
         if (mode == 6) {
-            while (f.commands.step(Lane::Domain)) {}
+            while (f.commands.step(Lane::Utility)) {}
             QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 1);
             f.opening->close();
         }
@@ -437,8 +446,8 @@ private Q_SLOTS:
         Fixture f; f.load(); const auto original = f.wallet->stored.at("1");
         const auto first = f.store->submit(Create(), [&] {
             ++completed;
-            if (boundary == 1) f.commands.rejectLane(Lane::Domain);
-            if (boundary == 2) f.commands.scheduler->stopAcceptingWork();
+            if (boundary == 1) f.opening->utilityQueue()->close();
+            if (boundary == 2) f.opening->close();
         });
         const auto second = f.store->submit(Create(), [&] { ++completed; });
         QVERIFY(first && second); QVERIFY(!first.operation->result() && !second.operation->result());
@@ -458,10 +467,10 @@ private Q_SLOTS:
     void oversizedInterestIsRejectedBeforeScheduling()
     {
         Fixture f; f.load();
-        const auto watches = f.watches; const auto trace = f.commands.traceSnapshot();
+        const auto watches = f.watches; const auto trace = f.commands.queuedCount();
         const auto admission = f.store->interest(17, QString(129, 'a'));
         QCOMPARE(admission.rejection, execution::Rejection::Capacity);
-        QCOMPARE(f.commands.traceSnapshot(), trace); QCOMPARE(f.watches, watches);
+        QCOMPARE(f.commands.queuedCount(), trace); QCOMPARE(f.watches, watches);
         QVERIFY(!f.watched.contains(QString(129, 'a')));
     }
     void interestQueuedBeforeCloseCannotPublishAfterClose()
@@ -510,9 +519,9 @@ private Q_SLOTS:
         int largest{0}; bool closed{false};
         while (!f.commands.quiescent()) {
             const auto before = f.wallet->label_writes;
-            QVERIFY(f.commands.stepNext()); largest = std::max(largest, f.wallet->label_writes - before); QVERIFY(f.wallet->label_writes - before <= 16);
+            QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility))); largest = std::max(largest, f.wallet->label_writes - before); QVERIFY(f.wallet->label_writes - before <= 16);
             if (f.wallet->label_writes && !closed) {
-                closed = true; QVERIFY(!operation->result()); f.store->close(); f.opening->retire(); f.client.reset();
+                closed = true; QVERIFY(!operation->result()); f.store->close(); f.opening->stop(false, {}); f.client.reset();
             }
         }
         f.retirement.drain(); QVERIFY(closed); QCOMPARE(largest, 16); QCOMPARE(f.wallet->label_writes, 65);
@@ -548,9 +557,9 @@ private Q_SLOTS:
     void retainedSentCapabilityCanBeSubmittedAfterTheOriginalClose()
     {
         Fixture f; f.load(); auto capability = f.opening->startAction(); QVERIFY(capability);
-        f.store->close(); f.opening->retire(); f.client.reset();
+        f.store->close(); f.opening->stop(false, {}); f.client.reset();
         const auto admitted = f.store->submitSentLabels(std::move(capability), Txid::FromUint256(uint256{uint8_t{1}}), {{Address(), "committed-note"}}); QVERIFY(admitted);
-        f.commands.drain(); f.retirement.drain(); QCOMPARE(admitted.operation->result()->error, Error::None); QCOMPARE(f.wallet->label_writes, 1);
+        f.drain(); QCOMPARE(admitted.operation->result()->error, Error::None); QCOMPARE(f.wallet->label_writes, 1);
         QVERIFY(f.commands.quiescent() && f.retirement.quiescent());
     }
     void explicitSentNotesAreNotStarvedByPaidPersistence()
@@ -567,9 +576,9 @@ private Q_SLOTS:
     {
         Fixture f; bool released{false};
         auto held = f.opening->holdValues([&] { released = true; }); QVERIFY(held);
-        QVERIFY(!f.commands.step(Lane::Cleanup)); QVERIFY(!released);
-        f.commands.scheduler->stopAcceptingWork(); held.lease.reset();
-        QVERIFY(f.commands.step(Lane::Cleanup)); QVERIFY(released); f.commands.drain();
+        QVERIFY(!f.retirement.step(Lane::Utility)); QVERIFY(!released);
+        f.opening->close(); held.reset();
+        QVERIFY(f.retirement.step(Lane::Utility)); QVERIFY(released); f.commands.drain();
         QVERIFY(f.commands.quiescent());
     }
     void paymentObservationYieldsBeforePreparingTheWholeAddressHistory()
@@ -580,7 +589,7 @@ private Q_SLOTS:
         QVERIFY(f.opening->postDomain([&] { f.store->observed(f.facts({Address()})); }));
         bool marker{false}, queued_marker{false};
         while (!f.commands.quiescent()) {
-            const int before = prepared; QVERIFY(f.commands.stepNext());
+            const int before = prepared; QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility)));
             largest_turn = std::max(largest_turn, prepared - before); QVERIFY(prepared - before <= 128);
             if (prepared && !queued_marker) {
                 queued_marker = true; QVERIFY(!f.store->presentationCurrent());
@@ -602,7 +611,7 @@ private Q_SLOTS:
         for (int n{0}; n < 3'000; ++n) addresses.insert(QStringLiteral("unused-%1").arg(n));
         auto input = f.facts(std::move(addresses));
         QVERIFY(f.opening->postDomain([&] { f.store->observed(input); }));
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(!f.store->presentationCurrent());
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(!f.store->presentationCurrent());
         bool marker{false};
         QVERIFY(f.opening->postDomain([&] { marker = true; QVERIFY(!f.store->presentationCurrent()); }));
         f.commands.drain(); QVERIFY(marker); QVERIFY(f.store->presentationCurrent());
@@ -629,8 +638,8 @@ private Q_SLOTS:
                 QCOMPARE(unchanged.use_count(), references);
             }
         }));
-        QVERIFY(f.commands.step(Lane::Domain));
-        QVERIFY((f.commands.queuedCountIf([](const auto& turn) { return turn.lane == Lane::Cleanup; }) == 0));
+        QVERIFY(f.commands.step(Lane::Utility));
+        QVERIFY(f.retirement.quiescent());
         f.commands.drain(); QVERIFY(f.store->presentationCurrent()); QCOMPARE(f.wallet->writes, 3);
     }
     void cleanupBackpressureRejectsUnconsumedReceiptInputAndFullRetryRecovers()
@@ -645,7 +654,7 @@ private Q_SLOTS:
                 if (n > 5) QCOMPARE(current.use_count(), 1);
             }
         }));
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(!f.store->presentationCurrent());
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(!f.store->presentationCurrent());
         f.commands.drain(); QCOMPARE(f.wallet->writes, 0);
         const auto failed = f.store->take(); QVERIFY(failed); QCOMPARE(failed->error, Error::Rejected);
         QVERIFY(!f.store->presentationCurrent());
@@ -665,8 +674,8 @@ private Q_SLOTS:
         int injected{0}, turns{0};
         while (!f.commands.quiescent()) {
             QVERIFY(++turns < 2'000);
-            QVERIFY(f.commands.stepNext());
-            while (f.commands.step(Lane::Cleanup)) {}
+            QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility)));
+            while (f.retirement.step(Lane::Utility)) {}
             if (injected < 20) {
                 addresses.insert(QStringLiteral("z-latest-%1").arg(injected++));
                 // A complete cumulative source, as supplied by Reader; replaced
@@ -684,10 +693,11 @@ private Q_SLOTS:
     {
         Fixture f; f.load(3);
         QVERIFY(f.opening->postDomain([&] { f.store->observed(f.facts({Address()})); }));
-        f.commands.rejectLane(Lane::Domain);
-        QVERIFY(f.commands.step(Lane::Domain)); f.commands.drain();
+        f.opening->utilityQueue()->close();
+        QVERIFY(f.commands.step(Lane::Utility)); f.commands.drain();
         QVERIFY(!f.store->presentationCurrent()); QCOMPARE(f.wallet->writes, 0);
         const auto failed = f.store->take(); QVERIFY(failed); QCOMPARE(failed->error, Error::Rejected);
+        *f.opening->utilityQueue() = f.commands.executor().makeQueue(Lane::Utility);
         f.observe({Address()}); QVERIFY(f.store->presentationCurrent()); QCOMPARE(f.wallet->writes, 3);
     }
     void failedPartialPaymentPreparationRepairsAlreadyObservedAddressOnRetry()
@@ -714,9 +724,9 @@ private Q_SLOTS:
         Fixture f{Encode, DecodeOne, [&](Record row) { if (row.entry.payment_received) ++prepared; return FreezeRecord(std::move(row)); }};
         f.load(513);
         QVERIFY(f.opening->postDomain([&] { f.store->observed(f.facts({Address()})); }));
-        while (!prepared) { QVERIFY(!f.commands.quiescent()); QVERIFY(f.commands.stepNext()); }
+        while (!prepared) { QVERIFY(!f.commands.quiescent()); QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility))); }
         const int admitted_preparation = prepared; QVERIFY(admitted_preparation <= 128);
-        f.store->close(); f.opening->retire(); f.client.reset(); f.commands.drain(); f.retirement.drain();
+        f.store->close(); f.opening->stop(false, {}); f.client.reset(); f.drain();
         QCOMPARE(prepared, admitted_preparation); QVERIFY(!f.store->presentationCurrent());
         QVERIFY(f.commands.quiescent() && f.retirement.quiescent());
         // Work already admitted before close may persist its confirmed facts.
@@ -788,9 +798,9 @@ private Q_SLOTS:
         std::shared_ptr<const Snapshot> paid_snapshot;
         std::optional<Publication> latest;
         while (!f.commands.quiescent()) {
-            QVERIFY(!f.commands.queuedIdle());
+            QVERIFY(!f.commands.quiescent());
             const int before = encodes;
-            QVERIFY(f.commands.stepNext());
+            QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility)));
             max_in_turn = std::max(max_in_turn, encodes - before);
             QVERIFY(encodes - before <= 32);
             if (auto publication = f.store->take()) {
@@ -826,32 +836,56 @@ private Q_SLOTS:
     void historyLoadingYieldsWithItsOriginalOutcomeAndAllData()
     {
         QFETCH(int, count); QFETCH(int, payload); QFETCH(int, maximum);
-        int decoded{0}, largest_turn{0};
-        Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
+        ManualStartupExecution workers;
+        const auto opening = MakeWalletSession(workers.executor(), [] {});
+        auto unrelated = workers.executor().makeQueue(Lane::Utility);
+        const auto wallet = std::make_shared<Wallet>();
+        int decoded{0}, largest_turn{0}, original_queue_seen{0}, other_queue_seen{0};
+        std::shared_ptr<Operation> original;
+        auto store = std::make_shared<Store>(opening, [] {}, [](QSet<QString>) {}, [] { return Entry().date; },
+            [] { return true; }, Store::Release{}, ReservationStorage{}, Encode, [&](std::string_view blob) {
+                if (++decoded == 1) {
+                    const auto queued_here = opening->postDomain([&] {
+                        original_queue_seen = decoded;
+                        QVERIFY(!original->result());
+                    });
+                    const bool queued_elsewhere = unrelated.post([&] { other_queue_seen = decoded; });
+                    Q_ASSERT(queued_here && queued_elsewhere);
+                }
+                return DecodeOne(blob);
+            });
+        const auto stop = qScopeGuard([&] {
+            store->close();
+            opening->stop(false, {});
+            workers.drain();
+        });
+        QVERIFY(opening->start(wallet));
+        workers.drain();
         for (int id{1}; id <= count; ++id) {
             auto entry = Entry(id); entry.recipient.message.assign(payload, 'm');
-            f.wallet->stored[util::ToString(id)] = Encode(entry);
+            wallet->stored[util::ToString(id)] = Encode(entry);
         }
-        const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        QVERIFY(f.commands.step(Lane::Domain)); QCOMPARE(decoded, 0);
-        bool marker{false}, marker_queued{false};
-        while (!f.commands.quiescent()) {
+        const auto admitted = store->submit(Intent(Kind::Reload));
+        QVERIFY(admitted);
+        original = admitted.operation;
+        QVERIFY(workers.step(Lane::Utility));
+        QVERIFY(workers.step(Lane::Core));
+        QCOMPARE(decoded, 0);
+        QVERIFY(!original->result());
+        QVERIFY(!store->presentationCurrent());
+        while (!workers.quiescent()) {
             const int before = decoded;
-            QVERIFY(f.commands.stepNext());
+            QVERIFY(workers.step(Lane::Utility) || workers.step(Lane::Core));
             largest_turn = std::max(largest_turn, decoded - before);
-            QVERIFY(decoded - before <= maximum);
-            if (decoded && decoded < count && !marker_queued) {
-                marker_queued = true;
-                QVERIFY(!admitted.operation->result()); QVERIFY(!f.store->presentationCurrent());
-                QVERIFY(f.opening->postDomain([&] {
-                    marker = true; QVERIFY(decoded < count); QVERIFY(!admitted.operation->result());
-                }));
-            }
         }
-        QVERIFY(marker); QCOMPARE(decoded, count); QCOMPARE(largest_turn, maximum);
-        QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::None);
-        const auto publication = f.store->take(); QVERIFY(publication && publication->loaded);
+        QCOMPARE(decoded, count);
+        QCOMPARE(original_queue_seen, maximum);
+        QCOMPARE(other_queue_seen, maximum);
+        QCOMPARE(largest_turn, maximum);
+        QVERIFY(original->result());
+        QCOMPARE(original->result()->error, Error::None);
+        const auto publication = store->take();
+        QVERIFY(publication && publication->loaded);
         QCOMPARE(publication->snapshot->records.size(), static_cast<size_t>(count));
         QCOMPARE(publication->snapshot->records.front()->entry.id, static_cast<int64_t>(count));
         QCOMPARE(publication->snapshot->labels.at(Address()), QStringLiteral("private"));
@@ -860,7 +894,12 @@ private Q_SLOTS:
             QCOMPARE(record->entry.recipient.message, std::string(payload, 'm'));
             QCOMPARE(record->display.note, QStringLiteral("private"));
         }
-        f.observe(); QVERIFY(f.store->presentationCurrent()); QCOMPARE(f.wallet->writes, 0);
+        const auto facts = std::make_shared<const walletreceipts::Snapshot>(
+            walletreceipts::Snapshot{opening->identity(), {}, {}, opening->transactionRevision()});
+        QVERIFY(opening->postDomain([store, facts] { store->observed(facts); }));
+        workers.drain();
+        QVERIFY(store->presentationCurrent());
+        QCOMPARE(wallet->writes, 0);
     }
     void decodingResourceFailureIsExplicitAndReloadCanRecover()
     {
@@ -887,7 +926,7 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int id{1}; id <= 97; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY(f.commands.stepNext()); }
+        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility))); }
         QCOMPARE(decoded, 32); QVERIFY(!admitted.operation->result());
         QVERIFY(f.opening->postDomain([&] { f.store->observed(f.facts({Address()})); }));
         f.commands.drain(); QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::None);
@@ -907,13 +946,14 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int id{1}; id <= 97; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core)); QVERIFY(f.commands.step(Lane::Domain));
-        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY(f.commands.stepNext()); }
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core)); QVERIFY(f.commands.step(Lane::Utility));
+        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility))); }
         QCOMPARE(decoded, 32);
-        f.commands.rejectLane(Lane::Domain);
-        QVERIFY(f.commands.step(Lane::Domain)); f.commands.drain();
+        f.opening->utilityQueue()->close();
+        QVERIFY(f.commands.step(Lane::Utility)); f.commands.drain();
         QCOMPARE(decoded, 64); QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::Rejected);
         QCOMPARE(f.wallet->loads, 1); QVERIFY(!f.store->presentationCurrent());
+        *f.opening->utilityQueue() = f.commands.executor().makeQueue(Lane::Utility);
         QCOMPARE(f.settle(Intent(Kind::Reload))->result()->error, Error::None);
         f.observe(); QVERIFY(f.store->presentationCurrent()); QCOMPARE(decoded, 161); QCOMPARE(f.wallet->loads, 2);
         QCOMPARE(f.store->take()->snapshot->records.size(), size_t{97}); QCOMPARE(f.wallet->writes, 0);
@@ -924,9 +964,9 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int id{1}; id <= 97; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY(f.commands.stepNext()); }
+        while (!decoded) { QVERIFY(!f.commands.quiescent()); QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility))); }
         QCOMPARE(decoded, 32); QVERIFY(!admitted.operation->result());
-        f.store->close(); f.opening->retire(); f.client.reset(); f.commands.drain(); f.retirement.drain();
+        f.store->close(); f.opening->stop(false, {}); f.client.reset(); f.drain();
         QCOMPARE(decoded, 32); QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::Closed);
         QCOMPARE(f.wallet->writes, 0); QVERIFY(f.commands.quiescent() && f.retirement.quiescent());
     }
@@ -964,9 +1004,9 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int64_t id{1}; id <= 257; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        QVERIFY(f.commands.step(Lane::Domain));
-        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Domain)); }
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        QVERIFY(f.commands.step(Lane::Utility));
+        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Utility)); }
         QVERIFY(!admitted.operation->result()); QVERIFY(!f.store->presentationCurrent());
         bool other_work{false};
         QVERIFY(f.opening->postDomain([&] { other_work = true; QVERIFY(!admitted.operation->result()); }));
@@ -984,9 +1024,9 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int64_t id{1}; id <= 257; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Domain));
-        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Domain)); }
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Utility));
+        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Utility)); }
         QVERIFY(!admitted.operation->result());
         QVERIFY(f.opening->postDomain([&] { f.store->observed(f.facts({Address()})); }));
         f.commands.drain(); QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::None);
@@ -1008,13 +1048,14 @@ private Q_SLOTS:
         int decoded{0};
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }}; f.wallet->stored["1"] = Encode(Entry());
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        QVERIFY(f.commands.step(Lane::Domain));
-        f.commands.rejectLane(Lane::Domain);
-        QVERIFY(f.commands.step(Lane::Domain)); f.commands.drain();
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        QVERIFY(f.commands.step(Lane::Utility));
+        f.opening->utilityQueue()->close();
+        QVERIFY(f.commands.step(Lane::Utility)); f.commands.drain();
         QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::Rejected);
         QVERIFY(!f.store->presentationCurrent()); QCOMPARE(f.wallet->loads, 1); QCOMPARE(f.wallet->writes, 0);
         const auto failed = f.store->take(); QVERIFY(failed); QVERIFY(!failed->loaded); QCOMPARE(failed->error, Error::Rejected);
+        *f.opening->utilityQueue() = f.commands.executor().makeQueue(Lane::Utility);
         QCOMPARE(f.settle(Intent(Kind::Reload))->result()->error, Error::None);
         f.observe(); QVERIFY(f.store->presentationCurrent()); QCOMPARE(f.wallet->loads, 2);
     }
@@ -1024,11 +1065,11 @@ private Q_SLOTS:
         Fixture f{Encode, [&](std::string_view blob) { ++decoded; return DecodeOne(blob); }};
         for (int64_t id{1}; id <= 257; ++id) f.wallet->stored[util::ToString(id)] = Encode(Entry(id));
         const auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Domain));
-        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Domain)); }
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Utility));
+        while (decoded < 257) { QVERIFY(f.commands.step(Lane::Utility)); }
         QVERIFY(!admitted.operation->result()); f.store->close();
-        f.opening->retire(); f.client.reset(); f.commands.drain(); f.retirement.drain();
+        f.opening->stop(false, {}); f.client.reset(); f.drain();
         QVERIFY(admitted.operation->result()); QCOMPARE(admitted.operation->result()->error, Error::Closed);
         QCOMPARE(f.wallet->writes, 0); QVERIFY(f.commands.quiescent() && f.retirement.quiescent());
     }
@@ -1122,17 +1163,17 @@ private Q_SLOTS:
         auto last = snapshot;
         // Keep Native unavailable while the independent Domain release runs.
         int native{0};
-        QVERIFY(execution::Submit(*f.commands.scheduler, [&] { ++native; }, [] {}));
-        const auto held = f.commands.dispatchNext(Lane::Core); QVERIFY(held);
+        QVERIFY(f.commands.core.post([&] { ++native; }));
+        const auto held = f.commands.take(Lane::Core); QVERIFY(held);
         f.store->retire(std::move(last));
         QVERIFY(!old.expired());
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QCOMPARE(native, 0);
         QCOMPARE(f.wallet->loads, 0); QCOMPARE(f.wallet->writes, 0);
         // Drop the independent test observer, then require the owner's copy
         // to have gone without a load, command or GUI acknowledgement.
         QVERIFY(old.use_count() == 1);
-        QVERIFY(f.commands.finishWork(*held)); f.commands.drain();
+        held(); f.commands.drain();
     }
     void presentationRetirementYieldsToOtherDomainWork()
     {
@@ -1146,7 +1187,7 @@ private Q_SLOTS:
         QCOMPARE(released, 0);
         int at_marker{-1};
         QVERIFY(f.opening->postDomain([&] { at_marker = released; }));
-        while (at_marker < 0 && f.commands.step(Lane::Domain)) {}
+        while (at_marker < 0 && f.commands.step(Lane::Utility)) {}
         QVERIFY(at_marker > 0); QVERIFY(at_marker < 40);
         f.commands.drain(); QCOMPARE(released, 40);
         for (const auto& snapshot : old) QVERIFY(snapshot.expired());
@@ -1157,7 +1198,7 @@ private Q_SLOTS:
         Fixture f;
         auto snapshot = std::make_shared<const Snapshot>();
         const std::weak_ptr<const Snapshot> old = snapshot;
-        f.commands.rejectLane(Lane::Domain);
+        f.commands.reject_utility = true;
         f.store->retire(std::move(snapshot));
         f.commands.drain(); QVERIFY(!old.expired());
         f.store->retire(std::make_shared<const Snapshot>());
@@ -1180,11 +1221,17 @@ private Q_SLOTS:
             const std::shared_ptr<State> state;
         };
         auto state = std::make_shared<State>();
-        const auto unblock = qScopeGuard([state] { state->release.release(); });
-        BackendExecutor commands{execution::Options{}}, retirement;
+        execution::Executor executor{execution::Executor::Config{}};
+        auto opening = MakeWalletSession(executor, [state] { ++state->metadata; });
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto shutdown = qScopeGuard([&] {
+            state->release.release();
+            opening->stop(false, [stopped] { *stopped = true; });
+            const bool drained = QTest::qWaitFor([&] { return stopped->load(); }, 5'000);
+            executor.stopAndJoin();
+            QVERIFY(drained);
+        });
         auto native = std::make_shared<Native>(state);
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler(), retirement.scheduler(),
-            std::make_shared<std::atomic_bool>(false), [state] { ++state->metadata; });
         auto client = opening->start(native).borrower;
         QTRY_VERIFY(state->metadata.load() > 0);
         auto store = std::make_shared<Store>(opening, [] {}, Store::Watch{}, QDateTime::currentDateTimeUtc,
@@ -1205,20 +1252,18 @@ private Q_SLOTS:
             state->snapshot_destroyed = QThread::currentThread(); delete value;
         }};
         store->retire(std::move(old_snapshot));
-        // Physical Domain release progresses while Native is still held.
+        // Utility retirement progresses while Core is still held.
         QTRY_VERIFY(state->snapshot_destroyed.load());
         QVERIFY(state->snapshot_destroyed.load() != qApp->thread());
         QCOMPARE(state->outcomes.load(), 0);
-        store->close(); opening->retire(); client.reset(); native.reset();
+        store->close(); opening->stop(false, [stopped] { *stopped = true; }); client.reset(); native.reset();
         bool heartbeat{false}; QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection);
-        QTRY_VERIFY(heartbeat); QVERIFY(!retirement.isDrained()); QVERIFY(!admitted.operation->result());
+        QTRY_VERIFY(heartbeat); QVERIFY(!stopped->load()); QVERIFY(!admitted.operation->result());
         state->release.release();
         QTRY_VERIFY(admitted.operation->result().has_value());
-        commands.shutdown(); retirement.shutdown(); QTRY_VERIFY(commands.isDrained() && retirement.isDrained());
+        QTRY_VERIFY(stopped->load());
         QCOMPARE(state->outcomes.load(), 1); QVERIFY(admitted.operation->result()->request_saved);
         QVERIFY(admitted.operation->result()->reservation_released);
-        // The QThread objects have been deleted by physical drain. Compare
-        // their recorded addresses without QtTest formatting a dead QObject.
         QCOMPARE(static_cast<const void*>(state->reservation.load()),
                  static_cast<const void*>(state->effect.load()));
         QVERIFY(state->outcome.load() && state->outcome.load() != qApp->thread());
@@ -1252,7 +1297,7 @@ private Q_SLOTS:
         Fixture f; f.wallet->stored["1"] = Encode(Entry());
         auto admitted = f.store->submit(Intent(Kind::Reload)); QVERIFY(admitted);
         QCOMPARE(f.wallet->loads, 0); QVERIFY(!admitted.operation->result());
-        QVERIFY(f.commands.step(Lane::Domain)); QCOMPARE(f.wallet->loads, 0);
+        QVERIFY(f.commands.step(Lane::Utility)); QCOMPARE(f.wallet->loads, 0);
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->loads, 1);
         QVERIFY(!admitted.operation->result()); QVERIFY(!f.store->take()->loaded);
         f.commands.drain(); QVERIFY(admitted.operation->result());
@@ -1263,7 +1308,7 @@ private Q_SLOTS:
         Fixture f; f.load(0); int completions{0};
         const auto admitted = f.store->submit(Create(), [&] { ++completions; }); QVERIFY(admitted);
         QVERIFY(!admitted.operation->result()); QCOMPARE(f.wallet->writes, 0);
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 1);
         QVERIFY(!admitted.operation->result()); QCOMPARE(completions, 0);
         f.commands.drain(); QCOMPARE(completions, 1);
@@ -1356,7 +1401,7 @@ private Q_SLOTS:
     void paymentDuringAcceptedEditIsMergedBeforeAnyLaterWriter()
     {
         Fixture f; f.load(); auto edit = f.store->submit(f.edit(f.record())); QVERIFY(edit);
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         // The Native effect has completed, but its authoritative consumption
         // is held while a receipt arrives on Domain.
         QVERIFY(f.commands.step(Lane::Core));
@@ -1369,7 +1414,7 @@ private Q_SLOTS:
     {
         Fixture f; f.load(); auto command = f.edit(f.record()); command.draft.amount = 200;
         const auto admitted = f.store->submit(command); QVERIFY(admitted);
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         // Reconciliation has already consumed the payment. Matching current
         // native revision alone must not authorize the previously derived edit.
         f.store->observed(f.facts({Address()}));
@@ -1397,7 +1442,7 @@ private Q_SLOTS:
     void nativeNoticeBeforeDispatchRejectsUnreconciledEdit()
     {
         Fixture f; f.load(); auto edit = f.store->submit(f.edit(f.record()));
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         f.wallet->transaction(Txid::FromUint256(uint256{uint8_t{2}}), CT_NEW);
         f.commands.drain(); QCOMPARE(edit.operation->result()->error, Error::Checking);
         QCOMPARE(f.wallet->writes, 0);
@@ -1425,7 +1470,7 @@ private Q_SLOTS:
         const auto admitted = f.store->submit(command); QVERIFY(admitted);
         bool marker{false}, marker_queued{false};
         while (!f.commands.quiescent()) {
-            const int before = encodes; QVERIFY(f.commands.stepNext());
+            const int before = encodes; QVERIFY((f.commands.step(Lane::Core) || f.commands.step(Lane::Utility)));
             largest_turn = std::max(largest_turn, encodes - before); QVERIFY(encodes - before <= 32);
             if (!marker_queued) {
                 marker_queued = true;
@@ -1477,7 +1522,7 @@ private Q_SLOTS:
         Fixture f; f.load(70);
         Command command; command.kind = Kind::Label; command.address = Address(); command.label = "renamed";
         const auto operation = f.store->submit(command).operation;
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 32);
         // The first real effect exists; hold its Domain consumption while the
         // immutable receipt input arrives, then release all legal lanes.
@@ -1495,7 +1540,7 @@ private Q_SLOTS:
     {
         Fixture f; f.load(70); f.wallet->fail_write = 33;
         Command label; label.kind = Kind::Label; label.address = Address(); label.label = "renamed";
-        auto admitted = f.store->submit(label); while (f.commands.step(Lane::Domain)) {}
+        auto admitted = f.store->submit(label); while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 32);
         QVERIFY(!admitted.operation->result()); f.commands.drain();
         const auto result = *admitted.operation->result(); QCOMPARE(result.error, Error::Partial);
@@ -1511,7 +1556,7 @@ private Q_SLOTS:
         QVERIFY(admitted); f.commands.drain();
         const auto result = admitted.operation->result(); QVERIFY(result); QVERIFY(result->request_saved); QVERIFY(result->publication_failed);
         QCOMPARE(f.wallet->writes, 1);
-        f.store->close(); f.opening->retire(); f.client.reset(); f.commands.drain(); f.retirement.drain();
+        f.store->close(); f.opening->stop(false, {}); f.client.reset(); f.drain();
         QVERIFY(f.commands.quiescent()); QVERIFY(f.retirement.quiescent());
     }
     void editorPreconditionChecksTheActualPublicLabelBeforeAnyWrite()
@@ -1520,7 +1565,7 @@ private Q_SLOTS:
         command.address = Address(); command.label = "my edit"; command.expected_label = "private";
         int completed{0}; std::optional<Result> receipt;
         const auto admitted = f.store->submitResult(command, [&](const Result& value) { ++completed; receipt = value; });
-        QVERIFY(admitted); while (f.commands.step(Lane::Domain)) {}
+        QVERIFY(admitted); while (f.commands.step(Lane::Utility)) {}
         f.wallet->label = "external";
         f.commands.drain(); QCOMPARE(completed, 1); QVERIFY(receipt);
         QCOMPARE(receipt->error, Error::Changed); QCOMPARE(receipt->current_label, std::optional<QString>{"external"});
@@ -1567,18 +1612,171 @@ private Q_SLOTS:
     }
     void rejectedPlanningAndNativeDispatchHaveTerminalOutcomes()
     {
-        Fixture f; f.load(); f.commands.rejectLane(Lane::Domain);
+        Fixture f; f.load(); f.commands.reject_utility = true;
         const auto planning = f.store->submit(Create()); QVERIFY(!planning);
         QVERIFY(planning.operation && planning.operation->result()->error == Error::Rejected);
-        f.commands.rejectLane(Lane::Core);
+        f.commands.reject_core = true;
         const auto native = f.settle(Create()); QCOMPARE(native->result()->error, Error::Rejected);
         QCOMPARE(f.wallet->writes, 0);
+    }
+    void paymentEditorDrainsAcceptedSaveWithSchedulerClosed()
+    {
+        ManualStartupExecution presentation;
+        ManualStartupExecution worker;
+        auto opening = MakeWalletSession(worker.executor(), [] {});
+        const auto wallet = std::make_shared<Wallet>();
+        wallet->stored["1"] = Encode(Entry());
+        auto store = std::make_shared<Store>(opening, [] {}, [](auto) {}, [] { return Entry().date; }, [] { return true; });
+        std::unique_ptr<PaymentRequestEditorModel> editor;
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            editor.reset();
+            store->close();
+            opening->stop(false, [&] { stopped = true; });
+            worker.drain();
+            presentation.drain();
+            QVERIFY(stopped);
+        });
+        QVERIFY(opening->start(wallet));
+        worker.drain();
+        const auto load = store->submit(Intent(Kind::Reload));
+        QVERIFY(load);
+        worker.drain();
+        QVERIFY(load.operation->result()->error == Error::None);
+        const auto facts = std::make_shared<const walletreceipts::Snapshot>(
+            walletreceipts::Snapshot{opening->identity(), {}, {}, opening->transactionRevision()});
+        QVERIFY(opening->postDomain([store, facts] { store->observed(facts); }));
+        worker.drain();
+
+        auto ports = MakeReceivePorts(opening, store, [&](auto turn) { presentation.outcomes.post(std::move(turn)); }, {});
+        editor = std::make_unique<PaymentRequestEditorModel>(1, 2, false, std::move(ports.editor));
+        worker.drain();
+        presentation.drain();
+        QVERIFY(editor->available());
+        QCOMPARE(editor->message()->text(), QStringLiteral("message"));
+
+        const QString edited{QStringLiteral("captured before validation")};
+        editor->message()->edit(edited);
+        editor->save();
+        QVERIFY(editor->busy());
+        QCOMPARE(wallet->writes, 0);
+        editor->retire();
+        store->close();
+        opening->stop(false, [&] { stopped = true; });
+        QVERIFY(!stopped);
+
+        worker.drain();
+        QVERIFY(stopped);
+        QCOMPARE(wallet->writes, 1);
+        QVERIFY(!editor->saveResult().present);
+        const auto saved = DecodeOne(wallet->stored.at("1"));
+        QVERIFY(saved);
+        QCOMPARE(saved->recipient.message, edited.toStdString());
+        presentation.drain();
+        QCOMPARE(editor->phase(), PaymentRequestEditorModel::Closed);
+        QVERIFY(editor->saveResult().requestSaved);
+        QCOMPARE(editor->saveResult().requestId, QStringLiteral("1"));
+        QCOMPARE(wallet->writes, 1);
+        QVERIFY(presentation.quiescent());
+    }
+    void savedRequestUsesUtilityForCopyAndExportWithSchedulerClosed()
+    {
+        ManualStartupExecution presentation;
+        ManualStartupExecution worker;
+        auto opening = MakeWalletSession(worker.executor(), [] {});
+        const auto wallet = std::make_shared<Wallet>();
+        wallet->stored["1"] = Encode(Entry());
+        auto store = std::make_shared<Store>(opening, [] {}, [](auto) {}, [] { return Entry().date; }, [] { return true; });
+        std::unique_ptr<RequestSharingModel> sharing;
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            sharing.reset();
+            store->close();
+            opening->stop(false, [&] { stopped = true; });
+            worker.drain();
+            presentation.drain();
+            QVERIFY(stopped);
+        });
+        QVERIFY(opening->start(wallet));
+        worker.drain();
+        const auto load = store->submit(Intent(Kind::Reload));
+        QVERIFY(load);
+        worker.drain();
+        QVERIFY(load.operation->result()->error == Error::None);
+        const auto facts = std::make_shared<const walletreceipts::Snapshot>(
+            walletreceipts::Snapshot{opening->identity(), {}, {}, opening->transactionRevision()});
+        QVERIFY(opening->postDomain([store, facts] { store->observed(facts); }));
+        worker.drain();
+
+        const auto core_submissions = worker.coreSubmissions();
+        auto ports = MakeReceivePorts(opening, store, [&](auto turn) { presentation.outcomes.post(std::move(turn)); },
+                                      std::make_shared<backup::InstallCoordinator>());
+        const auto payload = BuildBitcoinUri(Address(), 100, "public", "message");
+        QImage pixels{8, 8, QImage::Format_RGB32};
+        pixels.fill(Qt::black);
+        ports.sharing.render = [payload, pixels](const QString& text) { return text == payload ? pixels : QImage{}; };
+        const auto clipboard_writes = std::make_shared<int>(0);
+        ports.sharing.deliver = [clipboard_writes, payload, pixels](requestshare::Kind kind, const QString& text, const QImage& image) {
+            if (kind != requestshare::Kind::Qr || text != payload || image != pixels) return requestshare::Delivery::Failed;
+            ++*clipboard_writes;
+            return requestshare::Delivery::Accepted;
+        };
+        sharing = std::make_unique<RequestSharingModel>(1, std::move(ports.sharing));
+        sharing->setActive(true);
+        QVERIFY(!worker.step(Lane::Core));
+        worker.drain();
+        presentation.drain();
+        QVERIFY(sharing->canCopyQr());
+        QCOMPARE(sharing->paymentUri(), payload);
+
+        std::unique_ptr<ShareOperationModel> copy{sharing->copyQr()};
+        QVERIFY(copy);
+        QVERIFY(!worker.step(Lane::Core));
+        worker.drain();
+        QCOMPARE(copy->phase(), ShareOperationModel::Authorizing);
+        QCOMPARE(*clipboard_writes, 0);
+        presentation.drain();
+        QVERIFY(copy->result().performed);
+        QCOMPARE(*clipboard_writes, 1);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("saved-request.png");
+        auto* file = sharing->beginQrExport();
+        QVERIFY(file);
+        worker.drain();
+        QCOMPARE(file->phase(), RequestImageExportOperation::Choosing);
+        QVERIFY(file->choose(QUrl::fromLocalFile(path)));
+        QVERIFY(!worker.step(Lane::Core));
+        worker.drain();
+        QVERIFY(file->saved());
+        QCOMPARE(worker.coreSubmissions(), core_submissions);
+        QCOMPARE(file->result().requestId, QStringLiteral("1"));
+        QCOMPARE(QImage(path).convertToFormat(QImage::Format_RGB32), pixels);
+
+        file = sharing->beginQrExport();
+        QVERIFY(file);
+        std::unique_ptr<ShareOperationModel> pending{sharing->copyQr()};
+        QVERIFY(pending);
+        worker.drain();
+        QCOMPARE(file->phase(), RequestImageExportOperation::Choosing);
+        QCOMPARE(pending->phase(), ShareOperationModel::Authorizing);
+        store->close();
+        opening->stop(false, [&] { stopped = true; });
+        worker.drain();
+        QVERIFY(stopped);
+        presentation.drain();
+        QVERIFY(!pending->result().admitted);
+        QCOMPARE(*clipboard_writes, 1);
+        QVERIFY(file->cancel());
+        presentation.drain();
+        QVERIFY(presentation.quiescent());
     }
     void closeFencesNewCommandsButDrainsOriginalActionWithoutGui()
     {
         Fixture f; f.load(); const auto original = f.store->submit(f.edit(f.record())); QVERIFY(original);
-        f.store->close(); f.opening->retire(); f.client.reset();
-        QVERIFY(!f.retirement.step(Lane::Cleanup));
+        f.store->close(); f.opening->stop(false, {}); f.client.reset();
+        QVERIFY(!f.retirement.step(Lane::Utility));
         QCOMPARE(f.store->submit(Create()).rejection, execution::Rejection::Closed);
         f.commands.drain(); QVERIFY(original.operation->result()->request_saved);
         f.retirement.drain(); QVERIFY(f.retirement.quiescent());
@@ -1589,11 +1787,11 @@ private Q_SLOTS:
         Fixture f; f.load(70);
         auto command = Intent(Kind::Label); command.address = Address(); command.label = "after-close";
         const auto operation = f.store->submit(command).operation;
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 32);
-        f.store->close(); f.opening->retire(); f.client.reset();
-        QVERIFY(!f.retirement.step(Lane::Cleanup));
-        f.commands.drain(); f.retirement.drain();
+        f.store->close(); f.opening->stop(false, {}); f.client.reset();
+        QVERIFY(!f.retirement.step(Lane::Utility));
+        f.drain();
         QVERIFY(operation->result()); QCOMPARE(operation->result()->records_saved, size_t{70});
         QCOMPARE(operation->result()->error, Error::None); QCOMPARE(f.wallet->writes, 70);
         QVERIFY(f.retirement.quiescent());
@@ -1614,11 +1812,11 @@ private Q_SLOTS:
         Fixture f; f.load(70);
         f.wallet->fail_all_writes = label_only;
         auto command = Intent(Kind::Label); command.address = Address(); command.label = "partial";
-        if (transport_failure) f.commands.rejectCoreNumber(f.commands.coreSubmissions() + 2);
         const auto operation = f.store->submit(command).operation;
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 32);
-        if (!transport_failure) f.commands.scheduler->stopAcceptingWork();
+        if (transport_failure) f.commands.reject_core = true;
+        else f.opening->close();
         f.commands.drain();
         QVERIFY(operation->result());
         const auto result = *operation->result();
@@ -1640,7 +1838,7 @@ private Q_SLOTS:
         auto action = old.opening->startAction(); QVERIFY(action);
         QCOMPARE(reopened.opening->planAction(action, [] {}).rejection, execution::Rejection::Invalid);
         QCOMPARE(reopened.opening->perform(action, [](interfaces::Wallet&) { return true; }, [](bool) {}).rejection, execution::Rejection::Invalid);
-        old.opening->retire();
+        old.opening->stop(false, {});
         int effects{0}; QVERIFY(old.opening->perform(action, [&](interfaces::Wallet&) { ++effects; return true; }, [](bool) {}));
         old.commands.drain(); QCOMPARE(effects, 1); action.reset(); old.retirement.drain();
     }

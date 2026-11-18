@@ -6,7 +6,7 @@
 
 #include <qml/models/activityexportdata.h>
 #include <qml/models/backuppolicyoperation.h>
-#include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 
 //! What one export ended with, kept after the operation is replaced.
 struct ActivityExportResult {
@@ -24,7 +24,7 @@ public:
     enum Error { NoError, InvalidPath, Inspection, UnsupportedTarget, WalletFile, Staging, Write, Changed, Install, OutcomeUnknown, Rejected };
     Q_ENUM(Error)
     ActivityExportOperation(activityexport::Request request, activityexport::Files files,
-        execution::SnapshotServices execution, std::function<activityexport::Result(const activityexport::Request&)> writer,
+        presentation::Post post, std::function<activityexport::Result(const activityexport::Request&)> writer,
         QObject* parent = nullptr);
     ~ActivityExportOperation() override;
     QString operationId() const { return m_id; }

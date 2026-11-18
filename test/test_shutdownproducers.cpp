@@ -6,7 +6,9 @@
 
 #include <chainparams.h>
 #include <node/interface_ui.h>
-#include <qml/backendexecutor.h>
+#include <qml/asyncjoin.h>
+#include <qml/executor.h>
+#include <qml/guipresentation.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/blockclockmodel.h>
 #include <qml/models/blockclockhistory.h>
@@ -15,10 +17,13 @@
 #include <qml/models/nodemodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/models/rpcconsolemodel.h>
+#include <test/mocks/drainexecutors.h>
 #include <test/mocks/mocknode.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <util/translation.h>
 
+#include <QFile>
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <QThread>
@@ -35,6 +40,154 @@ const TranslateFn G_TRANSLATION_FUN{nullptr};
 class ShutdownProducersTests : public QObject
 {
     Q_OBJECT
+
+    void trafficQueueJoinsIncludeDeferredCleanup(bool destroy_owner)
+    {
+        const auto entered = std::make_shared<QSemaphore>();
+        const auto release = std::make_shared<QSemaphore>();
+        std::atomic_bool cleaned{false}, joining{false}, joined{false};
+        MockNode node;
+        execution::Executor executor{execution::Executor::Config{}};
+        auto tower = std::make_unique<NetworkTrafficTower>(node, executor);
+        std::thread joiner;
+        const auto unblock = qScopeGuard([release, &joiner] {
+            release->release();
+            if (joiner.joinable()) joiner.join();
+        });
+        {
+            auto cleanup = std::shared_ptr<int>(new int{0}, [entered, release, &cleaned](int* value) {
+                entered->release();
+                release->acquire();
+                delete value;
+                cleaned = true;
+            });
+            node.get_total_bytes_recv_fn = [cleanup = std::move(cleanup)]() mutable {
+                // Release a value owned only by this accepted sample.
+                auto last = std::move(cleanup);
+                return int64_t{100};
+            };
+        }
+        QSignalSpy drained{tower.get(), &NetworkTrafficTower::drained};
+        QVERIFY(drained.isValid());
+        tower->startSampling();
+        tower->beginShutdown();
+        QTRY_VERIFY(entered->available() > 0);
+        QVERIFY(!cleaned);
+        QCOMPARE(drained.size(), 0);
+        if (destroy_owner) {
+            tower.reset();
+            joiner = std::thread([&] {
+                joining = true;
+                executor.stopAndJoin();
+                joined = true;
+            });
+            QTRY_VERIFY(joining);
+            QVERIFY(!joined);
+        }
+        bool gui_progress{false};
+        QTimer::singleShot(0, this, [&] { gui_progress = true; });
+        QTRY_VERIFY(gui_progress);
+        QCOMPARE(drained.size(), 0);
+        release->release();
+        if (destroy_owner) {
+            QTRY_VERIFY(joined);
+        } else {
+            QTRY_COMPARE(drained.size(), 1);
+        }
+        QVERIFY(cleaned);
+    }
+
+    struct WorkerCleanup {
+        std::atomic_bool armed{false}, finished{false};
+        QSemaphore entered, release;
+
+        static void arm(const std::shared_ptr<WorkerCleanup>& cleanup)
+        {
+            struct WorkerExit {
+                std::shared_ptr<WorkerCleanup> cleanup;
+                ~WorkerExit()
+                {
+                    cleanup->entered.release();
+                    cleanup->release.acquire();
+                    cleanup->finished = true;
+                }
+            };
+            thread_local const WorkerExit exit{cleanup}; // NOLINT(bitcoin-nontrivial-threadlocal): Tests thread exit.
+            cleanup->armed = true;
+        }
+    };
+
+    template <typename Model>
+    void checkWorkerCleanup(std::unique_ptr<Model>& model, void (Model::*stop)(), void (Model::*drain_signal)(),
+                            const std::shared_ptr<WorkerCleanup>& cleanup, bool destroy_owner)
+    {
+        auto unblock = qScopeGuard([cleanup] { cleanup->release.release(); });
+        QSignalSpy drained(model.get(), drain_signal);
+        QVERIFY(drained.isValid());
+        QTRY_VERIFY(cleanup->armed.load());
+        (model.get()->*stop)();
+        QTRY_VERIFY(cleanup->entered.available() > 0);
+        QCOMPARE(drained.size(), 0);
+        QVERIFY(!cleanup->finished);
+
+        bool joined{false}, gui_progress{false};
+        QObject receiver;
+        if (destroy_owner) {
+            model.reset();
+            WaitForThreadJoins(&receiver, [&] { joined = true; });
+            QCoreApplication::sendPostedEvents(&receiver, QEvent::MetaCall);
+            QVERIFY(!joined);
+        }
+        QTimer::singleShot(0, &receiver, [&] { gui_progress = true; });
+        QTRY_VERIFY(gui_progress);
+        QCOMPARE(drained.size(), 0);
+
+        cleanup->release.release();
+        unblock.dismiss();
+        if (destroy_owner) {
+            QTRY_VERIFY(joined);
+        } else {
+            QTRY_COMPARE(drained.size(), 1);
+        }
+        QVERIFY(cleanup->finished);
+    }
+
+    void debugLogQueueJoinsIncludeDeferredCleanup(bool destroy_owner)
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("debug.log");
+        {
+            QFile file{path};
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("2026-06-19T10:00:00Z readiness\n") > 0);
+        }
+        const auto cleanup = std::make_shared<WorkerCleanup>();
+        auto* const gui_thread = QThread::currentThread();
+        auto log = std::make_unique<DebugLogModel>(fs::PathFromString(path.toStdString()), true,
+            [cleanup, gui_thread, post = presentation::QueuedPost()](auto publication) {
+                if (QThread::currentThread() != gui_thread) WorkerCleanup::arm(cleanup);
+                post(std::move(publication));
+            });
+        log->setActive(true);
+        checkWorkerCleanup(log, &DebugLogModel::stop, &DebugLogModel::drained, cleanup, destroy_owner);
+    }
+
+    void rpcQueueJoinsIncludeDeferredCleanup(bool destroy_owner)
+    {
+        MockNode node;
+        const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+        const auto cleanup = std::make_shared<WorkerCleanup>();
+        node.execute_rpc_fn = [cleanup](const auto&, const auto&, const auto&) {
+            WorkerCleanup::arm(cleanup);
+            return UniValue{7};
+        };
+        auto console = std::make_unique<RpcConsoleModel>(node);
+        QVERIFY(console->submitNodeCommand(QStringLiteral("getblockcount")));
+        checkWorkerCleanup(console, &RpcConsoleModel::beginShutdown, &RpcConsoleModel::drained, cleanup, destroy_owner);
+        QCOMPARE(node.calls.executeRpc.load(), 1);
+    }
+
 private Q_SLOTS:
     void producerJoinsIncludeDeferredCleanup_data()
     {
@@ -53,86 +206,50 @@ private Q_SLOTS:
         QFETCH(int, producer);
         QFETCH(bool, destroy_owner_before_join_completion);
         SelectParams(ChainType::REGTEST);
+        if (producer == 1) {
+            trafficQueueJoinsIncludeDeferredCleanup(destroy_owner_before_join_completion);
+            return;
+        }
+        if (producer == 2) {
+            rpcQueueJoinsIncludeDeferredCleanup(destroy_owner_before_join_completion);
+            return;
+        }
+        if (producer == 3) {
+            debugLogQueueJoinsIncludeDeferredCleanup(destroy_owner_before_join_completion);
+            return;
+        }
         MockNode node;
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        std::unique_ptr<QObject> model;
-        std::function<void()> stop;
-        switch (producer) {
-        case 0: {
-            auto* instance = new NodeModel(node);
-            model.reset(instance);
-            stop = [instance] { instance->beginShutdown(); };
-            break;
-        }
-        case 1: {
-            auto* instance = new NetworkTrafficTower(node);
-            model.reset(instance);
-            stop = [instance] { instance->beginShutdown(); };
-            break;
-        }
-        case 2: {
-            auto* instance = new RpcConsoleModel(node);
-            model.reset(instance);
-            stop = [instance] { instance->beginShutdown(); };
-            break;
-        }
-        case 3: {
-            auto* instance = new DebugLogModel(fs::PathFromString(directory.filePath("debug.log").toStdString()));
-            model.reset(instance);
-            stop = [instance] { instance->stop(); };
-            break;
-        }
-        }
-        QVERIFY(model);
-        auto entered = std::make_shared<QSemaphore>();
-        auto release = std::make_shared<QSemaphore>();
-        const auto unblock = qScopeGuard([release] { release->release(); });
-        {
-            // Producers use owned executors rather than a view-specific
-            // QThread. Delay the actual last-reference cleanup
-            // on that worker; drain must include it even after owner deletion.
-            auto* executor = model->findChild<BackendExecutor*>();
-            QVERIFY(executor);
-            auto cleanup = std::shared_ptr<int>(new int{0}, [entered, release](int* value) {
-                entered->release();
-                release->acquire();
-                delete value;
-            });
-            // The task holds the only reference. A copy kept here could be
-            // released last, running the blocking deleter on the GUI thread.
-            QVERIFY(executor->submit(model.get(), [cleanup = std::move(cleanup)] {}, [] {}));
-        }
-        QSignalSpy drained(model.get(), producer == 0 ? SIGNAL(workDrained()) : SIGNAL(drained()));
-        QVERIFY(drained.isValid());
-        stop();
-        QTRY_VERIFY(entered->available() > 0);
-        bool gui_progress{false};
-        QTimer::singleShot(0, this, [&] { gui_progress = true; });
-        QTRY_VERIFY(gui_progress);
-        QCOMPARE(drained.size(), 0);
-        release->release();
-        if (destroy_owner_before_join_completion) {
-            model.reset();
-            bool all_drained{false};
-            BackendExecutor::shutdownAll(this, [&] { all_drained = true; });
-            QTRY_VERIFY(all_drained);
-        } else {
-            QTRY_COMPARE(drained.size(), 1);
-        }
+        const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+        const auto cleanup = std::make_shared<WorkerCleanup>();
+        node.handle_question_fn = [cleanup](interfaces::Node::QuestionFn) {
+            WorkerCleanup::arm(cleanup);
+            return interfaces::MakeCleanupHandler([] {});
+        };
+        auto model = std::make_unique<NodeModel>(node);
+        checkWorkerCleanup(model, &NodeModel::beginShutdown, &NodeModel::workDrained, cleanup,
+            destroy_owner_before_join_completion);
+        QCOMPARE(node.calls.handleQuestion.load(), 1);
     }
 
     void backendQueriesWaitForSuccessfulInitialization()
     {
         SelectParams(ChainType::REGTEST);
         MockNode node;
-        ManualExecutionEnvironment environment;
+        ManualNodeObservations environment;
         int64_t milliseconds{0};
         std::vector<std::function<void()>> deadlines;
-        const execution::SnapshotServices execution_services{environment.scheduler,
-            [&](auto publication) { environment.post(std::move(publication)); }};
-        NodeModel::Services services;
-        services.execution = execution_services;
+        auto services = environment.services();
+        const auto retirement = services.network_retirement;
+        const auto post = services.post;
+        const auto queues = [&] {
+            using execution::Lane;
+            auto& executor = environment.executor();
+            return NativeListModel::Queues{
+                std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core)),
+                std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility)),
+                retirement, {},
+            };
+        };
         services.wall_seconds = [] { return int64_t{100'000}; };
         services.monotonic_milliseconds = [&] { return milliseconds; };
         services.schedule = [&](NodeModel::Poll, std::chrono::milliseconds, auto callback) {
@@ -142,16 +259,10 @@ private Q_SLOTS:
         const bool backend_ready{false};
         NodeModel model(node, backend_ready, std::move(services));
         QVERIFY(model.nodeInformationRows().isEmpty());
-        PeerListModel peers(node, nullptr, backend_ready, execution_services,
-                            [] { return NodeClock::time_point{}; });
-        BanListModel bans(node, nullptr, backend_ready, execution_services);
-        const auto settle = [&] {
-            for (int turn{0}; turn < 128; ++turn) {
-                environment.drain(); environment.publishAll();
-                if (environment.transportIdle() && environment.publicationsIdle()) return;
-            }
-            QTest::qFail("The original backend query owners did not settle", __FILE__, __LINE__);
-        };
+        PeerListModel peers(node, nullptr, backend_ready, post,
+                            [] { return NodeClock::time_point{}; }, queues());
+        BanListModel bans(node, nullptr, backend_ready, post, queues());
+        const auto settle = [&] { QVERIFY(DrainManualNodeTurns(environment)); };
         const auto cleanup = qScopeGuard([&] {
             model.beginShutdown(); peers.beginShutdown(); bans.beginShutdown(); settle();
         });
@@ -205,7 +316,7 @@ private Q_SLOTS:
         QCOMPARE(node.calls.getMempoolSize.load(), mempool_queries);
         QCOMPARE(node.calls.getNodesStats.load(), peer_queries);
         QCOMPARE(node.calls.getBanned.load(), ban_queries);
-        QVERIFY(environment.quiescent());
+        QVERIFY(DrainManualNodeTurns(environment));
     }
 
     void stoppedViewsDoNotRestartBackendQueries()
@@ -214,13 +325,17 @@ private Q_SLOTS:
         MockNode node;
         PeerListModel peers(node, nullptr);
         BanListModel bans(node);
+        ManualStartupExecution worker;
+        const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+        PresentationServices services{{{}, [&](auto turn) { return worker.outcomes.post(std::move(turn)); }, {}, utility}};
         auto history = std::make_shared<BlockClockHistory>();
-        BlockClockModel clock(history);
+        BlockClockModel clock(history, services);
         history->initialize({});
         clock.refreshHistory();
         peers.beginShutdown();
         bans.beginShutdown();
         clock.stop();
+        worker.drain();
         const int peer_queries = node.calls.getNodesStats.load();
         const int ban_queries = node.calls.getBanned.load();
         peers.startAutoRefresh();
@@ -236,6 +351,12 @@ private Q_SLOTS:
         QCOMPARE(node.calls.getNodesStats.load(), peer_queries);
         QCOMPARE(node.calls.getBanned.load(), ban_queries);
         QVERIFY(history->retentionStart().has_value());
+        QVERIFY(worker.quiescent());
+        clock.close();
+        worker.drain();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        worker.drain();
+        QCOMPARE(services.pendingRetirements(), size_t{0});
     }
 
     void nodeHandlersRetireOffGuiBeforeDrain()

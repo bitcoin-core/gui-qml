@@ -8,6 +8,7 @@
 #include <consensus/amount.h>
 #include <qml/models/receiverequestoperation.h>
 #include <qml/models/texteditsessionmodel.h>
+#include <qml/guipresentation.h>
 #include <qml/snapshotquery.h>
 #include <qml/walletopening.h>
 
@@ -59,7 +60,7 @@ public:
     void close();
     QString readError() const { return m_read_error; }
     bool refreshPending() const;
-    void configureSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void configureSession(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     QModelIndex index(int row, int column = 0, const QModelIndex& parent = {}) const override;
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -90,7 +91,7 @@ Q_SIGNALS:
 
 private:
     void closeImpl(bool notify);
-    void attachSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void attachSession(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     struct AddressEntry {
         QString address;
         QString label;
@@ -120,7 +121,7 @@ private:
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const Projection>>> m_query;
     std::shared_ptr<LabelJob> m_label_job;
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     std::shared_ptr<QObject> m_bridge;
     std::shared_ptr<const Projection> m_visible, m_pending;
     const Node* m_root{nullptr};

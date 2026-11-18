@@ -81,44 +81,46 @@ SendRecipient* SendRecipientsListModel::createRecipient()
     auto* recipient = new SendRecipient(m_wallet, m_recipient_owner.get());
     recipient->setImportLock(m_import_pending);
     connectRecipientSignals(recipient);
-    if (m_services.scheduler) recipient->setOpening(m_opening, m_services);
+    if (m_opening) recipient->setOpening(m_opening, m_post);
     return recipient;
 }
-void SendRecipientsListModel::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void SendRecipientsListModel::setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post)
 {
     if (m_closed || m_query || (m_opening && m_opening != opening)) return;
-    m_opening = std::move(opening); m_services = std::move(services);
+    m_opening = std::move(opening); m_post = std::move(post);
     const auto setup = ++m_setup_revision;
-    if (!m_services.scheduler && m_opening) m_services.scheduler = m_opening->scheduler();
     const QPointer<SendRecipientsListModel> observer{this};
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
-    m_retirement_post = presentation::ReliablePost(m_services.post);
+    if (!m_post) m_post = presentation::QueuedPost();
+    m_retirement_post = presentation::ReliablePost(m_post);
     const auto original_opening = m_opening;
-    const auto ports = m_services;
+    auto submit = original_opening ? original_opening->observationPost(execution::Lane::Domain) : nullptr;
     const auto source = m_recipients;
     const auto epoch = m_epoch;
-    const auto current = [observer, setup, original_opening, ports, source, epoch] {
+    const auto current = [observer, setup, original_opening, source, epoch] {
         return observer && !observer->m_closed && observer->m_setup_revision == setup && observer->m_epoch == epoch &&
-            observer->m_opening == original_opening && observer->m_services.scheduler == ports.scheduler && observer->m_recipients == source;
+            observer->m_opening == original_opening && observer->m_recipients == source;
     };
-    if (!ports.scheduler) return;
-    auto retired = execution::RetainValues<Retired>(ports.scheduler, [] { return std::make_unique<Retired>(); });
+    if (!submit) return;
+    const auto make_retired = [] { return std::make_unique<Retired>(); };
+    auto retired = walletopening::RetainValues<Retired>(original_opening, make_retired);
     if (!current()) return;
     if (!retired) { m_error = tr("Recipient cleanup is unavailable."); Q_EMIT validationChanged(); return; }
-    auto backend = execution::RetainValues<Backend>(ports.scheduler, [limits = m_limits] { return std::make_unique<Backend>(limits); });
+    const auto make_backend = [limits = m_limits] { return std::make_unique<Backend>(limits); };
+    auto backend = walletopening::RetainValues<Backend>(original_opening, make_backend);
     if (!current()) return;
     if (!backend) { m_error = tr("Recipient services are unavailable."); Q_EMIT validationChanged(); return; }
-    auto rows = execution::RetainValues<Rows>(ports.scheduler, [source, current] {
+    const auto make_rows = [source, current] {
         return current() ? std::make_unique<Rows>(std::move(*source)) : nullptr;
-    });
+    };
+    auto rows = walletopening::RetainValues<Rows>(original_opening, make_rows);
     if (!current()) return;
     if (!rows) { m_error = tr("Recipient services are unavailable."); Q_EMIT validationChanged(); return; }
     m_retired = std::move(retired); m_backend = backend; m_recipients = std::move(rows);
     backend->requested_intent_revision = m_intent_revision;
-    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const DraftSnapshot>>>(ports.scheduler,
-        [backend, scheduler = ports.scheduler] {
+    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const DraftSnapshot>>>(
+        [backend, original_opening] {
             const auto [epoch, revision, intent_revision] = backend->synchronize();
-            auto snapshot = execution::RetainValues<DraftSnapshot>(scheduler, [&] {
+            const auto make_snapshot = [&] {
                 auto value = std::make_unique<DraftSnapshot>(); value->revision = revision; value->intent_revision = intent_revision; value->maximum = backend->draft.maximum(); value->all_valid = !backend->draft.recipients().empty();
                 value->applied_import = backend->applied_import;
                 std::set<CTxDestination> destinations;
@@ -149,10 +151,12 @@ void SendRecipientsListModel::setOpening(std::shared_ptr<walletopening::Session>
                 });
                 value->state = empty ? senddraft::State::Empty : value->all_valid ? senddraft::State::Ready : senddraft::State::Editing;
                 value->total_text = value->amount_total_valid ? BitcoinAmount::satsToBtcString(value->total) : QStringLiteral("—"); return value;
-            });
+            };
+            auto snapshot = walletopening::RetainValues<DraftSnapshot>(original_opening, make_snapshot);
             if (!snapshot) throw std::runtime_error{"Recipient snapshot cleanup unavailable"};
             return std::shared_ptr<const DraftSnapshot>{std::move(snapshot)};
-        }, [post = ports.post, observer, setup] { post([observer, setup] { if (observer && observer->m_setup_revision == setup) observer->publishDraft(); }); }, execution::Lane::Domain);
+        }, [post = m_post, observer, setup] { post([observer, setup] { if (observer && observer->m_setup_revision == setup) observer->publishDraft(); }); },
+        std::move(submit));
     m_initializing = true; initializeRecipients(0);
 }
 void SendRecipientsListModel::initializeRecipients(int row)
@@ -162,7 +166,7 @@ void SendRecipientsListModel::initializeRecipients(int row)
     const auto rows = m_recipients;
     [[maybe_unused]] const auto owner = m_recipient_owner;
     const auto opening = m_opening;
-    const auto services = m_services;
+    const auto post = m_post;
     const auto setup = m_setup_revision, epoch = m_epoch;
     const auto current = [guard, rows, setup, epoch] {
         return guard && !guard->m_closed && guard->m_setup_revision == setup &&
@@ -170,13 +174,13 @@ void SendRecipientsListModel::initializeRecipients(int row)
     };
     const int end = std::min(row + 32, rows->size());
     for (; row < end; ++row) {
-        auto* recipient = (*rows)[row]; recipient->setOpening(opening, services);
+        auto* recipient = (*rows)[row]; recipient->setOpening(opening, post);
         if (!current()) return;
         submitRecipient(recipient); if (!current()) return;
     }
     m_initialize_row = row;
     if (row < count()) {
-        try { services.post([current, guard, row] { if (current()) guard->initializeRecipients(row); }); }
+        try { post([current, guard, row] { if (current()) guard->initializeRecipients(row); }); }
         catch (...) { if (current()) m_error = tr("Recipient initialization is waiting for GUI delivery."); }
         return;
     }
@@ -235,7 +239,7 @@ void SendRecipientsListModel::retryRecipients(int row)
     const int end = std::min(row + 32, count());
     for (; row < end && row < count(); ++row) { (*m_recipients)[row]->retryPublications(); if (!guard || m_closed) return; }
     if (row < count()) {
-        try { m_services.post([guard, row] { if (guard) guard->retryRecipients(row); }); }
+        try { m_post([guard, row] { if (guard) guard->retryRecipients(row); }); }
         catch (...) { m_retrying = false; }
         return;
     }
@@ -248,19 +252,21 @@ std::shared_ptr<const SendRecipientsListModel::DraftSnapshot> SendRecipientsList
 std::shared_ptr<const paymentimport::TargetPort> SendRecipientsListModel::importTarget(SendRecipient* recipient)
 {
     if (m_closed || !m_query || !m_opening || m_initializing || m_clearing || recipientRow(recipient) < 0) return {};
-    struct Call { std::shared_ptr<execution::Scheduler> scope; execution::TaskId acknowledge;
-                  std::shared_ptr<const int> tag; std::shared_ptr<std::atomic_bool> settled;
-                  paymentimport::Child child; std::shared_ptr<std::optional<paymentimport::ChildReply>> outcome; };
+    struct Call { std::shared_ptr<const int> tag; std::shared_ptr<std::atomic_bool> settled;
+                  paymentimport::Child child; std::shared_ptr<std::optional<paymentimport::ChildReply>> outcome;
+                  bool acknowledging{false}; };
     struct Routes { std::mutex mutex; std::map<paymentimport::CommandKey, Call> calls; };
     const QPointer<SendRecipientsListModel> observer{this};
     const auto backend = m_backend;
     const auto opening = m_opening;
-    const auto scheduler = m_services.scheduler;
     const auto query = m_query;
     const auto closed = m_owner_closed, edit_gate = m_import_pending;
     const auto setup = m_setup_revision, epoch = m_epoch, draft = m_identity, token = recipient->identity();
-    const auto post = presentation::ReliablePost(m_services.post);
-    const auto routes = execution::RetainValues<Routes>(scheduler, [] { return std::make_unique<Routes>(); });
+    const auto post = presentation::ReliablePost(m_post);
+    const auto post_observation = opening->observationPost(execution::Lane::Domain);
+    if (!post_observation) return {};
+    const auto make_routes = [] { return std::make_unique<Routes>(); };
+    const auto routes = walletopening::RetainValues<Routes>(opening, make_routes);
     if (!observer || observer->m_closed || observer->m_setup_revision != setup || observer->m_epoch != epoch ||
         observer->m_backend != backend || !routes) return {};
     const auto notify = [post, observer] {
@@ -281,41 +287,77 @@ std::shared_ptr<const paymentimport::TargetPort> SendRecipientsListModel::import
         }
         return current;
     };
-    const auto scoped_query = [backend, routes](paymentimport::CommandKey key, paymentimport::Child child,
+    const auto retire = [opening](std::function<void()> work) {
+        return opening->retireValues(std::move(work));
+    };
+    const auto submit = [retire](std::shared_ptr<execution::Task> task) {
+        return retire([task = std::move(task)] {
+            task->execute();
+            task->deliver();
+        });
+    };
+    const auto erase = [routes](paymentimport::CommandKey key, const std::shared_ptr<const int>& tag) {
+        Call retired;
+        {
+            std::lock_guard lock{routes->mutex};
+            const auto found = routes->calls.find(key);
+            if (found == routes->calls.end() || found->second.tag != tag) return false;
+            retired = std::move(found->second);
+            routes->calls.erase(found);
+        }
+        return true;
+    };
+    const auto forget = [backend, erase](paymentimport::CommandKey key, const paymentimport::Child& child, const std::shared_ptr<const int>& tag) {
+        if (erase(key, tag)) backend->imports.acknowledge(key, child);
+    };
+    const auto query_receipt = [backend, routes, retire](paymentimport::CommandKey key, paymentimport::Child child,
                                                paymentimport::TargetPort::Completed done,
                                                paymentimport::TargetPort::Failed failed) {
-        std::shared_ptr<execution::Scheduler> scope;
         std::shared_ptr<std::optional<paymentimport::ChildReply>> outcome;
         { std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key);
-          if (found != routes->calls.end() && found->second.child == child) { scope = found->second.scope; outcome = found->second.outcome; } }
-        if (!scope) return execution::SubmitResult{{}, execution::Rejection::Invalid};
-        return execution::Submit(*scope, [backend, child, key, outcome] {
+          if (found != routes->calls.end() && found->second.child == child) outcome = found->second.outcome; }
+        if (!outcome) return execution::SubmitResult{{}, execution::Rejection::Invalid};
+        auto task = execution::MakeTask([backend, child, key, outcome] {
             paymentimport::ChildReply reply{paymentimport::Receipt{child, paymentimport::Outcome::Unknown, 0, 0}, {}, {}, {}};
             if (const auto receipt = backend->imports.query(key)) {
                 reply.receipt = receipt->receipt;
-                reply.applied = std::make_shared<const paymentimport::ApplyReceipt>(*receipt);
+                reply.applied = *outcome && (*outcome)->applied ? (*outcome)->applied
+                    : std::make_shared<const paymentimport::ApplyReceipt>(*receipt);
             } else if (outcome && *outcome) return **outcome;
             return reply;
-        }, std::move(done), std::move(failed), {execution::Lane::Domain});
+        }, std::move(done), std::move(failed));
+        return retire([task = std::move(task)] {
+            task->execute();
+            task->deliver();
+        });
     };
     auto port = std::make_shared<paymentimport::TargetPort>();
     port->opening = opening->identity(); port->draft = draft; port->recipient = token;
-    port->observe = [opening, facts](auto source, auto done, auto failed) {
-        return execution::Submit(*opening->scheduler(), [facts, source = std::move(source)] { return facts(source.get()); },
-            std::move(done), std::move(failed), {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    port->observe = [facts, post_observation](auto source, auto done, auto failed) {
+        auto task = execution::MakeTask([facts, source = std::move(source)] { return facts(source.get()); },
+            std::move(done), std::move(failed));
+        return post_observation(std::move(task));
     };
-    port->query = scoped_query;
-    port->acknowledge = [routes](paymentimport::CommandKey key, const paymentimport::Child& child) {
+    port->query = query_receipt;
+    port->acknowledge = [routes, retire, forget](paymentimport::CommandKey key, const paymentimport::Child& child) {
         Call call;
-        { std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key);
-          if (found == routes->calls.end() || found->second.child != child || !found->second.settled->load())
-              return execution::SubmitResult{{}, execution::Rejection::Invalid};
-          call = found->second; }
-        return call.scope->activateCleanup(call.acknowledge)
-            ? execution::SubmitResult{call.acknowledge, execution::Rejection::None}
-            : execution::SubmitResult{{}, execution::Rejection::Closed};
+        {
+            std::lock_guard lock{routes->mutex};
+            const auto found = routes->calls.find(key);
+            if (found == routes->calls.end() || found->second.child != child || !found->second.settled->load())
+                return execution::SubmitResult{{}, execution::Rejection::Invalid};
+            if (std::exchange(found->second.acknowledging, true)) return execution::SubmitResult{{}, execution::Rejection::Closed};
+            call = found->second;
+        }
+        const auto submitted = retire([forget, key, child, tag = call.tag] { forget(key, child, tag); });
+        if (!submitted) {
+            std::lock_guard lock{routes->mutex};
+            const auto found = routes->calls.find(key);
+            if (found != routes->calls.end() && found->second.tag == call.tag) found->second.acknowledging = false;
+        }
+        return submitted;
     };
-    port->dispatch = [backend, opening, scheduler, routes, facts, edit_gate, closed, query, notify, scoped_query]
+    port->dispatch = [backend, opening, routes, facts, edit_gate, closed, query, notify, query_receipt, submit, erase]
         (paymentimport::CommandKey key, paymentimport::Child child, std::shared_ptr<const paymentimport::Inspection> source,
          paymentimport::TargetPort::Completed done, paymentimport::TargetPort::Failed failed) {
         if (!source || source->kind != paymentimport::Kind::Payment || child.kind != paymentimport::ChildKind::Apply ||
@@ -323,37 +365,29 @@ std::shared_ptr<const paymentimport::TargetPort> SendRecipientsListModel::import
             return execution::SubmitResult{{}, execution::Rejection::Invalid};
         bool duplicate;
         { std::lock_guard lock{routes->mutex}; duplicate = routes->calls.contains(key); }
-        if (duplicate) return scoped_query(key, child, std::move(done), std::move(failed));
-        const auto scope = scheduler->openActionScope();
-        if (!scope) return execution::SubmitResult{{}, execution::Rejection::Closed};
+        if (duplicate) return query_receipt(key, child, std::move(done), std::move(failed));
         const auto tag = std::make_shared<const int>(0);
         const auto settled = std::make_shared<std::atomic_bool>(false);
         const auto outcome = std::make_shared<std::optional<paymentimport::ChildReply>>();
-        const auto cleanup = execution::Submit(*scope, [] {}, [backend, routes, key, child, tag] {
-            { std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key);
-              if (found == routes->calls.end() || found->second.tag != tag) return;
-              routes->calls.erase(found); }
-            backend->imports.acknowledge(key, child);
-        }, {}, {execution::Lane::Cleanup}, true);
-        if (!cleanup) return execution::SubmitResult{{}, cleanup.rejection};
+        const auto discard = [&] { erase(key, tag); };
         bool inserted{false};
         try {
             std::lock_guard lock{routes->mutex};
-            inserted = routes->calls.emplace(key, Call{scope, cleanup.id, tag, settled, child, outcome}).second;
-        } catch (...) { scope->activateCleanup(cleanup.id); throw; }
+            inserted = routes->calls.emplace(key, Call{tag, settled, child, outcome}).second;
+        } catch (...) { discard(); throw; }
         if (!inserted || closed->load() || edit_gate->exchange(true)) {
-            scope->activateCleanup(cleanup.id);
+            discard();
             return execution::SubmitResult{{}, execution::Rejection::Capacity};
         }
         notify();
-        const auto submitted = execution::Submit(*scope,
-            [backend, scheduler, facts, edit_gate, closed, source, child, key, query, notify, settled, outcome] {
+        const auto submitted = submit(execution::MakeTask(
+            [backend, opening, facts, edit_gate, closed, source, child, key, query, notify, settled, outcome] {
                 const auto completed = qScopeGuard([settled] { settled->store(true); });
                 // Reserve all publication storage before the atomic local edit.
-                auto projection = execution::RetainValues<senddraft::AppliedImport>(scheduler,
-                    [] { return std::make_unique<senddraft::AppliedImport>(); });
-                auto retained = execution::RetainValues<paymentimport::ApplyReceipt>(scheduler,
-                    [] { return std::make_unique<paymentimport::ApplyReceipt>(); });
+                const auto make_projection = [] { return std::make_unique<senddraft::AppliedImport>(); };
+                const auto make_receipt = [] { return std::make_unique<paymentimport::ApplyReceipt>(); };
+                auto projection = walletopening::RetainValues<senddraft::AppliedImport>(opening, make_projection);
+                auto retained = walletopening::RetainValues<paymentimport::ApplyReceipt>(opening, make_receipt);
                 auto current = facts(source.get());
                 current.compatible = current.available && !closed->load() &&
                     backend->draft.recipients().contains(child.target.recipient);
@@ -385,8 +419,8 @@ std::shared_ptr<const paymentimport::TargetPort> SendRecipientsListModel::import
                     paymentimport::Receipt{child, paymentimport::Outcome::Rejected, 0, child.target.revision}, {}, {}, {}};
                 settled->store(true); edit_gate->store(false); notify();
                 if (failed) failed(error);
-            }, {execution::Lane::Domain});
-        if (!submitted) { edit_gate->store(false); scope->activateCleanup(cleanup.id); notify(); }
+            }));
+        if (!submitted) { edit_gate->store(false); discard(); notify(); }
         return submitted;
     };
     return port;
@@ -614,8 +648,8 @@ void SendRecipientsListModel::synchronizeUnits(BitcoinAmount::Unit unit, int row
     const int end = std::min(row + 32, count());
     for (; row < end; ++row) { (*m_recipients)[row]->amount()->setUnit(unit); if (!guard) return; }
     m_syncing_units = false; m_unit_row = row;
-    if (row < count() && m_services.post) {
-        try { m_services.post([guard, unit, row, generation] { if (guard) guard->synchronizeUnits(unit, row, generation); }); }
+    if (row < count() && m_post) {
+        try { m_post([guard, unit, row, generation] { if (guard) guard->synchronizeUnits(unit, row, generation); }); }
         catch (...) { m_error = tr("Recipient unit presentation is waiting for GUI delivery."); }
     } else {
         m_units_pending = false;
@@ -706,18 +740,19 @@ void SendRecipientsListModel::clear()
         rejectCommand(tr("Send is still processing recipient changes. Try again after they finish.")); return;
     }
     const QPointer<SendRecipientsListModel> guard{this};
-    const auto scheduler = m_services.scheduler;
     const auto opening = m_opening;
     const auto source = m_recipients;
     const auto owner = m_recipient_owner;
     const auto setup = m_setup_revision, epoch = m_epoch, revision = m_revision, clear_generation = m_clear_generation;
-    const auto current = [guard, scheduler, opening, source, owner, setup, epoch, revision, clear_generation] {
+    const auto current = [guard, opening, source, owner, setup, epoch, revision, clear_generation] {
         return guard && !guard->m_closed && !guard->m_changing_rows && guard->m_setup_revision == setup &&
             guard->m_epoch == epoch && guard->m_revision == revision && guard->m_clear_generation == clear_generation &&
-            guard->m_opening == opening && guard->m_services.scheduler == scheduler &&
+            guard->m_opening == opening &&
             guard->m_recipients == source && guard->m_recipient_owner == owner;
     };
-    auto replacement = scheduler ? execution::RetainValues<Rows>(scheduler, [] { return std::make_unique<Rows>(); }) : std::make_shared<Rows>();
+    const auto make_rows = [] { return std::make_unique<Rows>(); };
+    auto replacement = opening ? walletopening::RetainValues<Rows>(opening, make_rows)
+        : std::make_shared<Rows>();
     if (!current()) return;
     if (!replacement) { m_error = tr("The recipient could not be reset. Try again."); Q_EMIT validationChanged(); return; }
     const QPointer<SendRecipient> prepared{createRecipient()};
@@ -777,8 +812,8 @@ void SendRecipientsListModel::trimToFront(quint64 generation)
         m_changing_rows = false; if (m_closed) { retireValues(); return; }
         Q_EMIT countChanged(); if (!guard || m_closed) return;
     }
-    if (count() > 1 && m_services.post) {
-        try { m_services.post([guard, generation] { if (guard) guard->trimToFront(generation); }); }
+    if (count() > 1 && m_post) {
+        try { m_post([guard, generation] { if (guard) guard->trimToFront(generation); }); }
         catch (...) { m_error = tr("Recipient removal is waiting for GUI delivery."); Q_EMIT validationChanged(); }
         return;
     }

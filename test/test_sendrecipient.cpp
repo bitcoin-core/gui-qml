@@ -3,31 +3,39 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
-#include <qml/backendexecutor.h>
-#include <test/mocks/manualexecutionenvironment.h>
-#include <test/mocks/admissionhookscheduler.h>
-#include <test/mocks/threadrecordingscheduler.h>
+#include <qml/executor.h>
+#include <qml/guipresentation.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/walletsession.h>
+#include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 #include <key_io.h>
 #include <QtTest/QtTest>
 #include <QSignalSpy>
 #include <QPersistentModelIndex>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <limits>
 #include <stdexcept>
 
 namespace {
 QString Address(unsigned char seed = 4) { return QString::fromStdString(EncodeDestination(PKHash{uint160{std::vector<unsigned char>(20, seed)}})); }
 struct Fixture {
-    ManualRoutedExecution commands;
+    ManualStartupExecution commands;
+    std::shared_ptr<walletopening::Session> opening{MakeWalletSession(commands.executor(), [] {})};
+    std::shared_ptr<bool> drained{std::make_shared<bool>(false)};
     std::deque<std::function<void()>> publications;
     std::unique_ptr<SendRecipientsListModel> recipients;
     bool fail_post{false};
     explicit Fixture(senddraft::Limits limits = {}) : recipients(std::make_unique<SendRecipientsListModel>(nullptr, limits)) {
-        recipients->setOpening({}, {commands.scheduler, [this](std::function<void()> turn) {
+        QVERIFY(opening->start(std::make_shared<StubWallet>()));
+        commands.drain();
+        opening->take();
+        recipients->setOpening(opening, [this](std::function<void()> turn) {
             if (fail_post) throw std::runtime_error{"GUI transport unavailable"};
             publications.push_back(std::move(turn));
-        }});
+        });
         finish();
     }
     ~Fixture() {
@@ -35,12 +43,14 @@ struct Fixture {
         recipients.reset();
         // Independent bounded GUI retirement outlives the facade, including a
         // deliberately throwing primary transport and its real queued fallback.
-        for (int turn{0}; turn < 1024 && (turn == 0 || commands.scheduler->pending()); ++turn) {
+        stop();
+        for (int turn{0}; turn < 1024 && !*drained; ++turn) {
             finish(); QCoreApplication::processEvents(); commands.drain();
         }
     }
+    void stop() { opening->stop(false, [done = drained] { *done = true; }); }
     bool publishOne() { if (publications.empty()) return false; auto turn = std::move(publications.front()); publications.pop_front(); turn(); return true; }
-    void finish() { do { commands.drain(); while (publishOne()) {} } while (!commands.queuedIdle() || !commands.activeIdle()); }
+    void finish() { do { commands.drain(); while (publishOne()) {} } while (!commands.quiescent()); }
     void fill(SendRecipient* recipient, unsigned char seed, CAmount amount) { recipient->setAddress(Address(seed)); recipient->amount()->setSatoshi(amount); }
 };
 }
@@ -366,80 +376,90 @@ private Q_SLOTS:
     void validationAdmissionKeepsOriginalEditorIntent()
     {
         QFETCH(int, outcome);
-        ManualRoutedExecution env;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(env.scheduler);
-        std::deque<std::function<void()>> posts;
+        std::function<void()> interrupt;
+        ManualNodeObservations env{[&](execution::Lane lane) {
+            if (lane == execution::Lane::Utility && interrupt) std::exchange(interrupt, {})();
+        }};
+        auto opening = MakeWalletSession(env.executor(), [] {});
         auto recipient = std::make_unique<SendRecipient>(nullptr);
-        const auto settle = [&] {
-            for (int turn{0}; turn < 256 && (turn == 0 || !env.queuedIdle() || !posts.empty()); ++turn) {
-                env.drain(); while (!posts.empty()) { auto work = std::move(posts.front()); posts.pop_front(); work(); }
-            }
-        };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle(); });
-        recipient->setOpening({}, {scheduler, [&](auto work) { posts.push_back(std::move(work)); }}); settle();
-        recipient->setAddress(Address()); settle();
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            interrupt = {};
+            recipient.reset();
+            opening->stop(false, [&] { stopped = true; });
+            QVERIFY(DrainManualNodeTurns(env));
+            QVERIFY(stopped);
+        });
+        recipient->setOpening(opening, env.post());
+        QVERIFY(DrainManualNodeTurns(env));
+        recipient->setAddress(Address());
+        QVERIFY(DrainManualNodeTurns(env));
         QSignalSpy draft{recipient.get(), &SendRecipient::draftChanged};
-        auto trigger = scheduler->armSubmit(execution::Lane::Domain, 1, [&] {
+        interrupt = [&] {
             if (outcome == 0) recipient->close();
             else if (outcome == 1) recipient.reset();
             else recipient->amount()->setSatoshi(9000);
-        });
+        };
         recipient->amount()->setSatoshi(7000);
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
+        QVERIFY(!interrupt);
         // No original admission continuation may emit after quiet/deletion or
         // duplicate the distinct newer input's draft notification.
         QCOMPARE(draft.count(), outcome == 2 ? 1 : 0);
-        settle();
+        QVERIFY(DrainManualNodeTurns(env));
         if (outcome == 2) {
             QVERIFY(recipient->isValid()); QVERIFY(recipient->validationSnapshot());
             QCOMPARE(recipient->validationSnapshot()->amount, CAmount{9000});
         } else if (outcome == 0) { QVERIFY(recipient); QVERIFY(!recipient->validationPending()); }
         else QVERIFY(!recipient);
-        scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void cleanupAdmissionKeepsOriginalValidationOwner_data()
     {
         QTest::addColumn<int>("outcome");
         QTest::newRow("quiet") << 0;
         QTest::newRow("delete") << 1;
-        QTest::newRow("same-port-successor") << 2;
+        QTest::newRow("same-opening-rebind") << 2;
     }
     void cleanupAdmissionKeepsOriginalValidationOwner()
     {
         QFETCH(int, outcome);
-        ManualRoutedExecution env;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(env.scheduler);
-        std::deque<std::function<void()>> old_posts, new_posts;
-        size_t old_posted{0}, new_posted{0};
+        ManualNodeObservations env;
+        auto opening = MakeWalletSession(env.executor(), [] {});
         auto recipient = std::make_unique<SendRecipient>(nullptr);
-        const auto identity = recipient->identity();
-        const auto settle = [&] {
-            for (int turn = 0; turn < 128 && (turn == 0 || !env.queuedIdle() || !old_posts.empty() || !new_posts.empty()); ++turn) {
-                env.drain();
-                for (auto* queue : {&old_posts, &new_posts}) while (!queue->empty()) {
-                    auto work = std::move(queue->front()); queue->pop_front(); work();
-                }
-            }
-        };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle(); });
-        const auto trigger = scheduler->armCleanup(1, [&] {
-            if (outcome == 0) recipient->close();
-            else if (outcome == 1) recipient.reset();
-            else recipient->setOpening({}, {scheduler, [&](auto turn) { ++new_posted; new_posts.push_back(std::move(turn)); }});
+        size_t original_posts{0}, replacement_posts{0};
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            recipient.reset();
+            opening->stop(false, [&] { stopped = true; });
+            QVERIFY(DrainManualNodeTurns(env));
+            QVERIFY(stopped);
         });
-        recipient->setOpening({}, {scheduler, [&](auto turn) { ++old_posted; old_posts.push_back(std::move(turn)); }});
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
+        const auto identity = recipient->identity();
+        recipient->setOpening(opening, [&](auto work) {
+            ++original_posts;
+            env.post()(std::move(work));
+        });
+        QVERIFY(env.hasWork(execution::Lane::Utility));
+        if (outcome == 0) recipient->close();
+        else if (outcome == 1) recipient.reset();
+        else {
+            recipient->setOpening(opening, [&](auto work) {
+                ++replacement_posts;
+                env.post()(std::move(work));
+            });
+            recipient->setAddress(Address());
+            recipient->amount()->setSatoshi(7'000);
+        }
+        QVERIFY(DrainManualNodeTurns(env));
         if (outcome == 2) {
-            recipient->setAddress(Address()); recipient->amount()->setSatoshi(7'000); settle();
             QVERIFY(recipient->isValid()); QVERIFY(recipient->validationSnapshot());
             QCOMPARE(recipient->validationSnapshot()->token, identity);
             QCOMPARE(recipient->validationSnapshot()->amount, CAmount{7'000});
-            QCOMPARE(old_posted, size_t{0}); QVERIFY(new_posted > 0);
-        } else if (outcome == 0) { QVERIFY(recipient); QVERIFY(!recipient->validationPending()); }
-        else QVERIFY(!recipient);
-        scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
+            QVERIFY(original_posts > 0);
+            QCOMPARE(replacement_posts, size_t{0});
+        } else {
+            QCOMPARE(original_posts, size_t{0});
+            if (recipient) QVERIFY(!recipient->validationPending());
+        }
     }
     void quietCloseDuringQtMutation_data() {
         QTest::addColumn<int>("mutation"); QTest::addColumn<bool>("about");
@@ -465,7 +485,7 @@ private Q_SLOTS:
         }
         QVERIFY(closed); QCOMPARE(at_end, mutation == 0 ? 3 : mutation == 1 ? 1 : about ? 2 : 1);
         QCOMPARE(model->rowCount(), 0);
-        f.recipients.reset(); f.finish(); QCOMPARE(f.commands.scheduler->pending(), size_t{0});
+        f.recipients.reset(); f.stop(); f.finish(); QVERIFY(*f.drained);
     }
     void quietCloseFencesAllEditorsThenRetiresBoundedBatchesWithoutFacade() {
         Fixture f{{128}};
@@ -491,19 +511,19 @@ private Q_SLOTS:
         QVERIFY(address_signals.empty());
         // A closed recipient ignores its amount: edits submit no intent,
         // start no validation and queue no work.
-        const auto pending = f.commands.scheduler->pending();
+        const auto pending = f.commands.queuedCount();
         amount->setSatoshi(9000); amount->fromDisplay("5"); amount->setUnit(BitcoinAmount::Unit::SAT);
         amount->resetInput(); amount->format(); amount->paste("9", 0, 0);
         QVERIFY(intents.empty()); QVERIFY(drafts.empty()); QVERIFY(validity.empty());
         QVERIFY(!first->validationPending()); QVERIFY(!first->isValid());
-        QCOMPARE(f.commands.scheduler->pending(), pending);
-        f.commands.scheduler->close(); f.commands.drain();
-        QCOMPARE(destroyed, 0); QVERIFY(f.commands.scheduler->pending() > 0);
+        QCOMPARE(f.commands.queuedCount(), pending);
+        f.stop(); f.commands.drain();
+        QCOMPARE(destroyed, 0); QVERIFY(!*f.drained);
         QVERIFY(f.publishOne()); QCOMPARE(destroyed, 32); QVERIFY(first);
         f.recipients.reset(); // Remaining GUI handoffs have an independent owner.
         f.finish();
         QCOMPARE(destroyed, count); QVERIFY(!first);
-        QCOMPARE(f.commands.scheduler->pending(), size_t{0});
+        QVERIFY(*f.drained); QVERIFY(f.commands.quiescent());
     }
     void validationAndAggregateDoNotBecomeReadyBeforeTheirGuiPublication() {
         Fixture f; auto* recipient = f.recipients->currentRecipient(); f.fill(recipient, 4, 1000);
@@ -617,7 +637,7 @@ private Q_SLOTS:
     void rejectedDomainWorkNeverAdmitsTheLastValidDraft() {
         Fixture f; auto* recipient = f.recipients->currentRecipient(); f.fill(recipient, 4, 1000); f.finish();
         QVERIFY(f.recipients->allValid());
-        f.commands.rejectLane(execution::Lane::Domain);
+        f.commands.reject_utility = true;
         recipient->setAddress(Address(5)); f.finish();
         QVERIFY(!recipient->isValid()); QVERIFY(!f.recipients->allValid()); QVERIFY(!recipient->addressError().isEmpty());
         recipient->retryPublications(); f.finish(); QVERIFY(recipient->isValid()); QVERIFY(f.recipients->allValid());
@@ -637,17 +657,48 @@ private Q_SLOTS:
         QCOMPARE(changed.count(), 0);
     }
     void realValidationUsesSharedDomainThread() {
-        BackendExecutor executor;
-        const auto recording = std::make_shared<ThreadRecordingScheduler>(executor.scheduler());
-        {
-            SendRecipient recipient{nullptr}; recipient.setOpening({}, {recording, {}});
-            recipient.setAddress(Address()); recipient.amount()->setSatoshi(1000);
-            QTRY_VERIFY(!recipient.validationPending()); QVERIFY(recipient.isValid());
-            QVERIFY(recording->thread(execution::Lane::Domain));
-            QVERIFY(recording->thread(execution::Lane::Domain) != QThread::currentThread());
+        using execution::Lane;
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        auto opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{utility, [core](auto done) {
+                core->close();
+                core->whenDrained(std::move(done));
+            }, core, utility});
+        const auto gui = QThread::currentThread();
+        QSemaphore entered, release;
+        std::atomic<QThread*> validation_thread{nullptr};
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        SendRecipient recipient{nullptr};
+        const auto cleanup = qScopeGuard([&] {
+            release.release();
             recipient.close();
-        }
-        executor.shutdown(); QTRY_VERIFY(executor.isDrained());
+            opening->stop(false, [stopped] { *stopped = true; });
+            QVERIFY(QTest::qWaitFor([&] { return stopped->load(); }, 5'000));
+            executor.stopAndJoin();
+        });
+        QVERIFY(opening->start(std::make_shared<StubWallet>()));
+        QVERIFY(utility->post([&] {
+            entered.release();
+            release.acquire();
+        }));
+        QVERIFY(entered.tryAcquire(1, 5'000));
+        recipient.setOpening(opening, [&, post = presentation::QueuedPost()](auto publish) {
+            validation_thread = QThread::currentThread();
+            post(std::move(publish));
+        });
+        recipient.setAddress(Address());
+        recipient.amount()->setSatoshi(1000);
+        QVERIFY(recipient.validationPending());
+        QVERIFY(!recipient.isValid());
+        release.release();
+        QTRY_VERIFY(!recipient.validationPending());
+        QVERIFY(recipient.isValid());
+        QVERIFY(validation_thread.load());
+        QVERIFY(validation_thread.load() != gui);
     }
 };
 BITCOINQML_REGISTER_QT_TEST(SendRecipientTests)

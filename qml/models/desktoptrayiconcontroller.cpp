@@ -64,8 +64,8 @@ DesktopTrayIconController::DesktopTrayIconController(QObject* parent)
         });
 
 #if defined(Q_OS_MACOS)
-    MacDockIconHandler* dockHandler = MacDockIconHandler::instance();
-    connect(dockHandler, &MacDockIconHandler::dockIconClicked, this,
+    auto* dockHandler = appdesktop::MacDockIconHandler::instance();
+    connect(dockHandler, &appdesktop::MacDockIconHandler::dockIconClicked, this,
         [this] { Q_EMIT showRequested(); });
 #endif
 }

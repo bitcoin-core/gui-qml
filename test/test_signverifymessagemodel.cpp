@@ -3,14 +3,16 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/signverifymessagemodel.h>
-#include <qml/backendexecutor.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/executor.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/walletsession.h>
 #include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 #include <common/signmessage.h>
 #include <key.h>
 #include <key_io.h>
 #include <pubkey.h>
+#include <QScopeGuard>
 #include <QThread>
 #include <QtTest/QtTest>
 #include <stdexcept>
@@ -40,20 +42,19 @@ struct MessageWallet : StubWallet {
     }
 };
 struct Fixture {
-    ManualRoutedExecution commands, retirement;
+    ManualStartupExecution commands;
     std::shared_ptr<MessageWallet> wallet{std::make_shared<MessageWallet>()};
     std::shared_ptr<walletopening::Session> opening;
     std::deque<std::function<void()>> publications;
     std::unique_ptr<SignVerifyMessageModel> model;
     Fixture() {
-        opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        opening = MakeWalletSession(commands.executor(), [] {});
         opening->start(wallet); commands.drain(); opening->take();
         model = std::make_unique<SignVerifyMessageModel>();
-        model->setOpening(opening, {commands.scheduler, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }});
+        model->setOpening(opening, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); });
         finish();
     }
-    ~Fixture() { if (model) model->close(); commands.drain(); model.reset(); opening->retire(); commands.drain(); retirement.drain(); }
+    ~Fixture() { if (model) model->close(); commands.drain(); model.reset(); opening->stop(false, {}); commands.drain(); }
     void publish() { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } }
     void finish() { commands.drain(); publish(); }
     void setInput(const QString& message) { model->setSigningAddress(Address()); model->setSigningMessage(message); finish(); }
@@ -195,7 +196,7 @@ private Q_SLOTS:
         QVERIFY(f.commands.step(execution::Lane::Core));
         QCOMPARE(f.wallet->signs, 1); QVERIFY(f.model->signature().isEmpty());
         QVERIFY(!f.model->signingOperation()->result());
-        QVERIFY(f.commands.step(execution::Lane::Domain));
+        QVERIFY(f.commands.step(execution::Lane::Utility));
         QVERIFY(f.model->signingOperation()->result());
         QVERIFY(f.model->signature().isEmpty()); QVERIFY(f.model->signingBusy());
         f.publish();
@@ -208,10 +209,10 @@ private Q_SLOTS:
     {
         Fixture f; f.setInput("original statement");
         bool fail{false};
-        f.model->setOpening(f.opening, {f.commands.scheduler, [&f, &fail](std::function<void()> turn) {
+        f.model->setOpening(f.opening, [&f, &fail](std::function<void()> turn) {
             if (std::exchange(fail, false)) throw std::runtime_error{"GUI transport unavailable"};
             f.publications.push_back(std::move(turn));
-        }});
+        });
         f.finish(); fail = true;
         QVERIFY(f.model->requestSignMessage(Address(), "original statement"));
         f.commands.drain();
@@ -247,7 +248,7 @@ private Q_SLOTS:
         f.model->close(); f.model.reset(); f.opening->close();
         QVERIFY(f.commands.step(execution::Lane::Core));
         QCOMPARE(f.wallet->signs, 1); QVERIFY(!owner->result());
-        QVERIFY(f.commands.step(execution::Lane::Domain));
+        QVERIFY(f.commands.step(execution::Lane::Utility));
         QVERIFY(owner->result()); QVERIFY(owner->result()->value);
         QCOMPARE(owner->result()->value->signature, QStringLiteral("owned-signature"));
         f.publish(); QCOMPARE(f.wallet->signs, 1); QCOMPARE(f.wallet->internals, 0);
@@ -284,7 +285,7 @@ private Q_SLOTS:
         Fixture f;
         f.model->close();
         f.model = std::make_unique<SignVerifyMessageModel>();
-        f.model->setOpening({}, {f.commands.scheduler, [&f](std::function<void()> turn) { f.publications.push_back(std::move(turn)); }});
+        f.model->setOpening({}, [&f](std::function<void()> turn) { f.publications.push_back(std::move(turn)); }, f.opening->utilityQueue());
         f.finish();
         CKey key; key.MakeNewKey(true);
         const QString address = QString::fromStdString(EncodeDestination(PKHash{key.GetPubKey()}));
@@ -294,9 +295,8 @@ private Q_SLOTS:
         f.model->setVerificationSignature(encoded); f.finish();
         const auto id = f.model->requestVerifyMessage(address, "exact statement", encoded); QVERIFY(id);
         QVERIFY(f.model->verificationBusy()); QVERIFY(!f.model->verificationValid());
-        QVERIFY(f.commands.step(execution::Lane::Domain));
-        QVERIFY(!f.model->verificationValid());
-        QVERIFY(f.commands.step(execution::Lane::Domain));
+        QVERIFY(f.commands.step(execution::Lane::Utility));
+        QVERIFY(!f.publications.empty());
         QVERIFY(!f.model->verificationValid());
         f.publish();
         QCOMPARE(f.model->verificationId(), id); QVERIFY(f.model->verificationValid());
@@ -309,6 +309,64 @@ private Q_SLOTS:
         QCOMPARE(f.model->verificationState(), SignVerifyMessageModel::VerificationIdle);
         QVERIFY(!f.model->verificationValid()); QVERIFY(f.model->verificationText().isEmpty());
     }
+    void walletlessVerificationUsesUtilityWithSchedulerClosed()
+    {
+        int unexpected_dispatches{0};
+        std::deque<std::function<void()>> utility, publications;
+        execution::Executor executor{[&](execution::Lane lane, execution::UtilityWorker worker, auto turn) {
+            if (lane != execution::Lane::Utility || worker != execution::UtilityWorker::IO) {
+                ++unexpected_dispatches;
+                return false;
+            }
+            utility.push_back(std::move(turn));
+            return true;
+        }};
+        const auto drain = [](auto& turns) {
+            while (!turns.empty()) {
+                auto turn = std::move(turns.front());
+                turns.pop_front();
+                turn();
+            }
+        };
+        auto outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        const auto cleanup = qScopeGuard([&] {
+            outcomes->close();
+            drain(utility);
+        });
+        SignVerifyMessageModel model;
+        model.setOpening({}, [&](auto turn) { publications.push_back(std::move(turn)); }, outcomes);
+        CKey key;
+        key.MakeNewKey(true);
+        const QString address = QString::fromStdString(EncodeDestination(PKHash{key.GetPubKey()}));
+        std::string signature;
+        QVERIFY(MessageSign(key, "exact statement", signature));
+        const QString encoded = QString::fromStdString(signature);
+        model.setVerificationAddress(address);
+        model.setVerificationMessage("exact statement");
+        model.setVerificationSignature(encoded);
+        drain(utility);
+        drain(publications);
+        QVERIFY(model.canVerify());
+
+        const auto id = model.requestVerifyMessage(address, "exact statement", encoded);
+        QVERIFY(id);
+        QVERIFY(model.verificationBusy());
+        drain(utility);
+        QVERIFY(!model.verificationValid());
+        drain(publications);
+        QCOMPARE(model.verificationId(), id);
+        QVERIFY(model.verificationValid());
+
+        QVERIFY(model.requestVerifyMessage(address, "exact statement", encoded));
+        drain(utility);
+        model.setVerificationMessage("successor statement");
+        drain(publications);
+        QCOMPARE(model.verificationState(), SignVerifyMessageModel::VerificationIdle);
+        QVERIFY(!model.verificationValid());
+        QVERIFY(model.verificationText().isEmpty());
+        QCOMPARE(unexpected_dispatches, 0);
+    }
+
     void watchOnlySigningRefusesWithoutAskingForCredentials()
     {
         Fixture f; f.wallet->watch_only = true; f.setInput("statement");
@@ -417,23 +475,43 @@ private Q_SLOTS:
                 effect = QThread::currentThread(); return MessageWallet::signMessage(message, address, signature);
             }
         };
-        BackendExecutor commands, retirement;
+        using execution::Lane;
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        const auto cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
         auto wallet = std::make_shared<Wallet>(); wallet->encrypted = true; wallet->long_secret_chars = 40'000;
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler(), retirement.scheduler(),
-            std::make_shared<std::atomic_bool>(false), [] {});
+        auto opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{cleanup, [core, outcomes](auto done) {
+                core->close();
+                core->whenDrained([outcomes, done = std::move(done)] {
+                    outcomes->close();
+                    outcomes->whenDrained(done);
+                });
+            }, core, outcomes});
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto stop = qScopeGuard([&] {
+            opening->stop(false, [stopped] { *stopped = true; });
+            QVERIFY(QTest::qWaitFor([&] { return stopped->load(); }, 5000));
+        });
+        const auto core_thread = std::make_shared<std::atomic<QThread*>>(nullptr);
+        QVERIFY(core->post([core_thread] { *core_thread = QThread::currentThread(); }));
         QVERIFY(opening->start(wallet));
         QTRY_VERIFY(opening->available());
         {
-            SignVerifyMessageModel model; model.setOpening(opening, {commands.scheduler(), {}});
+            SignVerifyMessageModel model; model.setOpening(opening, {});
             QVERIFY(model.requestSignMessageWithPassphrase(Address(), "real worker statement", QString(40'000, QChar{'p'})));
             QTRY_VERIFY(!model.signingBusy());
             QCOMPARE(model.signingState(), SignVerifyMessageModel::SigningSucceeded);
-            QVERIFY(wallet->effect.load() != QThread::currentThread());
-            QVERIFY(wallet->unlock_thread.load() != QThread::currentThread()); QCOMPARE(wallet->unlocks, 1); QCOMPARE(wallet->locks, 1);
+            QVERIFY(core_thread->load());
+            QVERIFY(core_thread->load() != QThread::currentThread());
+            QVERIFY(wallet->effect.load() == core_thread->load());
+            QVERIFY(wallet->unlock_thread.load() == core_thread->load());
+            QCOMPARE(wallet->unlocks, 1); QCOMPARE(wallet->locks, 1);
             model.close();
         }
-        opening->retire(); commands.shutdown(); retirement.shutdown();
-        QTRY_VERIFY(commands.isDrained()); QTRY_VERIFY(retirement.isDrained());
         QCOMPARE(wallet->internals, 0);
     }
 };

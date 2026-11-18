@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_BITCOINURIMODEL_H
 #define BITCOIN_QML_MODELS_BITCOINURIMODEL_H
 
-#include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 #ifdef ENABLE_WALLET
 #include <qml/models/paymentimportoperation.h>
@@ -15,14 +15,16 @@
 #include <atomic>
 #include <memory>
 
+namespace execution { class Executor; }
+
 struct BitcoinUriOperations;
 class BitcoinUriModel;
 class WalletQmlModel;
 class SendRecipient;
 
 /** Recognizes pasted payment URIs and starts payment request and PSBT
- * imports into a send draft. Reading and analysis run on the injected
- * scheduler; each import is observed through its PaymentImportOperation. */
+ * imports into a send draft. Reading and analysis run in the background.
+ * Each import is observed through its PaymentImportOperation. */
 class BitcoinUriModel : public QObject
 {
     Q_OBJECT
@@ -31,8 +33,9 @@ public:
     Q_ENUM(InputField)
     explicit BitcoinUriModel(QObject* parent = nullptr);
     ~BitcoinUriModel() override;
-    void setServices(execution::SnapshotServices services);
+    void setServices(presentation::Post post, execution::Executor* executor = nullptr);
     void close();
+    void whenDrained(std::function<void()> done);
     //! Whether pasted text is a payment URI. Decided by its scheme, so a paste
     //! is routed at once: other text is pasted into the field as typed.
     Q_INVOKABLE bool isPaymentUri(const QString& text) const;
@@ -40,6 +43,7 @@ public:
     //! from \p clipboard, or an empty string.
     Q_INVOKABLE QString pastedPaymentUri(const QString& previous, const QString& current, const QString& clipboard) const;
 #ifdef ENABLE_WALLET
+    void setExportCoordinator(std::shared_ptr<backup::InstallCoordinator> coordinator);
     Q_INVOKABLE PaymentImportOperation* requestImportText(const QString& text, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
     Q_INVOKABLE PaymentImportOperation* requestImportFile(const QString& path, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
     Q_INVOKABLE PaymentImportOperation* captureImport(WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
@@ -53,7 +57,7 @@ private:
     PaymentImportOperation* createImport(std::optional<paymentimport::Input> input, std::shared_ptr<const paymentimport::TargetPort> target, QObject* owner,
                                          std::shared_ptr<paymentimport::CreationReceipt> creation = {});
 #endif
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     const std::shared_ptr<BitcoinUriOperations> m_operations;
     const std::shared_ptr<std::atomic_bool> m_admission{std::make_shared<std::atomic_bool>(false)};
     quint64 m_sequence{0};

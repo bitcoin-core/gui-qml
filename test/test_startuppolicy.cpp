@@ -4,7 +4,7 @@
 #include <qml/startuppolicy.h>
 #include <qml/startupeffects.h>
 #include <qml/quithandler.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <chainparamsbase.h>
@@ -29,9 +29,14 @@
 
 namespace {
 struct PolicyFixture {
-    ManualRoutedExecution commands;
+    ManualStartupExecution commands;
     std::deque<std::function<void()>> gui;
-    execution::SnapshotServices services{commands.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }};
+    presentation::Post post = [this](auto turn) { gui.push_back(std::move(turn)); };
+    std::shared_ptr<execution::SerialQueue> retirement =
+        std::make_shared<execution::SerialQueue>(commands.executor().makeQueue(execution::Lane::Utility));
+    PresentationServices services{{post, [queue = retirement](auto turn) {
+        return queue->post(std::move(turn));
+    }, {}, std::make_shared<execution::SerialQueue>(commands.executor().makeQueue(execution::Lane::Utility))}};
     ~PolicyFixture() { settle(); }
     void publish() { while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); } }
     void settle() { for (int n = 0; n < 16; ++n) { commands.drain(); publish(); } commands.drain(); }
@@ -98,10 +103,10 @@ private Q_SLOTS:
         QVERIFY2(args.ParseParameters(2,argv,error),error.c_str());
         const auto original_chain=gArgs.GetChainType();
         const auto restore=qScopeGuard([original_chain]{SelectBaseParams(original_chain);});
-        ManualRoutedExecution runner;
         std::optional<startup::ProfileIdentity> result;
-        QVERIFY(execution::Submit(*runner.scheduler,[&]{return startup::ReadProfileIdentity(args);},
-            [&](auto value){result=std::move(value);}));
+        ManualStartupExecution runner;
+        QVERIFY(runner.core.post([&] { result = startup::ReadProfileIdentity(args); }));
+        QVERIFY(!result);
         runner.drain(); QVERIFY(result); QCOMPARE(result->network,QString{"regtest"});
         // Core resolves the existing base directory physically; on macOS
         // /tmp is an alias of /private/tmp, even before regtest exists.
@@ -136,7 +141,7 @@ private Q_SLOTS:
     }
     void warningIntakePreservesFullNativeOrBoundedGuiText() {
         QFETCH(int, mode); PolicyFixture fixture;
-        auto collection = startupdiagnostics::Create(fixture.commands.scheduler); QVERIFY(collection);
+        auto collection = startupdiagnostics::Create(fixture.services.valueRetirement()); QVERIFY(collection);
         auto loss = mode == 7 ? startup::DiagnosticLoss{} : std::make_shared<std::atomic_bool>(false);
         if (mode == 5 || mode == 7) collection.reset();
         if (mode == 6) collection->seal();
@@ -162,7 +167,7 @@ private Q_SLOTS:
     }
     void errorIntakeRetainsOriginalAndOwnsLoss() {
         QFETCH(int, mode); PolicyFixture fixture;
-        auto collection = startupdiagnostics::Create(fixture.commands.scheduler); QVERIFY(collection);
+        auto collection = startupdiagnostics::Create(fixture.services.valueRetirement()); QVERIFY(collection);
         if (mode == 5) collection->seal();
         auto loss = mode == 7 ? startup::DiagnosticLoss{} : std::make_shared<std::atomic_bool>(false);
         const bool large = mode == 2 || mode == 3 || mode == 6;
@@ -207,14 +212,14 @@ private Q_SLOTS:
     }
     void errorDetailOwnershipAndProjection() {
         QFETCH(int, mode); PolicyFixture fixture;
-        StartupDiagnosticsModel existing{fixture.services};
+        StartupDiagnosticsModel existing{fixture.post, fixture.services};
         QVERIFY(existing.append("existing details", false)); QVERIFY(existing.project(false)); fixture.settle();
-        auto collection = startupdiagnostics::Create(fixture.commands.scheduler); QVERIFY(collection);
+        auto collection = startupdiagnostics::Create(fixture.services.valueRetirement()); QVERIFY(collection);
         QVERIFY(collection->append("complete imported detail", false)); collection->seal();
         auto loss = std::make_shared<std::atomic_bool>(false);
-        if (mode == 3) fixture.commands.rejectLane(execution::Lane::Domain);
-        auto details = startup::PrepareErrorDetails(fixture.services, "fallback summary", mode == 2 ? collection : nullptr,
-            mode == 0 ? &existing : nullptr, loss);
+        if (mode == 3) fixture.commands.reject_utility = true;
+        auto details = startup::PrepareErrorDetails(fixture.post, "fallback summary", mode == 2 ? collection : nullptr,
+            mode == 0 ? &existing : nullptr, loss, fixture.services);
         QVERIFY(details.model); QCOMPARE(bool(details.owned), mode != 0);
         QCOMPARE(bool(details.replacement_message), mode == 3);
         QCOMPARE(loss->load(), mode == 3);
@@ -309,7 +314,8 @@ private Q_SLOTS:
         QTest::newRow("original-native-exception") << 2;
     }
     void nodePreparationOutcomeSurvivesQuitAndAdmissionClose() {
-        QFETCH(int, mode); PolicyFixture fixture; PreparationFixture preparation;
+        QFETCH(int, mode); ManualStartupExecution environment; PreparationFixture preparation;
+        std::deque<std::function<void()>> gui;
         preparation.configured = mode != 1; if (mode == 2) preparation.throw_at = "base";
         QmlQuitHandler quit_handler; int stage{0}; bool returned{false};
         QTimer driver;
@@ -317,23 +323,32 @@ private Q_SLOTS:
             if (stage == 0) {
                 ++stage; QVERIFY(!returned);
                 QEvent quit{QEvent::Quit}; QCoreApplication::sendEvent(QCoreApplication::instance(), &quit);
-                QVERIFY(quit_handler.isQuitRequested()); fixture.commands.scheduler->stopAcceptingWork();
-                QVERIFY(fixture.commands.step(execution::Lane::Core)); QVERIFY(!preparation.trace.empty());
-                QVERIFY(fixture.gui.empty()); QVERIFY(!returned);
+                QVERIFY(quit_handler.isQuitRequested()); environment.core.close();
+                QVERIFY(environment.step(execution::Lane::Core)); QVERIFY(!preparation.trace.empty());
+                QVERIFY(gui.empty()); QVERIFY(!returned);
             } else if (stage == 1) {
-                ++stage; QVERIFY(fixture.commands.step(execution::Lane::Domain));
-                QCOMPARE(fixture.gui.size(), size_t{1}); QVERIFY(!returned);
-            } else if (stage == 2) { ++stage; driver.stop(); fixture.publish(); }
+                ++stage; QVERIFY(environment.step(execution::Lane::Utility));
+                QCOMPARE(gui.size(), size_t{1}); QVERIFY(!returned);
+            } else if (stage == 2) {
+                ++stage; driver.stop();
+                auto publish = std::move(gui.front());
+                gui.pop_front();
+                publish();
+            }
         });
         driver.start(0); QString error;
         auto outcome = startup::PreparationOutcome::Ready;
-        try { outcome = startup::Run(fixture.services, [&] { return startup::PrepareNode(preparation.ports()); }); }
+        try {
+            outcome = startup::Run(&environment.core, &environment.outcomes,
+                [&] { return startup::PrepareNode(preparation.ports()); },
+                [&](auto publish) { gui.push_back(std::move(publish)); });
+        }
         catch (const std::runtime_error& exception) { error = QString::fromUtf8(exception.what()); }
         returned = true; driver.stop(); QCOMPARE(stage, 3);
         QCOMPARE(error, mode == 2 ? QString{"base"} : QString{});
         if (mode != 2) QCOMPARE(outcome, mode == 0 ? startup::PreparationOutcome::Ready : startup::PreparationOutcome::ConfigurationFailed);
         QCOMPARE(preparation.trace.count("configure"), 1); QCOMPARE(preparation.trace.count("base"), mode == 1 ? 0 : 1);
-        QVERIFY(quit_handler.isQuitRequested()); fixture.settle(); QVERIFY(fixture.commands.quiescent());
+        QVERIFY(quit_handler.isQuitRequested()); QVERIFY(gui.empty()); QVERIFY(environment.quiescent());
     }
     void missingPreparationPortsStartNoEffects() {
         QFETCH(int, port); PreparationFixture fixture; auto ports = fixture.ports();
@@ -374,43 +389,64 @@ private Q_SLOTS:
         QTest::addColumn<int>("mode");
         QTest::newRow("before-window-ready") << 0; QTest::newRow("error-handoff-does-not-wait") << 1;
         QTest::newRow("before-window-refused-read") << 2;
+        QTest::newRow("error-handoff-while-core-is-held") << 3;
     }
     void preferencesInstallUsesExplicitPhaseAndOriginalNamespace() {
-        QFETCH(int, mode); PolicyFixture fixture; QTemporaryDir directory; QVERIFY(directory.isValid());
+        QFETCH(int, mode); bool core_ran{false};
+        ManualStartupExecution fixture; QTemporaryDir directory; QVERIFY(directory.isValid());
         const QString path = directory.filePath("preferences.ini");
         { QSettings settings{path, QSettings::IniFormat}; settings.setValue("windowWidth", 1234); settings.sync(); }
         UiPreferencesNamespace identity; identity.file = path; identity.format = QSettings::IniFormat;
         QQmlApplicationEngine engine;
         QTimer driver; int turns{0};
-        connect(&driver, &QTimer::timeout, this, [&] { ++turns; fixture.settle(); });
-        if (mode == 2) fixture.commands.rejectLane(execution::Lane::Core);
-        if (mode != 1) driver.start(0);
-        auto* store = startup::InstallPreferences(engine, fixture.services, identity,
-            mode == 1 ? startup::PreferencesPhase::ErrorHandoff : startup::PreferencesPhase::BeforeWindow);
+        connect(&driver, &QTimer::timeout, this, [&] { ++turns; fixture.drain(); });
+        const bool error_handoff = mode == 1 || mode == 3;
+        if (mode == 3) QVERIFY(fixture.core.post([&] { core_ran = true; }));
+        if (mode == 2) fixture.reject_core = true;
+        if (!error_handoff) driver.start(0);
+        auto* store = startup::InstallPreferences(engine, fixture.executor(),
+            mode == 3 ? execution::Lane::Utility : execution::Lane::Core, presentation::QueuedPost(), identity,
+            error_handoff ? startup::PreferencesPhase::ErrorHandoff : startup::PreferencesPhase::BeforeWindow);
         driver.stop(); QVERIFY(store); QCOMPARE(store->parent(), &engine);
         QCOMPARE(engine.rootContext()->contextProperty("uiPreferencesStore").value<QObject*>(), store);
-        if (mode == 1) { QCOMPARE(turns, 0); QVERIFY(!store->ready()); QVERIFY(store->pending()); fixture.settle(); }
-        else if (mode == 0) QVERIFY(turns > 0);
+        if (error_handoff) {
+            QCOMPARE(turns, 0);
+            QVERIFY(!store->ready());
+            QVERIFY(store->pending());
+            if (mode == 3) {
+                while (fixture.step(execution::Lane::Utility)) {}
+                QTRY_VERIFY(store->ready());
+                QVERIFY(!core_ran);
+            } else {
+                fixture.drain();
+                QTRY_VERIFY(store->ready());
+            }
+        } else if (mode == 0) {
+            QVERIFY(turns > 0);
+        }
         QCOMPARE(store->ready(), mode != 2);
         if (mode != 2) QCOMPARE(store->values().windowWidth, 1234.0);
         else QVERIFY(!store->error().isEmpty());
         store->close();
+        fixture.drain();
+        if (mode == 3) QVERIFY(core_ran);
     }
     void preferencesRetirementWaitsForOriginalWrite_data() {
         QTest::addColumn<bool>("window"); QTest::newRow("no-window") << false; QTest::newRow("disable-native-window") << true;
     }
     void preferencesRetirementWaitsForOriginalWrite() {
-        QFETCH(bool, window); PolicyFixture fixture; QTemporaryDir directory; QVERIFY(directory.isValid());
+        QFETCH(bool, window); ManualStartupExecution fixture; QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("preferences.ini"); UiPreferencesNamespace identity; identity.file = path;
         QQmlApplicationEngine engine; QQuickWindow native_window;
-        auto* store = startup::InstallPreferences(engine, fixture.services, identity, startup::PreferencesPhase::ErrorHandoff);
-        fixture.settle(); QVERIFY(store->ready()); AppPreferences view; view.configure(store);
+        auto* store = startup::InstallPreferences(engine, fixture.executor(), execution::Lane::Core,
+            presentation::QueuedPost(), identity, startup::PreferencesPhase::ErrorHandoff);
+        fixture.drain(); QTRY_VERIFY(store->ready()); AppPreferences view; view.configure(store);
         QVERIFY(view.requestGeometry(25, 35, 1200, 800)); auto receipt = store->lastWriteReceipt(); QVERIFY(receipt);
         QCOMPARE(receipt->load(), UiPreferencesStore::Pending);
         QTimer driver; int turns{0};
         connect(&driver, &QTimer::timeout, this, [&] {
             ++turns; if (window) QVERIFY(!native_window.contentItem()->isEnabled());
-            fixture.settle();
+            fixture.drain();
         });
         driver.start(0); startup::FinishPreferences(store, window ? &native_window : nullptr); driver.stop();
         QVERIFY(turns > 0); QCOMPARE(receipt->load(), UiPreferencesStore::Applied); QVERIFY(!store->pending());

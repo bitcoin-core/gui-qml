@@ -3,7 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_MODELS_UIPREFERENCES_H
 #define BITCOIN_QML_MODELS_UIPREFERENCES_H
-#include <qml/ownedwork.h>
+#include <qml/executor.h>
+#include <qml/guipresentation.h>
 #include <qml/settingsnamespace.h>
 #include <qml/preferenceswatch.h>
 #include <QObject>
@@ -30,7 +31,8 @@ class UiPreferencesStore final : public QObject
     Q_PROPERTY(QString error READ error NOTIFY stateChanged)
 public:
     enum Outcome {Idle,Pending,Applied,Failed,Uncertain,Closed};Q_ENUM(Outcome)
-    UiPreferencesStore(execution::SnapshotServices,UiPreferencesNamespace,QObject* parent=nullptr);
+    UiPreferencesStore(execution::Executor*, execution::Lane, presentation::Post,
+                       UiPreferencesNamespace, QObject* parent = nullptr);
     ~UiPreferencesStore() override;
     void start();
     Q_INVOKABLE void retry();
@@ -46,23 +48,28 @@ Q_SIGNALS:
     void stateChanged();
 private:
     friend class AppPreferences;
-    struct Native;struct Result;
+    struct Native;
+    struct Result;
+    using Receipt = std::shared_ptr<std::atomic<Outcome>>;
     using Mutation=std::function<void(UiPreferencesValues&)>;
     quint64 write(QStringList keys,Mutation);
     quint64 rejectIntent(QString error);
     void finishRefresh();
     preferences::Watch m_watch{[this] { refresh(); }};
     bool m_refresh_requested{false}, m_loading{false};
-    void load();void publish(std::shared_ptr<const Result>,quint64);
+    void load();
+    bool submit(quint64 ticket, std::function<void(Result&)> effect, Receipt receipt = {});
+    void failed(quint64 ticket, const Receipt&, bool admission_rejected = false);
+    void publish(std::shared_ptr<const Result>,quint64);
     bool attach(AppPreferences*);void notifyViews();void notifyTurn();
-    execution::SnapshotServices m_services;
-    std::unique_ptr<execution::OwnedWork> m_work;
+    execution::SerialQueue m_effects;
+    std::shared_ptr<execution::SerialQueue> m_outcomes;
+    presentation::Post m_post;
     std::shared_ptr<Native> m_native;
     std::shared_ptr<const Result> m_result;
     UiPreferencesValues m_defaults;
-    execution::ResourceKey m_key{};
     std::map<quint64,QPointer<AppPreferences>> m_views;
-    std::shared_ptr<std::atomic<Outcome>> m_receipt;
+    Receipt m_receipt;
     quint64 m_next_view{0},m_notify_cursor{0},m_revision{0},m_operation_id{0};
     size_t m_pending{0};bool m_ready{false},m_closed{false},m_notify_scheduled{false},m_notify_again{false};QString m_error;
 };

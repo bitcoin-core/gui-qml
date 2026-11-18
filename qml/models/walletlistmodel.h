@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_WALLETLISTMODEL_H
 #define BITCOIN_QML_MODELS_WALLETLISTMODEL_H
 
-#include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <qml/walletcatalog.h>
 #include <QAbstractListModel>
 #include <QHash>
@@ -13,7 +13,6 @@
 #include <QPointer>
 #include <QString>
 
-class BackendExecutor;
 class WalletQmlModel;
 Q_MOC_INCLUDE("qml/models/walletqmlmodel.h")
 
@@ -45,9 +44,10 @@ public:
     Q_ENUM(BackendAvailability)
 
     WalletListModel(interfaces::Node& node, QObject *parent = nullptr);
-    WalletListModel(interfaces::Node& node, execution::SnapshotServices services, QObject* parent = nullptr);
+    WalletListModel(interfaces::Node& node, execution::Executor& executor, presentation::Post post, QObject* parent = nullptr);
     ~WalletListModel() override;
     void close();
+    void whenRetired(std::function<void()> done);
     bool projectionPending() const { return m_pending; }
     QString readError() const { return m_error; }
     ReaderPhase phase() const { return m_phase; }
@@ -93,6 +93,7 @@ public Q_SLOTS:
     void setOperationId(const QString& walletId, const QString& operationId);
 
 private:
+    WalletListModel(interfaces::Node& node, execution::Executor* executor, presentation::Post post, QObject* parent);
     struct OpenWalletBinding {
         QPointer<WalletQmlModel> wallet;
         const WalletQmlModel* identity{nullptr};
@@ -105,9 +106,8 @@ private:
     std::shared_ptr<walletcatalog::Reader> m_reader;
     std::shared_ptr<const walletcatalog::Snapshot> m_visible;
     QHash<QString, OpenWalletBinding> m_open_wallets;
-    execution::SnapshotServices m_services;
-    std::shared_ptr<QObject> m_bridge;
-    std::shared_ptr<BackendExecutor> m_owned_executor;
+    presentation::Post m_post;
+    std::shared_ptr<execution::Executor> m_owned_executor;
     quint64 m_revision{0}, m_directory_epoch{0};
     size_t m_notice{0};
     bool m_pending{false}, m_stopping{false}, m_wallet_dir_loaded{false};

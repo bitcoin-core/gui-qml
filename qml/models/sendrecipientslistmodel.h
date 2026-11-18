@@ -53,7 +53,7 @@ public:
     void chooseAmountMode(SendRecipient* recipient, SendRecipient::AmountMode mode);
     Q_INVOKABLE void removeRecipient(const QString& recipient_id);
     ~SendRecipientsListModel() override;
-    void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     void close();
     void retryPublications();
     std::shared_ptr<const DraftSnapshot> draftSnapshot() const;
@@ -133,7 +133,7 @@ private:
     std::shared_ptr<Rows> m_recipients{std::make_shared<Rows>()};
     std::shared_ptr<Backend> m_backend;
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     std::shared_ptr<const DraftSnapshot> m_snapshot;
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const DraftSnapshot>>> m_query;
     int m_current{0}, m_initialize_row{0}, m_unit_row{0};

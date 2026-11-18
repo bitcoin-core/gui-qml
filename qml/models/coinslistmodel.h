@@ -7,6 +7,7 @@
 #include <interfaces/wallet.h>
 #include <qml/models/coinselection.h>
 #include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <qml/walletopening.h>
 #include <QAbstractListModel>
 #include <QDateTime>
@@ -68,7 +69,7 @@ public:
     std::shared_ptr<const execution::OwnedCommand<SelectionOutcome>> selectionOperation() const { return m_last_selection; }
     explicit CoinsListModel(WalletQmlModel* parent = nullptr);
     ~CoinsListModel() override;
-    void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     void close();
     void retryPublications();
     QString readError() const { return m_read_error; }
@@ -162,7 +163,7 @@ private:
     std::shared_ptr<const View> m_target, m_published_view;
     std::shared_ptr<const Selection> m_selection{std::make_shared<const Selection>()};
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     WalletQmlModel* m_wallet_model;
     bool m_stopping{false}, m_loading{false}, m_incomplete{false}, m_descending{true};
     bool m_selection_editing{false};

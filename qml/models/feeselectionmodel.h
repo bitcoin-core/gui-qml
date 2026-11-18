@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_MODELS_FEESELECTIONMODEL_H
 #define BITCOIN_QML_MODELS_FEESELECTIONMODEL_H
+#include <qml/guipresentation.h>
 #include <qml/models/feeestimatevalues.h>
 #include <qml/snapshotquery.h>
 #include <QObject>
@@ -72,7 +73,7 @@ public:
 public:
     explicit FeeSelectionModel(QObject* parent = nullptr);
     ~FeeSelectionModel() override;
-    void setServices(execution::SnapshotServices services);
+    void setServices(presentation::Post post, execution::SnapshotQuery<feepolicy::Snapshot>::Post submit);
     void observe(CAmount minimum, QHash<unsigned int, CAmount> rates);
     void close();
     void finishStop();
@@ -124,7 +125,6 @@ private:
     void request(bool intent);
     void publishPolicy();
     void reject(const QString& error);
-    execution::SnapshotServices m_services;
     std::shared_ptr<Input> m_input;
     std::shared_ptr<execution::SnapshotQuery<feepolicy::Snapshot>> m_query;
     std::optional<feepolicy::Snapshot> m_snapshot;

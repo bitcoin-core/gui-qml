@@ -35,7 +35,7 @@ public:
     QString persistedNote() const { return persisted().values[requestedit::Note].text; }
     Q_INVOKABLE void settle() { m_ports.drain(); Q_EMIT changed(); }
     Q_INVOKABLE void domain() { m_ports.domain(); Q_EMIT changed(); }
-    Q_INVOKABLE void backend() { m_ports.execution.drain(); Q_EMIT changed(); }
+    Q_INVOKABLE void backend() { m_ports.drainWorkers(); Q_EMIT changed(); }
     Q_INVOKABLE void publish() { m_ports.publish(); Q_EMIT changed(); }
     Q_INVOKABLE void setNextGenerationError(ReceiveError::Code error) { m_ports.next_generation = error; }
     Q_INVOKABLE void setNextWriteError(ReceiveError::Code error) { m_ports.next_write = error; }
@@ -75,8 +75,7 @@ private:
         ports.current = [this] { return m_current; };
         ports.nativeRevision = [this] { return m_native_revision; };
         ports.retire = [this](auto snapshot) {
-            const auto admitted = execution::Submit(*m_ports.execution.scheduler,
-                [snapshot = std::move(snapshot)]() mutable { snapshot.reset(); }, [] {}, {}, {execution::Lane::Domain});
+            const auto admitted = m_ports.execution.outcomes.post([snapshot = std::move(snapshot)]() mutable { snapshot.reset(); });
             Q_ASSERT(admitted);
         };
         return ports;

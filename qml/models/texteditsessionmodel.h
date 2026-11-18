@@ -4,7 +4,8 @@
 #ifndef BITCOIN_QML_MODELS_TEXTEDITSESSIONMODEL_H
 #define BITCOIN_QML_MODELS_TEXTEDITSESSIONMODEL_H
 #include <qml/persistenteditor.h>
-#include <qml/snapshotquery.h>
+#include <qml/retainedvalue.h>
+#include <qml/guipresentation.h>
 #include <QObject>
 #include <QString>
 
@@ -130,10 +131,11 @@ public:
         std::optional<Read> current;
         TextEditError error;
     };
-    using Writer = std::function<execution::SubmitResult(const Reducer::Attempt&, std::function<void(Write)>, std::shared_ptr<execution::Scheduler>)>;
+    using Writer = std::function<execution::SubmitResult(const Reducer::Attempt&, std::function<void(Write)>)>;
     struct Ports {
-        execution::SnapshotServices execution;
-        // Completions run on the same Domain lane as this editor. They must
+        presentation::Post post;
+        std::function<bool(std::function<void()>)> postWork;
+        // Completions run on the same worker queue as this editor. They must
         // survive quiet close; GUI delivery is never a persistence dependency.
         std::function<execution::SubmitResult(std::function<void(Read)>)> read;
         Writer write;
@@ -143,6 +145,7 @@ public:
         // Query only: never call the write port again for an uncertain attempt.
         std::function<execution::SubmitResult(const Reducer::Attempt&, std::function<void(Write)>)> query;
         std::function<bool(const QString&)> validate;
+        execution::ValueCleanup value_cleanup;
     };
     TextEditSessionModel(QString entity, Ports ports, QObject* parent = nullptr);
     ~TextEditSessionModel() override;
@@ -187,7 +190,6 @@ private:
     bool refuseBusy(const QString& command);
     bool submit(std::function<void(State&)> command, const QString& name);
     const QString m_editor_id, m_entity_id;
-    execution::SnapshotServices m_execution;
     TextEditError m_immediate_error;
     TextEditClosePrompt* m_prompt{nullptr};
     TextEditInput m_text{this};

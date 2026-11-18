@@ -14,7 +14,6 @@
 #include <QStringList>
 #include <mutex>
 
-class BackendExecutor;
 namespace psbtdocument { class Owner; }
 namespace interfaces { class Node; }
 
@@ -51,7 +50,7 @@ public:
     Q_ENUM(NodeReadiness)
     // A raw Wallet argument records the expected context only. Wallet work is
     // rejected until composition supplies the retained opening below. Node must
-    // outlive this model's configured scheduler drain (the app-wide Node service).
+    // outlive this model's queued work (the app-wide Node service).
     explicit PsbtQmlModel(bool wallet_expected, interfaces::Node* node, QObject* parent = nullptr);
     ~PsbtQmlModel() override;
     void configureSession(std::shared_ptr<walletopening::Session> opening, psbtfee::Services services);
@@ -94,7 +93,12 @@ public:
     void refreshState(const QString& status_override = {});
     void retryPublication();
     const PartiallySignedTransaction* psbt() const { return m_snapshot ? m_snapshot->document.get() : nullptr; }
-    std::shared_ptr<const PartiallySignedTransaction> document() const { return m_snapshot ? m_snapshot->document : nullptr; }
+    std::shared_ptr<const PartiallySignedTransaction> document() const
+    {
+        if (!m_snapshot || !m_snapshot->document) return {};
+        if (m_snapshot_lease) return {m_snapshot_lease, m_snapshot->document.get()};
+        return m_snapshot->document;
+    }
     void setError(const QString& error);
     void setMatchedTxid(const QString& txid);
     // Worker/test-setup utilities. Model commands never call these on GUI.
@@ -133,12 +137,12 @@ private:
     std::shared_ptr<walletopening::Session> m_opening;
     psbtfee::Services m_services;
     std::shared_ptr<QObject> m_bridge;
-    std::unique_ptr<BackendExecutor> m_owned_executor;
+    struct OwnedQueues;
+    std::unique_ptr<OwnedQueues> m_owned_queues;
     interfaces::Node* m_node{nullptr};
     bool m_wallet_expected{false}, m_closed{false};
     std::shared_ptr<Operation> m_active;
-    std::optional<execution::ResourceLease> m_active_lease, m_snapshot_lease;
-    std::optional<execution::ResourceLease> m_quarantine_lease;
+    std::shared_ptr<void> m_active_lease, m_snapshot_lease, m_quarantine_lease;
     std::shared_ptr<const PartiallySignedTransaction> m_quarantined_document;
     quint64 m_quarantined_operation{0}, m_quarantined_generation{0};
     std::shared_ptr<const psbtwork::Snapshot> m_snapshot;

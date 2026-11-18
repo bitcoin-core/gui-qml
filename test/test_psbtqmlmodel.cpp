@@ -5,11 +5,16 @@
 #include <QtTest/QtTest>
 
 #include <qml/models/psbtqmlmodel.h>
-#include <qml/backendexecutor.h>
+#include <qml/asyncjoin.h>
+#include <qml/models/walletqmlmodel.h>
+#include <qml/executor.h>
+#include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <test/mocks/psbtfile.h>
 #include <test/mocks/mocknode.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/mockwallet.h>
+#include <test/mocks/walletsession.h>
 #include <test/mocks/psbtfeefixture.h>
 
 #include <chainparams.h>
@@ -37,6 +42,18 @@
 #include <vector>
 
 namespace {
+psbtfee::Services ManualPsbtServices(ManualStartupExecution& worker,
+                                    std::deque<std::function<void()>>& publications)
+{
+    psbtfee::Services services;
+    services.core = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Core));
+    services.utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    const auto values = std::make_shared<execution::ValueCleanupQueue>(services.utility);
+    services.value_cleanup = [values](auto cleanup) { return values->hold(std::move(cleanup)); };
+    services.post = [&publications](auto callback) { publications.push_back(std::move(callback)); };
+    return services;
+}
+
 const auto VALID_MAINNET_ADDRESS = QStringLiteral("1BoatSLRHtKNngkdXEeobR76b53LETtpyT");
 
 class PsbtTestWallet : public StubWallet
@@ -119,13 +136,14 @@ PartiallySignedTransaction MakeCompletePsbt()
 
 void Configure(PsbtQmlModel& model, const std::shared_ptr<PsbtTestWallet>& wallet)
 {
-    auto executor = std::make_shared<BackendExecutor>();
-    auto opening = std::make_shared<walletopening::Session>(executor->scheduler(), executor->scheduler(),
-        std::make_shared<std::atomic_bool>(false), [] {});
-    opening->start(wallet);
-    model.configureSession(opening, {executor->scheduler(), {}, {}});
+    auto executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
+    auto opening = MakeWalletSession(*executor, [] {});
+    const auto started = opening->start(wallet);
+    QVERIFY(started);
+    model.configureSession(opening, {{}, presentation::QueuedPost()});
     QObject::connect(&model, &QObject::destroyed, [opening, executor] {
-        opening->retire(); executor->shutdown();
+        const auto drained = JoinThreadAfterDrain([executor] { executor->stopAndJoin(); }, qApp, [] {});
+        opening->stop(false, drained);
     });
 }
 bool AwaitIdle(PsbtQmlModel& model)
@@ -152,9 +170,8 @@ private Q_SLOTS:
         const auto wallet = std::make_shared<PsbtTestWallet>();
         int signs{0};
         wallet->on_sign = [returned = fixture.returned, &signs](auto& document) { ++signs; document = returned; };
-        ManualRoutedExecution transport;
-        auto opening = std::make_shared<walletopening::Session>(transport.scheduler, transport.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        ManualStartupExecution transport;
+        auto opening = MakeWalletSession(transport.executor(), [] {});
         QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -166,7 +183,7 @@ private Q_SLOTS:
         };
         {
             PsbtQmlModel model{true, nullptr};
-            model.configureSession(opening, {transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); }});
+            model.configureSession(opening, {{}, [&](auto turn) { publications.push_back(std::move(turn)); }});
             QVERIFY(model.requestLoadFromFile(original_path)); transport.drain(); publish();
             QVERIFY(model.loaded()); QVERIFY(model.canSign());
             const auto generation = model.documentGeneration();
@@ -187,7 +204,7 @@ private Q_SLOTS:
             QVERIFY(model.unverifiedResultToken().isEmpty());
             QCOMPARE(signs, 1); QCOMPARE(wallet->private_accesses, 0);
         }
-        opening->retire(); transport.drain();
+        opening->stop(false, {}); transport.drain();
         QVERIFY(transport.quiescent());
     }
     void documentOwnerRetiresWithoutGuiDelivery_data()
@@ -200,10 +217,17 @@ private Q_SLOTS:
     void documentOwnerRetiresWithoutGuiDelivery()
     {
         QFETCH(int, when);
-        ManualRoutedExecution transport;
+        using execution::Lane;
+        ManualStartupExecution worker;
+        const auto core = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        const auto values = std::make_shared<execution::ValueCleanupQueue>(
+            std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility)));
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        const auto drain = qScopeGuard([&] { model.close(); worker.drain(); });
+        model.setFeeServices({{}, [&](auto callback) { publications.push_back(std::move(callback)); },
+            {}, core, utility, [values](auto cleanup) { return values->hold(std::move(cleanup)); }});
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto path = directory.filePath("retained-document.psbt");
@@ -211,8 +235,11 @@ private Q_SLOTS:
         const auto ticket = model.requestLoadFromFile(path);
         QVERIFY(ticket);
         if (when) {
-            QVERIFY(transport.step(execution::Lane::Core));
-            QVERIFY(transport.step(execution::Lane::Domain));
+            QVERIFY(!worker.step(Lane::Core));
+            QVERIFY(worker.step(Lane::Utility));
+            QVERIFY(worker.step(Lane::Core));
+            QVERIFY(publications.empty());
+            worker.drain();
             QCOMPARE(publications.size(), size_t{1});
             QVERIFY(!model.loaded());
             if (when == 2) {
@@ -221,10 +248,14 @@ private Q_SLOTS:
             }
         }
         model.close();
-        transport.drain();
+        const auto retired = std::make_shared<bool>(false);
+        values->close([retired] { *retired = true; });
+        QVERIFY(!values->hold([] {}));
+        worker.drain();
+        QVERIFY(*retired);
         // The facade and its queued GUI callback are still alive. Neither may
         // retain the document owner's cleanup reservation or its Native value.
-        QVERIFY(transport.quiescent());
+        QVERIFY(worker.quiescent());
         QVERIFY(!model.loaded());
         QVERIFY(!model.canSign());
         QVERIFY(!model.canBroadcast());
@@ -233,7 +264,7 @@ private Q_SLOTS:
         }
         QCOMPARE(model.phase(), PsbtQmlModel::Phase::Closed);
         QCOMPARE(model.requestLoadFromFile(path), quint64{0});
-        QVERIFY(transport.quiescent());
+        QVERIFY(worker.quiescent());
     }
 
     void manualReadRetainsOriginalDocumentAndPresentation_data()
@@ -245,11 +276,11 @@ private Q_SLOTS:
     void manualReadRetainsOriginalDocumentAndPresentation()
     {
         QFETCH(int, change);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         MockNode node;
         auto model = std::make_unique<PsbtQmlModel>(false, nullptr);
-        model->setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model->setFeeServices(ManualPsbtServices(transport, publications));
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto original = MakeCompletePsbt();
         auto replacement = original;
@@ -264,8 +295,10 @@ private Q_SLOTS:
         model->retryPublication(); // An outcome cannot publish before Core has run.
         QVERIFY(!model->loaded());
         QVERIFY(model->busy());
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.step(execution::Lane::Core));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(publications.empty());
+        transport.drain();
         QCOMPARE(publications.size(), size_t{1});
         QVERIFY(!model->loaded());
         if (change == 1) model->clear();
@@ -303,10 +336,10 @@ private Q_SLOTS:
     }
     void summaryWindowIsBoundedAndUsesCurrentSnapshot()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary.psbt");
@@ -335,20 +368,21 @@ private Q_SLOTS:
     }
     void summaryPageSupersedesNativeHeldOldWindow()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary-stale.psbt");
         QCOMPARE(WritePsbtFile(MakeCompletePsbt(), path), QString{});
-        QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all();
+        QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all(); transport.drain();
         const auto original = model.summary(); QVERIFY(original.size() > 2);
 
         model.requestSummaryWindow(0, 1);
-        const auto held = transport.dispatchNext(execution::Lane::Domain);
-        QVERIFY(held); QVERIFY(transport.finishWork(*held)); // The first formatted page has not reached its Domain outcome.
+        QVERIFY(transport.step(execution::Lane::Utility));
+        QVERIFY(publications.empty());
+        QCOMPARE(transport.queuedCount(), size_t{1});
         model.requestSummaryWindow(1, 1);
         QVERIFY(model.summaryPending()); QVERIFY(model.summary().empty());
         transport.drain();
@@ -361,10 +395,10 @@ private Q_SLOTS:
     }
     void summaryPageWithHeldGuiPublicationUsesLatestRequest()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary-held-gui.psbt");
@@ -392,12 +426,12 @@ private Q_SLOTS:
     void busyNodeReplacementKeepsSummaryPagingLive()
     {
         QFETCH(bool, page_notice_held);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         MockNode first_node, replacement_node;
         QTemporaryDir directory; QVERIFY(directory.isValid());
         PsbtQmlModel model{false, &first_node};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] {
             while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); }
         };
@@ -438,10 +472,10 @@ private Q_SLOTS:
     }
     void sameGenerationRefreshRejectsRetiredSummaryPage()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary-same-generation-refresh.psbt");
@@ -479,22 +513,19 @@ private Q_SLOTS:
     }
     void closeWithSummaryOutcomeHeldDrainsWhileFacadeLives()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary-close.psbt");
         QCOMPARE(WritePsbtFile(MakeCompletePsbt(), path), QString{});
-        QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all();
+        QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all(); transport.drain();
         model.requestSummaryWindow(1, 1);
-        const auto held = transport.dispatchNext(execution::Lane::Domain);
-        QVERIFY(held); QVERIFY(transport.finishWork(*held));
-        QVERIFY(transport.queuedCountIf([](const auto& turn) {
-            return turn.lane == execution::Lane::Domain && turn.phase == execution::Phase::OutcomeReady;
-        }) == 1);
-
+        QVERIFY(transport.step(execution::Lane::Utility));
+        QVERIFY(publications.empty());
+        QCOMPARE(transport.queuedCount(), size_t{1});
         model.close(); // Keep the facade alive while its already-admitted page drains.
         QVERIFY(!model.loaded()); QVERIFY(model.summary().empty()); QVERIFY(!model.summaryPending());
         transport.drain(); publish_all();
@@ -502,12 +533,46 @@ private Q_SLOTS:
         QVERIFY(transport.quiescent());
         QVERIFY(!model.loaded()); QVERIFY(model.summary().empty()); QVERIFY(!model.summaryPending());
     }
+    void acceptedSummarySurvivesUtilityQueueClosure()
+    {
+        ManualStartupExecution worker;
+        std::deque<std::function<void()>> publications;
+        auto services = ManualPsbtServices(worker, publications);
+        const auto utility = services.utility;
+        PsbtQmlModel model{false, nullptr};
+        model.setFeeServices(std::move(services));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("summary.psbt");
+        QCOMPARE(WritePsbtFile(MakeCompletePsbt(), path), QString{});
+        QVERIFY(model.requestLoadFromFile(path));
+        worker.drain();
+        QCOMPARE(publications.size(), size_t{1});
+        auto loaded = std::move(publications.front());
+        publications.pop_front();
+        loaded();
+        const auto expected = model.summary().mid(1, 1);
+        QCOMPARE(expected.size(), 1);
+
+        model.requestSummaryWindow(1, 1);
+        QVERIFY(model.summaryPending());
+        utility->close();
+        worker.drain();
+        QVERIFY(model.summaryPending());
+        QCOMPARE(publications.size(), size_t{1});
+        publications.front()();
+        QVERIFY(!model.summaryPending());
+        QCOMPARE(model.summary(), expected);
+        model.close();
+        worker.drain();
+        QVERIFY(worker.quiescent());
+    }
     void failedSummaryPageAdmissionIsVisibleAndRetryable()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         PsbtQmlModel model{false, nullptr};
-        model.setFeeServices({transport.scheduler, {}, [&](auto callback) { publications.push_back(std::move(callback)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish_all = [&] { while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); } };
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("summary-retry.psbt");
@@ -515,7 +580,7 @@ private Q_SLOTS:
         QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all();
         const auto expected = model.summary().mid(1, 1);
 
-        transport.rejectLane(execution::Lane::Domain);
+        transport.reject_utility = true;
         model.requestSummaryWindow(1, 1);
         QVERIFY(model.summaryPending());
         publish_all();
@@ -536,7 +601,7 @@ private Q_SLOTS:
     void manualClipboardRequiresCurrentGuiInterest()
     {
         QFETCH(int, change);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         MockNode node;
         QTemporaryDir directory; QVERIFY(directory.isValid());
@@ -547,7 +612,7 @@ private Q_SLOTS:
             model.reset(); transport.drain(); publish_all(); transport.drain();
             QGuiApplication::clipboard()->setText(previous_clipboard);
         });
-        model->setFeeServices({transport.scheduler,{},[&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->setFeeServices(ManualPsbtServices(transport, publications));
         const auto document = MakeCompletePsbt();
         const auto path = directory.filePath("copy-original.psbt");
         QCOMPARE(WritePsbtFile(document,path),QString{});
@@ -558,9 +623,9 @@ private Q_SLOTS:
         const auto ticket = model->requestCopyToClipboard(); QVERIFY(ticket);
         QVERIFY(!model->requestCopyToClipboard());
         QCOMPARE(QGuiApplication::clipboard()->text(),sentinel);
-        QVERIFY(transport.step(execution::Lane::Core));
+        QVERIFY(!transport.step(execution::Lane::Core));
         QCOMPARE(QGuiApplication::clipboard()->text(),sentinel);
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QCOMPARE(QGuiApplication::clipboard()->text(),sentinel);
         QCOMPARE(publications.size(),size_t{1});
         if (change == 1) model->clear();
@@ -583,7 +648,7 @@ private Q_SLOTS:
 
     void manualClipboardNativeHandoffMayDestroyObserver()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto model = std::make_unique<PsbtQmlModel>(false,nullptr);
@@ -596,7 +661,7 @@ private Q_SLOTS:
             model.reset(); transport.drain(); publish_all(); transport.drain();
             QGuiApplication::clipboard()->setText(previous_clipboard);
         });
-        model->setFeeServices({transport.scheduler,{},[&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->setFeeServices(ManualPsbtServices(transport, publications));
         const auto document = MakeCompletePsbt(); const auto path = directory.filePath("handoff.psbt");
         QCOMPARE(WritePsbtFile(document,path),QString{});
         QVERIFY(model->requestLoadFromFile(path)); transport.drain(); publish_all(); transport.drain();
@@ -619,13 +684,13 @@ private Q_SLOTS:
     void manualAdmissionFailuresStartNoDocumentEffect_data()
     {
         QTest::addColumn<int>("mode");
-        const std::array names{"no-document", "closed-model", "core-rejected", "", "", "wallet-without-opening", "closed-opening"};
-        for (int mode : {0, 1, 2, 5, 6}) QTest::newRow(names[mode]) << mode;
+        const std::array names{"no-document", "closed-model", "core-rejected", "file-read-rejected", "", "wallet-without-opening", "closed-opening"};
+        for (int mode : {0, 1, 2, 3, 5, 6}) QTest::newRow(names[mode]) << mode;
     }
     void manualAdmissionFailuresStartNoDocumentEffect()
     {
         QFETCH(int, mode);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         auto wallet = std::make_shared<PsbtTestWallet>();
         std::shared_ptr<walletopening::Session> opening;
@@ -633,16 +698,15 @@ private Q_SLOTS:
         auto model = std::make_unique<PsbtQmlModel>(mode == 5 || mode == 6,nullptr);
         const auto publish_all = [&] { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } };
         const auto cleanup = qScopeGuard([&] {
-            model.reset(); if (opening) opening->retire(); transport.drain(); publish_all(); transport.drain();
+            model.reset(); if (opening) opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         });
         const auto post = [&](auto turn) { publications.push_back(std::move(turn)); };
         if (mode == 6) {
-            opening = std::make_shared<walletopening::Session>(transport.scheduler,transport.scheduler,
-                std::make_shared<std::atomic_bool>(false),[] {});
+            opening = MakeWalletSession(transport.executor(), [] {});
             QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
-            model->configureSession(opening,{transport.scheduler,{},post});
+            model->configureSession(opening,{{},post});
             opening->close();
-        } else model->setFeeServices({transport.scheduler,{},post});
+        } else model->setFeeServices(ManualPsbtServices(transport, publications));
         const auto submissions_before = transport.coreSubmissions();
         const auto document = MakeCompletePsbt(); const auto path = directory.filePath("not-read.psbt");
         QCOMPARE(WritePsbtFile(document,path),QString{});
@@ -651,40 +715,185 @@ private Q_SLOTS:
         QVERIFY(!model->requestCopyToClipboard()); QVERIFY(!model->requestSignWithPassphrase(QStringLiteral("unused")));
         QCOMPARE(model->documentGeneration(),generation);
         if (mode == 1) model->close();
-        if (mode == 2) transport.rejectLane(execution::Lane::Core);
+        if (mode == 2) transport.reject_core = true;
+        if (mode == 3) transport.reject_utility = true;
         if (mode != 0) {
             const auto ticket = model->requestLoadFromFile(path);
             QCOMPARE(bool(ticket),mode != 1 && mode != 6);
         }
+        if (mode == 2) { transport.drain(); publish_all(); }
         QVERIFY(!model->busy()); QVERIFY(!model->loaded());
         QVERIFY(!model->canSign()); QVERIFY(!model->canBroadcast());
         QVERIFY(wallet->sign_args.empty()); QCOMPARE(wallet->private_accesses,0);
         QVERIFY(!QFile::exists(directory.filePath("not-written.psbt")));
-        if (mode == 2) QCOMPARE(model->error(),QStringLiteral("The PSBT action could not start. Try again."));
+        if (mode == 2) QCOMPARE(model->error(),QStringLiteral("The PSBT action did not start."));
+        if (mode == 3) QCOMPARE(model->error(),QStringLiteral("The PSBT action could not start. Try again."));
         if (mode == 5) QCOMPARE(model->error(),QStringLiteral("The wallet session is unavailable."));
         if (mode == 1) QCOMPARE(model->phase(),PsbtQmlModel::Phase::Closed);
-        model.reset(); if (opening) opening->retire(); transport.drain(); publish_all(); transport.drain();
+        model.reset(); if (opening) opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         QCOMPARE(transport.coreSubmissions()-submissions_before,mode == 2 ? size_t{1} : size_t{0});
         QVERIFY(transport.quiescent());
     }
 
+    void detachedPsbtReadsOnUtilityAndInspectsTheCapturedDocumentOnCore()
+    {
+        using execution::Lane;
+        ManualStartupExecution worker;
+        const auto core = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        std::deque<std::function<void()>> publications;
+        const auto publish = [&] {
+            while (!publications.empty()) {
+                auto turn = std::move(publications.front());
+                publications.pop_front();
+                turn();
+            }
+        };
+        PsbtQmlModel model{false, nullptr};
+        const auto cleanup = qScopeGuard([&] { model.close(); worker.drain(); publish(); });
+        auto values = std::make_shared<execution::ValueCleanupQueue>(utility);
+        model.setFeeServices({{}, [&](auto turn) { publications.push_back(std::move(turn)); }, {}, core, utility, [values](auto cleanup) { return values->hold(std::move(cleanup)); }});
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("detached.psbt");
+        const auto original = MakeCompletePsbt();
+        QCOMPARE(WritePsbtFile(original, path), QString{});
+
+        QVERIFY(model.requestLoadFromFile(path));
+        QVERIFY(!worker.step(Lane::Core));
+        QVERIFY(worker.step(Lane::Utility));
+        QVERIFY(QFile::remove(path));
+        QVERIFY(worker.step(Lane::Core));
+        QVERIFY(!model.loaded());
+        QVERIFY(worker.step(Lane::Utility));
+        QVERIFY(!model.loaded());
+        while (worker.step(Lane::Utility)) QVERIFY(!model.loaded());
+        publish();
+        QVERIFY(model.loaded());
+        QCOMPARE(PsbtQmlModel::SerializePsbtRaw(*model.psbt()), PsbtQmlModel::SerializePsbtRaw(original));
+        QCOMPARE(worker.coreSubmissions(), size_t{1});
+
+        model.requestSummaryWindow(0, 1);
+        QVERIFY(model.summaryPending());
+        QVERIFY(!worker.step(Lane::Core));
+        QVERIFY(worker.step(Lane::Utility));
+        QVERIFY(model.summaryPending());
+        while (worker.step(Lane::Utility)) QVERIFY(model.summaryPending());
+        publish();
+        QVERIFY(!model.summaryPending());
+        QVERIFY(model.summaryError().isEmpty());
+        QCOMPARE(model.summary().size(), 1);
+        model.close();
+        worker.drain();
+        publish();
+        worker.drain();
+        QVERIFY(worker.quiescent());
+
+        // The standalone wallet facade still offers a file request when no
+        // wallet is loaded and drains its detached PSBT aliases on shutdown.
+        WalletQmlModel detached;
+        QCOMPARE(WritePsbtFile(original, path), QString{});
+        const auto request = detached.requestImportPsbtFromFile(path);
+        QVERIFY(request);
+        QVERIFY(detached.psbtActionBusy());
+        QTRY_VERIFY(!detached.psbtActionBusy());
+        QCOMPARE(detached.psbtActionId(), request);
+        QCOMPARE(detached.psbtActionState(), WalletQmlModel::PsbtActionState::PsbtFailed);
+        QCOMPARE(detached.psbtActionError(), QStringLiteral("No wallet is loaded."));
+        QVERIFY(!detached.currentTransaction());
+
+        auto* standalone = detached.importedPsbt();
+        QCOMPARE(AwaitLoad(*standalone, path), QString{});
+        const auto serialized = PsbtQmlModel::SerializePsbtRaw(original);
+        auto document = standalone->document();
+        QVERIFY(document);
+        detached.beginShutdown();
+        QCoreApplication::processEvents();
+        QVERIFY(!detached.shutdownComplete());
+        QCOMPARE(PsbtQmlModel::SerializePsbtRaw(*document), serialized);
+        document.reset();
+        QTRY_VERIFY(detached.shutdownComplete());
+    }
+
+    void walletPsbtDocumentUsesSessionWithSchedulerClosed()
+    {
+        using execution::Lane;
+        ManualStartupExecution worker;
+        auto opening = MakeWalletSession(worker.executor(), [] {});
+        PsbtQmlModel model{true, nullptr};
+        bool drained{false};
+        const auto cleanup = qScopeGuard([&] {
+            model.close();
+            opening->stop(false, [&] { drained = true; });
+            worker.drain();
+            QVERIFY(drained);
+        });
+        QVERIFY(opening->start(std::make_shared<PsbtTestWallet>()));
+        worker.drain();
+        opening->take();
+        model.configureSession(opening, {{}, presentation::QueuedPost()});
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("wallet.psbt");
+        const auto original = MakeUnsignedPsbt();
+        QCOMPARE(WritePsbtFile(original, path), QString{});
+        QVERIFY(model.requestLoadFromFile(path));
+        QVERIFY(model.busy());
+        worker.drain();
+        QTRY_VERIFY(model.loaded() && model.canSign());
+        QCOMPARE(PsbtQmlModel::SerializePsbtRaw(*model.psbt()), PsbtQmlModel::SerializePsbtRaw(original));
+        worker.drain();
+        model.requestSummaryWindow(0, 1);
+        QVERIFY(model.summaryPending());
+        QVERIFY(!worker.step(Lane::Core));
+        QVERIFY(worker.step(Lane::Utility));
+        QTRY_VERIFY(!model.summaryPending());
+        QVERIFY(model.summaryError().isEmpty());
+        QCOMPARE(model.summary().size(), 1);
+
+        worker.reject_utility = true;
+        model.requestSummaryWindow(0, 1);
+        QTRY_VERIFY(!model.summaryPending());
+        QVERIFY(!model.summaryError().isEmpty());
+        model.requestSummaryWindow(0, 1);
+        worker.drain();
+        QTRY_VERIFY(!model.summaryPending());
+        QVERIFY(model.summaryError().isEmpty());
+        QCOMPARE(model.summary().size(), 1);
+
+        auto document = model.document();
+        QVERIFY(document);
+        model.close();
+        opening->stop(false, [&] { drained = true; });
+        worker.drain();
+        QVERIFY(!drained);
+        QCOMPARE(PsbtQmlModel::SerializePsbtRaw(*document), PsbtQmlModel::SerializePsbtRaw(original));
+        document.reset();
+        worker.drain();
+        QVERIFY(drained);
+    }
+
     void manualLoadReadsPathOnItsOriginalCoreTurn()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto model = std::make_unique<PsbtQmlModel>(false,nullptr);
         const auto publish_all = [&] { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } };
         const auto cleanup = qScopeGuard([&] { model.reset(); transport.drain(); publish_all(); transport.drain(); });
-        model->setFeeServices({transport.scheduler,{},[&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->setFeeServices(ManualPsbtServices(transport, publications));
         auto original = MakeCompletePsbt(); auto replaced = original; replaced.outputs[0].amount=1'200;
         const auto path = directory.filePath("read-on-core.psbt");
         QCOMPARE(WritePsbtFile(original,path),QString{});
         QVERIFY(model->requestLoadFromFile(path));
         QCOMPARE(WritePsbtFile(replaced,path),QString{});
         QVERIFY(!model->loaded());
+        QVERIFY(!transport.step(execution::Lane::Core));
+        QVERIFY(transport.step(execution::Lane::Utility));
+        QCOMPARE(WritePsbtFile(original,path),QString{});
         QVERIFY(transport.step(execution::Lane::Core)); QVERIFY(!model->loaded());
-        QVERIFY(transport.step(execution::Lane::Domain)); QVERIFY(!model->loaded());
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
+        QVERIFY(!model->loaded());
         publish_all(); transport.drain();
         QVERIFY(model->loaded());
         QCOMPARE(PsbtQmlModel::SerializePsbtRaw(*model->psbt()),PsbtQmlModel::SerializePsbtRaw(replaced));
@@ -693,23 +902,22 @@ private Q_SLOTS:
 
     void manualReadRetirementReportsNotStarted()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         auto wallet = std::make_shared<PsbtTestWallet>();
-        auto opening = std::make_shared<walletopening::Session>(transport.scheduler,transport.scheduler,
-            std::make_shared<std::atomic_bool>(false),[] {});
+        auto opening = MakeWalletSession(transport.executor(), [] {});
         QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto model = std::make_unique<PsbtQmlModel>(true,nullptr);
         const auto publish_all = [&] { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } };
         const auto cleanup = qScopeGuard([&] {
-            model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+            model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         });
-        model->configureSession(opening,{transport.scheduler,{},[&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->configureSession(opening,{{},[&](auto turn) { publications.push_back(std::move(turn)); }});
         const auto ticket = model->requestLoadFromFile(directory.filePath("not-read-after-opening-retirement.psbt"));
         QVERIFY(ticket); QVERIFY(model->busy());
         opening->retire();
-        QVERIFY(transport.step(execution::Lane::Core));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(wallet->sign_args.empty()); QVERIFY(!model->loaded());
         transport.drain();
         QCOMPARE(model->phase(),PsbtQmlModel::Phase::Pending);
@@ -718,7 +926,7 @@ private Q_SLOTS:
         QCOMPARE(model->phase(),PsbtQmlModel::Phase::Failed);
         QCOMPARE(model->error(),QStringLiteral("The PSBT action did not start."));
         QCOMPARE(wallet->private_accesses,0);
-        model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+        model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         QVERIFY(transport.quiescent());
     }
     void assessedScriptsKeepOriginalExportAndBroadcast_data()
@@ -739,7 +947,7 @@ private Q_SLOTS:
         expected_document.inputs[0].redeem_script = original.redeem;
         CMutableTransaction expected;
         QVERIFY(FinalizeAndExtractPSBT(expected_document, expected));
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         auto wallet = std::make_shared<PsbtTestWallet>();
         wallet->private_keys_disabled = true;
@@ -754,11 +962,10 @@ private Q_SLOTS:
             submitted = std::move(transaction);
             return node::TransactionError::OK;
         };
-        auto opening = std::make_shared<walletopening::Session>(transport.scheduler, transport.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        auto opening = MakeWalletSession(transport.executor(), [] {});
         QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
         auto model = std::make_unique<PsbtQmlModel>(true, &node);
-        model->configureSession(opening, {transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->configureSession(opening, {{}, [&](auto turn) { publications.push_back(std::move(turn)); }});
         const auto publish_all = [&] {
             while (!publications.empty()) {
                 auto turn = std::exchange(publications.front(), {});
@@ -766,16 +973,18 @@ private Q_SLOTS:
             }
         };
         const auto cleanup = qScopeGuard([&] {
-            model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+            model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto source_path = directory.filePath("original.psbt");
         QCOMPARE(WritePsbtFile(original.document, source_path), QString{});
         QVERIFY(model->requestLoadFromFile(source_path));
+        QVERIFY(!transport.step(execution::Lane::Core));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.step(execution::Lane::Core));
         QCOMPARE(wallet->sign_args, std::vector<bool>{false});
         QVERIFY(!model->loaded());
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(!model->loaded());
         publish_all(); transport.drain();
         QVERIFY(model->complete()); QVERIFY(model->canBroadcast()); QVERIFY(!model->canSign());
@@ -792,10 +1001,10 @@ private Q_SLOTS:
         QCOMPARE(wallet->derivation_args, (std::vector<bool>{false}));
         QCOMPARE(wallet->unlock_calls, 0); QCOMPARE(wallet->lock_calls, 0); QVERIFY(wallet->locked);
         QVERIFY(!model->submitted());
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (!model->submitted()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(model->submitted()); // Receipt survives observer close and held GUI.
         QCOMPARE(psbtwork::SerializeRaw(original.document), raw);
-        model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+        model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         QVERIFY(transport.quiescent());
     }
     void assessedBroadcastUsesTheReviewedRevision_data()
@@ -816,7 +1025,7 @@ private Q_SLOTS:
         expected_document.inputs[0].redeem_script = original.redeem;
         CMutableTransaction expected;
         QVERIFY(FinalizeAndExtractPSBT(expected_document, expected));
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         auto wallet = std::make_shared<PsbtTestWallet>();
         wallet->private_keys_disabled = true;
@@ -831,11 +1040,10 @@ private Q_SLOTS:
             submitted = std::move(transaction);
             return node::TransactionError::OK;
         };
-        auto opening = std::make_shared<walletopening::Session>(transport.scheduler, transport.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        auto opening = MakeWalletSession(transport.executor(), [] {});
         QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
         auto model = std::make_unique<PsbtQmlModel>(true, &node);
-        model->configureSession(opening, {transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->configureSession(opening, {{}, [&](auto turn) { publications.push_back(std::move(turn)); }});
         const auto publish_all = [&] {
             while (!publications.empty()) {
                 auto turn = std::exchange(publications.front(), {});
@@ -843,16 +1051,18 @@ private Q_SLOTS:
             }
         };
         const auto cleanup = qScopeGuard([&] {
-            model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+            model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto source_path = directory.filePath("original.psbt");
         QCOMPARE(WritePsbtFile(original.document, source_path), QString{});
         QVERIFY(model->requestLoadFromFile(source_path));
+        QVERIFY(!transport.step(execution::Lane::Core));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.step(execution::Lane::Core));
         QCOMPARE(wallet->sign_args, std::vector<bool>{false});
         QVERIFY(!model->loaded());
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(!model->loaded());
         publish_all(); transport.drain();
         QVERIFY(model->complete()); QVERIFY(model->canBroadcast()); QVERIFY(!model->canSign());
@@ -872,10 +1082,10 @@ private Q_SLOTS:
         QCOMPARE(wallet->derivation_args, (std::vector<bool>{false}));
         QCOMPARE(wallet->unlock_calls, 0); QCOMPARE(wallet->lock_calls, 0); QVERIFY(wallet->locked);
         QVERIFY(!model->submitted());
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (!model->submitted()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(model->submitted()); // Receipt survives observer close and held GUI.
         QCOMPARE(psbtwork::SerializeRaw(original.document), raw);
-        model.reset(); opening->retire(); transport.drain(); publish_all(); transport.drain();
+        model.reset(); opening->stop(false, {}); transport.drain(); publish_all(); transport.drain();
         QVERIFY(transport.quiescent());
     }
     void authenticatedIncompleteDocumentStillNeedsSigningAuthority_data()
@@ -913,28 +1123,78 @@ private Q_SLOTS:
     }
     void capturedLongPasswordUsesOriginalActionAndNativeMaterialization()
     {
-        QFETCH(bool,close_before_effect);ManualExecutionEnvironment environment;
-        auto wallet=std::make_shared<PsbtTestWallet>();wallet->encrypted=true;wallet->locked=true;
-        wallet->expected_password=std::string(40'000,'x');
-        auto opening=std::make_shared<walletopening::Session>(environment.scheduler,environment.scheduler,std::make_shared<std::atomic_bool>(false),[]{});
-        QVERIFY(opening->start(wallet));environment.drain();opening->take();
-        PsbtQmlModel model{true,nullptr};model.configureSession(opening,{environment.scheduler,{},[&](auto turn){environment.post(std::move(turn));}});
-        QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("long-secret.psbt");
-        QCOMPARE(WritePsbtFile(MakeUnsignedPsbt(),path),QString{});
-        QVERIFY(model.requestLoadFromFile(path));environment.drain();environment.publishAll();QVERIFY(model.canSign());
-        QString original=QString::fromStdString(wallet->expected_password);
-        const auto ticket=model.requestSignWithPassphrase(original);QVERIFY(ticket);QCOMPARE(wallet->unlock_calls,0);
-        original.fill(QChar{'y'}); // Editing the source cannot retarget the captured action.
-        if(close_before_effect){model.detachWallet();opening->retire();}
-        QVERIFY(environment.step()); // Core owns materialization, unlock, signing and relock.
-        QCOMPARE(wallet->unlock_calls,1);QCOMPARE(wallet->observed_password,wallet->expected_password);
-        QCOMPARE(wallet->lock_calls,1);QVERIFY(wallet->locked);
-        if(!close_before_effect)QVERIFY(model.busy());
-        environment.drain(); // Actual result recorded while GUI publication remains held.
-        QSignalSpy notices{&model,&PsbtQmlModel::changed};environment.publishAll();
-        if(close_before_effect)QCOMPARE(notices.size(),0);
-        else{QCOMPARE(model.operationId(),ticket);QCOMPARE(model.phase(),PsbtQmlModel::Phase::Ready);QCOMPARE(wallet->private_accesses,0);model.detachWallet();opening->retire();}
-        environment.drain();environment.publishAll();QVERIFY(environment.quiescent());
+        QFETCH(bool, close_before_effect);
+        ManualStartupExecution worker;
+        std::deque<std::function<void()>> publications;
+        const auto publish_all = [&] {
+            while (!publications.empty()) {
+                auto turn = std::move(publications.front());
+                publications.pop_front();
+                turn();
+            }
+        };
+        auto wallet = std::make_shared<PsbtTestWallet>();
+        wallet->encrypted = true;
+        wallet->locked = true;
+        wallet->expected_password = std::string(40'000, 'x');
+        auto opening = MakeWalletSession(worker.executor(), [] {});
+
+        PsbtQmlModel model{true, nullptr};
+        bool drained{false};
+        const auto finish = qScopeGuard([&] {
+            model.detachWallet();
+            opening->stop(false, {});
+            worker.drain();
+            publish_all();
+        });
+        QVERIFY(opening->start(wallet));
+        worker.drain();
+        opening->take();
+        model.configureSession(opening, {{}, [&](auto turn) {
+            publications.push_back(std::move(turn));
+        }});
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("long-secret.psbt");
+        QCOMPARE(WritePsbtFile(MakeUnsignedPsbt(), path), QString{});
+        QVERIFY(model.requestLoadFromFile(path));
+        worker.drain();
+        publish_all();
+        QVERIFY(model.canSign());
+
+        QString original = QString::fromStdString(wallet->expected_password);
+        const auto ticket = model.requestSignWithPassphrase(original);
+        QVERIFY(ticket);
+        QCOMPARE(wallet->unlock_calls, 0);
+        original.fill(QChar{'y'});
+        if (close_before_effect) {
+            model.detachWallet();
+            opening->retire();
+        }
+        QVERIFY(worker.step(execution::Lane::Core));
+        QCOMPARE(wallet->unlock_calls, 1);
+        QCOMPARE(wallet->observed_password, wallet->expected_password);
+        QCOMPARE(wallet->lock_calls, 1);
+        QVERIFY(wallet->locked);
+        if (!close_before_effect) QVERIFY(model.busy());
+
+        worker.drain();
+        QSignalSpy notices{&model, &PsbtQmlModel::changed};
+        publish_all();
+        if (close_before_effect) {
+            QCOMPARE(notices.size(), 0);
+        } else {
+            QCOMPARE(model.operationId(), ticket);
+            QCOMPARE(model.phase(), PsbtQmlModel::Phase::Ready);
+            QCOMPARE(wallet->private_accesses, 0);
+            model.detachWallet();
+        }
+        opening->stop(false, [&] { drained = true; });
+        worker.drain();
+        publish_all();
+        QVERIFY(drained);
+        QVERIFY(worker.quiescent());
     }
 
     void feeProofCannotOutliveDocument_data()
@@ -952,22 +1212,25 @@ private Q_SLOTS:
     void nodeObservationAndSubmissionHaveSeparateHeldOutcomes()
     {
         QFETCH(bool, spend_before_native);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         bool spent{false}; int observations{0};
         MockNode node;
         node.broadcast_transaction_fn = [](CTransactionRef, CAmount, CFeeRate, std::string&) { return node::TransactionError::OK; };
         auto model = std::make_unique<PsbtQmlModel>(false, &node);
-        model->setFeeServices({transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); },
-            [&](CTransactionRef, CAmount) { ++observations; psbtpolicy::Facts facts; facts.observed = true; facts.missing_inputs = spent; return facts; }});
+        auto services = ManualPsbtServices(transport, publications);
+        services.policy = [&](CTransactionRef, CAmount) { ++observations; psbtpolicy::Facts facts; facts.observed = true; facts.missing_inputs = spent; return facts; };
+        model->setFeeServices(std::move(services));
         const auto publish = [&] { while (!publications.empty()) { auto turn = std::exchange(publications.front(), {}); publications.pop_front(); turn(); } };
         const auto cleanup = qScopeGuard([&] { model.reset(); transport.drain(); publish(); transport.drain(); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("policy.psbt");
         QCOMPARE(WritePsbtFile(MakeCompletePsbt(), path), QString{});
         QVERIFY(model->requestLoadFromFile(path)); QCOMPARE(observations, 0);
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.step(execution::Lane::Core)); QCOMPARE(observations, 1); QVERIFY(!model->loaded());
-        QVERIFY(transport.step(execution::Lane::Domain)); QVERIFY(!model->loaded());
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
+        QVERIFY(!model->loaded());
         publish(); transport.drain(); QVERIFY(model->canBroadcast());
         QCOMPARE(model->nodeReadiness(), PsbtQmlModel::NodeReadiness::NoKnownObstacle);
         const auto ticket = model->requestBroadcast(); QVERIFY(ticket); QCOMPARE(observations, 1);
@@ -976,7 +1239,7 @@ private Q_SLOTS:
         QCOMPARE(node.calls.broadcastTransaction.load(), spend_before_native ? 0 : 1);
         QVERIFY(!model->submitted());
         spent = true; // A later observation cannot rewrite the actual effect receipt.
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QCOMPARE(model->submitted(), !spend_before_native);
         QVERIFY(model->busy()); // GUI publication is still held.
         publish(); transport.drain();
@@ -989,7 +1252,7 @@ private Q_SLOTS:
     }
     void acceptedRawResultIsReleasedOnNative()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         MockNode node;
         std::weak_ptr<const CTransaction> native_transaction;
@@ -998,7 +1261,7 @@ private Q_SLOTS:
             return node::TransactionError::OK;
         };
         auto model = std::make_unique<PsbtQmlModel>(false, &node);
-        model->setFeeServices({transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); }});
+        model->setFeeServices(ManualPsbtServices(transport, publications));
         const auto publish = [&] { while (!publications.empty()) { auto turn = std::exchange(publications.front(), {}); publications.pop_front(); turn(); } };
         const auto cleanup = qScopeGuard([&] { model.reset(); transport.drain(); publish(); transport.drain(); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
@@ -1008,19 +1271,20 @@ private Q_SLOTS:
         QVERIFY(model->canBroadcast());
         QVERIFY(model->requestBroadcast());
         QVERIFY(transport.step(execution::Lane::Core)); QVERIFY(!native_transaction.expired());
-        QVERIFY(transport.step(execution::Lane::Domain)); QVERIFY(model->submitted());
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
+        QVERIFY(model->submitted());
         publish();
         // GUI projection releases only the cleanup lease. Actual transaction
         // destruction stays queued until the controlled Native cleanup turn.
         QVERIFY(!native_transaction.expired());
-        for (int step = 0; step < 8 && !native_transaction.expired(); ++step) QVERIFY(transport.step(execution::Lane::Cleanup));
+        for (int step = 0; step < 8 && !native_transaction.expired(); ++step) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(native_transaction.expired());
         transport.drain(); model.reset(); transport.drain(); publish(); transport.drain();
         QVERIFY(transport.quiescent());
     }
     void acceptedBroadcastAndDrainDoNotRequireGuiPublication()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> publications;
         MockNode node;
         QString actually_submitted;
@@ -1029,15 +1293,16 @@ private Q_SLOTS:
             return node::TransactionError::OK;
         };
         PsbtQmlModel model{false, &node};
-        model.setFeeServices({transport.scheduler, {}, [&](auto turn) { publications.push_back(std::move(turn)); }});
+        model.setFeeServices(ManualPsbtServices(transport, publications));
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("complete.psbt");
         QCOMPARE(WritePsbtFile(MakeCompletePsbt(), path), QString{});
         QVERIFY(model.requestLoadFromFile(path));
         QVERIFY(!model.loaded());
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.step(execution::Lane::Core));
         QVERIFY(!model.loaded());
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(!model.loaded()); QCOMPARE(publications.size(), size_t{1});
         auto publish = std::move(publications.front()); publications.pop_front(); publish();
         QVERIFY(model.loaded()); QVERIFY(model.canBroadcast());
@@ -1048,7 +1313,7 @@ private Q_SLOTS:
         QCOMPARE(node.calls.broadcastTransaction.load(), 1);
         QVERIFY(!model.submitted());
         model.detachWallet();
-        QVERIFY(transport.step(execution::Lane::Domain));
+        while (publications.empty()) QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(model.submitted());
         QCOMPARE(model.submittedTxid(), actually_submitted);
         QVERIFY(!model.canBroadcast());
@@ -1060,10 +1325,17 @@ private Q_SLOTS:
     void feeProofCannotOutliveDocument()
     {
         QFETCH(int, scenario);
-        ManualExecutionEnvironment environment;
+        ManualStartupExecution environment;
+        std::deque<std::function<void()>> publications;
+        const auto publish_all = [&] {
+            while (!publications.empty()) {
+                auto publish = std::move(publications.front());
+                publications.pop_front();
+                publish();
+            }
+        };
         auto wallet = std::make_shared<PsbtTestWallet>();
-        auto opening = std::make_shared<walletopening::Session>(environment.scheduler, environment.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        auto opening = MakeWalletSession(environment.executor(), [] {});
         QVERIFY(opening->start(wallet)); environment.drain(); opening->take();
         auto model = std::make_unique<PsbtQmlModel>(true, nullptr);
         auto document = psbtfeefixture::Legacy(2, false);
@@ -1073,26 +1345,28 @@ private Q_SLOTS:
             input.witness_utxo = input.non_witness_utxo->vout[input.prev_out]; input.non_witness_utxo = nullptr;
         }
         int reads{0};
-        model->configureSession(opening, {environment.scheduler,
+        model->configureSession(opening, {
             [&reads, &actual, scenario](const COutPoint& outpoint) -> std::optional<CTxOut> {
                 ++reads;
                 if (scenario == 1) return {};
                 if (scenario == 2) throw std::runtime_error("lookup failed");
                 return actual.at(outpoint);
-            }, [&environment](auto publication) { environment.post(std::move(publication)); }});
+            }, [&](auto publication) { publications.push_back(std::move(publication)); }});
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("needs-proof.psbt");
         QCOMPARE(WritePsbtFile(document, path), QString{});
-        environment.rejectNext(scenario == 3);
+        environment.reject_core = scenario == 3;
         QVERIFY(model->requestLoadFromFile(path));
         QCOMPARE(reads, 0); QVERIFY(!model->loaded()); QVERIFY(!model->canBroadcast());
         if (scenario == 3) {
-            environment.drain(); environment.publishAll();
+            environment.drain(); publish_all();
             QCOMPARE(reads, 0); QVERIFY(!model->loaded()); QVERIFY(!model->error().isEmpty());
         } else {
-            QVERIFY(environment.step()); // Native file/decode/lookup, no GUI publication.
+            QVERIFY(environment.step(execution::Lane::Utility));
+            QCOMPARE(reads, 0);
+            QVERIFY(environment.step(execution::Lane::Core));
             QVERIFY(reads > 0); QVERIFY(!model->loaded());
-            QVERIFY(environment.step()); // Owned Domain result, GUI still held.
+            while (publications.empty()) QVERIFY(environment.step(execution::Lane::Utility));
             QVERIFY(!model->loaded());
             if (scenario == 4) model->clear();
             if (scenario == 5) {
@@ -1103,7 +1377,7 @@ private Q_SLOTS:
             if (scenario == 6) model.reset();
             if (scenario == 7) model->detachWallet();
             if (scenario == 8) { MockNode replacement; model->setNode(&replacement); model->setNode(nullptr); }
-            environment.drain(); environment.publishAll();
+            environment.drain(); publish_all();
             if (scenario == 0) { QVERIFY(model->loaded()); QVERIFY(model->canBroadcast()); }
             if (scenario == 1 || scenario == 2) { QVERIFY(model->loaded()); QVERIFY(!model->canBroadcast()); QVERIFY(!model->error().isEmpty()); }
             if (scenario == 4 || scenario == 7 || scenario == 8) { QVERIFY(!model->loaded()); QVERIFY(!model->canBroadcast()); }
@@ -1111,7 +1385,7 @@ private Q_SLOTS:
         }
         if (model) model->detachWallet();
         model.reset();
-        opening->retire(); environment.drain(); environment.publishAll();
+        opening->stop(false, {}); environment.drain(); publish_all();
         QVERIFY(environment.quiescent());
     }
 
@@ -1345,14 +1619,23 @@ void PsbtQmlModelTests::loadPreservesPsbtMetadata()
     const QString source_path{temp_dir.filePath(QStringLiteral("source.psbt"))};
     QCOMPARE(WritePsbtFile(psbt, source_path), QString{});
 
-    PsbtQmlModel model{false, nullptr};
-    QCOMPARE(AwaitLoad(model, source_path), QString{});
+    auto model = std::make_unique<PsbtQmlModel>(false, nullptr);
+    QCOMPARE(AwaitLoad(*model, source_path), QString{});
 
-    const auto loaded{model.psbt()};
+    auto loaded = model->document();
     QVERIFY(loaded);
     QCOMPARE(loaded->unknown, psbt.unknown);
     QCOMPARE(loaded->inputs[0].unknown, psbt.inputs[0].unknown);
     QCOMPARE(loaded->outputs[0].unknown, psbt.outputs[0].unknown);
+
+    model.reset();
+    const auto joined = std::make_shared<bool>(false);
+    WaitForThreadJoins(this, [joined] { *joined = true; });
+    QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
+    QVERIFY(!*joined);
+    QCOMPARE(loaded->unknown, psbt.unknown);
+    loaded.reset();
+    QTRY_VERIFY(*joined);
 }
 
 void PsbtQmlModelTests::broadcastsCompletePsbt()

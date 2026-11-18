@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/walletregistry.h>
-#include <qml/backendexecutor.h>
-#include <qml/retainedsnapshot.h>
+#include <qml/asyncjoin.h>
+#include <qml/executor.h>
 #include <QCoreApplication>
 #include <QMutexLocker>
 #include <QScopeGuard>
@@ -150,10 +150,10 @@ struct OpenWalletListModel::State {
         return -1;
     }
 };
-OpenWalletListModel::OpenWalletListModel(std::shared_ptr<execution::Scheduler> scheduler, QObject* parent, presentation::Post post)
+OpenWalletListModel::OpenWalletListModel(const WalletRegistry& registry, QObject* parent, presentation::Post post)
     : QAbstractListModel(parent), m_post(presentation::ReliablePost(post ? std::move(post) : presentation::QueuedPost()))
 {
-    m_state = execution::RetainSnapshot<State>(scheduler, [] { return std::make_unique<State>(); });
+    m_state = registry.retain<State>([] { return std::make_unique<State>(); });
 }
 std::shared_ptr<WalletNameRegistry> OpenWalletListModel::nameRegistry() const
 {
@@ -309,7 +309,7 @@ void WalletRegistry::Retirement::watch(WalletQmlModel* model)
     values->alive.emplace(model, model);
     ++native_backends;
     const auto weak = weak_from_this();
-    model->backendExecutor()->whenDrained(bridge.get(), [weak] { if (const auto state = weak.lock()) { --state->native_backends; state->finish(); } });
+    model->whenNativeDrained(*bridge, [weak] { if (const auto state = weak.lock()) { --state->native_backends; state->finish(); } });
     QObject::connect(model, &QObject::destroyed, bridge.get(), [weak, model] {
         if (const auto state = weak.lock(); state && state->values) {
             state->values->alive.erase(model); state->values->retiring.erase(model); state->values->adoptions.erase(model); state->finish();
@@ -358,6 +358,11 @@ void WalletRegistry::Retirement::enqueue()
     post([self] { self->pumping = false; self->pump(); });
 }
 
+void WalletRegistry::Retirement::drainValues(std::function<void()> done)
+{
+    value_cleanup->close(std::move(done));
+}
+
 void WalletRegistry::Retirement::pump()
 {
     if (!started || batches_done || !values) return;
@@ -386,12 +391,14 @@ void WalletRegistry::Retirement::pump()
     if (empty) { adopt(empty, false); empty->beginShutdown(); }
     const auto self = shared_from_this();
     const auto notified = std::make_shared<std::atomic_bool>(false);
-    shutdown([self, notified] {
-        self->post([self, notified] {
-            if (notified->exchange(true)) return;
-            self->native_done = true;
-            if (self->observer) self->host->notice(Notice::NativeDrained);
-            self->finish();
+    drainValues([self, notified] {
+        self->shutdown([self, notified] {
+            self->post([self, notified] {
+                if (notified->exchange(true)) return;
+                self->native_done = true;
+                if (self->observer) self->host->notice(Notice::NativeDrained);
+                self->finish();
+            });
         });
     });
     finish();
@@ -404,6 +411,11 @@ void WalletRegistry::Retirement::finish()
     // Dropping its lease lets the executor finish only after teardown runs.
     values.reset();
     if (!native_done || std::exchange(completed, true)) return;
+    if (auto join = std::exchange(join_when_drained, {})) join();
+    else notifyRetired();
+}
+void WalletRegistry::Retirement::notifyRetired()
+{
     if (empty) { if (observer) empty->setParent(observer); else empty->deleteLater(); }
     if (observer) host->notice(Notice::Retired);
     keep_alive.reset();
@@ -414,7 +426,7 @@ bool WalletRegistry::registerModel(WalletQmlModel* wallet_model, std::shared_ptr
     const auto registry_lifetime = shared_from_this();
     const QPointer<QObject> observer{m_host->owner};
     const QPointer<WalletQmlModel> original{wallet_model};
-    if (!adoption) adoption = retain<OpeningAdoption>(m_services.scheduler, [] { return std::make_unique<OpeningAdoption>(); });
+    if (!adoption) adoption = retain<OpeningAdoption>([] { return std::make_unique<OpeningAdoption>(); });
     if (!adoption || !observer || m_host->stopping() || !original) return false;
     adoption->facade = wallet_model;
     adoption->identity = wallet_model->opening()->identity();
@@ -508,7 +520,6 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
     });
     const auto state = m_retirement;
     const auto values = state->values;
-    const auto scheduler = m_services.scheduler;
     const auto publication = m_host->publicationId();
     const auto current = [&] {
         return guard && !m_host->stopping() && state->values == values && m_host->publicationCurrent(publication);
@@ -565,7 +576,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
     }
     if (mismatched_opening) { m_host->adoptionUnavailable(true); return nullptr; }
     if (!adoption && model) adoption = m_retirement->values->adoptions.at(model);
-    if (!adoption) adoption = retain<OpeningAdoption>(scheduler, [observation] {
+    if (!adoption) adoption = retain<OpeningAdoption>([observation] {
         auto value = std::make_unique<OpeningAdoption>();
         if (observation.unloaded) value->unloaded = observation.unloaded;
         return value;
@@ -573,7 +584,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
     if (!current()) return nullptr;
     if (!adoption) { origin->unavailable = true; m_host->adoptionUnavailable(false); return nullptr; }
     if (!origin->bindings.contains(name)) {
-        auto binding = retain<AdoptionOrigin::Binding>(scheduler, [name, adoption] {
+        auto binding = retain<AdoptionOrigin::Binding>([name, adoption] {
             auto value = std::make_unique<AdoptionOrigin::Binding>(); value->name = name; value->opening = adoption; return value;
         });
         if (!current()) return nullptr;
@@ -679,7 +690,7 @@ void WalletRegistry::observeOpening(const std::shared_ptr<AdoptionOrigin>& sourc
         const auto actual = values->adoptions.find(facade);
         if (actual == values->adoptions.end() || actual->second == opening) return;
         opening = actual->second;
-        binding = retain<AdoptionOrigin::Binding>(m_services.scheduler, [name, opening] {
+        binding = retain<AdoptionOrigin::Binding>([name, opening] {
             auto value = std::make_unique<AdoptionOrigin::Binding>(); value->name = name; value->opening = opening; return value;
         });
         if (!current()) return;
@@ -704,7 +715,6 @@ std::shared_ptr<WalletRegistry::AdoptionOrigin> WalletRegistry::newOrigin()
     const auto sequence = ++m_origin_sequence;
     const auto admission_event = m_adoption_clock->next();
     if (!admission_event) return {};
-    const auto scheduler = m_services.scheduler;
     const auto state = m_retirement;
     const auto values = state->values;
     const auto post = m_services.post;
@@ -716,10 +726,10 @@ std::shared_ptr<WalletRegistry::AdoptionOrigin> WalletRegistry::newOrigin()
     });
     // Keep unregister transport charged until GUI consumption. It owns only
     // metadata, never an idle original action capability or wallet borrower.
-    auto registration = retain<uint64_t>(scheduler, [sequence] { return std::make_unique<uint64_t>(sequence); });
+    auto registration = retain<uint64_t>([sequence] { return std::make_unique<uint64_t>(sequence); });
     if (!registration || !observer || m_host->stopping() || state->values != values) return {};
     const std::weak_ptr<Retirement> weak = state;
-    auto origin = retain<AdoptionOrigin>(scheduler, [sequence, admission_event, weak, registration, post] {
+    auto origin = retain<AdoptionOrigin>([sequence, admission_event, weak, registration, post] {
         auto value = std::make_unique<AdoptionOrigin>();
         value->sequence = sequence;
         value->admission_event = admission_event;
@@ -757,10 +767,9 @@ void WalletRegistry::closeOpening(WalletQmlModel* wallet)
     m_host->prepareForget(wallet);
     wallet->close();
     if (!observer || m_host->stopping() || state->values != values) return;
-    const auto scheduler = m_services.scheduler;
     std::shared_ptr<Retirement::ClosedFence> fence;
     if (m_close_fence_sequence != std::numeric_limits<uint64_t>::max()) {
-        fence = retain<Retirement::ClosedFence>(scheduler, [name, origin_cutoff, cutoff, opening] {
+        fence = retain<Retirement::ClosedFence>([name, origin_cutoff, cutoff, opening] {
             return std::make_unique<Retirement::ClosedFence>(Retirement::ClosedFence{name, origin_cutoff, cutoff, opening});
         });
     }
@@ -784,17 +793,30 @@ WalletRegistry::WalletRegistry(std::shared_ptr<Host> host, Services services)
 {
     m_retirement = std::make_shared<Retirement>();
     m_retirement->shutdown = m_services.shutdown;
+    m_retirement->value_cleanup = std::make_shared<execution::ValueCleanupQueue>(m_services.value_cleanup);
     m_retirement->bridge = m_services.bridge;
     m_retirement->observer = m_host->owner; m_retirement->host = m_host; m_retirement->empty = m_services.empty;
     m_retirement->post = m_services.post;
-    m_retirement->values = execution::RetainSnapshot<Retirement::Values>(m_services.scheduler, [] { return std::make_unique<Retirement::Values>(); });
+    auto release_on_failure = qScopeGuard([this] { m_retirement->values.reset(); });
+    m_retirement->values = retain<Retirement::Values>([] { return std::make_unique<Retirement::Values>(); });
     if (!m_retirement->values) {
         // No catalog or form inventory may be admitted without retained cleanup.
         m_retirement->retained = false; m_retirement->values = std::make_shared<Retirement::Values>();
     }
     m_retirement->watch(m_services.empty);
-    m_open_wallet_model = new OpenWalletListModel(m_services.scheduler, m_host->owner, m_services.post);
+    m_open_wallet_model = new OpenWalletListModel(*this, m_host->owner, m_services.post);
     m_names_registry = m_open_wallet_model->nameRegistry();
+    release_on_failure.dismiss();
+}
+
+WalletRegistry::~WalletRegistry()
+{
+    if (!m_retirement->started) m_retirement->values.reset();
+}
+
+execution::ValueCleanup WalletRegistry::valueCleanup() const
+{
+    return [queue = m_retirement->value_cleanup](auto cleanup) { return queue->hold(std::move(cleanup)); };
 }
 
 bool WalletRegistry::containsExact(WalletQmlModel* wallet) const
@@ -853,15 +875,24 @@ void WalletRegistry::detachPresentation()
     m_open_wallet_model = nullptr;
 }
 void WalletRegistry::detachController() { m_retirement->observer = nullptr; m_host->owner = nullptr; }
-void WalletRegistry::beginRetirement()
+void WalletRegistry::beginRetirement(std::shared_ptr<execution::Executor> executor,
+                                     std::function<void(std::function<void()>)> notification_retirement)
 {
     auto state = m_retirement; state->keep_alive = state; state->started = true;
+    if (notification_retirement) {
+        state->shutdown = [retire = std::move(notification_retirement), shutdown = std::move(state->shutdown)](auto done) {
+            retire([shutdown, done = std::move(done)]() mutable { shutdown(std::move(done)); });
+        };
+    }
+    if (executor) {
+        state->join_when_drained = JoinThreadAfterDrain([executor = std::move(executor)] { executor->stopAndJoin(); },
+            state->bridge.get(), [state] { state->notifyRetired(); });
+    }
     state->values->pending = std::move(m_wallets);
     state->values->forms = std::move(m_forms);
     state->values->names = std::move(m_wallet_names);
     state->values->positions = std::move(m_wallet_positions);
     state->values->information = std::move(m_wallet_information);
-    m_services.scheduler->stopAcceptingWork();
     state->enqueue(); // Every original resource is escrowed before publication.
 }
 void WalletRegistry::registerForm(QObject* form, std::function<void()> close)
@@ -911,7 +942,8 @@ std::shared_ptr<walletpublication::CatalogReservation> WalletRegistry::reserveCr
     if (!m_host->owner || m_host->stopping() || m_adoption_depth || !m_retirement->retained) return {};
     auto origin = newOrigin();
     if (!origin || !m_host->owner || m_host->stopping()) return {};
-    auto observation = retain<walletpublication::NativeObservation>(m_services.scheduler, [clock = m_adoption_clock] { return std::make_unique<walletpublication::NativeObservation>(clock); });
+    const auto make_observation = [clock = m_adoption_clock] { return std::make_unique<walletpublication::NativeObservation>(clock); };
+    auto observation = retain<walletpublication::NativeObservation>(make_observation);
     if (!observation) return {};
     auto release = std::make_shared<ResultLifetime>(); origin->result_lifetime = release;
     auto ticket = std::make_shared<RegistryCreationReservation>(operation_id, std::move(release), std::move(observation), weak_from_this(), origin);

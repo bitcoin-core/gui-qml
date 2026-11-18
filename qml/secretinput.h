@@ -3,13 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_SECRETINPUT_H
 #define BITCOIN_QML_SECRETINPUT_H
-#include <qml/execution.h>
 #include <support/allocators/secure.h>
 #include <QString>
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <utility>
+
+namespace walletopening { class Session; }
 
 namespace secretinput {
 enum class Error { None, Unavailable, TransportBudget, Materialization };
@@ -40,7 +42,8 @@ struct CaptureResult {
     explicit operator bool() const { return bool(input) && error == Error::None; }
 };
 // O(1) metadata admission. result.bytes is the retained secret's accounted size.
-CaptureResult Capture(const std::shared_ptr<execution::Scheduler>& scheduler, const QString& text);
+CaptureResult Capture(const std::function<std::shared_ptr<void>(std::function<void()>)>& hold, const QString& text);
+CaptureResult Capture(const std::shared_ptr<walletopening::Session>& opening, const QString& text);
 size_t Bytes(const Captured& input);
 SecureString Materialize(const Captured& input);
 }

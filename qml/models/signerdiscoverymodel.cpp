@@ -2,24 +2,57 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/signerdiscoverymodel.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <QRegularExpression>
 #include <QTimer>
+#include <mutex>
+#include <stdexcept>
 #include <utility>
 namespace {
 SignerDiscoveryError Error(const signerdiscovery::Result& result) { return {static_cast<SignerDiscoveryError::Code>(result.error), result.message}; }
+
+signerdiscovery::Reader::Submit SubmitToQueues(execution::SerialQueue worker, std::shared_ptr<execution::SerialQueue> outcomes)
+{
+    using namespace execution;
+    return [worker = std::make_shared<SerialQueue>(std::move(worker)), outcomes = std::move(outcomes),
+            decision = std::make_shared<std::recursive_mutex>()](std::shared_ptr<Task> task, Lane lane) {
+        bool accepted;
+        if (lane == Lane::Domain) {
+            accepted = outcomes->post([task = std::move(task), decision] {
+                std::lock_guard lock{*decision};
+                task->execute();
+                task->deliver();
+            });
+        } else {
+            accepted = worker->post([task = std::move(task), outcomes, decision] {
+                task->execute();
+                const auto deliver = [task, decision] {
+                    std::lock_guard lock{*decision};
+                    task->deliver();
+                };
+                // Preserve the actual outcome if the transport refuses its
+                // handoff. Decisions still run one at a time.
+                if (!outcomes->post(deliver)) deliver();
+            });
+        }
+        return SubmitResult{{}, accepted ? Rejection::None : Rejection::Transport};
+    };
+}
 }
 SignerDiscoveryModel::ConfigurationDrain::~ConfigurationDrain() { if (notify) notify(); }
 SignerDiscoveryModel::SignerDiscoveryModel(Services services, QObject* parent)
     : QAbstractListModel(parent), m_services(std::move(services)), m_bridge(presentation::MakeGuiObject())
 {
-    if (!m_services.discovery.scheduler) { m_executor = std::make_shared<BackendExecutor>(execution::Options{}); m_services.discovery.scheduler = m_executor->scheduler(); }
-    if (!m_services.configuration.scheduler) { m_config_executor = std::make_shared<BackendExecutor>(execution::Options{}); m_services.configuration.scheduler = m_config_executor->scheduler(); }
-    if (!m_services.discovery.post) m_services.discovery.post = [bridge = m_bridge](auto work) { QMetaObject::invokeMethod(bridge.get(), std::move(work), Qt::QueuedConnection); };
-    if (!m_services.configuration.post) m_services.configuration.post = m_services.discovery.post;
-    m_services.discovery.post = presentation::ReliablePost(std::move(m_services.discovery.post));
-    m_services.configuration.post = presentation::ReliablePost(std::move(m_services.configuration.post));
+    if (!m_services.executor) throw std::invalid_argument{"Signer discovery requires an executor"};
+    auto& executor = *m_services.executor;
+    auto outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+    auto discovery_submit = SubmitToQueues(executor.makeQueue(execution::Lane::Utility, execution::UtilityWorker::Signer), outcomes);
+    m_configuration_submit = SubmitToQueues(executor.makeQueue(execution::Lane::Core), std::move(outcomes));
+    if (!m_services.discovery_post) m_services.discovery_post = [bridge = m_bridge](auto work) { QMetaObject::invokeMethod(bridge.get(), std::move(work), Qt::QueuedConnection); };
+    if (!m_services.configuration_post) m_services.configuration_post = m_services.discovery_post;
+    m_services.discovery_post = presentation::ReliablePost(std::move(m_services.discovery_post));
+    m_services.configuration_post = presentation::ReliablePost(std::move(m_services.configuration_post));
     if (!m_services.retire) m_services.retire = presentation::QueuedPost();
     m_services.retire = presentation::ReliablePost(std::move(m_services.retire));
     if (!m_services.arm) {
@@ -31,13 +64,13 @@ SignerDiscoveryModel::SignerDiscoveryModel(Services services, QObject* parent)
     m_configuration_drain = std::make_shared<ConfigurationDrain>([observer, post = m_services.retire] {
         post([observer] { if (observer) { observer->m_configuration_drained = true; observer->finishDrain(); } });
     });
-    m_configuration_reader = std::make_shared<signerdiscovery::Reader>(m_services.configuration.scheduler,
+    m_configuration_reader = std::make_shared<signerdiscovery::Reader>(m_configuration_submit,
         [ports = m_services.ports, drain = m_configuration_drain]() -> signerdiscovery::Result {
             if (!ports.configuration) return {{}, {}, signerdiscovery::Error::Unavailable, tr("The effective signer configuration is unavailable.")};
             return {ports.configuration(), {}, signerdiscovery::Error::None, {}};
-        }, [observer, drain = m_configuration_drain, post = m_services.configuration.post] { post([observer] { if (observer) observer->publishConfiguration(); }); });
-    m_reader = std::make_shared<signerdiscovery::Reader>(m_services.discovery.scheduler, [ports = m_services.ports] { return signerdiscovery::Discover(ports); },
-        [observer, post = m_services.discovery.post] { post([observer] { if (observer) observer->publish(); }); },
+        }, [observer, drain = m_configuration_drain, post = m_services.configuration_post] { post([observer] { if (observer) observer->publishConfiguration(); }); });
+    m_reader = std::make_shared<signerdiscovery::Reader>(std::move(discovery_submit), [ports = m_services.ports] { return signerdiscovery::Discover(ports); },
+        [observer, post = m_services.discovery_post] { post([observer] { if (observer) observer->publish(); }); },
         [observer, post = m_services.retire] { post([observer] { if (observer) { observer->m_discovery_drained = true; observer->finishDrain(); } }); });
 }
 SignerDiscoveryModel::~SignerDiscoveryModel() { close(); }
@@ -92,10 +125,12 @@ bool SignerDiscoveryModel::apply()
     ++m_configuration_revision;
     const QPointer<SignerDiscoveryModel> observer{this};
     const auto drain = m_configuration_drain;
-    m_save = std::make_shared<execution::OwnedCommand<signerdiscovery::Result>>(m_services.configuration.scheduler,
-        [observer, drain, post = m_services.configuration.post] { post([observer] { if (observer) observer->saved(); }); });
-    const auto command = m_edited;
-    const auto admitted = m_save->start([save = m_services.ports.save, command, drain] { return save(command); }, {execution::Lane::Core, {}, execution::WorkClass::Action});
+    m_save = std::make_shared<execution::OwnedCommand<signerdiscovery::Result>>(
+        [observer, drain, post = m_services.configuration_post] { post([observer] { if (observer) observer->saved(); }); });
+    const auto effect = [save = m_services.ports.save, command = m_edited, drain] { return save(command); };
+    const auto admitted = m_save->startWith([&](auto done, auto failed) {
+        return m_configuration_submit(execution::MakeTask(effect, std::move(done), std::move(failed)), execution::Lane::Core);
+    });
     if (!admitted) { m_saving = false; m_fresh = m_read_fresh; m_save.reset(); reject(QStringLiteral("apply"), {SignerDiscoveryError::Rejected, tr("The signer setting could not be changed. Try again.")}); }
     if (observer && !m_closed) Q_EMIT changed();
     return bool(admitted);
@@ -198,8 +233,6 @@ void SignerDiscoveryModel::close()
     m_configuration_reader->close(); m_configuration_reader.reset();
     m_save.reset();
     m_configuration_drain.reset();
-    if (m_executor) m_executor->shutdown();
-    if (m_config_executor) m_config_executor->shutdown();
     Q_EMIT changed();
 }
 void SignerDiscoveryModel::finishDrain()

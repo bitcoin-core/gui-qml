@@ -4,7 +4,10 @@
 #include <qml/models/activitydetailmodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletqmlmodel.h>
+#include <test/mocks/walletmodelservices.h>
 #include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/manualwalletdrain.h>
 #include <test/mocks/mockwallet.h>
 #include <core_io.h>
 #include <key_io.h>
@@ -94,10 +97,11 @@ struct Native final : StubWallet {
 };
 struct Fixture {
     ManualExecutionEnvironment env;
+    ManualStartupExecution worker;
     std::shared_ptr<Native> native;
     std::unique_ptr<WalletQmlModel> wallet;
     std::unique_ptr<TransactionActivityModel> source;
-    std::shared_ptr<BackendExecutor> backend;
+    std::shared_ptr<const bool> native_drained;
     std::unique_ptr<ActivityDetailModel> view(QObject& owner) {
         std::unique_ptr<ActivityDetailModel> result{source->createDetailView(&owner)};
         if (result) result->setActive(true);
@@ -105,11 +109,10 @@ struct Fixture {
     }
     explicit Fixture(int count=2) : native(std::make_shared<Native>(count)) {
         FeeReadServices fees;
-        fees.scheduler=env.scheduler;
         fees.post=[this](auto turn){env.post(std::move(turn));};
         fees.timer=std::shared_ptr<FeeReadTimer>{&env,[](auto*){}};
-        wallet=std::make_unique<WalletQmlModel>(WalletQmlModel::SharedWallet{native,env.scheduler},nullptr,std::move(fees),psbtfee::Services{},backup::Services{});
-        backend=wallet->backendExecutor();
+        wallet=std::make_unique<WalletQmlModel>(WalletWithQueues(native,worker.executor()),nullptr,std::move(fees),psbtfee::Services{},backup::Services{});
+        native_drained = WatchWalletNativeDrain(*wallet);
         if(!QTest::qWaitFor([this]{settle();
             return wallet->capabilitiesKnown()&&wallet->property("receiveRequestsLoaded").toBool()&&!wallet->receiveRequestReconciliationPending();},5000))QTest::qFail("Opening did not become ready",__FILE__,__LINE__);
         TransactionActivityModel::Services services;
@@ -120,16 +123,16 @@ struct Fixture {
         settle();
     }
     void settle() {
-        for(int round=0;round<64;++round){env.drain();
+        for(int round=0;round<64;++round){worker.drain();
             env.publishAll();
             QCoreApplication::processEvents();
-            if(env.turnsIdle()&&env.publicationsIdle()&&(!source||!source->loading()))return;}
+            if(worker.quiescent()&&env.publicationsIdle()&&(!source||!source->loading()))return;}
     }
     ~Fixture() {
         source.reset();
         wallet->beginShutdown();
         if(!QTest::qWaitFor([this]{settle();
-            return backend->isDrained()&&env.turnsIdle()&&env.publicationsIdle();},10000))QTest::qFail("Shared opening failed physical retirement",__FILE__,__LINE__);
+            return *native_drained&&worker.quiescent()&&env.publicationsIdle();},10000))QTest::qFail("Shared opening failed physical retirement",__FILE__,__LINE__);
         wallet.reset();
         settle();
     }
@@ -154,17 +157,11 @@ private Q_SLOTS:
         auto view=f.view(owner);
         const auto reads=f.native->detail_reads.load();
         view->setTransactionId(Id(f.native->first));
-        QVERIFY(f.env.queuedTurnCount()>=2);
-        auto held_core=f.env.takeTurnFront();
-        QVERIFY(held_core);
-        auto core=std::move(*held_core); // The original public read stays physically held.
-        const auto release_core=qScopeGuard([&] {
-            if (core.turn) {
-                auto turn=std::exchange(core.turn,{});
-                turn();
-            }
-        });
-        f.env.drain();
+        QVERIFY(f.worker.hasWork(execution::Lane::Utility));
+        auto core = f.worker.take(execution::Lane::Core);
+        QVERIFY(core);
+        const auto release_core = qScopeGuard([&] { if (core) core(); });
+        f.worker.drain();
         QCOMPARE(f.native->detail_reads.load(),reads);
         QCOMPARE(view->detailOutputs()->rowCount(),0); // GUI preview also held.
         if (!full_gui_first) {
@@ -175,15 +172,15 @@ private Q_SLOTS:
             QVERIFY(!view->selectedTransactionDetails().value("flow").toMap().value("inputs").toList().front().toMap().value("amountKnown").toBool());
             QVERIFY(!view->selectedTransactionDetails().value("canBump").toBool());
             QVERIFY(view->requestEntryDetails("outputs",0));
-            f.env.drain();
+            f.worker.drain();
             f.env.publishAll();
             QCOMPARE(EntryField(*view,"amountSat"),QStringLiteral("1001"));
             QCOMPARE(EntryField(*view,"index"),QStringLiteral("0"));
             QCOMPARE(f.native->detail_reads.load(),reads); // Entry observation never unblocks/reads Core.
         }
-        auto finish_core=std::exchange(core.turn,{});
+        auto finish_core=std::exchange(core,{});
         finish_core();
-        f.env.drain();
+        f.worker.drain();
         QCOMPARE(f.native->detail_reads.load(),reads+1);
         if (full_gui_first) {
             QCOMPARE(f.env.publicationCount(),size_t{2});
@@ -210,7 +207,7 @@ private Q_SLOTS:
         f.source->setDisplayUnit(3); // Desired SAT unit; its Domain projection stays held.
         auto view=f.view(owner);
         view->setTransactionId(id);
-        f.env.drain();
+        f.worker.drain();
         f.env.publishAll(); // Admits source projection but does not run it.
         QCOMPARE(view->state(),ActivityDetailModel::Ready);
         QCOMPARE(view->selectedTransactionDetails().value("amount").toString(),original_amount);
@@ -240,7 +237,7 @@ private Q_SLOTS:
         QVERIFY(first->pending());
         QVERIFY(second->pending());
         QCOMPARE(first->detailOutputs()->rowCount(),0);
-        f.env.drain();
+        f.worker.drain();
         QCOMPARE(first->detailOutputs()->rowCount(),0);
         QCOMPARE(second->detailOutputs()->rowCount(),0);
         QCOMPARE(f.native->detail_reads.load(),reads+2);
@@ -279,7 +276,7 @@ private Q_SLOTS:
         QCOMPARE(second->detailOutputs()->data(second->detailOutputs()->index(0,0),Qt::UserRole).toMap().value("amountSat").toLongLong(),qint64{1002});
         QCOMPARE(RawRows(*second),QString::fromStdString(EncodeHexTx(*f.native->second.tx)));
         first->setActive(true);
-        f.env.drain();
+        f.worker.drain();
         first.reset();
         f.env.publishAll();
         f.native->depth=9;
@@ -297,7 +294,7 @@ private Q_SLOTS:
         QObject owner;
         std::unique_ptr<ActivityDetailModel> old{f.view(owner)};
         old->setTransactionId(Id(f.native->first));
-        f.env.drain();
+        f.worker.drain();
         old->setTransactionId(Id(f.native->second));
         f.env.publishAll();
         QVERIFY(old->pending());
@@ -305,7 +302,7 @@ private Q_SLOTS:
         f.settle();
         QCOMPARE(old->selectedTransactionDetails().value("txid").toString(),Id(f.native->second));
         old->reload();
-        f.env.drain();
+        f.worker.drain();
         f.wallet->beginShutdown();
         f.source->close();
         const auto publications=f.env.publicationCount();
@@ -336,7 +333,7 @@ private Q_SLOTS:
         std::unique_ptr<ActivityDetailModel> first{f.view(owner)},second{f.view(owner)};
         first->setTransactionId(Id(f.native->first));
         second->setTransactionId(Id(f.native->second));
-        f.env.drain();
+        f.worker.drain();
         QVERIFY(!f.env.publicationsIdle());
         QSignalSpy first_changed{first.get(),&ActivityDetailModel::transactionDetailsChanged};
         QSignalSpy second_changed{second.get(),&ActivityDetailModel::transactionDetailsChanged};
@@ -359,8 +356,8 @@ private Q_SLOTS:
         second.reset();
         f.source.reset();
         QVERIFY(QTest::qWaitFor([&]{f.settle();
-            return f.backend->isDrained();},5000));
-        QCOMPARE(f.env.scheduler->pending(),size_t{0});
+            return *f.native_drained;},5000));
+        QVERIFY(f.worker.quiescent());
     }
     void identitySignalCannotExposeOrAdmitThePreviousTransaction()
     {
@@ -409,21 +406,21 @@ private Q_SLOTS:
         f.wallet->beginShutdown();
         f.source->close();
         QCOMPARE(view->state(),ActivityDetailModel::Closed);
-        QVERIFY(f.env.scheduler->pending()>0);
+        QVERIFY(!*f.native_drained);
         QCOMPARE(QGuiApplication::clipboard()->text(),QStringLiteral("before original handoff"));
-        f.env.drain();
+        f.worker.drain();
         // Domain completed, but the necessary GUI clipboard handoff still
-        // owns a Native cleanup lease; the actual ledger cannot drain yet.
+        // keeps the wallet open until the clipboard receives the data.
         QCOMPARE(QGuiApplication::clipboard()->text(),QStringLiteral("before original handoff"));
-        QVERIFY(f.env.scheduler->pending()>0);
+        QVERIFY(!*f.native_drained);
         QCOMPARE(shutdown.count(),0);
         QCoreApplication::processEvents();
         QCOMPARE(QGuiApplication::clipboard()->text(),expected);
         QCOMPARE(copied.count(),0); // Quiet observer, actual accepted effect.
         view.reset();
         f.source.reset();
-        QVERIFY(QTest::qWaitFor([&] {f.settle();return shutdown.count()==1&&f.backend->isDrained()&&f.env.scheduler->pending()==0;},5000));
-        QCOMPARE(f.env.scheduler->pending(),size_t{0});
+        QVERIFY(QTest::qWaitFor([&] {f.settle();return shutdown.count()==1&&*f.native_drained&&f.worker.quiescent();},5000));
+        QVERIFY(f.worker.quiescent());
     }
     void acceptedCopyFinishesAfterItsViewIsDestroyed()
     {
@@ -437,7 +434,7 @@ private Q_SLOTS:
         const auto expected=QString::fromStdString(EncodeHexTx(*f.native->first.tx));
         QVERIFY(view->copyRawTransaction());
         view.reset();
-        f.env.drain();
+        f.worker.drain();
         QCoreApplication::processEvents();
         QCOMPARE(QGuiApplication::clipboard()->text(),expected);
         f.settle();
@@ -451,7 +448,7 @@ private Q_SLOTS:
         second->setTransactionId(Id(f.native->second));
         f.settle();
         first->reload();
-        f.env.drain();
+        f.worker.drain();
         bool revoked{false};
         int reset_observations{0};
         connect(first->detailInputs(),&QAbstractItemModel::modelAboutToBeReset,&owner,[&]{if(!std::exchange(revoked,true))first->setActive(false);});
@@ -475,7 +472,7 @@ private Q_SLOTS:
         QObject owner;
         std::unique_ptr<ActivityDetailModel> view{f.view(owner)};
         const auto reads=f.native->detail_reads.load();
-        f.env.rejectNext(true);
+        f.worker.reject_core = true;
         view->setTransactionId(Id(f.native->first));
         f.settle();
         QVERIFY(!view->pending());
@@ -539,9 +536,9 @@ private Q_SLOTS:
         QCOMPARE(native->histories.load(),histories);
         first.reset();
         second.reset();
-        const auto backend=wallet->backendExecutor();
+        const auto native_drained = WatchWalletNativeDrain(*wallet);
         wallet->beginShutdown();
-        QTRY_VERIFY(backend->isDrained());
+        QTRY_VERIFY(*native_drained);
         wallet.reset();
     }
 };

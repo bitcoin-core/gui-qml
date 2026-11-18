@@ -7,6 +7,7 @@
 
 #include <net_types.h>
 #include <netaddress.h>
+#include <qml/nativelistmodel.h>
 
 #include <QAbstractListModel>
 #include <QList>
@@ -19,7 +20,7 @@ struct BanListEntry
     CBanEntry ban_entry;
 };
 
-class BanListModel : public QAbstractListModel
+class BanListModel : public NativeListModel
 {
     Q_OBJECT
 
@@ -29,30 +30,31 @@ public:
         BanUntilRole
     };
 
-    explicit BanListModel(interfaces::Node& node, QObject* parent = nullptr, bool backend_ready = true);
+    explicit BanListModel(interfaces::Node& node, QObject* parent = nullptr, bool backend_ready = true,
+                          presentation::Post post = {}, Queues queues = {});
+    ~BanListModel() override;
     void backendInitialized();
 
-    int rowCount(const QModelIndex& parent = {}) const override;
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     Q_PROPERTY(int count READ count NOTIFY countChanged)
-    int count() const { return m_ban_list.size(); }
+    int count() const { return rowCount(); }
 
     Q_INVOKABLE bool unbanAt(int row);
-    void beginShutdown() { m_stopping = true; }
+    void beginShutdown();
+    void close() override;
 
 public Q_SLOTS:
     void refresh();
 
 Q_SIGNALS:
     void countChanged();
+    void unbanFinished(bool success);
 
 private:
+    void publishCommand();
+    std::shared_ptr<execution::OwnedCommand<bool>> m_unban_command;
     interfaces::Node& m_node;
-    QList<BanListEntry> m_ban_list;
-    bool m_stopping{false};
     bool m_backend_ready;
 };
-
 #endif // BITCOIN_QML_MODELS_BANLISTMODEL_H

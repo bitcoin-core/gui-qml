@@ -4,11 +4,14 @@
 #ifndef BITCOIN_QML_PAYMENTIMPORTREVIEW_H
 #define BITCOIN_QML_PAYMENTIMPORTREVIEW_H
 #include <qml/paymentimportports.h>
+#include <qml/retainedvalue.h>
 #include <qml/psbtwork.h>
 #include <atomic>
 namespace paymentimport {
 struct ReviewServices {
-    std::shared_ptr<execution::Scheduler> scheduler;
+    std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)> observe;
+    std::function<execution::SubmitResult(std::function<void()>)> retire;
+    execution::ValueCleanup hold;
     // Immutable view/opening validity. This callback never accesses a QObject.
     std::function<bool()> current;
     using Done = std::function<void(psbtwork::ImportResult)>;

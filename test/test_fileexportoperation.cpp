@@ -3,85 +3,56 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/fileexportoperation.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/psbtwork.h>
 #include <chainparams.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/psbtfeefixture.h>
 #include <test/qt_test_registry.h>
 
 #include <QFile>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QtTest/QtTest>
 
 #include <atomic>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace {
 struct Fixture {
-    ManualRoutedExecution execution;
-    std::deque<std::function<void()>> gui_posts;
+    ManualNodeObservations execution;
 
-    Fixture() = default;
-
-    ~Fixture()
-    {
-        // Model destruction and its last GUI publication can release retained
-        // values after the test's final explicit drain. Complete their Cleanup
-        // turns while the manual transport is still owned by this fixture.
-        for (int turns = 0; turns < 4096; ++turns) {
-            execution.drain();
-            deliverGui();
-            if (execution.transportIdle() && gui_posts.empty()) break;
-        }
-        QVERIFY(gui_posts.empty());
-        QVERIFY(execution.quiescent());
-    }
+    ~Fixture() { QVERIFY(DrainManualNodeTurns(execution)); }
 
     backup::Services services()
     {
         backup::Services result;
-        result.scheduler = execution.scheduler;
-        result.post = [this](std::function<void()> work) { gui_posts.push_back(std::move(work)); };
+        result.utility = std::make_shared<execution::SerialQueue>(execution.executor().makeQueue(execution::Lane::Utility));
+        result.post = execution.post();
         result.coordinator = std::make_shared<backup::InstallCoordinator>();
         return result;
     }
-    void deliverGui()
-    {
-        while (!gui_posts.empty()) {
-            auto work = std::move(gui_posts.front());
-            gui_posts.pop_front();
-            work();
-        }
-    }
+    void deliverGui() { execution.publishAll(); }
 };
-void UseSerialPromptRetirement(backup::Services& services, std::function<void()> after_first_admission = {})
+void UseSerialFileWork(backup::Services& services, std::function<void()> after_first_admission = {})
 {
-    const auto scheduler = services.scheduler;
-    const auto action_key = scheduler->allocateKey();
+    const auto utility = services.utility;
     auto after_admission = std::make_shared<std::function<void()>>(std::move(after_first_admission));
-    services.submit = [scheduler, action_key, after_admission](backup::Services::Work work) {
-        auto submitted = execution::Submit(*scheduler, [work = std::move(work)] { work({}); }, [] {}, {},
-            {execution::Lane::Core, action_key, execution::WorkClass::Action});
+    services.submit = [utility, after_admission](backup::Services::Work work) {
+        const bool submitted = utility->post([work = std::move(work)] { work({}); });
         // Model an accepted enqueue whose caller is synchronously closed
         // before submit() returns the admission receipt.
         if (submitted && *after_admission) {
             auto hook = std::exchange(*after_admission, {});
             hook();
         }
-        return submitted;
-    };
-    services.reserve_prompt_retirement = [scheduler, action_key](std::function<void()> work) {
-        return execution::Submit(*scheduler, std::move(work), [] {}, {},
-            {execution::Lane::Cleanup, action_key, execution::WorkClass::Action}, true);
-    };
-    services.activate_prompt_retirement = [scheduler](execution::TaskId id) {
-        return scheduler->activateCleanup(id);
+        return execution::SubmitResult{{}, submitted ? execution::Rejection::None : execution::Rejection::Transport};
     };
 }
 struct DeletionState {
@@ -148,13 +119,13 @@ private Q_SLOTS:
         const QByteArray expected = psbtwork::SerializeRaw(*document);
         QVERIFY(!expected.isEmpty());
 
-        BackendExecutor executor;
+        execution::Executor executor{execution::Executor::Config{}};
         QObject gui;
         std::atomic<bool> off_gui{true};
         std::atomic<int> outcomes{0};
         std::atomic<int> outcome_phase{-1};
         backup::Services services;
-        services.scheduler = executor.scheduler();
+        services.utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
         services.post = [&gui](auto publication) {
             if (!QMetaObject::invokeMethod(&gui, std::move(publication), Qt::QueuedConnection)) {
                 throw std::runtime_error("GUI publication could not be queued");
@@ -169,6 +140,7 @@ private Q_SLOTS:
             outcome_phase = static_cast<int>(result.phase);
             ++outcomes;
         };
+        const auto cleanup = qScopeGuard([&] { executor.stopAndJoin(); });
         FileExportOperationModel operation{path, document, std::move(services)};
 
         QVERIFY(operation.start());
@@ -180,8 +152,6 @@ private Q_SLOTS:
         QCOMPARE(outcome_phase.load(), static_cast<int>(backup::Phase::Succeeded));
         QVERIFY(off_gui.load());
 
-        executor.shutdown();
-        QTRY_VERIFY(executor.isDrained());
     }
 
     void startAdmissionCanDeleteProjection_data()
@@ -205,13 +175,9 @@ private Q_SLOTS:
         Fixture fixture;
         std::unique_ptr<FileExportOperationModel> operation;
         auto services = fixture.services();
-        const auto scheduler = services.scheduler;
-        const auto key = scheduler->allocateKey();
-        services.submit = [scheduler, key, accept, &operation](backup::Services::Work work) {
-            const auto receipt = accept
-                ? execution::Submit(*scheduler, [work = std::move(work)] { work({}); }, [] {}, {},
-                    {execution::Lane::Core, key, execution::WorkClass::Action})
-                : execution::SubmitResult{{}, execution::Rejection::Transport};
+        services.submit = [utility = services.utility, accept, &operation](backup::Services::Work work) {
+            const bool submitted = accept && utility->post([work = std::move(work)] { work({}); });
+            const execution::SubmitResult receipt{{}, submitted ? execution::Rejection::None : execution::Rejection::Transport};
             // Admission may close the public projection before returning its
             // receipt. Its original accepted write and cleanup remain owned.
             operation.reset();
@@ -236,7 +202,7 @@ private Q_SLOTS:
         request.reset();
         fixture.execution.drain();
         QVERIFY(deletion->destroyed.load());
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void retiringBeforeInspectionReleasesPsbtThroughCleanup()
@@ -255,22 +221,32 @@ private Q_SLOTS:
         operation.retire();
         QVERIFY(!state->destroyed);
 
-        fixture.execution.drain();
-        fixture.deliverGui();
+        while (operation.busy()) {
+            QVERIFY(fixture.execution.step(execution::Lane::Utility));
+            fixture.deliverGui();
+        }
         QVERIFY(!operation.busy());
         QVERIFY(!QFile::exists(path));
+        // The explicit retire event was queued behind inspection, before
+        // inspection released the document and queued its cleanup.
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
         QVERIFY(!state->destroyed);
-        QCOMPARE(fixture.execution.queuedCountIf([](const auto& turn) {
-            return turn.lane == execution::Lane::Cleanup && turn.phase == execution::Phase::Queued;
-        }), 1);
-        QVERIFY(fixture.execution.step(execution::Lane::Cleanup));
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
         QVERIFY(state->destroyed);
         fixture.execution.drain();
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
+    }
+
+    void refusalReleasesPsbtThroughCleanup_data()
+    {
+        QTest::addColumn<bool>("throw_on_outcome");
+        QTest::newRow("normal-outcome") << false;
+        QTest::newRow("throwing-outcome") << true;
     }
 
     void refusalReleasesPsbtThroughCleanup()
     {
+        QFETCH(bool, throw_on_outcome);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path = directory.filePath(QStringLiteral("existing.psbt"));
@@ -283,7 +259,13 @@ private Q_SLOTS:
         auto state = std::make_shared<DeletionState>();
         auto document = TrackedDocument(state);
         Fixture fixture;
-        FileExportOperationModel operation{path, document, fixture.services()};
+        auto services = fixture.services();
+        int outcomes{0};
+        services.outcome = [&](backup::Snapshot) {
+            ++outcomes;
+            if (throw_on_outcome) throw std::runtime_error("failed export observer");
+        };
+        FileExportOperationModel operation{path, document, std::move(services)};
         document.reset();
 
         QVERIFY(operation.start());
@@ -292,20 +274,20 @@ private Q_SLOTS:
         QVERIFY(operation.confirmationRequired());
         QVERIFY(!state->destroyed);
         QVERIFY(operation.cancel());
-        fixture.execution.drain();
-        fixture.deliverGui();
+        while (operation.busy()) {
+            QVERIFY(fixture.execution.step(execution::Lane::Utility));
+            fixture.deliverGui();
+        }
 
         QVERIFY(!operation.busy());
         QVERIFY(operation.error().contains(QStringLiteral("cancelled"), Qt::CaseInsensitive));
         QCOMPARE(ReadFile(path), original);
+        QCOMPARE(outcomes, 1);
         QVERIFY(!state->destroyed);
-        QCOMPARE(fixture.execution.queuedCountIf([](const auto& turn) {
-            return turn.lane == execution::Lane::Cleanup && turn.phase == execution::Phase::Queued;
-        }), 1);
-        QVERIFY(fixture.execution.step(execution::Lane::Cleanup));
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
         QVERIFY(state->destroyed);
         fixture.execution.drain();
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void rejectedStartAdmissionReleasesPsbtThroughCleanup()
@@ -317,20 +299,58 @@ private Q_SLOTS:
         Fixture fixture;
         FileExportOperationModel operation{directory.filePath(QStringLiteral("rejected.psbt")), document, fixture.services()};
         document.reset();
-        fixture.execution.rejectLane(execution::Lane::Core);
+        fixture.execution.rejectNext(execution::Lane::Utility);
 
         QVERIFY(!operation.start());
         QVERIFY(!operation.busy());
         QCOMPARE(operation.error(), QStringLiteral("The PSBT could not be saved. Try again."));
         QVERIFY(!state->destroyed);
         // The rejected request releases its retained PSBT through Cleanup.
-        QCOMPARE(fixture.execution.queuedCountIf([](const auto& turn) {
-            return turn.lane == execution::Lane::Cleanup && turn.phase == execution::Phase::Queued;
-        }), 1);
-        QVERIFY(fixture.execution.step(execution::Lane::Cleanup));
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
         QVERIFY(state->destroyed);
         fixture.execution.drain();
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
+    }
+
+    void closedOwnerRejectsExportEvenWhenFileQueueIsOpen()
+    {
+        Fixture fixture;
+        auto services = fixture.services();
+        auto owner = std::make_shared<execution::SerialQueue>(fixture.execution.executor().makeQueue(execution::Lane::Utility));
+        owner->close();
+        auto cleanup = std::make_shared<execution::ValueCleanupQueue>(owner);
+        services.value_cleanup = [cleanup](auto retire) { return cleanup->hold(std::move(retire)); };
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("closed.psbt");
+        auto deletion = std::make_shared<DeletionState>();
+        auto document = TrackedDocument(deletion);
+        FileExportOperationModel operation{path, document, std::move(services)};
+        QVERIFY(!operation.start());
+        QVERIFY(!operation.error().isEmpty());
+        document.reset();
+        QVERIFY(deletion->destroyed.load());
+        QVERIFY(fixture.execution.turnsIdle());
+        QVERIFY(!QFile::exists(path));
+    }
+
+    void abandoningPreparedExportDestroysPsbtOffGui()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("unused.psbt"));
+        auto deletion = std::make_shared<DeletionState>();
+        execution::Executor executor{execution::Executor::Config{}};
+        backup::Services services;
+        services.utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        {
+            FileExportOperationModel operation{path, TrackedDocument(deletion), std::move(services)};
+            QVERIFY(!deletion->destroyed.load());
+        }
+        executor.stopAndJoin();
+        QVERIFY(deletion->destroyed.load());
+        QVERIFY(!deletion->destroyed_on_gui.load());
+        QVERIFY(!QFile::exists(path));
     }
 
     void realWorkerRefusalDestroysCapturedPsbtOffGui()
@@ -346,16 +366,17 @@ private Q_SLOTS:
         }
         auto state = std::make_shared<DeletionState>();
         auto document = TrackedDocument(state);
-        BackendExecutor executor;
+        execution::Executor executor{execution::Executor::Config{}};
         QObject gui;
         backup::Services services;
-        services.scheduler = executor.scheduler();
+        services.utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
         services.post = [&gui](auto publication) {
             if (!QMetaObject::invokeMethod(&gui, std::move(publication), Qt::QueuedConnection)) {
                 throw std::runtime_error("GUI publication could not be queued");
             }
         };
         services.available = [] { return true; };
+        const auto cleanup = qScopeGuard([&] { executor.stopAndJoin(); });
         FileExportOperationModel operation{path, document, std::move(services)};
         document.reset();
 
@@ -368,8 +389,6 @@ private Q_SLOTS:
 
         QVERIFY(!state->destroyed_on_gui.load());
         QCOMPARE(ReadFile(path), original);
-        executor.shutdown();
-        QTRY_VERIFY(executor.isDrained());
     }
 
     void overwriteNeedsApprovalAndRechecksDestinationVersion()
@@ -466,7 +485,7 @@ private Q_SLOTS:
         std::atomic_int outcomes{0};
         std::atomic_int terminal_phase{-1};
         auto services = fixture.services();
-        UseSerialPromptRetirement(services);
+        UseSerialFileWork(services);
         services.outcome = [&](backup::Snapshot snapshot) {
             ++outcomes;
             terminal_phase = static_cast<int>(snapshot.phase);
@@ -488,16 +507,13 @@ private Q_SLOTS:
         // terminal outcome and must retire before any overwrite is admitted.
         if (delete_projection) operation.reset();
         else operation->retire();
-        QVERIFY(fixture.execution.step(execution::Lane::Cleanup));
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
 
         QCOMPARE(outcomes.load(), 1);
         QCOMPARE(terminal_phase.load(), static_cast<int>(backup::Phase::Retired));
         QCOMPARE(ReadFile(path), original);
         QVERIFY(!deletion->destroyed);
-        QCOMPARE(fixture.execution.queuedCountIf([](const auto& turn) {
-            return turn.lane == execution::Lane::Cleanup && turn.phase == execution::Phase::Queued;
-        }), 1);
-        QVERIFY(fixture.execution.step(execution::Lane::Cleanup));
+        QVERIFY(fixture.execution.step(execution::Lane::Utility));
         QVERIFY(deletion->destroyed);
 
         fixture.deliverGui();
@@ -507,7 +523,7 @@ private Q_SLOTS:
         }
         fixture.execution.drain();
         request.reset();
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void acceptedFreshContinuationSurvivesRetirementBeforeInspection_data()
@@ -556,7 +572,49 @@ private Q_SLOTS:
             QVERIFY(operation->saved());
         }
         request.reset();
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
+    }
+
+    void acceptedContinuationRemembersRetirementBeforeStart_data()
+    {
+        QTest::addColumn<bool>("existing_target");
+        QTest::newRow("existing-target-retires") << true;
+        QTest::newRow("fresh-target-is-written") << false;
+    }
+
+    void acceptedContinuationRemembersRetirementBeforeStart()
+    {
+        QFETCH(bool, existing_target);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("captured.psbt");
+        const QByteArray original{"keep the existing destination"};
+        if (existing_target) {
+            QFile file{path};
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(original), original.size());
+        }
+        std::vector<backup::Phase> outcomes;
+        Fixture fixture;
+        auto services = fixture.services();
+        services.outcome = [&](backup::Snapshot snapshot) { outcomes.push_back(snapshot.phase); };
+        auto operation = std::make_unique<FileExportOperationModel>(path, std::move(services));
+        auto request = operation->requestForAcceptedContinuation();
+        QVERIFY(request);
+
+        // Preparation still owns the accepted save when the page disappears.
+        operation.reset();
+        auto document = std::make_shared<const PartiallySignedTransaction>(psbtfeefixture::Legacy(2, false));
+        const auto expected = psbtwork::SerializeRaw(*document);
+        QVERIFY(request->start(std::move(document)));
+        fixture.execution.drain();
+
+        QCOMPARE(outcomes.size(), 1U);
+        QCOMPARE(outcomes.front(), existing_target ? backup::Phase::Retired : backup::Phase::Succeeded);
+        QCOMPARE(ReadFile(path), existing_target ? original : expected);
+        request.reset();
+        fixture.execution.drain();
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void retirementDuringInspectionUsesTheInspectedDestinationPolicy_data()
@@ -605,7 +663,7 @@ private Q_SLOTS:
         fixture.deliverGui();
         QCOMPARE(operation.phase(), existing_destination
             ? BackupFileOperation::Phase::Retired : BackupFileOperation::Phase::Succeeded);
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void acceptedWriteContinuesAfterRetirementDuringWrite()
@@ -644,7 +702,7 @@ private Q_SLOTS:
         QCOMPARE(terminal_phase.load(), static_cast<int>(backup::Phase::Succeeded));
         fixture.deliverGui();
         QCOMPARE(operation.phase(), BackupFileOperation::Phase::Succeeded);
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void acceptedContinuationCloseDuringStartAdmission_data()
@@ -672,7 +730,7 @@ private Q_SLOTS:
         Fixture fixture;
         FileExportOperationModel* projection{nullptr};
         auto services = fixture.services();
-        UseSerialPromptRetirement(services, [&] {
+        UseSerialFileWork(services, [&] {
             if (projection) projection->retire();
         });
         std::atomic_int outcomes{0};
@@ -703,7 +761,7 @@ private Q_SLOTS:
         request.reset();
         fixture.execution.drain();
         QVERIFY(deletion->destroyed.load());
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void acceptedContinuationDeleteAfterInspection_data()
@@ -776,7 +834,7 @@ private Q_SLOTS:
         request.reset();
         fixture.execution.drain();
         QVERIFY(deletion->destroyed.load());
-        QVERIFY(fixture.execution.quiescent());
+        QVERIFY(fixture.execution.turnsIdle());
     }
 
     void overwritePromptRetirementSurvivesRejectedCoreAdmission()
@@ -790,9 +848,11 @@ private Q_SLOTS:
             QVERIFY(file.open(QIODevice::WriteOnly));
             QCOMPARE(file.write(original), qint64(original.size()));
         }
-        Fixture fixture;
-        auto services = fixture.services();
-        UseSerialPromptRetirement(services);
+        Fixture gui;
+        ManualStartupExecution workers;
+        backup::Services services;
+        services.utility = std::make_shared<execution::SerialQueue>(workers.executor().makeQueue(execution::Lane::Utility));
+        services.post = gui.services().post;
         std::atomic_int outcomes{0};
         std::atomic_int terminal_phase{-1};
         services.outcome = [&](backup::Snapshot snapshot) {
@@ -804,29 +864,24 @@ private Q_SLOTS:
         auto request = operation->requestForAcceptedContinuation();
         QVERIFY(request);
         QVERIFY(operation->start());
-        fixture.execution.drain();
-        fixture.deliverGui();
+        workers.drain();
+        gui.deliverGui();
         QVERIFY(operation->confirmationRequired());
 
-        // Retirement remains admitted through Cleanup even when all later
-        // Core submissions reject.
-        fixture.execution.rejectLane(execution::Lane::Core);
+        // The accepted file action must retire on Utility even when Core
+        // refuses a new effect.
+        workers.reject_core = true;
         operation->retire();
-        fixture.execution.drain();
-        const auto outcomes_after_close_admission = outcomes.load();
-        if (outcomes_after_close_admission != 1) {
-            // Keep failure evidence bounded and fully cleaned up.
-            operation->retire();
-            fixture.execution.drain();
-        }
-        fixture.deliverGui();
-        QCOMPARE(outcomes_after_close_admission, 1);
+        workers.drain();
+        QVERIFY(!workers.core.post([] {}));
+        QCOMPARE(outcomes.load(), 1);
+        gui.deliverGui();
         QCOMPARE(terminal_phase.load(), static_cast<int>(backup::Phase::Retired));
         QCOMPARE(ReadFile(path), original);
         operation.reset();
         request.reset();
-        fixture.execution.drain();
-        QVERIFY(fixture.execution.quiescent());
+        workers.drain();
+        QVERIFY(workers.quiescent());
     }
 };
 

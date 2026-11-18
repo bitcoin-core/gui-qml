@@ -5,7 +5,7 @@
 #include <qml/models/signertransaction.h>
 #include <qml/psbtwork.h>
 #include <test/mocks/psbtfile.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/inputwork.h>
 #include <test/mocks/mocknode.h>
 #include <test/mocks/mockwallet.h>
 #include <test/mocks/psbtfeefixture.h>
@@ -325,10 +325,10 @@ private Q_SLOTS:
         wallet.unlock_ok = mode != 2 && mode != 7;
         wallet.lock_ok = mode != 5 && mode != 7; wallet.throw_lock = mode == 6;
         auto request = Request(psbtwork::Kind::Sign);
-        ManualRoutedExecution environment;
+        InputWork environment;
         const QString password = QString::fromUtf8("signing-\xc3\xa9-password");
         if (mode == 4) {
-            auto captured = secretinput::Capture(environment.scheduler, password);
+            auto captured = secretinput::Capture(environment.hold(), password);
             QVERIFY(captured); request.captured_passphrase = std::move(captured.input);
         } else if (mode >= 2) {
             const auto utf8 = password.toUtf8();
@@ -349,14 +349,14 @@ private Q_SLOTS:
         if (mode == 1) QCOMPARE(result.error, QString{"Enter your wallet password to sign this transaction."});
         if (mode == 2) QCOMPARE(result.error, QString{"The wallet password is incorrect."});
         if (mode >= 5) QCOMPARE(result.error, QString{"The wallet lock could not be restored. Check its security state before retrying."});
-        environment.drain();
-        QVERIFY(environment.quiescent());
+        environment.worker.drain();
+        QVERIFY(environment.worker.quiescent());
     }
 
     void passwordMaterializationFailureStartsNoWalletEffect()
     {
-        ManualExecutionEnvironment environment;
-        auto captured = secretinput::Capture(environment.scheduler, QStringLiteral("original password"));
+        InputWork environment;
+        auto captured = secretinput::Capture(environment.hold(), QStringLiteral("original password"));
         QVERIFY(captured);
         WorkWallet wallet;
         wallet.encrypted = wallet.locked = true;
@@ -377,8 +377,8 @@ private Q_SLOTS:
         QCOMPARE(wallet.unlock_calls, 0); QCOMPARE(wallet.lock_calls, 0);
         QCOMPARE(wallet.sign_calls, 0); QCOMPARE(wallet.inspect_calls, 0);
         QVERIFY(wallet.locked); QVERIFY(!result.snapshot); QVERIFY(!result.relock_failed);
-        environment.drain();
-        QVERIFY(environment.quiescent());
+        environment.worker.drain();
+        QVERIFY(environment.worker.quiescent());
     }
 
     void signerCannotChangeReview_data()

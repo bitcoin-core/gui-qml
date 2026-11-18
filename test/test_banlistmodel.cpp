@@ -5,8 +5,17 @@
 #include <QtTest/QtTest>
 
 #include <QSet>
+#include <QDateTime>
+#include <QLocale>
+#include <QScopeGuard>
 
 #include <test/mocks/mocknode.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/nativelistqueues.h>
+#include <QPersistentModelIndex>
+#include <QThread>
+#include <atomic>
+#include <test/mocks/drainexecutors.h>
 #include <qml/models/banlistmodel.h>
 #include <util/translation.h>
 
@@ -39,11 +48,35 @@ class BanListModelTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void localizedBanExpiryUsesTheLocaleTimeConvention_data();
+    void localizedBanExpiryUsesTheLocaleTimeConvention();
     void refreshPopulatesRolesAndRows();
     void unbanAtTargetsSelectedSubnet();
-    void unbanAtReturnsFalseWhenNodeRejectsSubnet();
+    void unbanOutcomeReportsNodeRejection();
     void unbanAtIgnoresInvalidRows();
+    void expiredBanDisappearsOnRefreshAndStaleUnban();
+    void manualReadFailureAndRejection_data();
+    void manualReadFailureAndRejection();
+    void manualUnbanKeepsOriginalSubnetAndAcceptedEffect();
+    void realThreadReadsNeverRunOnGui();
 };
+
+void BanListModelTests::localizedBanExpiryUsesTheLocaleTimeConvention_data()
+{
+    QTest::addColumn<QString>("name"); QTest::newRow("de-DE-24-hour") << QStringLiteral("de_DE"); QTest::newRow("en-US-12-hour") << QStringLiteral("en_US");
+}
+void BanListModelTests::localizedBanExpiryUsesTheLocaleTimeConvention()
+{
+    QFETCH(QString, name); const QLocale previous; const QLocale locale{name}; QLocale::setDefault(locale);
+    const auto restore = qScopeGuard([&] { QLocale::setDefault(previous); });
+    MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
+    const auto timestamp = QDateTime(QDate{2026, 11, 15}, QTime{18, 30}).toSecsSinceEpoch();
+    node.get_banned_fn = [&](banmap_t& result) { result = {{ParseSubnet("10.0.0.0/8"), MakeBanEntry(timestamp)}}; return true; };
+    BanListModel model{node, nullptr}; model.refresh(); QTRY_COMPARE(model.rowCount(), 1);
+    const auto expected = locale.toString(QDateTime::fromSecsSinceEpoch(timestamp), QLocale::ShortFormat);
+    QCOMPARE(model.index(0).data(int(BanListModel::BanRoles::BanUntilRole)).toString(), expected);
+    QCOMPARE(node.calls.getBanned.load(), 1);
+}
 
 void BanListModelTests::refreshPopulatesRolesAndRows()
 {
@@ -54,6 +87,7 @@ void BanListModelTests::refreshPopulatesRolesAndRows()
     banned.emplace(subnet_b, MakeBanEntry(2'000'000'000));
 
     MockNode node;
+    const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     node.get_banned_fn = [&](banmap_t& result) {
         result = banned;
         return true;
@@ -63,12 +97,13 @@ void BanListModelTests::refreshPopulatesRolesAndRows()
     QSignalSpy count_spy(&model, &BanListModel::countChanged);
 
     model.refresh();
+    QTRY_VERIFY(model.count() > 0);
 
     QCOMPARE(node.calls.getBanned.load(), 1);
     QCOMPARE(model.count(), 2);
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.rowCount(model.index(0, 0)), 0);
-    QCOMPARE(count_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 2);
 
     const auto roles = model.roleNames();
     QCOMPARE(roles.value(static_cast<int>(BanListModel::BanRoles::AddressRole)), QByteArray{"address"});
@@ -98,6 +133,7 @@ void BanListModelTests::unbanAtTargetsSelectedSubnet()
     banned.emplace(subnet, MakeBanEntry(1'900'000'000));
 
     MockNode node;
+    const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     node.get_banned_fn = [&](banmap_t& result) {
         result = banned;
         return true;
@@ -105,24 +141,29 @@ void BanListModelTests::unbanAtTargetsSelectedSubnet()
 
     BanListModel model{node, nullptr};
     model.refresh();
+    QTRY_VERIFY(model.count() > 0);
 
     bool received_expected_subnet{false};
     node.unban_fn = [&](const CSubNet& value) {
         received_expected_subnet = value.ToString() == subnet.ToString();
         return true;
     };
+    QSignalSpy finished{&model, &BanListModel::unbanFinished};
     QVERIFY(model.unbanAt(0));
-    QCOMPARE(node.calls.getBanned.load(), 1);
+    QTRY_COMPARE(finished.size(), 1);
+    QCOMPARE(finished.front().front().toBool(), true);
+    QTRY_COMPARE(node.calls.getBanned.load(), 2);
     QCOMPARE(node.calls.unban.load(), 1);
     QVERIFY(received_expected_subnet);
 }
 
-void BanListModelTests::unbanAtReturnsFalseWhenNodeRejectsSubnet()
+void BanListModelTests::unbanOutcomeReportsNodeRejection()
 {
     banmap_t banned;
     banned.emplace(ParseSubnet("10.0.0.0/8"), MakeBanEntry(1'900'000'000));
 
     MockNode node;
+    const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     node.get_banned_fn = [&](banmap_t& result) {
         result = banned;
         return true;
@@ -130,10 +171,14 @@ void BanListModelTests::unbanAtReturnsFalseWhenNodeRejectsSubnet()
 
     BanListModel model{node, nullptr};
     model.refresh();
+    QTRY_VERIFY(model.count() > 0);
 
     node.unban_fn = [](const CSubNet&) { return false; };
-    QVERIFY(!model.unbanAt(0));
-    QCOMPARE(node.calls.getBanned.load(), 1);
+    QSignalSpy finished{&model, &BanListModel::unbanFinished};
+    QVERIFY(model.unbanAt(0)); // Accepted request; the actual failure is asynchronous.
+    QTRY_COMPARE(finished.size(), 1);
+    QCOMPARE(finished.front().front().toBool(), false);
+    QTRY_COMPARE(node.calls.getBanned.load(), 2);
     QCOMPARE(node.calls.unban.load(), 1);
 }
 
@@ -143,6 +188,7 @@ void BanListModelTests::unbanAtIgnoresInvalidRows()
     banned.emplace(ParseSubnet("10.0.0.0/8"), MakeBanEntry(1'900'000'000));
 
     MockNode node;
+    const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     node.get_banned_fn = [&](banmap_t& result) {
         result = banned;
         return true;
@@ -150,11 +196,120 @@ void BanListModelTests::unbanAtIgnoresInvalidRows()
 
     BanListModel model{node, nullptr};
     model.refresh();
+    QTRY_VERIFY(model.count() > 0);
 
     QVERIFY(!model.unbanAt(-1));
     QVERIFY(!model.unbanAt(42));
     QCOMPARE(node.calls.getBanned.load(), 1);
     QCOMPARE(node.calls.unban.load(), 0);
+}
+
+void BanListModelTests::expiredBanDisappearsOnRefreshAndStaleUnban()
+{
+    const CSubNet expired_first = ParseSubnet("10.0.0.0/8");
+    const CSubNet expires_later = ParseSubnet("192.0.2.0/24");
+    banmap_t banned;
+    banned.emplace(expired_first, MakeBanEntry(1'900'000'000));
+    banned.emplace(expires_later, MakeBanEntry(2'000'000'000));
+
+    MockNode node;
+    const auto drain_native_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+    node.get_banned_fn = [&](banmap_t& result) {
+        result = banned;
+        return true;
+    };
+    node.unban_fn = [&](const CSubNet& value) {
+        return banned.erase(value) > 0;
+    };
+
+    BanListModel model{node, nullptr};
+    model.refresh();
+    QTRY_COMPARE(model.count(), 2);
+
+    // The first ban expires on Core: refresh drops it and rejects its old index.
+    banned.erase(expired_first);
+    model.refresh();
+    QTRY_COMPARE(model.count(), 1);
+    QCOMPARE(model.data(model.index(0, 0), static_cast<int>(BanListModel::BanRoles::AddressRole)).toString(),
+             QString::fromStdString(expires_later.ToString()));
+    QVERIFY(!model.unbanAt(1));
+    QCOMPARE(node.calls.unban.load(), 0);
+
+    // The remaining ban expires before the user clicks Unban: Core rejects the
+    // stale unban and the follow-up refresh clears the expired row.
+    banned.clear();
+    QSignalSpy finished{&model, &BanListModel::unbanFinished};
+    QVERIFY(model.unbanAt(0));
+    QTRY_COMPARE(finished.size(), 1);
+    QCOMPARE(finished.front().front().toBool(), false);
+    QTRY_COMPARE(model.count(), 0);
+    QCOMPARE(node.calls.unban.load(), 1);
+}
+
+void BanListModelTests::manualReadFailureAndRejection_data()
+{
+    QTest::addColumn<bool>("reject");
+    QTest::newRow("native-failure")<<false;
+    QTest::newRow("transport-rejection")<<true;
+}
+void BanListModelTests::manualReadFailureAndRejection()
+{
+    QFETCH(bool,reject);
+    ManualStartupExecution transport;
+    std::deque<std::function<void()>> gui;
+    bool fail{false};
+    banmap_t banned{{ParseSubnet("10.0.0.0/8"),MakeBanEntry(1'900'000'000)}};
+    MockNode node;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+    node.get_banned_fn=[&](auto& result) { result=banned;return !fail; };
+    BanListModel model{node,nullptr,true,[&](auto turn) { gui.push_back(std::move(turn)); }, NativeListQueues(transport.executor())};
+    auto publish=[&] { if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true; };
+    model.refresh(); QCOMPARE(model.count(),0); QCOMPARE(node.calls.getBanned.load(),0);
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(publish());
+    QCOMPARE(model.count(),1);QPersistentModelIndex persistent{model.index(0)};
+    const auto address=model.data(persistent,int(BanListModel::BanRoles::AddressRole)).toString();
+    fail=true;if(reject)transport.reject_core = true;model.refresh();
+    if(!reject)QVERIFY(transport.step(execution::Lane::Core));
+    // Rejected admission owns an explicit outcome too; deliver it before GUI publication.
+    transport.drain();while(publish()){}
+    QVERIFY(!model.readError().isEmpty());QVERIFY(!model.projectionPending());QCOMPARE(model.count(),1);
+    QVERIFY(persistent.isValid());QCOMPARE(model.data(persistent,int(BanListModel::BanRoles::AddressRole)).toString(),address);
+    QSignalSpy changes{&model,&QAbstractItemModel::rowsRemoved};
+    fail=false;banned.clear();model.refresh();QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));
+    model.close();while(publish()){}QCOMPARE(changes.size(),0);transport.drain();QVERIFY(transport.quiescent());
+}
+void BanListModelTests::manualUnbanKeepsOriginalSubnetAndAcceptedEffect()
+{
+    ManualStartupExecution transport;
+    std::deque<std::function<void()>> gui;
+    const auto original=ParseSubnet("10.0.0.0/8");
+    banmap_t banned{{original,MakeBanEntry(1'900'000'000)}};
+    MockNode node;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+    node.get_banned_fn=[&](auto& result){result=banned;return true;};
+    std::string actual;
+    node.unban_fn=[&](const auto& subnet){actual=subnet.ToString();return true;};
+    BanListModel model{node,nullptr,true,[&](auto turn){gui.push_back(std::move(turn));}, NativeListQueues(transport.executor())};
+    model.refresh();QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));
+    auto turn=std::move(gui.front());gui.pop_front();turn();QCOMPARE(model.count(),1);
+    QSignalSpy finished{&model,&BanListModel::unbanFinished};
+    QVERIFY(model.unbanAt(0));QVERIFY(!model.unbanAt(0));
+    banned.clear();banned.emplace(ParseSubnet("192.0.2.0/24"),MakeBanEntry(2'000'000'000));
+    model.close();QCOMPARE(node.calls.unban.load(),0);
+    QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(actual,original.ToString());
+    QVERIFY(transport.step(execution::Lane::Utility));
+    while(!gui.empty()){auto publish=std::move(gui.front());gui.pop_front();publish();}
+    QCOMPARE(finished.size(),0);QCOMPARE(node.calls.unban.load(),1);
+    transport.drain();QVERIFY(transport.quiescent());
+}
+void BanListModelTests::realThreadReadsNeverRunOnGui()
+{
+    MockNode node;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+    const auto* gui=QThread::currentThread();std::atomic<bool> off_gui{false};
+    node.get_banned_fn=[&](auto& result){off_gui=QThread::currentThread()!=gui;
+        result={{ParseSubnet("10.0.0.0/8"),MakeBanEntry(1'900'000'000)}};return true;};
+    BanListModel model{node,nullptr};model.refresh();QTRY_COMPARE(model.count(),1);QVERIFY(off_gui.load());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
@@ -163,4 +318,4 @@ BITCOINQML_REGISTER_QT_TEST(BanListModelTests)
 #else
 QTEST_MAIN(BanListModelTests)
 #endif
-#include "test_banlistmodel.moc"
+#include <test_banlistmodel.moc>

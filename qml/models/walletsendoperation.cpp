@@ -196,12 +196,12 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     request.review_id = m_review_id = wallet->m_current_review_identity;
     request.reviewed = review->getWtx(); request.psbt = review->psbt();
     request.assessment = review->assessedPsbt();
-    request.policy = wallet->m_psbt_fee_services.policy;
+    request.policy = wallet->m_psbt_fee_services.wallet_policy ? wallet->m_psbt_fee_services.wallet_policy : wallet->m_psbt_fee_services.policy;
     request.sweeps_wallet = intent == walletsend::Intent::Submit && wallet->currentTransactionSweepsWallet();
     request.assessed_complete = review->canBroadcast();
     request.proof = review->feeProof(); request.approved_fee = review->reviewedFee();
     if (passphrase) {
-        auto captured = secretinput::Capture(wallet->m_opening->scheduler(), *passphrase);
+        auto captured = secretinput::Capture(wallet->m_opening, *passphrase);
         if (!captured) {
             fail(State::Failed, WalletQmlModel::tr("The password could not be used. The transaction was not sent."));
             return true;
@@ -310,7 +310,7 @@ void WalletSendOperation::unlock(const QString& passphrase)
         return;
     }
     const QString unusable = WalletQmlModel::tr("The password could not be used. The transaction was not sent.");
-    auto captured = secretinput::Capture(wallet->m_opening ? wallet->m_opening->scheduler() : nullptr, passphrase);
+    auto captured = secretinput::Capture(wallet->m_opening, passphrase);
     if (!captured || !m_work->providePassphrase(m_attempt_id, m_review_id, std::move(captured.input))) {
         publish(State::NeedsUnlock, unusable);
         wallet->setTransactionStatus(unusable, true);

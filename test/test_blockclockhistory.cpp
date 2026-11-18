@@ -462,4 +462,4 @@ BITCOINQML_REGISTER_QT_TEST(BlockClockHistoryTests)
 #else
 QTEST_MAIN(BlockClockHistoryTests)
 #endif
-#include "test_blockclockhistory.moc"
+#include <test_blockclockhistory.moc>

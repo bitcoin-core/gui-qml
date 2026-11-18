@@ -70,30 +70,51 @@ void BlockClockHistory::stop()
 {
     std::lock_guard lock{m_mutex};
     m_stopped = true;
+    m_blocks.clear(); // Subscription retirement owns full cache destruction on Native.
     m_pending.clear();
+    m_dirty = false;
     m_changed = {};
 }
 
 void BlockClockHistory::setChangedCallback(std::function<void()> callback)
 {
+    installChangedCallback(std::move(callback));
+}
+quint64 BlockClockHistory::installChangedCallback(std::function<void()> callback)
+{
     std::lock_guard lock{m_mutex};
-    if (m_stopped) return;
+    if (m_stopped) return 0;
+    const auto token = ++m_callback_token;
     m_changed = std::move(callback);
     if (m_changed && m_initialized && m_dirty) m_changed();
+    return token;
+}
+void BlockClockHistory::clearChangedCallback(quint64 token)
+{
+    std::lock_guard lock{m_mutex};
+    if (token && token == m_callback_token) { m_changed = {}; ++m_callback_token; }
 }
 
 std::optional<qint64> BlockClockHistory::retentionStart()
 {
     std::lock_guard lock{m_mutex};
     if (m_stopped) return std::nullopt;
-    return m_retention_start;
+    return m_requested_retention.load();
 }
 
 void BlockClockHistory::setRetentionStart(qint64 retention_start)
 {
+    m_requested_retention.store(retention_start);
+    applyRequestedRetention();
+}
+
+void BlockClockHistory::applyRequestedRetention()
+{
     std::lock_guard lock{m_mutex};
+    const auto retention_start = m_requested_retention.load();
     if (m_stopped || m_retention_start == retention_start) return;
     m_retention_start = retention_start;
+    if (m_initialized) ++m_generation;
     std::erase_if(m_blocks, [retention_start](const auto& item) { return item.second < retention_start; });
     std::erase_if(m_pending, [retention_start](const auto& item) {
         return item.second && *item.second < retention_start;
@@ -103,13 +124,18 @@ void BlockClockHistory::setRetentionStart(qint64 retention_start)
 
 std::optional<QList<qint64>> BlockClockHistory::takeSnapshot()
 {
+    auto snapshot = takeSnapshotWithGeneration();
+    return snapshot ? std::optional<QList<qint64>>{std::move(snapshot->first)} : std::nullopt;
+}
+std::optional<std::pair<QList<qint64>, quint64>> BlockClockHistory::takeSnapshotWithGeneration(bool force)
+{
     std::lock_guard lock{m_mutex};
-    if (m_stopped || !m_initialized || !m_dirty) return std::nullopt;
+    if (m_stopped || !m_initialized || (!m_dirty && !force)) return std::nullopt;
     QList<qint64> timestamps;
     timestamps.reserve(m_blocks.size());
     for (const auto& [hash, timestamp] : m_blocks) timestamps.push_back(timestamp);
     m_dirty = false;
-    return timestamps;
+    return std::pair{std::move(timestamps), m_generation.load()};
 }
 
 void BlockClockHistory::initialize(Blocks blocks)
@@ -126,10 +152,12 @@ void BlockClockHistory::initialize(Blocks blocks)
             blocks.erase(hash);
         }
     }
+    m_retention_start = m_requested_retention.load();
     std::erase_if(blocks, [this](const auto& item) { return item.second < m_retention_start; });
     m_blocks = std::move(blocks);
     m_pending.clear();
     m_initialized = true;
+    ++m_generation;
     m_dirty = true;
     if (m_changed) m_changed();
 }
@@ -150,13 +178,14 @@ void BlockClockHistory::blockDisconnected(const interfaces::BlockInfo& block)
 void BlockClockHistory::record(const uint256& hash, int64_t timestamp, bool connected)
 {
     std::lock_guard lock{m_mutex};
-    if (m_stopped || timestamp < m_retention_start) return;
+    if (m_stopped || timestamp < m_requested_retention.load()) return;
     if (!m_initialized) {
         m_pending.insert_or_assign(hash, connected ? std::optional{timestamp} : std::nullopt);
         return;
     }
     const bool changed{connected ? m_blocks.emplace(hash, timestamp).second : m_blocks.erase(hash) != 0};
     if (!changed) return;
+    ++m_generation;
     m_dirty = true;
     if (m_changed) m_changed();
 }

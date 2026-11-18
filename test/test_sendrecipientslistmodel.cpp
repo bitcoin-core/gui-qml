@@ -5,10 +5,11 @@
 #include <QtTest/QtTest>
 
 #include <qml/models/sendrecipient.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/models/sendrecipientslistmodel.h>
-#include <test/mocks/admissionhookscheduler.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/walletsession.h>
+#include <test/mocks/mockwallet.h>
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -20,11 +21,43 @@
 
 #include <memory>
 
+namespace {
+struct ListFixture {
+    ManualNodeObservations env;
+    std::shared_ptr<walletopening::Session> opening{MakeWalletSession(env.executor(), [] {})};
+    std::unique_ptr<SendRecipientsListModel> model;
+    explicit ListFixture(int limit = 25)
+        : model(std::make_unique<SendRecipientsListModel>(nullptr, senddraft::Limits{limit})) {}
+    void bind() { model->setOpening(opening, env.post()); }
+    void settle()
+    {
+        for (int turn{0}; turn < 512; ++turn) {
+            env.drain();
+            env.publishAll();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            if (env.turnsIdle() && env.publicationsIdle()) return;
+        }
+        QFAIL("Recipient work did not drain");
+    }
+    ~ListFixture()
+    {
+        model.reset();
+        bool stopped{false};
+        opening->stop(false, [&] { stopped = true; });
+        settle();
+        QVERIFY(stopped);
+    }
+};
+} // namespace
+
 class SendRecipientsListModelTests : public QObject
 {
     Q_OBJECT
-    std::unique_ptr<BackendExecutor> m_executor;
-    void bind(SendRecipientsListModel& model) { model.setOpening({}, {m_executor->scheduler(), {}}); }
+    std::unique_ptr<execution::Executor> m_executor;
+    std::shared_ptr<walletopening::Session> m_opening;
+
+    void bind(SendRecipientsListModel& model) { model.setOpening(m_opening, {}); }
 private Q_SLOTS:
     void recipientBudgetIsEnforcedWithoutAQmlButton()
     {
@@ -41,145 +74,148 @@ private Q_SLOTS:
     void childCleanupAdmissionCannotRetargetListIntent()
     {
         QFETCH(bool, initializing); QFETCH(int, outcome);
-        ManualRoutedExecution env;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(env.scheduler);
-        std::deque<std::function<void()>> posts;
-        auto model = std::make_unique<SendRecipientsListModel>(nullptr, senddraft::Limits{initializing ? 128 : 25});
-        const auto settle = [&] {
-            for (int turn{0}; turn < 1024 && (turn == 0 || !env.queuedIdle() || !posts.empty()); ++turn) {
-                env.drain(); while (!posts.empty()) { auto work = std::move(posts.front()); posts.pop_front(); work(); }
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            }
-        };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
+        ListFixture f{initializing ? 128 : 25};
+        auto& model = f.model;
         if (initializing) {
-            // More than one bounded initialization turn. Reentrant clear
-            // replaces the original inventory while its first chunk is open.
+            // Keep a second initialization chunk pending on the GUI queue.
             for (int row{1}; row < 65; ++row) model->add();
             QCOMPARE(model->count(), 65);
         } else {
-            model->setOpening({}, {scheduler, [&](auto work) { posts.push_back(std::move(work)); }}); settle();
-            model->currentRecipient()->amount()->setUnit(BitcoinAmount::Unit::MilliBTC); settle();
+            f.bind(); f.settle();
+            model->currentRecipient()->amount()->setUnit(BitcoinAmount::Unit::MilliBTC); f.settle();
         }
         QPointer<SendRecipient> successor;
-        auto trigger = scheduler->armCleanup(initializing ? 4 : 1, [&] {
-            if (outcome == 0) model->close();
-            else if (outcome == 1) model.reset();
-            else {
-                model->clear(); successor = model->currentRecipient();
-                successor->setLabel(QStringLiteral("original clear successor"));
-                successor->amount()->setUnit(BitcoinAmount::Unit::MicroBTC);
-            }
-        });
-        if (initializing) model->setOpening({}, {scheduler, [&](auto work) { posts.push_back(std::move(work)); }});
-        else model->add();
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
-        settle();
+        if (initializing) {
+            f.bind();
+            QVERIFY(!f.env.publicationsIdle());
+        } else {
+            model->add();
+            QCOMPARE(model->count(), 2);
+        }
+        if (outcome == 0) model->close();
+        else if (outcome == 1) model.reset();
+        else {
+            model->clear();
+            successor = model->currentRecipient();
+            successor->setLabel(QStringLiteral("original clear successor"));
+            successor->amount()->setUnit(BitcoinAmount::Unit::MicroBTC);
+        }
+        f.settle();
         if (outcome == 2) {
             QVERIFY(model && successor); QCOMPARE(model->count(), 1); QCOMPARE(model->currentRecipient(), successor.data());
             QCOMPARE(successor->label(), QStringLiteral("original clear successor"));
             QCOMPARE(successor->amount()->unit(), BitcoinAmount::Unit::MicroBTC); QVERIFY(!model->validationPending());
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void cleanupAdmissionKeepsOriginalSetup_data()
     {
-        QTest::addColumn<int>("reservation"); QTest::addColumn<int>("outcome");
-        for (int reservation : {1, 2, 3}) for (int outcome : {0, 1, 2})
-            QTest::newRow(qPrintable(QString::number(reservation) + QLatin1Char('-') + QString::number(outcome))) << reservation << outcome;
+        QTest::addColumn<int>("stage"); QTest::addColumn<int>("outcome");
+        for (int stage : {0, 1, 2}) for (int outcome : {0, 1, 2})
+            QTest::newRow(qPrintable(QString::number(stage) + QLatin1Char('-') + QString::number(outcome))) << stage << outcome;
     }
     void cleanupAdmissionKeepsOriginalSetup()
     {
-        QFETCH(int, reservation); QFETCH(int, outcome);
-        ManualRoutedExecution env;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(env.scheduler);
-        std::deque<std::function<void()>> old_posts, current_posts;
-        size_t old_posted{0}, current_posted{0};
-        auto model = std::make_unique<SendRecipientsListModel>();
+        QFETCH(int, stage); QFETCH(int, outcome);
+        size_t original_posts{0}, replacement_posts{0};
+        ListFixture f;
+        auto& model = f.model;
         const QPointer<SendRecipient> original{model->currentRecipient()};
-        const auto publish = [&] {
-            for (auto* queue : {&old_posts, &current_posts}) while (!queue->empty()) {
-                auto turn = std::move(queue->front()); queue->pop_front(); turn();
-            }
-        };
-        const auto settle = [&] {
-            for (int turn = 0; turn < 512 && (turn == 0 || !env.queuedIdle() || !old_posts.empty() || !current_posts.empty()); ++turn) {
-                env.drain(); publish(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            }
-        };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
-        auto trigger = scheduler->armCleanup(reservation, [&] {
-            if (outcome == 0) model->close();
-            else if (outcome == 1) model.reset();
-            else model->setOpening({}, {scheduler, [&](auto turn) { ++current_posted; current_posts.push_back(std::move(turn)); }});
-        });
-        model->setOpening({}, {scheduler, [&](auto turn) { ++old_posted; old_posts.push_back(std::move(turn)); }});
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
-        if (outcome == 2) {
-            QVERIFY(model); QCOMPARE(model->currentRecipient(), original.data());
+        model->setOpening(f.opening, [&](auto turn) { ++original_posts; f.env.post()(std::move(turn)); });
+        if (stage >= 1) QVERIFY(f.env.step(execution::Lane::Utility));
+        if (stage == 2) f.env.drain();
+        if (outcome == 0) model->close();
+        else if (outcome == 1) model.reset();
+        else {
+            model->setOpening(f.opening, [&](auto turn) { ++replacement_posts; f.env.post()(std::move(turn)); });
+            QCOMPARE(model->currentRecipient(), original.data());
             model->currentRecipient()->setLabel(QStringLiteral("successor"));
-            settle(); QCOMPARE(old_posted, size_t{0}); QVERIFY(current_posted > 0);
-            QCOMPARE(model->currentRecipient()->label(), QStringLiteral("successor"));
+        }
+        f.settle();
+        if (outcome == 2) {
+            QVERIFY(original_posts > 0); QCOMPARE(replacement_posts, size_t{0});
+            QCOMPARE(model->currentRecipient(), original.data());
+            QCOMPARE(original->label(), QStringLiteral("successor"));
             QVERIFY(!model->validationPending());
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void clearCleanupAdmissionKeepsNewerIntent_data()
     {
-        QTest::addColumn<int>("reservation"); QTest::addColumn<int>("outcome");
-        for (int reservation : {1, 2}) for (int outcome : {0, 1, 2})
-            QTest::newRow(qPrintable(QString::number(reservation) + QLatin1Char('-') + QString::number(outcome))) << reservation << outcome;
+        QTest::addColumn<int>("stage"); QTest::addColumn<int>("outcome");
+        for (int stage : {0, 1}) for (int outcome : {0, 1, 2})
+            QTest::newRow(qPrintable(QString::number(stage) + QLatin1Char('-') + QString::number(outcome))) << stage << outcome;
     }
     void clearCleanupAdmissionKeepsNewerIntent()
     {
-        QFETCH(int, reservation); QFETCH(int, outcome);
-        ManualRoutedExecution env;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(env.scheduler);
-        std::deque<std::function<void()>> posts;
-        auto model = std::make_unique<SendRecipientsListModel>();
-        const auto settle = [&] {
-            for (int turn = 0; turn < 512 && (turn == 0 || !env.queuedIdle() || !posts.empty()); ++turn) {
-                env.drain(); while (!posts.empty()) { auto work = std::move(posts.front()); posts.pop_front(); work(); }
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            }
-        };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
-        model->setOpening({}, {scheduler, [&](auto turn) { posts.push_back(std::move(turn)); }}); settle();
-        const QPointer<SendRecipient> original{model->currentRecipient()};
-        const auto original_identity = original->identity();
+        QFETCH(int, stage); QFETCH(int, outcome);
+        ListFixture f;
+        auto& model = f.model;
+        f.bind(); f.settle();
+        const auto original_identity = model->currentRecipient()->identity();
         QPointer<SendRecipient> successor;
-        auto trigger = scheduler->armCleanup(reservation, [&] {
-            if (outcome == 0) model->close();
-            else if (outcome == 1) model.reset();
-            else {
-                model->clear(); successor = model->currentRecipient();
-                successor->setLabel(QStringLiteral("new clear intent"));
-            }
-        });
         model->clear();
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
-        settle();
+        if (stage == 1) f.env.drain();
+        if (outcome == 0) model->close();
+        else if (outcome == 1) model.reset();
+        else {
+            model->clear();
+            successor = model->currentRecipient();
+            successor->setLabel(QStringLiteral("new clear intent"));
+        }
+        f.settle();
         if (outcome == 2) {
             QVERIFY(model && successor); QVERIFY(successor->identity() != original_identity);
             QCOMPARE(model->currentRecipient(), successor.data());
             QCOMPARE(successor->label(), QStringLiteral("new clear intent")); QCOMPARE(model->count(), 1);
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
     }
-    void initTestCase() { m_executor = std::make_unique<BackendExecutor>(); }
-    void cleanupTestCase() { m_executor->shutdown(); QTRY_VERIFY(m_executor->isDrained()); m_executor.reset(); }
+    void initTestCase()
+    {
+        using execution::Lane;
+        m_executor = std::make_unique<execution::Executor>(execution::Executor::Config{});
+        const auto core = std::make_shared<execution::SerialQueue>(m_executor->makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(m_executor->makeQueue(Lane::Utility));
+        m_opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{utility, [core](auto done) {
+                core->close();
+                core->whenDrained(std::move(done));
+            }, core, utility});
+        QVERIFY(m_opening->start(std::make_shared<StubWallet>()));
+    }
+    void cleanupTestCase()
+    {
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        m_opening->stop(false, [stopped] { *stopped = true; });
+        QVERIFY(QTest::qWaitFor([&] { return stopped->load(); }, 5'000));
+        m_opening.reset();
+        m_executor->stopAndJoin();
+        m_executor.reset();
+    }
     void invalidDraftAndAddressHaveIndependentAdmissionReasons()
     {
-        SendRecipientsListModel recipients; bind(recipients);
+        using execution::Lane;
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        auto opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{utility, [core](auto done) {
+                core->close();
+                core->whenDrained(std::move(done));
+            }, core, utility});
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto stop = qScopeGuard([&] {
+            opening->stop(false, [stopped] { *stopped = true; });
+            QVERIFY(QTest::qWaitFor([&] { return stopped->load(); }, 5000));
+        });
+        QVERIFY(opening->start(std::make_shared<StubWallet>()));
+        SendRecipientsListModel recipients;
+        recipients.setOpening(opening, {});
         auto* recipient = recipients.currentRecipient();
         recipient->setAddress("malformed-address");
         recipient->amount()->setSatoshi(2'000'000);
@@ -210,6 +246,18 @@ private Q_SLOTS:
         QVERIFY(recipients.validationError().isEmpty());
         recipients.add();
         QTRY_VERIFY(!recipients.validationError().isEmpty());
+        QCOMPARE(recipients.count(), 2);
+        auto* added = recipients.currentRecipient();
+        QVERIFY(added != recipient);
+        added->setAddress("second-malformed-address");
+        QTRY_VERIFY(!added->validationPending());
+        QVERIFY(!added->addressError().isEmpty());
+        recipients.clear();
+        QCOMPARE(recipients.count(), 1);
+        auto* reset = recipients.currentRecipient();
+        reset->setAddress("reset-malformed-address");
+        QTRY_VERIFY(!reset->validationPending());
+        QVERIFY(!reset->addressError().isEmpty());
     }
     void clearKeepsCurrentRecipientValidForQmlBindings();
     void clearToFrontReportsRemovedRows();

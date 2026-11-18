@@ -4,7 +4,7 @@
 #include <qml/executor.h>
 #include <qml/models/feeestimatereader.h>
 #include <qml/models/feeselectionmodel.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QScopeGuard>
@@ -19,16 +19,28 @@ namespace {
 using execution::Lane;
 
 struct PolicyFixture {
-    ManualRoutedExecution executor;
+    ManualStartupExecution worker;
     std::deque<std::function<void()>> gui;
     FeeSelectionModel model;
-    PolicyFixture() {
-        model.setServices({executor.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }});
+    PolicyFixture()
+    {
+        model.setServices([this](auto turn) { gui.push_back(std::move(turn)); },
+            [this](std::shared_ptr<execution::Task> task) {
+                const bool accepted = worker.outcomes.post([task = std::move(task)] {
+                    task->execute();
+                    task->deliver();
+                });
+                return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+            });
         model.observe(100, {{2, 1000}, {3, 1000}, {4, 1000}, {6, 1000}, {10, 1000}, {25, 1000}, {50, 1000}}); finish();
     }
-    ~PolicyFixture() { model.close(); executor.drain(); while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); } }
+    ~PolicyFixture() { model.close(); finish(); }
     void publish() { while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); } }
-    void finish() { do { executor.drain(); publish(); } while (!executor.queuedIdle() || !executor.activeIdle() || !gui.empty()); }
+    void finish()
+    {
+        do { worker.drain(); publish(); }
+        while (!worker.quiescent() || !gui.empty());
+    }
 };
 FeeReadInput Input(CAmount amount) { FeeReadInput value; value.recipients.push_back({"captured", amount}); value.dependencies = {quint64(amount), 2, 3, 4, 5}; return value; }
 FeeReadResult Estimate(CAmount fee = 700) { FeeReadResult value; value.estimates.insert(6, SendFeePreview{fee, 1, 2500, {}, false, feeestimate::Provenance::Estimated, 6}); return value; }
@@ -83,7 +95,7 @@ private Q_SLOTS:
         PolicyFixture f; f.model.chooseCustom(); f.finish(); QCOMPARE(f.model.customRate()->text(), QStringLiteral("1.000"));
         f.model.customRate()->edit("17"); f.finish(); QCOMPARE(f.model.ratePerKvB(), std::optional<CAmount>{17000});
         const auto revision = f.model.revision(); f.model.chooseCustom(); f.model.chooseCustomTarget(6);
-        QCOMPARE(f.model.revision(), revision); QVERIFY(f.executor.quiescent());
+        QCOMPARE(f.model.revision(), revision); QVERIFY(f.worker.quiescent());
         f.model.observe(100, {{2, 2000}, {3, 2000}, {4, 2000}, {6, 2000}, {10, 2000}, {25, 2000}, {50, 2000}}); f.finish();
         QCOMPARE(f.model.customRate()->text(), QStringLiteral("17")); QCOMPARE(f.model.ratePerKvB(), std::optional<CAmount>{17000});
         f.model.choosePreset(2); f.finish(); QCOMPARE(f.model.mode(), FeeSelectionModel::Automatic);
@@ -105,9 +117,14 @@ private Q_SLOTS:
         f.finish(); QCOMPARE(f.model.customRate()->text(), QStringLiteral("17"));
     }
     void lateTargetDefaultCannotOverwriteManualRate() {
-        PolicyFixture f; f.model.chooseCustomTarget(3); f.executor.drain(); QVERIFY(!f.gui.empty());
+        PolicyFixture f;
+        f.model.chooseCustomTarget(3);
+        QVERIFY(f.worker.step(Lane::Utility));
+        QVERIFY(!f.gui.empty());
         f.model.customRate()->edit("17"); f.publish(); QCOMPARE(f.model.customRate()->text(), QStringLiteral("17"));
         QVERIFY(f.model.policyPending()); f.finish(); QCOMPARE(f.model.ratePerKvB(), std::optional<CAmount>{17000});
+        QCOMPARE(f.worker.coreSubmissions(), size_t{0});
+        QVERIFY(f.worker.quiescent());
     }
     void exactRateTransport_data() {
         QTest::addColumn<QString>("text"); QTest::addColumn<qint64>("rate");
@@ -139,11 +156,11 @@ private Q_SLOTS:
     }
     void rejectedValidationRecoversOnlyWithExplicitInterest()
     {
-        PolicyFixture f; f.model.chooseCustom(); f.finish(); f.executor.rejectLane(execution::Lane::Domain);
+        PolicyFixture f; f.model.chooseCustom(); f.finish(); f.worker.reject_utility = true;
         f.model.customRate()->edit("17"); f.finish(); QVERIFY(!f.model.customRate()->valid());
         QVERIFY(!f.model.customRate()->error().isEmpty()); QVERIFY(!f.model.policyPending());
         const auto intent = f.model.revision(); f.model.chooseCustom(); f.model.customRate()->edit("17");
-        QVERIFY(f.executor.quiescent()); QVERIFY(!f.model.customRate()->valid());
+        QVERIFY(f.worker.quiescent()); QVERIFY(!f.model.customRate()->valid());
         f.model.refresh(); QVERIFY(f.model.policyPending()); f.finish();
         QCOMPARE(f.model.revision(), intent); QCOMPARE(f.model.ratePerKvB(), std::optional<CAmount>{17000});
     }
@@ -303,11 +320,11 @@ private Q_SLOTS:
         QCOMPARE(f.model.estimatedRate(), QStringLiteral("2.500"));
     }
     void stoppedPolicyCannotPublishHeldValidation() {
-        PolicyFixture f; f.model.chooseCustomTarget(3); f.executor.drain();
+        PolicyFixture f; f.model.chooseCustomTarget(3); f.worker.drain();
         QSignalSpy changes{&f.model, &FeeSelectionModel::policyChanged}; f.model.close();
         f.publish(); QCOMPARE(changes.size(), 0); QVERIFY(!f.model.ratePerKvB());
         QCOMPARE(f.model.estimateState(), FeeSelectionModel::Stopping);
-        QVERIFY(f.executor.quiescent()); f.model.finishStop(); QCOMPARE(f.model.estimateState(), FeeSelectionModel::Stopped);
+        QVERIFY(f.worker.quiescent()); f.model.finishStop(); QCOMPARE(f.model.estimateState(), FeeSelectionModel::Stopped);
     }
     void closeRetainsActualDrainAndRejectsLatePublication_data() {
         QTest::addColumn<int>("point"); QTest::newRow("Domain-queued") << 0; QTest::newRow("Core-queued") << 1; QTest::newRow("Core-finished-outcome-held") << 2;
@@ -324,7 +341,7 @@ private Q_SLOTS:
     void realReaderKeepsNativeWorkOffGui() {
         struct State {
             QSemaphore entered, release;
-            std::atomic_bool drained{false};
+            std::atomic<QThread*> drained_on{nullptr};
         };
         const auto state = std::make_shared<State>();
         QObject receiver; QThread* native_thread{nullptr}; std::optional<feeestimate::Publication> result;
@@ -354,7 +371,7 @@ private Q_SLOTS:
             QMetaObject::invokeMethod(&receiver, [&] {
                 if (auto value = reader->take()) result = std::move(value);
             }, Qt::QueuedConnection);
-        }, [state] { state->drained = true; });
+        }, [state] { state->drained_on = QThread::currentThread(); });
         QVERIFY(reader->request(1, Input(1))); QTRY_VERIFY(result && result->fresh);
         QCOMPARE(result->revision, quint64{1});
         QVERIFY(native_thread); QVERIFY(native_thread != QThread::currentThread());
@@ -363,14 +380,17 @@ private Q_SLOTS:
         QTRY_VERIFY(state->entered.available() > 0);
         QTRY_VERIFY(result && result->revision == 2 && result->phase == feeestimate::Phase::Reading);
         reader->close();
-        const auto core_drained = std::make_shared<std::atomic_bool>(false);
+        const auto core_drained = std::make_shared<std::atomic<QThread*>>(nullptr);
         core->close();
-        core->whenDrained([core_drained] { core_drained->store(true); });
-        QVERIFY(!state->drained.load());
+        core->whenDrained([core_drained] { core_drained->store(QThread::currentThread()); });
+        QVERIFY(!state->drained_on.load());
         QVERIFY(!core_drained->load());
+        utility->close(); // An accepted read still owns its outcome after both queues close.
         state->release.release();
         QTRY_VERIFY(core_drained->load());
-        QTRY_VERIFY(state->drained.load());
+        QTRY_VERIFY(state->drained_on.load());
+        QVERIFY(state->drained_on.load() == core_drained->load());
+        QVERIFY(state->drained_on.load() != native_thread);
         QCoreApplication::sendPostedEvents(&receiver, QEvent::MetaCall);
         QCOMPARE(result->revision, quint64{2});
         QCOMPARE(result->phase, feeestimate::Phase::Reading);

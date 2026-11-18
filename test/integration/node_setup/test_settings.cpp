@@ -8,12 +8,17 @@
 #include <qml/models/settingseditormodel.h>
 #include <qml/models/desktopwindowbehaviormodel.h>
 #include <qml/models/options_model.h>
+#include <qml/models/rpcconsolemodel.h>
 #include <qml/models/settings_keys.h>
 #include <node/caches.h>
+#include <node/interface_ui.h>
 #include <common/args.h>
 #include <common/settings.h>
 #include <util/fs.h>
 #include <util/byte_units.h>
+#include <util/translation.h>
+
+#include <atomic>
 
 #include <QDir>
 #include <QFile>
@@ -70,6 +75,70 @@ public Q_SLOTS:
     void recordOpenedUrl(const QUrl& url) { m_opened_urls.append(url); }
 
 private Q_SLOTS:
+    void acceptedSettingsWritePersistsWhenQuittingDuringRuntimeQuestion()
+    {
+        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel");
+        auto& node_model = m_app.nodeModel();
+        QVERIFY(options);
+        QTRY_VERIFY(options->settingsReady());
+        QTRY_VERIFY(!options->settingsPending());
+        QVERIFY(savedSetting("dbcache").isNull());
+
+        const auto answer = std::make_shared<std::atomic<int>>(-1);
+        const auto post = node_model.postNative(execution::Lane::Core);
+        QVERIFY(post);
+        QVERIFY(post(execution::MakeTask([] {
+            return uiInterface.ThreadSafeQuestion(Untranslated("Original question blocking Core"), "",
+                                                   CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT);
+        }, [answer](bool accepted) { answer->store(accepted ? 1 : 0); }, {})));
+        const auto close_prompt = qScopeGuard([&] {
+            if (node_model.runtimeDialogVisible()) node_model.answerRuntimeDialog(CClientUIInterface::BTN_ABORT);
+        });
+        QTRY_VERIFY(node_model.runtimeDialogVisible());
+        QCOMPARE(answer->load(), -1);
+
+        options->setDbcacheSizeMiB(701);
+        QVERIFY(options->settingsPending());
+        const auto before_quit = savedSetting("dbcache");
+        QVERIFY(before_quit.isNull() || before_quit.getValStr() == "701");
+        QSignalSpy requested{&node_model, &NodeModel::requestedShutdown};
+        m_app.window()->close();
+        QTRY_COMPARE(requested.count(), 1);
+        QTRY_COMPARE(answer->load(), 0);
+        QTRY_COMPARE(savedSetting("dbcache").getValStr(), std::string{"701"});
+    }
+
+    void acceptedSettingsWritePersistsWhenQuittingDuringBlockingRpc()
+    {
+        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel");
+        auto* console = qmltest::Model<RpcConsoleModel>(m_app, "rpcConsoleModel");
+        QVERIFY(options && console);
+        QTRY_VERIFY(options->settingsReady());
+        QTRY_VERIFY(!options->settingsPending());
+        QVERIFY(savedSetting("dbcache").isNull());
+        QVERIFY(qmltest::SelectSettings(m_app, "storage"));
+        auto* editor = settingsEditor();
+        QVERIFY(editor);
+        QTRY_VERIFY(editor->fresh());
+        QVERIFY(qmltest::SetText(m_app, "dbcacheSettingInput", "700"));
+        QTRY_VERIFY(editor->canSave());
+
+        const auto tip = qmltest::Call(m_app, &interfaces::Node::executeRpc,
+                                      "getbestblockhash", UniValue{UniValue::VARR}, "").get_str();
+        QVERIFY(console->submitNodeCommand(QString::fromStdString("waitfornewblock 0 " + tip)));
+        QTRY_VERIFY(qmltest::RpcCommandRunning(m_app, "waitfornewblock"));
+
+        editor->save();
+        // Quitting can discard an edit still awaiting validation. Wait until
+        // the write is accepted while the RPC remains blocked.
+        QTRY_VERIFY(editor->phase() == SettingsEditorModel::Saving || editor->lastSavePersisted());
+        QVERIFY(console->executing());
+        QSignalSpy requested{&m_app.nodeModel(), &NodeModel::requestedShutdown};
+        m_app.window()->close();
+        QTRY_COMPARE(requested.count(), 1);
+        QTRY_COMPARE(savedSetting("dbcache").getValStr(), std::string{"700"});
+    }
+
     void aboutLinkConfirmationCancelsAndReopensWithoutNavigation()
     {
         // Catch accidental launches without opening a real browser.

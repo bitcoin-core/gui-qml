@@ -2,14 +2,17 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/secretinput.h>
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 #include <qml/retainedvalue.h>
+#include <qml/walletopening.h>
 #include <support/cleanse.h>
 #include <QByteArray>
 #include <limits>
 
 namespace secretinput {
-Input::Input(QString text, size_t bytes) : m_text(std::move(text)), m_bytes(bytes) {}
-CaptureResult Capture(const std::shared_ptr<execution::Scheduler>& scheduler, const QString& text)
+namespace {
+template <typename Retain>
+CaptureResult CaptureInput(const QString& text, Retain retain)
 {
     // Peak conservative accounting: retained UTF16 plus temporary UTF8 and
     // secure UTF8 allocation. No scan of the original literal is necessary.
@@ -19,14 +22,28 @@ CaptureResult Capture(const std::shared_ptr<execution::Scheduler>& scheduler, co
     if (units > (std::numeric_limits<size_t>::max() - OVERHEAD) / BYTES_PER_CODE_UNIT)
         return {{}, Error::TransportBudget};
     const size_t bytes = OVERHEAD + units * BYTES_PER_CODE_UNIT;
-    if (!scheduler) return {{}, Error::Unavailable, bytes};
     std::shared_ptr<Input> retained;
     try {
-        retained = execution::RetainValues<Input>(scheduler, [&text, bytes] { return std::make_unique<Input>(text, bytes); });
+        retained = retain([&text, bytes] { return std::make_unique<Input>(text, bytes); });
     } catch (...) { return {{}, Error::Unavailable, bytes}; }
     const auto error = retained ? Error::None : Error::Unavailable;
     return {std::move(retained), error, bytes};
 }
+} // namespace
+
+Input::Input(QString text, size_t bytes) : m_text(std::move(text)), m_bytes(bytes) {}
+CaptureResult Capture(const execution::ValueCleanup& hold, const QString& text)
+{
+    return CaptureInput(text, [&hold](auto make) { return execution::RetainValues<Input>(hold, make); });
+}
+
+#ifdef ENABLE_WALLET
+CaptureResult Capture(const std::shared_ptr<walletopening::Session>& opening, const QString& text)
+{
+    return CaptureInput(text, [&opening](auto make) { return walletopening::RetainValues<Input>(opening, make); });
+}
+#endif
+
 size_t Bytes(const Captured& input) { return input ? input->bytes() : 0; }
 SecureString Materialize(const Captured& input)
 {

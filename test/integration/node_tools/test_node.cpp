@@ -10,6 +10,11 @@
 #include <util/translation.h>
 
 #include <QScopeGuard>
+#include <QLocale>
+
+#include <stdexcept>
+#include <QDateTime>
+#include <QVariantMap>
 #include <QSignalSpy>
 #include <QTimer>
 
@@ -57,6 +62,135 @@ private Q_SLOTS:
         QCOMPARE(model->numPeers(), static_cast<int>(qmltest::Call(m_app, &interfaces::Node::getNodeCount, ConnectionDirection::Both)));
     }
 
+    void invalidatedHeaderReadbackMatchesCore_data()
+    {
+        QTest::addColumn<int>("depth");
+        QTest::newRow("shallow-20") << 20;
+        QTest::newRow("deep-30") << 30;
+    }
+
+    void invalidatedHeaderReadbackMatchesCore()
+    {
+        QFETCH(int, depth);
+        auto* model = &m_app.nodeModel();
+        const auto rpc = [&](const char* method, const UniValue& params = UniValue{UniValue::VARR}) {
+            try { return qmltest::Call(m_app, &interfaces::Node::executeRpc, method, params, ""); }
+            catch (const UniValue& error) { throw std::runtime_error{std::string{"R38 public RPC "} + method + ": " + error.write()}; }
+        };
+        const auto generate = [&](int count, const char* descriptor = "raw(51)") {
+            UniValue params{UniValue::VARR}; params.push_back(count); params.push_back(descriptor);
+            return rpc("generatetodescriptor", params);
+        };
+        const auto information = [&](const QString& label) {
+            for (const auto& row : model->nodeInformationRows()) {
+                const auto values = row.toMap();
+                if (values.value("label").toString() == label) return values.value("value").toString();
+            }
+            return QString{};
+        };
+        QVERIFY(qmltest::ReturnToNode(m_app));
+        QVERIFY(qmltest::WaitForVisible(m_app, "blockClock"));
+        auto* clock = qmltest::Find(m_app, "blockClock"); QVERIFY(clock);
+        const int original_height = rpc("getblockcount").getInt<int>();
+        QCOMPARE(generate(200).size(), 200U);
+        const int height = original_height + 200;
+        QTRY_COMPARE(model->blockTipHeight(), height);
+        QTRY_COMPARE(information("Header height"), QString::number(height));
+        QTRY_VERIFY(model->initialSyncComplete());
+        QVERIFY(qmltest::Click(m_app, "nodeInformationButton"));
+        QVERIFY(qmltest::WaitForVisible(m_app, "nodeInformationPopup"));
+        QPointer<QObject> popup{qmltest::Find(m_app, "nodeInformationPopup")}; QVERIFY(popup);
+        const auto displayed = [&](const QString& label) {
+            const auto rows = model->nodeInformationRows();
+            for (int row = 0; row < rows.size(); ++row) {
+                if (rows[row].toMap().value("label").toString() != label) continue;
+                auto* value = popup ? qmltest::Find(popup, QStringLiteral("nodeInformationValue_%1").arg(row)) : nullptr;
+                return value ? value->property("text").toString() : QString{};
+            }
+            return QString{};
+        };
+        const auto observed = [&](int expected_height, int64_t expected_time) {
+            return model->blockTipHeight() == expected_height && model->initialSyncComplete() &&
+                information("Block height") == QString::number(expected_height) &&
+                information("Header height") == QString::number(expected_height) &&
+                information("Header time") == QLocale{}.toString(QDateTime::fromSecsSinceEpoch(expected_time), QLocale::ShortFormat) &&
+                displayed("Block height") == QString::number(expected_height) &&
+                displayed("Header height") == QString::number(expected_height) &&
+                displayed("Header time") == information("Header time") && clock->property("synced").toBool();
+        };
+        UniValue hash_params{UniValue::VARR}; hash_params.push_back(height - depth + 1);
+        const auto invalidated_hash = rpc("getblockhash", hash_params).get_str();
+        UniValue invalidated{UniValue::VARR}; invalidated.push_back(invalidated_hash);
+        bool invalid{false};
+        const auto cleanup = qScopeGuard([&] {
+            if (invalid) rpc("reconsiderblock", invalidated);
+            if (popup) QMetaObject::invokeMethod(popup, "close");
+        });
+        const auto invalidate = [&] { rpc("invalidateblock", invalidated); invalid = true; };
+        const auto reconsider = [&] { rpc("reconsiderblock", invalidated); invalid = false; };
+        const auto current_header_time = [&] {
+            const auto chain = rpc("getblockchaininfo");
+            UniValue params{UniValue::VARR}; params.push_back(chain.find_value("bestblockhash").get_str());
+            return rpc("getblockheader", params).find_value("time").getInt<int64_t>();
+        };
+        const auto core_matches = [&](int expected) {
+            const auto chain = rpc("getblockchaininfo");
+            return chain.find_value("blocks").getInt<int>() == expected &&
+                chain.find_value("headers").getInt<int>() == expected &&
+                !chain.find_value("initialblockdownload").get_bool();
+        };
+        invalidate();
+        QVERIFY(core_matches(height - depth));
+        const auto lowered_time = current_header_time();
+        // Collect the original oracle without returning before both recovery
+        // controls run. Red output therefore records genuine executed controls.
+        const bool lowered = QTest::qWaitFor([&] { return observed(height - depth, lowered_time); });
+        const auto observed_header = information("Header height");
+        const bool observed_sync = model->initialSyncComplete();
+        reconsider(); QVERIFY(core_matches(height));
+        const auto restored_time = current_header_time();
+        const bool reconsidered = QTest::qWaitFor([&] { return observed(height, restored_time); });
+        invalidate(); QVERIFY(core_matches(height - depth));
+        // A different coinbase script guarantees a new block instead of
+        // recreating the same now-invalid hash within the same clock second.
+        QCOMPARE(generate(1, "raw(52)").size(), 1U);
+        QVERIFY(core_matches(height - depth + 1));
+        const auto replacement_time = current_header_time();
+        const bool new_block = QTest::qWaitFor([&] { return observed(height - depth + 1, replacement_time); });
+        qInfo() << "R38 public header invalidation" << "depth" << depth << "Core height" << height - depth
+                << "observed header" << observed_header << "observed synced" << observed_sync
+                << "reconsider recovery" << reconsidered << "new block recovery" << new_block;
+        QVERIFY(reconsidered); QVERIFY(new_block); QVERIFY(lowered);
+        // The fixture has no peers. This proves the real clock's synced binding,
+        // not the peer-dependent Downloading/99.9% wording in the old report.
+    }
+
+    void rpcObservationDoesNotReplayAnEarlierGuiDesire()
+    {
+        auto* model=&m_app.nodeModel();QTRY_VERIFY(model->networkActionReady());
+        model->setPause(true);QTRY_VERIFY(!model->networkActionPending());QTRY_VERIFY(model->pause());
+        const auto set_rpc=[&](bool active){UniValue params{UniValue::VARR};params.push_back(active);qmltest::Call(m_app,&interfaces::Node::executeRpc,"setnetworkactive",params,"");};
+        set_rpc(true);QTRY_VERIFY(!model->pause());
+        set_rpc(false);QTRY_VERIFY(model->pause());
+        QVERIFY(!model->networkActionPending());
+        QCOMPARE(qmltest::Call(m_app,&interfaces::Node::getNetworkActive),false);
+        model->setPause(false);QTRY_VERIFY(!model->networkActionPending());QTRY_VERIFY(!model->pause());
+        QCOMPARE(qmltest::Call(m_app,&interfaces::Node::getNetworkActive),true);
+    }
+
+    void runtimeQuestionMakesTheHiddenNativeWindowReachable()
+    {
+        auto* window=m_app.window();QVERIFY(window);window->hide();QVERIFY(!window->isVisible());
+        auto answer=std::async(std::launch::async,[]{return uiInterface.ThreadSafeQuestion(Untranslated("Original hidden-window question"),"",CClientUIInterface::MSG_ERROR|CClientUIInterface::BTN_ABORT);});
+        const auto release=qScopeGuard([&]{m_app.nodeModel().answerRuntimeDialog(CClientUIInterface::BTN_OK);window->show();});
+        QTRY_VERIFY(window->isVisible());
+        QVERIFY(qmltest::WaitForVisible(m_app,"nodeRuntimeDialogButtonOk"));
+        QCOMPARE(m_app.nodeModel().runtimeDialogMessage(),QStringLiteral("Original hidden-window question"));
+        QVERIFY(qmltest::Click(m_app,"nodeRuntimeDialogButtonOk"));
+        QTRY_VERIFY(answer.wait_for(std::chrono::milliseconds{0})==std::future_status::ready);
+        QVERIFY(answer.get());QTRY_VERIFY(!m_app.nodeModel().runtimeDialogVisible());
+    }
+
     // #1138: a Core question that arrives while the window is minimized must
     // un-minimize it, or the node waits behind a message nobody can see.
     void runtimeQuestionRestoresTheMinimizedNativeWindow()
@@ -80,7 +214,7 @@ private Q_SLOTS:
         QVERIFY(console);
         const auto tip = qmltest::Call(m_app, &interfaces::Node::executeRpc, "getbestblockhash", UniValue{UniValue::VARR}, "").get_str();
         // Keep the RPC active until cleanup mines a block, even if the GUI is slow.
-        QVERIFY(console->submitCommand(QString::fromStdString("waitfornewblock 0 " + tip)));
+        QVERIFY(console->submitNodeCommand(QString::fromStdString("waitfornewblock 0 " + tip)));
         const auto finish_rpc = qScopeGuard([&] {
             UniValue params{UniValue::VARR};
             params.push_back(1);

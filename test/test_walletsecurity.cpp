@@ -2,12 +2,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <qml/models/walletsecuritymodel.h>
 #include <qml/walletsecurity.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/mockwallet.h>
+#include <test/mocks/walletsession.h>
 #include <test/qt_test_registry.h>
 
 #include <QScopeGuard>
@@ -44,12 +45,21 @@ struct Wallet final : StubWallet {
     bool no_keys{false}, encrypted{false}, locked{false}, throw_after_effect{false};
 };
 struct Fixture {
-    ManualRoutedExecution commands, retirement;
+    ManualStartupExecution commands, retirement;
     std::shared_ptr<Wallet> wallet{std::make_shared<Wallet>()};
     std::shared_ptr<walletopening::Session> session{std::make_shared<walletopening::Session>(
-        commands.scheduler, retirement.scheduler, std::make_shared<std::atomic_bool>(false), [] {})};
+        std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+        std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+        WalletSessionQueues(commands.executor(), retirement.executor()))};
     Fixture() { session->start(wallet); commands.drain(); session->take(); }
-    ~Fixture() { session->retire(); commands.drain(); retirement.drain(); }
+    ~Fixture()
+    {
+        session->stop(false, {});
+        do {
+            commands.drain();
+            retirement.drain();
+        } while (!commands.quiescent() || !retirement.quiescent());
+    }
 };
 }
 
@@ -213,36 +223,79 @@ private Q_SLOTS:
             const std::shared_ptr<State> state;
         };
         const auto state = std::make_shared<State>();
-        const auto unblock = qScopeGuard([state] { state->release.release(); });
-        BackendExecutor commands{execution::Options{}}, retirement;
+        execution::Executor executor{execution::Executor::Config{}};
+        auto session = MakeWalletSession(executor, [state] { ++state->metadata; });
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto shutdown = qScopeGuard([&] {
+            state->release.release();
+            session->stop(false, [stopped] { *stopped = true; });
+            const bool drained = QTest::qWaitFor([&] { return stopped->load(); }, 5'000);
+            executor.stopAndJoin();
+            QVERIFY(drained);
+        });
         auto native = std::make_shared<RealWallet>(state);
-        auto session = std::make_shared<walletopening::Session>(commands.scheduler(), retirement.scheduler(),
-            std::make_shared<std::atomic_bool>(false), [state] { ++state->metadata; });
         QVERIFY(session->start(native));
         QTRY_VERIFY(state->metadata.load() > 0);
         auto operation = std::make_shared<walletsecurity::Operation>(session, Kind::Encrypt, [state] {
             state->outcome_thread = QThread::currentThread(); ++state->outcomes;
         });
-        auto captured = secretinput::Capture(session->scheduler(), QString(40'000, QChar{'p'})); QVERIFY(captured);
+        auto captured = secretinput::Capture(session, QString(40'000, QChar{'p'})); QVERIFY(captured);
         QVERIFY(operation->start({Kind::Encrypt, {}, {}, {}, captured.input})); captured.input.reset();
         QTRY_VERIFY(state->entered.available() > 0);
         QVERIFY(state->entered.tryAcquire());
         QVERIFY(state->effect_thread.load() != qApp->thread());
-        native.reset(); session->retire(); commands.shutdown(); retirement.shutdown();
+        native.reset(); session->stop(false, [stopped] { *stopped = true; });
         bool heartbeat{false};
         QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection);
         QTRY_VERIFY(heartbeat);
-        QVERIFY(!retirement.isDrained());
+        QVERIFY(!stopped->load());
         QCOMPARE(state->outcomes.load(), 0);
         QVERIFY(!state->destruction_thread.load());
         state->release.release();
-        QTRY_VERIFY(commands.isDrained() && retirement.isDrained());
+        QTRY_VERIFY(stopped->load());
         QCOMPARE(state->outcomes.load(), 1);
         QVERIFY(state->matching_secret.load());
         QVERIFY(state->outcome_thread.load() != qApp->thread());
         QVERIFY(state->destruction_thread.load() && state->destruction_thread.load() != qApp->thread());
         QVERIFY(operation->result() && operation->result()->error == Error::None);
     }
+    void directSessionCapturesCredentialsAfterLegacySchedulerCloses()
+    {
+        ManualStartupExecution worker;
+        auto wallet = std::make_shared<Wallet>();
+        auto session = MakeWalletSession(worker.executor(), [] {});
+        bool drained{false};
+        const auto finish = qScopeGuard([&] { session->stop(false, {}); worker.drain(); });
+        QVERIFY(session->start(wallet));
+        worker.drain();
+
+        WalletSecurityModel model;
+        model.bind(session, presentation::MakeGuiObject(), [] { return true; });
+        model.observe(walletopening::Metadata{});
+        auto* operation = model.beginEncryption();
+        QVERIFY(operation);
+        QString replacement = QStringLiteral("replacement");
+        QVERIFY(operation->submitCredentials(operation->operationId(), {}, replacement, replacement));
+        replacement = QStringLiteral("edited");
+        QCOMPARE(operation->phase(), SecurityOperationModel::Phase::Pending);
+
+        model.close();
+        session->stop(false, [&] { drained = true; });
+        QCOMPARE(wallet->encryptions, 0);
+        QVERIFY(!drained);
+        QVERIFY(worker.step(Lane::Core));
+        QCOMPARE(wallet->encryptions, 1);
+        QVERIFY(wallet->encrypted);
+        QVERIFY(!drained);
+        QCOMPARE(operation->phase(), SecurityOperationModel::Phase::Pending);
+        worker.drain();
+        QVERIFY(drained);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QCOMPARE(operation->phase(), SecurityOperationModel::Phase::Succeeded);
+        QCOMPARE(wallet->encryptions, 1);
+        QVERIFY(worker.quiescent());
+    }
+
     void securityOutcomeWaitsForCoreThenDomain()
     {
         Fixture f;
@@ -256,24 +309,24 @@ private Q_SLOTS:
         QVERIFY(f.wallet->encrypted);
         QCOMPARE(notices, 0);
         QVERIFY(!operation->result());
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QCOMPARE(notices, 1);
         const auto result = operation->result();
         QVERIFY(result && result->error == Error::None && result->state_known && result->encrypted && result->locked);
     }
     void throwingPublicationKeepsActualOutcomeAndDoesNotStrandDomain()
     {
-        Fixture f; const auto baseline = f.commands.scheduler->pending();
+        Fixture f; QVERIFY(f.commands.quiescent());
         bool fail{true}; int notices{0};
         auto operation = std::make_shared<walletsecurity::Operation>(f.session, Kind::Encrypt, [&] {
             ++notices; if (fail) throw std::runtime_error{"GUI post rejected"};
         });
         QVERIFY(operation->start({Kind::Encrypt, {}, SecureString{"replacement"}}));
         QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->encryptions, 1); QVERIFY(!operation->result());
-        QVERIFY(f.commands.step(Lane::Domain)); f.commands.drain();
+        QVERIFY(f.commands.step(Lane::Utility)); f.commands.drain();
         const auto result = operation->result(); QVERIFY(result); QCOMPARE(result->error, Error::None);
         QVERIFY(result->state_known); QVERIFY(result->encrypted); QVERIFY(result->publication_failed);
-        QCOMPARE(f.commands.scheduler->pending(), baseline); QVERIFY(f.commands.activeIdle()); QVERIFY(f.commands.queuedIdle());
+        QVERIFY(f.commands.quiescent());
         fail = false; operation->retryPublication(); QCOMPARE(notices, 2); QCOMPARE(f.wallet->encryptions, 1);
         QVERIFY(!operation->result()->publication_failed); QCOMPARE(operation->result()->error, Error::None);
     }
@@ -316,14 +369,15 @@ private Q_SLOTS:
         Fixture f;
         auto operation = std::make_shared<walletsecurity::Operation>(f.session, Kind::Encrypt, [] {});
         QVERIFY(operation->start({Kind::Encrypt, {}, SecureString{"replacement"}}));
-        f.session->retire(true);
-        QVERIFY(!f.retirement.step(Lane::Cleanup));
+        f.session->stop(true, {});
+        QVERIFY(!f.retirement.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->encryptions, 1);
         QCOMPARE(f.wallet->removals, 0);
-        QVERIFY(!f.retirement.step(Lane::Cleanup));
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(!f.retirement.step(Lane::Utility));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(operation->result() && operation->result()->error == Error::None);
+        f.commands.drain();
         f.retirement.drain();
         QCOMPARE(f.wallet->removals, 1);
     }
@@ -335,7 +389,7 @@ private Q_SLOTS:
         const std::weak_ptr<walletsecurity::Operation> weak{operation};
         QVERIFY(operation->start({Kind::Encrypt, {}, SecureString{"replacement"}}));
         operation.reset();
-        f.session->retire();
+        f.session->stop(false, {});
         QVERIFY(!weak.expired());
         f.commands.drain(); f.retirement.drain();
         QCOMPARE(f.wallet->encryptions, 1);

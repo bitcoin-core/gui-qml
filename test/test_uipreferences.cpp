@@ -6,10 +6,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QWindow>
-#include <qml/backendexecutor.h>
 #include <qml/guipresentation.h>
-#include <test/mocks/manualexecutionenvironment.h>
-#include <test/mocks/drainexecutors.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QCoreApplication>
@@ -28,7 +26,14 @@
 #include <stdexcept>
 namespace {
 bool Deliver(std::deque<std::function<void()>>& gui){if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;}
-bool Settle(ManualRoutedExecution& transport,std::deque<std::function<void()>>& gui){for(int turn=0;turn<1024;++turn){if(!transport.queuedIdle()){if(!transport.stepNext())return false;continue;}if(Deliver(gui))continue;return true;}return false;}
+bool Settle(ManualStartupExecution& transport, std::deque<std::function<void()>>& gui)
+{
+    for (int turn = 0; turn < 1024; ++turn) {
+        transport.drain();
+        if (!Deliver(gui)) return transport.quiescent();
+    }
+    return false;
+}
 UiPreferencesNamespace File(const QString& path){UiPreferencesNamespace id;id.file=path;return id;}
 }
 class UiPreferencesTests : public QObject {
@@ -77,9 +82,9 @@ private Q_SLOTS:
 
 void UiPreferencesTests::rejectedRefreshDoesNotReenterOrRetryItsFailure()
 {
-    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("rejected.ini");ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(path)};
-    transport.scheduler->stopAcceptingWork();bool delivering{false},reentered{false};int notices{0};
+    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("rejected.ini");std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(path)};
+    transport.reject_core = true;bool delivering{false},reentered{false};int notices{0};
     const auto finish=qScopeGuard([&]{disconnect(&store,nullptr,this,nullptr);store.close();Settle(transport,gui);transport.drain();});
     const auto connection=connect(&store,&UiPreferencesStore::stateChanged,this,[&]{
         reentered|=delivering;delivering=true;if(++notices<=2)store.refresh();delivering=false;
@@ -120,8 +125,8 @@ void UiPreferencesTests::nativeWindowRestoreWaitsForOriginalRead()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path=directory.filePath("restore.ini");
     {QSettings settings{path,QSettings::IniFormat};settings.setValue("windowWidth",200);settings.setValue("windowHeight",100);settings.setValue("windowX",20000);settings.setValue("windowY",20000);settings.sync();}
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(path)};
     AppPreferences view;view.configure(&store);QWindow window;window.setMinimumSize({800,665});window.setGeometry({50,60,900,740});
     const auto before=window.geometry(); QVERIFY(!view.restoreWindow(&window)); QCOMPARE(window.geometry(),before);
     store.start(); transport.drain(); QVERIFY(!view.restoreWindow(&window)); QCOMPARE(window.geometry(),before);
@@ -134,16 +139,16 @@ void UiPreferencesTests::nativeWindowRestoreWaitsForOriginalRead()
 }
 void UiPreferencesTests::manualRefreshCoalescesBeforeInitialReadCompletes()
 {
-    QTemporaryDir directory;QVERIFY(directory.isValid());ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(directory.filePath("coalesce.ini"))};
+    QTemporaryDir directory;QVERIFY(directory.isValid());std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(directory.filePath("coalesce.ini"))};
     store.start();const auto original=store.operationId();for(int i=0;i<64;++i)store.refresh();
     QCOMPARE(store.operationId(),original);QVERIFY(Settle(transport,gui));QCOMPARE(store.operationId(),original+1);QVERIFY(store.ready());QVERIFY(!store.pending());
     store.close();const auto final=store.operationId();store.refresh();QCOMPARE(store.operationId(),final);transport.drain();QVERIFY(transport.quiescent());
 }
 void UiPreferencesTests::manualRefreshWaitsForAcceptedWritePublication()
 {
-    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("pending.ini");ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(path)};AppPreferences view;view.configure(&store);store.start();QVERIFY(Settle(transport,gui));
+    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("pending.ini");std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(path)};AppPreferences view;view.configure(&store);store.start();QVERIFY(Settle(transport,gui));
     view.set_activityGrouping("day");const auto receipt=store.lastWriteReceipt();QVERIFY(receipt);transport.drain();QCOMPARE(receipt->load(),UiPreferencesStore::Applied);QVERIFY(store.pending());
     {QSettings external{path,QSettings::IniFormat};external.setValue("dark",false);external.sync();}
     const auto write=store.operationId();store.refresh();store.refresh();QCOMPARE(store.operationId(),write);QVERIFY(view.dark());
@@ -156,51 +161,61 @@ void UiPreferencesTests::manualRefreshWaitsForAcceptedWritePublication()
 }
 void UiPreferencesTests::externalWriterIsObservedByRealWorkers()
 {
-    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("external.ini");BackendExecutor executor;
-    UiPreferencesStore store{{executor.scheduler(),presentation::QueuedPost()},File(path)};AppPreferences view;view.configure(&store);store.start();QTRY_VERIFY(store.ready());
+    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("external.ini");execution::Executor executor{execution::Executor::Config{}};
+    UiPreferencesStore store{&executor,execution::Lane::Core,presentation::QueuedPost(),File(path)};AppPreferences view;view.configure(&store);store.start();QTRY_VERIFY(store.ready());
     // Ensure a physical file exists before testing an independent writer.
     view.set_dark(true);QTRY_VERIFY(!store.pending());
     {QSettings external{path,QSettings::IniFormat};external.setValue("dark",false);external.setValue("activityGrouping","day");external.sync();}
     QTRY_VERIFY(!view.dark());QTRY_COMPARE(view.activityGrouping(),QStringLiteral("day"));QTRY_VERIFY(!store.pending());
     {QSettings external{path,QSettings::IniFormat};external.remove("activityGrouping");external.sync();}
     QTRY_COMPARE(view.activityGrouping(),QStringLiteral("month"));
-    bool drained{false};store.whenDrained([&]{drained=true;});QTRY_VERIFY(drained);executor.shutdown();
+    bool drained{false};store.whenDrained([&]{drained=true;});QTRY_VERIFY(drained);executor.stopAndJoin();
 }
 
 void UiPreferencesTests::loadWaitsForActualReadAndPublication(){
     QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("prefs.ini");
     {QSettings settings{path,QSettings::IniFormat};settings.setValue("windowWidth",1234);settings.setValue("windowHeight",777);settings.setValue("dark",false);settings.sync();}
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(path)};AppPreferences view;view.configure(&store);
+    std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(path)};AppPreferences view;view.configure(&store);
     store.start();QVERIFY(!store.ready());QCOMPARE(view.windowWidth(),0.0);
-    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(!store.ready());QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(!store.ready());
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(!store.ready());QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(!store.ready());
     QVERIFY(Settle(transport,gui));QVERIFY(store.ready());QCOMPARE(view.windowWidth(),1234.0);QCOMPARE(view.windowHeight(),777.0);QVERIFY(!view.dark());
     store.close();transport.drain();QVERIFY(transport.quiescent());
 }
 void UiPreferencesTests::acceptedWriteAndDrainSurviveQuietClose(){
-    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("prefs.ini");ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(path)};AppPreferences view;view.configure(&store);store.start();QVERIFY(Settle(transport,gui));
+    QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("prefs.ini");std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(path)};AppPreferences view;view.configure(&store);store.start();QVERIFY(Settle(transport,gui));
     QVERIFY(view.requestGeometry(25,35,1200,800));const auto receipt=store.lastWriteReceipt();QVERIFY(receipt);QCOMPARE(receipt->load(),UiPreferencesStore::Pending);
-    transport.scheduler->stopAcceptingWork();store.close();bool drained{false};store.whenDrained([&]{drained=true;});QSignalSpy notices{&view,&AppPreferences::changed};
-    QVERIFY(!drained);QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(receipt->load(),UiPreferencesStore::Applied);QVERIFY(!drained);
-    QVERIFY(Settle(transport,gui));QVERIFY(drained);QCOMPARE(notices.size(),0);
+    store.close(); QVERIFY(!view.requestGeometry(1, 2, 640, 480));
+    int drains{0}; store.whenDrained([&] { ++drains; }); QSignalSpy notices{&view, &AppPreferences::changed};
+    QCOMPARE(drains, 0);
+    QVERIFY(transport.step(execution::Lane::Core));
+    QCOMPARE(receipt->load(), UiPreferencesStore::Applied);
+    while (Deliver(gui)) {}
+    QCOMPARE(drains, 0); // Physical Core completion still leaves a Utility outcome and drain.
+    QVERIFY(transport.step(execution::Lane::Utility));
+    while (Deliver(gui)) {}
+    QCOMPARE(drains, 0);
+    QVERIFY(Settle(transport, gui)); QCOMPARE(drains, 1); QCOMPARE(notices.size(), 0);
+    store.whenDrained([&] { ++drains; });
+    QVERIFY(Settle(transport, gui)); QCOMPARE(drains, 2);
     QSettings settings{path,QSettings::IniFormat};QCOMPARE(settings.value("windowX").toInt(),25);QCOMPARE(settings.value("windowHeight").toInt(),800);
     transport.drain();QVERIFY(transport.quiescent());
 }
 void UiPreferencesTests::legacyFiltersAndOriginalNamespaceAreNative(){
     QTemporaryDir directory;QVERIFY(directory.isValid());const auto pre=directory.filePath("pre.ini"),chain=directory.filePath("chain.ini");
     {QSettings settings{pre,QSettings::IniFormat};settings.setValue("peerNetworkFilters","ipv4,garbage,onion,ipv4");settings.setValue("peerTransportFilters","v1,v2");settings.setValue("peerDirectionFilters","inbound,outbound");settings.setValue("unrelated",42);settings.sync();}
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;auto services=execution::SnapshotServices{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}};
-    UiPreferencesStore first{services,File(pre)};AppPreferences one;one.configure(&first);first.start();QVERIFY(Settle(transport,gui));
+    std::deque<std::function<void()>> gui;ManualStartupExecution transport;const auto post=[&](auto turn){gui.push_back(std::move(turn));};
+    UiPreferencesStore first{&transport.executor(),execution::Lane::Core,post,File(pre)};AppPreferences one;one.configure(&first);first.start();QVERIFY(Settle(transport,gui));
     QCOMPARE(one.peerNetworkFilters(),(QStringList{"ipv4","onion"}));QVERIFY(one.peerTransportFilters().isEmpty());QCOMPARE(one.peerDirectionFilters(),QStringList{"inbound"});
     one.set_dark(false);const auto receipt=first.lastWriteReceipt();first.close();QVERIFY(Settle(transport,gui));QCOMPARE(receipt->load(),UiPreferencesStore::Applied);
-    UiPreferencesStore second{services,File(chain)};AppPreferences two;two.configure(&second);second.start();QVERIFY(Settle(transport,gui));QVERIFY(two.dark());
+    UiPreferencesStore second{&transport.executor(),execution::Lane::Core,post,File(chain)};AppPreferences two;two.configure(&second);second.start();QVERIFY(Settle(transport,gui));QVERIFY(two.dark());
     QSettings original{pre,QSettings::IniFormat};QVERIFY(!original.value("dark").toBool());QCOMPARE(original.value("unrelated").toInt(),42);
     second.close();transport.drain();QVERIFY(transport.quiescent());
 }
 void UiPreferencesTests::heldGuiFanoutIsBoundedAndOlderResultsStayStale(){
-    QTemporaryDir directory;QVERIFY(directory.isValid());ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(directory.filePath("prefs.ini"))};store.start();QVERIFY(Settle(transport,gui));
+    QTemporaryDir directory;QVERIFY(directory.isValid());std::deque<std::function<void()>> gui;ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(directory.filePath("prefs.ini"))};store.start();QVERIFY(Settle(transport,gui));
     std::vector<std::unique_ptr<AppPreferences>> views;int notices{0};for(int row=0;row<65;++row){auto view=std::make_unique<AppPreferences>();view->configure(&store);connect(view.get(),&AppPreferences::changed,this,[&]{++notices;});views.push_back(std::move(view));}
     views[0]->set_dark(false);transport.drain();QVERIFY(Deliver(gui));QCOMPARE(notices,32); // One bounded notification turn, before result publication.
     QVERIFY(Deliver(gui)); // Native immutable result publication.
@@ -213,15 +228,14 @@ void UiPreferencesTests::heldGuiFanoutIsBoundedAndOlderResultsStayStale(){
 }
 void UiPreferencesTests::rejectedReadAndThrowingPostAreExplicit(){
     QTemporaryDir directory;QVERIFY(directory.isValid());
-    {ManualRoutedExecution transport;std::deque<std::function<void()>> gui;UiPreferencesStore store{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}},File(directory.filePath("reject.ini"))};transport.scheduler->stopAcceptingWork();store.start();QVERIFY(!store.ready());QVERIFY(!store.error().isEmpty());store.close();transport.drain();}
-    {ManualRoutedExecution transport;UiPreferencesStore store{{transport.scheduler,[](auto){throw std::runtime_error("primary presentation rejected");}},File(directory.filePath("fallback.ini"))};store.start();transport.drain();QTRY_VERIFY(store.ready());store.close();transport.drain();QVERIFY(transport.quiescent());}
+    {std::deque<std::function<void()>> gui;ManualStartupExecution transport;UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[&](auto turn){gui.push_back(std::move(turn));},File(directory.filePath("reject.ini"))};transport.reject_core = true;store.start();QVERIFY(!store.ready());QVERIFY(!store.error().isEmpty());store.close();transport.drain();}
+    {ManualStartupExecution transport;UiPreferencesStore store{&transport.executor(),execution::Lane::Core,[](auto){throw std::runtime_error("primary presentation rejected");},File(directory.filePath("fallback.ini"))};store.start();transport.drain();QTRY_VERIFY(store.ready());store.close();transport.drain();QVERIFY(transport.quiescent());}
 }
 void UiPreferencesTests::realThreadRoundTrip(){
-    QTemporaryDir directory;QVERIFY(directory.isValid());BackendExecutor executor{execution::Options{}};
-    UiPreferencesStore store{{executor.scheduler(),presentation::QueuedPost()},File(directory.filePath("real.ini"))};AppPreferences view;view.configure(&store);store.start();QTRY_VERIFY(store.ready());
+    QTemporaryDir directory;QVERIFY(directory.isValid());execution::Executor executor{execution::Executor::Config{}};
+    UiPreferencesStore store{&executor,execution::Lane::Core,presentation::QueuedPost(),File(directory.filePath("real.ini"))};AppPreferences view;view.configure(&store);store.start();QTRY_VERIFY(store.ready());
     view.set_activityGrouping("day");const auto receipt=store.lastWriteReceipt();QVERIFY(receipt);QTRY_COMPARE(receipt->load(),UiPreferencesStore::Applied);QTRY_COMPARE(view.activityGrouping(),QStringLiteral("day"));
-    bool drained{false};store.whenDrained([&]{drained=true;});QTRY_VERIFY(drained);executor.shutdown();
-    QEventLoop loop;bool retired{false};executor.whenDrained(&loop,[&]{retired=true;loop.quit();});while(!retired)loop.exec();
+    bool drained{false};store.whenDrained([&]{drained=true;});QTRY_VERIFY(drained);executor.stopAndJoin();
 }
 
 void UiPreferencesTests::scalarWritesOwnTheirValidationAndPersistedKeys_data()
@@ -273,8 +287,8 @@ void UiPreferencesTests::scalarWritesOwnTheirValidationAndPersistedKeys()
         settings.setValue(QString::fromLatin1(key), before); settings.setValue("unrelated", 42); settings.sync();
         QCOMPARE(settings.status(), QSettings::NoError);
     }
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     view.configure(nullptr); view.componentComplete();
     view.configure(&store); view.configure(&store); store.start(); QVERIFY(Settle(transport, gui)); QVERIFY(store.ready());
@@ -290,7 +304,7 @@ void UiPreferencesTests::scalarWritesOwnTheirValidationAndPersistedKeys()
         QCOMPARE(store.operationId(), previous_operation + 1);
         transport.drain();
         QCOMPARE(receipt->load(), valid ? UiPreferencesStore::Applied : UiPreferencesStore::Failed);
-        // Native persistence and Domain consumption do not publish GUI values.
+        // Native persistence and Utility delivery do not publish GUI values.
         QCOMPARE(view.property(key.constData()), before);
     }
     {
@@ -315,8 +329,8 @@ void UiPreferencesTests::scalarReadsRejectInvalidLegacyValues()
     QTemporaryDir directory; QVERIFY(directory.isValid());
     const auto path = directory.filePath("legacy.ini");
     { QSettings settings{path, QSettings::IniFormat}; settings.setValue(QString::fromLatin1(key), input); settings.sync(); }
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; const auto fallback = view.property(key.constData());
     view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
@@ -358,8 +372,8 @@ void UiPreferencesTests::geometryValidationKeepsTheOriginalPersistedRectangle()
 {
     QFETCH(double, x); QFETCH(double, y); QFETCH(double, width); QFETCH(double, height); QFETCH(bool, valid);
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("geometry.ini");
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; QCOMPARE(view.requestGeometry(x, y, width, height), quint64{0});
     view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
@@ -385,8 +399,8 @@ void UiPreferencesTests::failedStorageRetainsTheLastConfirmedValues()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("blocked.ini");
     QVERIFY(QDir().mkdir(path));
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
     QVERIFY(!store.ready()); QVERIFY(!store.error().isEmpty());
@@ -422,8 +436,8 @@ void UiPreferencesTests::filterCommandsPreserveCanonicalSelectionAndIntentKeys()
     QFETCH(QString, group); QFETCH(QStringList, choices); QFETCH(QByteArray, key); QFETCH(int, fault);
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("filters.ini");
     { QSettings persisted{path, QSettings::IniFormat}; persisted.setValue("unrelated", 42); persisted.sync(); }
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view;
     QCOMPARE(view.togglePeerFilter(group, choices.front()), quint64{0});
@@ -487,8 +501,8 @@ void UiPreferencesTests::parserContextAndUnconfiguredValues()
 {
     QFETCH(int, context_kind);
     QTemporaryDir directory; QVERIFY(directory.isValid());
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(directory.filePath("parser.ini"))};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(directory.filePath("parser.ini"))};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     QQmlEngine engine; QQmlContext context{engine.rootContext()}; QObject foreign;
     AppPreferences view; QSignalSpy changed{&view, &AppPreferences::changed};
@@ -507,7 +521,7 @@ void UiPreferencesTests::parserContextAndUnconfiguredValues()
     view.set_activityDisplayDensity(QStringLiteral("compact")); view.set_trafficGraphScale(3600);
     view.set_peerListSortBy(QStringLiteral("sent")); view.set_peerListSortAscending(false);
     QCOMPARE(view.requestGeometry(1, 2, 640, 480), quint64{0});
-    QCOMPARE(store.operationId(), quint64{0}); QVERIFY(transport.queuedIdle());
+    QCOMPARE(store.operationId(), quint64{0}); QVERIFY(transport.quiescent());
     if (context_kind) {
         context.setContextProperty(QStringLiteral("uiPreferencesStore"), context_kind == 2 ? static_cast<QObject*>(&store) : &foreign);
         QQmlEngine::setContextForObject(&view, &context);
@@ -553,8 +567,8 @@ void UiPreferencesTests::capturedNamespaceKeepsItsNativeStorageIdentity()
         QCOMPARE(persisted.status(), QSettings::NoError);
     }
     const auto remove_file = qScopeGuard([&] { QFile::remove(path); QDir().rmdir(QFileInfo(path).absolutePath()); });
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, captured};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, captured};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store);
     QCoreApplication::setOrganizationName(identity + QStringLiteral("-later"));
@@ -575,7 +589,7 @@ void UiPreferencesTests::capturedNamespaceKeepsItsNativeStorageIdentity()
 
 void UiPreferencesTests::missingSchedulerRejectsConstruction()
 {
-    const auto construct = [] { UiPreferencesStore store{{}, {}}; };
+    const auto construct = [] { UiPreferencesStore store{nullptr, execution::Lane::Core, {}, {}}; };
     bool rejected{false};
     try { construct(); }
     catch (const std::invalid_argument&) { rejected = true; }
@@ -587,8 +601,8 @@ void UiPreferencesTests::missingSchedulerRejectsConstruction()
 void UiPreferencesTests::manualStartRetryAndCloseKeepOneRead()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("retry.ini");
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store);
     store.start(); store.start(); store.retry(); QCOMPARE(store.operationId(), quint64{1});
@@ -608,8 +622,8 @@ void UiPreferencesTests::manualStartRetryAndCloseKeepOneRead()
 void UiPreferencesTests::manualViewRemovalKeepsBoundedFanout()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid());
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(directory.filePath("views.ini"))};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(directory.filePath("views.ini"))};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     store.start(); QVERIFY(Settle(transport, gui));
     std::vector<std::unique_ptr<AppPreferences>> views; int notices{0};
@@ -640,8 +654,9 @@ void UiPreferencesTests::manualFanoutRetiresWithItsStore()
 {
     QFETCH(bool, during_notification); QFETCH(bool, destroy);
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("retired.ini");
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    auto store = std::make_unique<UiPreferencesStore>(execution::SnapshotServices{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path));
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    auto store = std::make_unique<UiPreferencesStore>(&transport.executor(), execution::Lane::Core,
+        [&](auto turn) { gui.push_back(std::move(turn)); }, File(path));
     const auto cleanup = qScopeGuard([&] { if (store) store->close(); transport.drain(); Settle(transport, gui); });
     store->start(); QVERIFY(Settle(transport, gui));
     std::vector<std::unique_ptr<AppPreferences>> views;
@@ -662,8 +677,8 @@ void UiPreferencesTests::manualFanoutRetiresWithItsStore()
 void UiPreferencesTests::manualOlderWriteFailureCannotReplaceTheLatestOutcome()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("ordered.ini");
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
     view.set_blockclocksize(0); const auto older = store.lastWriteReceipt(); QVERIFY(older);
@@ -693,8 +708,9 @@ void UiPreferencesTests::manualObserverLossKeepsOriginalEffects()
     QFETCH(bool, write); QFETCH(bool, failure);
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("observer.ini");
     if (!write && failure) QVERIFY(QDir().mkdir(path));
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    auto store = std::make_unique<UiPreferencesStore>(execution::SnapshotServices{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path));
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    auto store = std::make_unique<UiPreferencesStore>(&transport.executor(), execution::Lane::Core,
+        [&](auto turn) { gui.push_back(std::move(turn)); }, File(path));
     const auto cleanup = qScopeGuard([&] { if (store) store->close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(store.get()); store->start();
     std::shared_ptr<const std::atomic<UiPreferencesStore::Outcome>> receipt;
@@ -737,8 +753,8 @@ void UiPreferencesTests::legacyGeometryReadbackPreservesOnlyRepresentableValues(
         persisted.setValue("windowX", x); persisted.setValue("windowY", y);
         persisted.setValue("windowWidth", width); persisted.setValue("windowHeight", height); persisted.sync();
     }
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
     QVERIFY(view.ready()); QVERIFY(view.error().isEmpty());
@@ -753,15 +769,15 @@ void UiPreferencesTests::legacyGeometryReadbackPreservesOnlyRepresentableValues(
 void UiPreferencesTests::manualOlderReadFailureCannotReplaceNewerConfirmedWrite()
 {
     QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("read-write-order.ini");
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
-    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(path)};
+    std::deque<std::function<void()>> gui; ManualStartupExecution transport;
+    UiPreferencesStore store{&transport.executor(),execution::Lane::Core, [&](auto turn) { gui.push_back(std::move(turn)); }, File(path)};
     const auto cleanup = qScopeGuard([&] { store.close(); transport.drain(); Settle(transport, gui); });
     AppPreferences view; view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
     QVERIFY(store.ready()); QVERIFY(view.dark()); QVERIFY(!store.pending());
 
     // The failed older read keeps its own GUI outcome while a newer command
     // independently owns a successful Native write and its confirmation.
-    const auto core_calls = transport.coreSubmissions(); transport.rejectLane(execution::Lane::Core);
+    const auto core_calls = transport.coreSubmissions(); transport.reject_core = true;
     store.retry(); const auto read_ticket = store.operationId();
     QCOMPARE(transport.coreSubmissions(), core_calls + 1); QVERIFY(store.pending()); QVERIFY(store.ready());
     view.set_dark(false); const auto write_ticket = store.operationId();

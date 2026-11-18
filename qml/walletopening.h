@@ -24,6 +24,7 @@
 #include <vector>
 
 namespace interfaces { class Chain; }
+namespace execution { class SerialQueue; class ValueCleanupQueue; }
 
 namespace walletopening {
 using Source = std::variant<std::shared_ptr<interfaces::Wallet>, std::unique_ptr<interfaces::Wallet>>;
@@ -86,10 +87,8 @@ struct Update {
 };
 
 /** One retained owner per opening. No Qt objects or private Core access.
- * Core and Domain use the injected shared executor. Retirement uses the
- * existing compatibility executor until its remaining borrowers migrate;
- * this creates no executor/thread and imposes no idle-wallet inventory cap
- * on the shared command queue's cleanup budget.
+ * Each application opening uses a Core queue on the shared executor, with
+ * Utility retiring its original wallet and handlers.
  */
 class Session : public std::enable_shared_from_this<Session>
 {
@@ -100,22 +99,36 @@ public:
         std::function<std::string(const std::string&)> read;
         std::function<bool(const std::string&, const std::string&)> write;
     };
-    Session(std::shared_ptr<execution::Scheduler> commands,
-            std::shared_ptr<execution::Scheduler> retirement,
-            std::shared_ptr<std::atomic_bool> closed, Notify notify, Preferences preferences = {}, Clock clock = std::chrono::steady_clock::now, std::shared_ptr<std::atomic_bool> shutdown_gate = {}, NativeEvents native_events = {});
+    struct Queues {
+        std::shared_ptr<execution::SerialQueue> cleanup;
+        std::function<void(Notify)> stop_work;
+        std::shared_ptr<execution::SerialQueue> core;
+        std::shared_ptr<execution::SerialQueue> outcomes;
+        // Releases the native wallet, which can wait for Core. Defaults to cleanup.
+        std::shared_ptr<execution::SerialQueue> native_cleanup{};
+    };
+    Session(std::shared_ptr<std::atomic_bool> closed, Notify notify, Preferences preferences, Clock clock,
+            std::shared_ptr<std::atomic_bool> shutdown_gate, NativeEvents native_events, Queues queues);
     struct Start {
         execution::SubmitResult submitted;
         std::shared_ptr<interfaces::Wallet> borrower;
         explicit operator bool() const { return bool(submitted); }
     };
     Start start(const std::shared_ptr<interfaces::Wallet>& wallet);
-    // Leaves both source handles in place if retirement cannot be reserved.
+    // Leaves both handles in place if the opening cannot take ownership.
     Start start(std::unique_ptr<interfaces::Wallet>& wallet, std::unique_ptr<interfaces::Handler>& unload_handler);
-    // A counted public-interface borrower, retained through legacy work and
-    // outcome destruction. The final interface/handler release is on Cleanup.
+    Start start(Source& source, std::unique_ptr<interfaces::Handler>& unload_handler);
+    // Retire a handoff that start did not acquire, before requesting stop.
+    void retireUnclaimed(Source& source, std::unique_ptr<interfaces::Handler>& unload_handler);
+    // A counted public-interface borrower. The final interface and handler
+    // release runs on the retirement worker.
     std::shared_ptr<interfaces::Wallet> borrow() const;
     Opening identity() const { return m_identity; }
-    std::shared_ptr<execution::Scheduler> scheduler() const { return m_commands; }
+    std::shared_ptr<execution::SerialQueue> coreQueue() const { return m_core_queue; }
+    std::shared_ptr<execution::SerialQueue> utilityQueue() const { return m_outcomes; }
+    std::shared_ptr<execution::SerialQueue> cleanupQueue() const { return m_cleanup_queue; }
+    std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)> observationPost(
+        execution::Lane lane = execution::Lane::Core);
     std::shared_ptr<std::atomic_bool> closedFlag() const { return m_closed; }
     bool observationOpen() const { return !m_closed->load() && (!m_shutdown_gate || !m_shutdown_gate->load()) && (!m_native_events.unloaded || !m_native_events.unloaded->load()); }
     bool available() const { return !m_actions_closed.load() && observationOpen(); }
@@ -123,37 +136,35 @@ public:
     bool admitAction();
     class Action {
     public:
+        ~Action();
+        Action(const Action&) = delete;
+        Action& operator=(const Action&) = delete;
         Opening identity() const { return m_identity; }
     private:
         friend class Session;
-        Action(Opening identity, std::shared_ptr<execution::Scheduler> scope, execution::ResourceKey work_key,
-               std::shared_ptr<interfaces::Wallet> wallet)
-            : m_identity(std::move(identity)), m_scope(std::move(scope)), m_work_key(work_key), m_wallet(std::move(wallet)) {}
+        explicit Action(Opening identity) : m_identity(std::move(identity)) {}
         const Opening m_identity;
-        const std::shared_ptr<execution::Scheduler> m_scope; // Released after its original wallet borrower.
-        const execution::ResourceKey m_work_key;
-        const std::shared_ptr<interfaces::Wallet> m_wallet;
+        std::shared_ptr<Session> m_owner;
     };
     // App-side admission/lifetime only, not a Core/RPC authorization lease.
     std::shared_ptr<const Action> startAction();
-    // File/export continuation work does not access Wallet. It shares the
-    // opening's admission lifetime but uses a private action key so a
-    // pre-reserved Native retirement receipt can run after queue pressure.
-    execution::SubmitResult submitActionWork(const std::shared_ptr<const Action>& action,
-                                         std::function<void()> work);
-    execution::SubmitResult reserveActionCleanup(const std::shared_ptr<const Action>& action,
-                                              std::function<void()> work);
-    bool activateActionCleanup(const std::shared_ptr<const Action>& action, execution::TaskId id);
     void requestClose();
     void refreshMetadata() { ingress(4); }
     void retryNotifications() { scheduleRefresh(); }
     execution::SubmitResult postDomain(std::function<void()> work, execution::WorkClass kind = execution::WorkClass::Observation);
-    // Pure value teardown uses the shared Cleanup lane, independent of Core
-    // and Domain. It owns no wallet handle and never waits for GUI delivery.
+    execution::SubmitResult postDomainTask(std::shared_ptr<execution::Task> packet, execution::WorkClass kind);
+    // Value work with a completion reports its outcome once accepted.
+    template <typename Work, typename Done>
+    execution::SubmitResult postDomain(Work work, Done done, std::function<void(std::exception_ptr)> failed,
+                                       execution::WorkClass kind = execution::WorkClass::Observation)
+    {
+        return postDomainTask(execution::MakeTask(std::move(work), std::move(done), std::move(failed)), kind);
+    }
+    // Value teardown runs on Utility and needs no GUI delivery.
     execution::SubmitResult retireValues(std::function<void()> work);
     // Reserve value teardown before retaining a shared input. The returned
     // lease gates cleanup through rejection/closure, without a GUI completion.
-    execution::Borrow holdValues(std::function<void()> cleanup);
+    std::shared_ptr<void> holdValues(std::function<void()> cleanup);
     uint64_t transactionRevision() const;
     // Captured atomic facts only: no Session/Wallet lifetime or GUI Core read.
     std::function<bool()> observationGuard() const;
@@ -181,30 +192,34 @@ public:
                                  std::function<void(std::exception_ptr)> failed = {})
     {
         if (!action || action->m_identity != m_identity) return {{}, execution::Rejection::Invalid};
-        return execution::Submit(*action->m_scope, [action, work = std::move(work)]() mutable {
-            return work(*action->m_wallet);
+        auto packet = execution::MakeTask([self = shared_from_this(), action, work = std::move(work)]() mutable {
+            return work(self->nativeWallet());
         }, [action, done = std::move(done)](auto result) mutable { done(std::move(result)); },
-        [action, failed = std::move(failed)](std::exception_ptr error) { if (failed) failed(error); },
-        {execution::Lane::Core, m_command_key, execution::WorkClass::Action});
+        [action, failed = std::move(failed)](std::exception_ptr error) { if (failed) failed(error); });
+        return postCore(std::move(packet));
     }
 
 
     template <typename Work, typename Done>
     execution::SubmitResult read(Work work, Done done, std::function<void(std::exception_ptr)> failed = {}, execution::WorkClass kind = execution::WorkClass::Observation)
     {
-        if (kind == execution::WorkClass::Action && !admitAction()) return {{}, execution::Rejection::Closed};
-        auto wallet = borrow();
-        if (!wallet) return {{}, execution::Rejection::Closed};
-        const auto held = std::make_shared<std::shared_ptr<interfaces::Wallet>>(std::move(wallet));
-        return execution::Submit(*m_commands, [held, work = std::move(work), closed = m_closed, gate = m_shutdown_gate, kind]() mutable {
-            if (kind == execution::WorkClass::Observation && (closed->load() || (gate && gate->load()))) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
-            return work(**held);
-        }, [held, done = std::move(done)](auto result) mutable { done(std::move(result)); },
-        [held, failed = std::move(failed)](std::exception_ptr error) { if (failed) failed(error); },
-        {execution::Lane::Core, m_command_key, kind});
+        if (kind == execution::WorkClass::Action) {
+            const auto action = startAction();
+            if (!action) return {{}, execution::Rejection::Closed};
+            return perform(action, std::move(work), std::move(done), std::move(failed));
+        }
+        if (!borrow()) return {{}, execution::Rejection::Closed};
+        return postCore(execution::MakeTask([self = shared_from_this(), work = std::move(work)]() mutable {
+            if (self->m_closed->load() || (self->m_shutdown_gate && self->m_shutdown_gate->load())) {
+                throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
+            }
+            return work(self->nativeWallet());
+        }, std::move(done), std::move(failed)));
     }
 private:
     struct Resources;
+    interfaces::Wallet& nativeWallet() const;
+    execution::SubmitResult postCore(std::shared_ptr<execution::Task> packet);
     Start startWith(const std::function<void(Resources&)>& acquire);
     void ingress(int kind, const Txid& txid = {}, ChangeType change = CT_UPDATED);
     void scheduleRefresh();
@@ -212,13 +227,13 @@ private:
     void refreshFailed(bool transactions);
     void publish(Update update);
     void publishState();
-    bool cleanup();
+    void releaseWork();
+    void drainWork(std::function<void(Notify)> stop_work);
+    bool cleanup(Resources& resources);
     void completeStop(bool failed);
     bool control(std::function<void()> effect);
 
     const Opening m_identity{std::make_shared<const Identity>()};
-    const std::shared_ptr<execution::Scheduler> m_commands, m_retirement;
-    const execution::ResourceKey m_command_key, m_retirement_key;
     const std::shared_ptr<std::atomic_bool> m_closed;
     const std::shared_ptr<std::atomic_bool> m_shutdown_gate;
     std::atomic_bool m_actions_closed{false};
@@ -226,6 +241,8 @@ private:
     const Preferences m_preferences;
     const Clock m_clock;
     const NativeEvents m_native_events;
+    const std::shared_ptr<execution::SerialQueue> m_cleanup_queue, m_core_queue, m_outcomes;
+    const std::shared_ptr<execution::ValueCleanupQueue> m_value_cleanup, m_native_cleanup, m_outcome_delivery;
     const std::shared_ptr<ChangeCounter> m_source_epoch{std::make_shared<ChangeCounter>()};
     std::shared_ptr<Resources> m_resources;
     State m_state{m_identity}; // Shared command Domain only
@@ -234,7 +251,9 @@ private:
     std::atomic_bool m_transactions_pending{false}, m_drained{false};
     bool m_started{false};
     mutable std::mutex m_mutex;
-    std::optional<execution::TaskId> m_cleanup;
+    size_t m_work_references{0}; // Accepted actions and retained values.
+    bool m_stop_requested{false};
+    std::function<void(Notify)> m_stop_work;
     std::vector<Notify> m_stop_callbacks;
     Update m_pending;
     std::optional<Update> m_latest;

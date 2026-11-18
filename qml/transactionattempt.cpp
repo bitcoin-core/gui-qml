@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/transactionattempt.h>
+#include <qml/executor.h>
 #include <qml/walletprepare.h>
 
 #include <limits>
@@ -146,8 +147,8 @@ bool Preparation::candidateCurrent(ReviewId review) const
         m_candidate_revision == m_intent_revision && m_candidate_review == review;
 }
 
-Owner::Owner(std::shared_ptr<execution::Scheduler> scheduler)
-    : m_scheduler(std::move(scheduler)), m_key(m_scheduler ? m_scheduler->allocateKey() : execution::ResourceKey{})
+Owner::Owner(std::shared_ptr<execution::SerialQueue> utility)
+    : m_utility(std::move(utility))
 {
 }
 
@@ -168,24 +169,27 @@ Snapshot Owner::project(State& state)
     return result;
 }
 
-execution::SubmitResult Owner::submit(const std::shared_ptr<State>& state,
-                                   const std::shared_ptr<execution::Scheduler>& scheduler,
-                                   execution::ResourceKey key, Mutation mutation, Completion done)
+execution::SubmitResult Owner::submit(Mutation mutation, Completion done) const
 {
-    if (!scheduler) return {{}, execution::Rejection::Closed};
     if (!done) done = [](Result) {};
-    return execution::Submit(*scheduler,
-        [state, mutation = std::move(mutation)]() mutable {
-            auto result = mutation(*state);
-            ++state->sequence;
-            result.snapshot = project(*state);
-            return result;
-        }, std::move(done), {}, {execution::Lane::Domain, key, execution::WorkClass::Action});
+    auto work = [state = m_state, mutation = std::move(mutation)] {
+        auto result = mutation(*state);
+        ++state->sequence;
+        result.snapshot = project(*state);
+        return result;
+    };
+    if (!m_utility) return {{}, execution::Rejection::Closed};
+    auto task = execution::MakeTask(std::move(work), std::move(done), {});
+    const bool accepted = m_utility->post([task = std::move(task)] {
+        task->execute();
+        task->deliver();
+    });
+    return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
 }
 
 execution::SubmitResult Owner::begin(StartInput input, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [input = std::move(input)](State& state) mutable {
             if (input.intent_revision < state.preparation.intentRevision()) {
                 return Result{Transition::Stale, {}, StartError::StaleIntent};
@@ -217,7 +221,7 @@ execution::SubmitResult Owner::begin(StartInput input, Completion done)
 
 execution::SubmitResult Owner::beginReplacement(ReplacementStart input, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [input = std::move(input)](State& state) mutable {
             if (input.intent_revision < state.preparation.intentRevision()) {
                 return Result{Transition::Stale, {}, StartError::StaleIntent};
@@ -245,7 +249,7 @@ execution::SubmitResult Owner::beginReplacement(ReplacementStart input, Completi
 
 execution::SubmitResult Owner::intentChanged(std::uint64_t revision, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [revision](State& state) {
             state.preparation.intentChanged(revision);
             return Result{Transition::Accepted};
@@ -254,7 +258,7 @@ execution::SubmitResult Owner::intentChanged(std::uint64_t revision, Completion 
 
 execution::SubmitResult Owner::reviewReplaced(ReviewId current_review, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [current_review](State& state) {
             if (current_review < state.facts.review) return Result{Transition::Stale};
             state.facts.review = current_review;
@@ -265,7 +269,7 @@ execution::SubmitResult Owner::reviewReplaced(ReviewId current_review, Completio
 
 execution::SubmitResult Owner::assess(Ticket ticket, CurrentFacts facts, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), facts = std::move(facts)](State& state) mutable {
             if (state.preparation.ticket() != ticket || state.preparation.phase() != Phase::Preparing)
                 return Result{Transition::Ignored};
@@ -278,7 +282,7 @@ execution::SubmitResult Owner::install(Ticket ticket, CurrentFacts facts,
                                     std::shared_ptr<const walletreview::Snapshot> candidate,
                                     ReviewId installed_review, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), facts = std::move(facts), candidate = std::move(candidate), installed_review](State& state) mutable {
             if (state.preparation.ticket() != ticket || state.preparation.phase() != Phase::Preparing)
                 return Result{Transition::Ignored};
@@ -293,7 +297,7 @@ execution::SubmitResult Owner::resolve(Ticket ticket, CurrentFacts facts, wallet
                                     std::shared_ptr<const walletreview::Snapshot> candidate,
                                     ReviewId installed_review, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), facts = std::move(facts), outcome,
          candidate = std::move(candidate), installed_review](State& state) mutable {
             if (state.preparation.ticket() != ticket || state.preparation.phase() != Phase::Preparing)
@@ -313,7 +317,7 @@ execution::SubmitResult Owner::resolve(Ticket ticket, CurrentFacts facts, wallet
 
 execution::SubmitResult Owner::fail(Ticket ticket, CurrentFacts facts, Phase outcome, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), facts = std::move(facts), outcome](State& state) mutable {
             if (state.preparation.ticket() != ticket || state.preparation.phase() != Phase::Preparing)
                 return Result{Transition::Ignored};
@@ -324,7 +328,7 @@ execution::SubmitResult Owner::fail(Ticket ticket, CurrentFacts facts, Phase out
 
 execution::SubmitResult Owner::reject(Ticket ticket, Phase outcome, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), outcome](State& state) mutable {
             return Result{state.preparation.reject(ticket, outcome)};
         }, std::move(done));
@@ -332,7 +336,7 @@ execution::SubmitResult Owner::reject(Ticket ticket, Phase outcome, Completion d
 
 execution::SubmitResult Owner::discard(Ticket ticket, Phase outcome, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), outcome](State& state) {
             return Result{state.preparation.discard(ticket, outcome)};
         }, std::move(done));
@@ -340,7 +344,7 @@ execution::SubmitResult Owner::discard(Ticket ticket, Phase outcome, Completion 
 
 execution::SubmitResult Owner::advance(Ticket ticket, CurrentFacts facts, Phase expected, Phase outcome, Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [ticket = std::move(ticket), facts = std::move(facts), expected, outcome](State& state) mutable {
             if (state.preparation.ticket() != ticket) return Result{Transition::Ignored};
             state.facts = facts;
@@ -350,7 +354,7 @@ execution::SubmitResult Owner::advance(Ticket ticket, CurrentFacts facts, Phase 
 
 execution::SubmitResult Owner::close(Completion done)
 {
-    return submit(m_state, m_scheduler, m_key,
+    return submit(
         [](State& state) { state.facts.session_open = false; state.preparation.close(); return Result{Transition::Accepted}; }, std::move(done));
 }
 

@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_RUNTIMEPROMPTWORKER_H
 #define BITCOIN_QML_RUNTIMEPROMPTWORKER_H
+#include <qml/presentationservices.h>
 #include <qml/runtimeprompt.h>
-#include <qml/snapshotquery.h>
 #include <functional>
 
 namespace runtimeprompt {
@@ -24,7 +24,7 @@ public:
     ~Continuation();
     Continuation(const Continuation&)=delete;
     Continuation& operator=(const Continuation&)=delete;
-    // Reading the answer does not finish the original Native scope. Its owner
+    // Reading the answer does not finish the original Native call. Its owner
     // retains this continuation through post-answer work and then releases it.
     Answer wait();
 private:
@@ -41,7 +41,11 @@ private:
 };
 class Service final {
 public:
-    Service(execution::SnapshotServices execution, std::function<void()> changed,
+    struct Queues {
+        std::shared_ptr<execution::SerialQueue> utility;
+        PresentationServices::RetireValue retire;
+    };
+    Service(Queues queues, std::function<void()> changed,
             std::function<void()> drained = {}, Limits limits = {});
     ~Service();
     // Transfer one fresh original producer request to this owner. It must not

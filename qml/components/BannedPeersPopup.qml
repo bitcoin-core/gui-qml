@@ -22,6 +22,17 @@ DialogPopup {
         }
     }
 
+    // Admission succeeds before the node applies the unban; report a late failure.
+    Connections {
+        target: root.model
+        function onUnbanFinished(success) {
+            if (!success && root.opened) {
+                unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+                unbanActionError.open()
+            }
+        }
+    }
+
     title: qsTr("Banned peers")
     surfaceObjectName: "bannedPeersPopupSurface"
     implicitWidth: 640

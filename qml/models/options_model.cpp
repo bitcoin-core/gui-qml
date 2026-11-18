@@ -3,6 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/options_model.h>
+#include <qml/asyncjoin.h>
+#include <qml/retainedvalue.h>
+#include <qml/retainedsnapshot.h>
 #include <qml/signerdiscovery.h>
 #include <qml/models/signerdiscoverymodel.h>
 
@@ -75,6 +78,16 @@ QVariantMap CoreSettingStatusesForNames(const QVariantMap& statuses, const QStri
 
 struct OptionsLinksState {std::shared_ptr<const QVariantList> links,next;};
 struct OptionsQmlModel::LinksRegistry {std::map<quint64,std::shared_ptr<OptionsLinksState>> views;};
+
+namespace {
+template <typename T, typename Factory>
+std::shared_ptr<T> RetainLinkSnapshot(const PresentationServices::RetireValue& retire,
+                                      const std::shared_ptr<execution::ValueCleanupQueue>& cleanup, Factory factory)
+{
+    if (!cleanup) return execution::RetainSnapshot<T>(retire, std::move(factory));
+    return execution::RetainValues<T>([cleanup](auto release) { return cleanup->hold(std::move(release)); }, std::move(factory));
+}
+} // namespace
 namespace {
 QVariantList BuildTransactionLinks(const QString& templates,const QString& txid)
 {
@@ -135,13 +148,14 @@ void OptionsTransactionLinks::applyRows(quint64 revision){
         if(!observer||!m_source||!m_source->presentationOpen()||revision!=m_revision)return;
     }
     if(!m_clearing&&state->links&&m_visible==state->links->size()){m_pending=false;Q_EMIT resultChanged();return;}
-    try {m_source->m_services.post([observer,revision]{if(observer)observer->applyRows(revision);});}
+    try {m_source->m_post([observer,revision]{if(observer)observer->applyRows(revision);});}
     catch(...){m_pending=false;m_error=tr("Transaction links could not be presented.");Q_EMIT resultChanged();}
 }
 bool OptionsQmlModel::attachLinks(OptionsTransactionLinks& view){
     if(m_stopping)return false;
     if(!m_links){setError(tr("Transaction link is unavailable."));return false;}
-    auto state=execution::RetainSnapshot<OptionsLinksState>(m_services.scheduler,[]{return std::make_unique<OptionsLinksState>();});
+    auto state=RetainLinkSnapshot<OptionsLinksState>(m_retire_link_value, m_link_cleanup,
+        [] { return std::make_unique<OptionsLinksState>(); });
     if(!state){setError(tr("Transaction link is unavailable."));return false;}const auto id=++m_next_links;m_links->views.emplace(id,state);
     view.m_state=state;view.m_id=id;return true;
 }
@@ -150,22 +164,43 @@ OptionsTransactionLinks* OptionsQmlModel::createTransactionLinks(){
     return view->source()?view.release():nullptr;
 }
 void OptionsQmlModel::removeLinks(quint64 id){if(m_links)m_links->views.erase(id);}
-void OptionsQmlModel::refreshLinks(OptionsTransactionLinks* view){
-    if(m_stopping||!m_links)return;
-    const auto revision=++view->m_revision;view->m_pending=true;view->m_error.clear();
-    const QPointer<OptionsTransactionLinks> observer{view};const QPointer<OptionsQmlModel> source{this};const auto state=view->m_state;
-    m_work->submit([templates=m_third_party_transaction_urls,txid=view->m_txid,scheduler=m_services.scheduler]{
-            auto result=execution::RetainSnapshot<QVariantList>(scheduler,[&]{auto rows=BuildTransactionLinks(templates,txid);
-                if(rows.size()>std::numeric_limits<int>::max())throw std::length_error("Transaction links exceed Qt row capacity");
-                return std::make_unique<QVariantList>(std::move(rows));});
-            if(!result)throw std::runtime_error("Transaction link capacity unavailable");
-            return std::shared_ptr<const QVariantList>{std::move(result)};},
-        [source,observer,state,revision](std::shared_ptr<const QVariantList> result){if(!source||!source->presentationOpen()||!observer||observer->m_revision!=revision)return;
-            const auto cached=state.lock();if(!cached)return;cached->next=std::move(result);observer->m_clearing=true;observer->applyRows(revision);},
-        [source,observer,revision](std::exception_ptr){if(!source||!source->presentationOpen()||!observer||observer->m_revision!=revision)return;
-            observer->m_pending=false;observer->m_error=tr("Transaction links could not be prepared.");Q_EMIT observer->resultChanged();},
-        {execution::Lane::Domain,{},execution::WorkClass::Observation});
-    if(observer&&source&&source->presentationOpen())Q_EMIT observer->resultChanged();
+void OptionsQmlModel::refreshLinks(OptionsTransactionLinks* view)
+{
+    if (m_stopping || !m_links) return;
+    const auto revision = ++view->m_revision;
+    view->m_pending = true;
+    view->m_error.clear();
+    const QPointer<OptionsTransactionLinks> observer{view};
+    const QPointer<OptionsQmlModel> source{this};
+    auto work = [templates = m_third_party_transaction_urls, txid = view->m_txid,
+                 retire = m_retire_link_value, cleanup = m_link_cleanup] {
+        auto result = RetainLinkSnapshot<QVariantList>(retire, cleanup, [&] {
+            auto rows = BuildTransactionLinks(templates, txid);
+            if (rows.size() > std::numeric_limits<int>::max()) throw std::length_error("Transaction links exceed Qt row capacity");
+            return std::make_unique<QVariantList>(std::move(rows));
+        });
+        if (!result) throw std::runtime_error("Transaction link capacity unavailable");
+        return std::shared_ptr<const QVariantList>{std::move(result)};
+    };
+    auto done = [source, observer, state = view->m_state, revision](std::shared_ptr<const QVariantList> result) {
+        if (!source || !source->presentationOpen() || !observer || observer->m_revision != revision) return;
+        const auto cached = state.lock();
+        if (!cached) return;
+        cached->next = std::move(result);
+        observer->m_clearing = true;
+        observer->applyRows(revision);
+    };
+    auto failed = [source, observer, revision](std::exception_ptr) {
+        if (!source || !source->presentationOpen() || !observer || observer->m_revision != revision) return;
+        observer->m_pending = false;
+        observer->m_error = tr("Transaction links could not be prepared.");
+        Q_EMIT observer->resultChanged();
+    };
+    m_work->submitAsync<std::shared_ptr<const QVariantList>>(
+        [post = m_link_post, work = std::move(work)](auto complete, auto failure) mutable {
+            return post(execution::MakeTask(std::move(work), std::move(complete), std::move(failure)));
+        }, std::move(done), std::move(failed));
+    if (observer && source && source->presentationOpen()) Q_EMIT observer->resultChanged();
 }
 
 struct OptionsQmlModel::Snapshot {
@@ -269,16 +304,34 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
 }
 
 namespace {struct NativeSettingsWrite {quint64 revision;std::shared_ptr<std::atomic<int>> receipt;};}
-OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, execution::SnapshotServices services,
-                                 execution::Executor* executor)
-    : m_node{node}, m_args{args}, m_services{std::move(services)}, m_application_executor{executor}
+OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, presentation::Post post,
+                                 execution::Executor* executor, PresentationServices* presentation, execution::Lane lane)
+    : m_node{node}, m_args{args},
+      m_owned_executor{!executor ? std::make_shared<execution::Executor>(execution::Executor::Config{}) : nullptr},
+      m_post{std::move(post)}, m_executor{executor ? executor : m_owned_executor.get()}, m_lane{lane}
 {
-    if(!m_services.scheduler) { m_executor=std::make_unique<BackendExecutor>(execution::Options{});m_services.scheduler=m_executor->scheduler(); }
-    if(!m_services.post)m_services.post=presentation::QueuedPost();
-    m_work=std::make_unique<execution::OwnedWork>(m_services, executor);
-    m_links=execution::RetainSnapshot<LinksRegistry>(m_services.scheduler,[]{return std::make_unique<LinksRegistry>();});
+    if (presentation) {
+        m_link_post = presentation->observationPost();
+        m_retire_link_value = presentation->valueRetirement();
+    }
+    if (!m_link_post || !m_retire_link_value) {
+        m_link_queue = std::make_shared<execution::SerialQueue>(m_executor->makeQueue(execution::Lane::Utility));
+        m_link_cleanup = std::make_shared<execution::ValueCleanupQueue>(
+            std::make_shared<execution::SerialQueue>(m_executor->makeQueue(execution::Lane::Utility)));
+        m_link_post = [queue = m_link_queue](auto packet) {
+            const bool accepted = queue->post([packet = std::move(packet)] {
+                packet->execute();
+                packet->deliver();
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+        };
+    }
+    if (!m_post) m_post = presentation::QueuedPost();
+    m_work = std::make_unique<execution::OwnedWork>(*m_executor, m_post, lane);
+    m_links = RetainLinkSnapshot<LinksRegistry>(m_retire_link_value, m_link_cleanup,
+        [] { return std::make_unique<LinksRegistry>(); });
     m_core_settings.setAdmissionReady(false);
-    m_core_settings.configureServices(executor ? execution::SnapshotServices{nullptr, m_services.post} : m_services, executor);
+    m_core_settings.configureServices(m_post, m_executor, lane);
     resetDirtySnapshots();
     refreshCoreSettingStatuses();
     m_core_settings.setBeforeChangeHandler([this](CoreSettingsModel::ChangeOrigin) {
@@ -288,7 +341,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, exec
         Q_UNUSED(origin);applyRuntimeCoreChange(change,m_core_change_dirty_snapshot);
     });
     const QPointer<OptionsQmlModel> observer{this};
-    m_core_settings.setEffect([node = &m_node, args = &m_args, scheduler = m_executor ? nullptr : m_services.scheduler](
+    m_core_settings.setEffect([node = &m_node, args = &m_args](
         const QmlCoreSettings::Change& change, CoreSettingsModel::EffectContext opaque) {
         const auto context = std::static_pointer_cast<const NativeSettingsWrite>(opaque);
         if (!change.accepted || (!QmlCoreSettings::ValuesChanged(change) && !change.force_write)) {
@@ -313,10 +366,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, exec
             }, &error);
             if (saved && names.contains(QStringLiteral("natpmp"))) node->mapPort(session.values().natpmp);
             if (context) context->receipt->store(saved ? SettingsApplied : SettingsFailed);
-            auto snapshot = scheduler ? execution::RetainSnapshot<Snapshot>(scheduler, [&] {
-                return std::make_unique<Snapshot>(readSnapshot(*node, *args));
-            }) : std::make_shared<Snapshot>(readSnapshot(*node, *args));
-            if (!snapshot) throw std::runtime_error("Settings effect facts capacity unavailable");
+            auto snapshot = std::make_shared<Snapshot>(readSnapshot(*node, *args));
             return CoreSettingsModel::EffectResult{error, snapshot->core, snapshot->statuses, std::move(snapshot)};
         } catch (...) {
             if (context && context->receipt->load() == SettingsPending) context->receipt->store(SettingsUncertain);
@@ -347,8 +397,9 @@ SettingsEditorModel* OptionsQmlModel::createSettingsEditor()
     if(m_editors.size()>=16){setError(tr("Close another settings editor before opening a new one."));return nullptr;}
     SettingsEditorModel* editor{nullptr};
     const bool admitted=m_work->submitAsync<bool>([&](auto done,auto){
-        auto ports = SettingsEditorModel::PublicPorts(m_node, m_args, m_services.post);
-        ports.executor = m_application_executor;
+        auto ports = SettingsEditorModel::PublicPorts(m_node, m_args, m_post);
+        ports.executor = m_executor;
+        ports.lane = m_lane;
         ports.retired = [done] { done(true); };
         editor=new SettingsEditorModel(std::move(ports),this);
         return true;
@@ -369,27 +420,62 @@ SettingsEditorModel* OptionsQmlModel::createSettingsEditor()
 OptionsQmlModel::~OptionsQmlModel()
 {
     close();
-    if(m_executor)m_executor->shutdown();
 }
+
+void OptionsQmlModel::whenLinksDrained(std::function<void()> done)
+{
+    m_work->whenQueuesDrained([queue = m_link_queue, cleanup = m_link_cleanup, done = std::move(done)] {
+        if (queue) {
+            queue->close();
+            queue->whenDrained([cleanup, done] { cleanup->close(done); });
+        } else if (done) {
+            done();
+        }
+    });
+}
+
 void OptionsQmlModel::close()
 {
+    if (std::exchange(m_stopping, true)) return;
     m_preference_watch.stop();
-    m_stopping=true; m_pending=false; m_forwarded_signer_pending=false; m_validation_pending=false;m_signer_validation_pending=false; ++m_signer_validation_revision;
+    m_pending=false; m_forwarded_signer_pending=false; m_validation_pending=false;m_signer_validation_pending=false; ++m_signer_validation_revision;
     m_work->close();m_links.reset();m_core_settings.close();
-    for(const auto& editor:m_editors)if(editor)editor->retire();
+    if (m_owned_executor) {
+        m_join_pending = true;
+        auto join = JoinThreadAfterDrain([executor = std::move(m_owned_executor)] { executor->stopAndJoin(); }, this, [this] {
+            m_join_pending = false;
+            if (m_shutdown_started) Q_EMIT shutdownFinished();
+        });
+        const auto remaining = std::make_shared<std::atomic_int>(2);
+        const auto drained = [remaining, join = std::move(join)] {
+            if (remaining->fetch_sub(1) == 1) join();
+        };
+        m_core_settings.whenEffectQueuesDrained(drained);
+        whenLinksDrained(drained);
+    } else if (m_link_queue) {
+        whenLinksDrained({});
+    }
+
+    // Editor retirement can emit a signal that destroys the options model.
+    // Register the native join before publishing those signals.
+    for (const auto& editor : std::exchange(m_editors, {})) {
+        if (editor) editor->retire();
+    }
 }
+
 void OptionsQmlModel::beginShutdown()
 {
-    if(std::exchange(m_shutdown_started,true))return;
-    close();
+    if (std::exchange(m_shutdown_started, true)) return;
     const QPointer<OptionsQmlModel> observer{this};
-    if(m_executor) {
-        m_executor->whenDrained(this,[observer] {if(observer)Q_EMIT observer->shutdownFinished();});
-        m_executor->shutdown();
-    } else {
-        const auto remaining=std::make_shared<int>(2);const auto finish=[observer,remaining]{if(--*remaining==0&&observer)Q_EMIT observer->shutdownFinished();};
-        m_work->close(finish);m_core_settings.whenEffectsDrained(finish);
-    }
+    close();
+    if (!observer || m_join_pending) return;
+    const auto remaining = std::make_shared<int>(m_link_queue ? 3 : 2);
+    const auto finish = [observer, remaining] {
+        if (--*remaining == 0 && observer) Q_EMIT observer->shutdownFinished();
+    };
+    if (m_link_queue) whenLinksDrained([post = m_post, finish] { post(finish); });
+    m_work->close(finish);
+    m_core_settings.whenEffectsDrained(finish);
 }
 
 void OptionsQmlModel::setError(const QString& error)
@@ -566,7 +652,7 @@ void OptionsQmlModel::runCommand(std::function<QString(interfaces::Node&, ArgsMa
         if(!observer||observer->m_stopping)return;
         if(--observer->m_pending_commands==0)observer->setPending(false);
         if(observer&&!observer->m_stopping&&!observation&&revision==observer->m_command_revision)Q_EMIT observer->settingsOperationChanged();
-    },{execution::Lane::Core,{},execution::WorkClass::Action});
+    },execution::Lane::Core);
     if(!admitted)receipt->store(SettingsFailed);
     if(!observer||m_stopping)return;
     if(clear_error)Q_EMIT settingsErrorChanged();
@@ -899,7 +985,7 @@ void OptionsQmlModel::queueSignerValidation()
     if (m_stopping) return;
     m_signer_validation_in_flight = true;
     const QPointer<OptionsQmlModel> observer{this};
-    presentation::ReliablePost(m_services.post)([observer] {
+    presentation::ReliablePost(m_post)([observer] {
         if (observer && !observer->m_stopping) observer->startSignerValidation();
     });
 }
@@ -925,7 +1011,7 @@ void OptionsQmlModel::startSignerValidation()
         m_signer_validation_error = tr("Unable to validate the signer path.");
         m_signer_validation_pending = false;
         Q_EMIT signerPathValidationChanged();
-    },{execution::Lane::Core,{},execution::WorkClass::Observation});
+    },execution::Lane::Core);
 }
 
 QString OptionsQmlModel::getDefaultDataDirString()

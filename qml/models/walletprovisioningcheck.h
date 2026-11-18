@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_MODELS_WALLETPROVISIONINGCHECK_H
 #define BITCOIN_QML_MODELS_WALLETPROVISIONINGCHECK_H
+#include <qml/guipresentation.h>
 #include <qml/snapshotquery.h>
 #include <qml/walletopening.h>
 #include <qml/walletnames.h>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <mutex>
 namespace interfaces { class Node; }
+namespace execution { class SerialQueue; }
 class WalletProvisioningCheck : public QObject
 {
     Q_OBJECT
@@ -25,7 +27,13 @@ class WalletProvisioningCheck : public QObject
     Q_PROPERTY(QString normalizedPath READ normalizedPath NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
-    WalletProvisioningCheck(interfaces::Node& node, execution::SnapshotServices services, QObject* parent = nullptr, std::shared_ptr<std::atomic_bool> names_ready = {}, std::shared_ptr<WalletNameRegistry> registry = {}, std::shared_ptr<std::atomic_bool> shutdown_gate = {}, bool strict_name = false);
+    struct Queues {
+        std::shared_ptr<execution::SerialQueue> core;
+        std::shared_ptr<execution::SerialQueue> outcomes;
+    };
+    WalletProvisioningCheck(interfaces::Node& node, presentation::Post post, QObject* parent,
+        std::shared_ptr<std::atomic_bool> names_ready, std::shared_ptr<WalletNameRegistry> registry,
+        std::shared_ptr<std::atomic_bool> shutdown_gate, bool strict_name, Queues queues);
     ~WalletProvisioningCheck() override;
     QString name() const { return m_name; }
     QString xpub() const { return m_xpub; }
@@ -48,12 +56,14 @@ Q_SIGNALS:
 private:
     struct Input { std::mutex mutex; QString name, xpub, path; quint64 revision{0}; };
     struct Result { QString name_error, normalized_path; bool xpub_valid{false}, path_exists{false}; quint64 revision{0}; };
+    execution::SnapshotQuery<Result>::Post queryPost() const;
     void publish();
     interfaces::Node& m_node;
     std::shared_ptr<QObject> m_bridge;
     std::shared_ptr<std::atomic_bool> m_names_ready;
     std::shared_ptr<WalletNameRegistry> m_registry;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
+    const Queues m_queues;
     std::shared_ptr<Input> m_input{std::make_shared<Input>()};
     std::shared_ptr<execution::SnapshotQuery<Result>> m_query;
     QString m_name, m_xpub, m_path, m_name_error, m_normalized_path, m_error;

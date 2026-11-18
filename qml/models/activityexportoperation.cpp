@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/activityexportoperation.h>
+#include <qml/executor.h>
 #include <qml/models/activitysnapshot.h>
 #include <qml/retainedvalue.h>
 
@@ -28,30 +29,31 @@ struct ExportSource {
 } // namespace
 
 ActivityExportOperation::ActivityExportOperation(activityexport::Request request, activityexport::Files files,
-    execution::SnapshotServices execution, std::function<activityexport::Result(const activityexport::Request&)> writer, QObject* parent)
+    presentation::Post post, std::function<activityexport::Result(const activityexport::Request&)> writer, QObject* parent)
     : FileSaveOperation(parent), m_id(QUuid::createUuid().toString(QUuid::WithoutBraces)),
       m_revision(request.snapshot && request.snapshot->snapshot ? QString::number(request.snapshot->snapshot->revision) : QString{}), m_unit(request.unit)
 {
-    if (!request.snapshot || !execution.scheduler || !execution.post || !files.inspect || !files.install || !writer) {
+    if (!request.snapshot || !files.utility || !files.value_cleanup || !post || !files.inspect || !files.install || !writer) {
         m_error = tr("This Activity export is no longer available."); return;
     }
     // Reserve before capturing the potentially large immutable frame. Aliases
     // may disappear on GUI; the original request is destroyed on Cleanup.
-    auto retained = execution::RetainValues<activityexport::Request>(execution.scheduler,
-        [&request] { return std::make_unique<activityexport::Request>(std::move(request)); });
+    const auto make_request = [&request] { return std::make_unique<activityexport::Request>(std::move(request)); };
+    auto retained = execution::RetainValues<activityexport::Request>(files.value_cleanup, make_request);
     if (!retained) { m_error = tr("Activity export cleanup is unavailable."); return; }
     const auto path = retained->path;
     auto source = std::make_shared<ExportSource>(); source->retained = std::move(retained);
     backup::Services services;
-    services.scheduler = execution.scheduler; services.post = execution.post;
+    services.post = std::move(post);
+    services.utility = files.utility;
     services.available = files.available; services.wallet_name = [] { return std::string{"activity"}; };
     services.inspect = [inspect = files.inspect](const std::string& raw, const std::string&) {
         return inspect(QString::fromUtf8(raw.data(), static_cast<qsizetype>(raw.size())));
     };
-    services.write = [source, files, writer](const backup::Proposal& target, bool approved) {
+    services.write = [source, install = std::move(files.install), writer](const backup::Proposal& target, bool approved) {
         const auto original_source = source->hold();
         if (!original_source) return backup::WriteResult{backup::Error::Transport};
-        return files.install(target, approved, [original_source, writer](const std::string& stage) {
+        return install(target, approved, [original_source, writer](const std::string& stage) {
             auto original = *original_source;
             original.path = QString::fromUtf8(stage.data(), static_cast<qsizetype>(stage.size()));
             return writer(original).saved;

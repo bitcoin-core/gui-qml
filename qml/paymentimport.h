@@ -14,6 +14,8 @@
 #include <memory>
 #include <QUrl>
 
+namespace execution { class SerialQueue; class ValueCleanupQueue; }
+
 namespace paymentimport {
 struct Input {
     enum class Kind { Text, File, Drop };
@@ -26,13 +28,13 @@ struct Input {
 struct Services {
     using Clock = std::function<std::chrono::steady_clock::time_point()>;
     using Wake = std::function<void(std::chrono::milliseconds, std::function<void()>)>;
-    std::shared_ptr<execution::Scheduler> scheduler;
     std::function<Inspection(const Input&)> read;
     std::function<Inspection(const Inspection&)> analyze;
     Clock now{std::chrono::steady_clock::now};
-    // Entry transport only. The callback enqueues Domain work; time and retry
-    // decisions remain on Domain and are controlled independently in tests.
+    // Entry transport only. The callback enqueues Utility work; time and retry
+    // decisions remain on the owner queue and are controlled independently in tests.
     Wake wake;
+    std::shared_ptr<execution::SerialQueue> reads{}, outcomes{};
 };
 Inspection ReadSource(const Input& input);
 Inspection AnalyzeSource(const Inspection& source, const psbtfee::Lookup& lookup = {});
@@ -52,8 +54,8 @@ struct Snapshot {
 };
 
 /** One original source, independent of its optional target. All state changes
- * run on its Domain lane. Foreign target callbacks fill reserved reply cells;
- * they never execute this owner's decisions on another executor's Domain. */
+ * run on its Utility queue. Target callbacks fill reply cells and enqueue their
+ * consumption on the original owner's queue. */
 class Owner final : public std::enable_shared_from_this<Owner>
 {
 public:
@@ -75,10 +77,9 @@ public:
 private:
     struct State;
     struct Delivery;
-    struct Close;
     enum class ReplyKind { Observe, Dispatch, Query };
     struct Reply;
-    Owner(uint64_t identity, Services services, std::shared_ptr<execution::Scheduler> scope,
+    Owner(uint64_t identity, Services services,
           Notify notify, Retired retired, std::shared_ptr<State> state);
     execution::SubmitResult submit(std::function<void()> decision);
     void publish();
@@ -94,17 +95,15 @@ private:
     void cancelObsolete();
     void wake();
     void poll();
-    void closeOnDomain();
+    void closeOnQueue();
     const uint64_t m_identity;
     const Services m_services;
-    const std::shared_ptr<execution::Scheduler> m_scope;
-    const execution::ResourceKey m_key;
+    const std::shared_ptr<execution::ValueCleanupQueue> m_outcomes;
     const Notify m_notify;
     const Retired m_retired;
     const std::shared_ptr<State> m_state;
-    const std::shared_ptr<Close> m_close;
-    execution::TaskId m_close_task;
     std::atomic_bool m_close_requested{false};
+    std::function<void(std::shared_ptr<Owner>)> m_post_close;
     // close() revokes this before queuing the Domain lifecycle decision. A
     // queued target GUI handoff must not outlive its Source view.
     const std::shared_ptr<std::atomic_bool> m_presentation_allowed{std::make_shared<std::atomic_bool>(true)};

@@ -2,15 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/settingseditormodel.h>
-#include <qml/backendexecutor.h>
 #include <qml/models/options_model.h>
+#include <qml/models/settingsnavigationcontroller.h>
 #include <qml/guiargs.h>
 #include <common/args.h>
 #include <init.h>
 #include <univalue.h>
 #include <test/mocks/mocknode.h>
 #include <QTemporaryDir>
-#include <test/mocks/manualexecutionenvironment.h>
 #include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
@@ -65,6 +64,33 @@ struct Fixture {
 class SettingsEditorModelTests:public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void ownerCloseClearsNavigationEditorBeforeDeletingItsEntries()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.settle());
+        struct Source : SettingsEditorSource {
+            explicit Source(SettingsEditorModel& editor) : model(editor) {}
+            SettingsEditorModel* createSettingsEditor() override { return &model; }
+            SettingsEditorModel& model;
+        } source{*fixture.model};
+        SettingsNavigationController navigation;
+        navigation.setSource(&source);
+        QCOMPARE(navigation.editor(), fixture.model.get());
+
+        QSignalSpy editor_changed{&navigation, &SettingsNavigationController::editorChanged};
+        const QPointer<SettingsEntryModel> entry{fixture.entry("proxy")};
+        bool entry_alive_at_detach{false};
+        connect(&navigation, &SettingsNavigationController::editorChanged, this, [&] {
+            entry_alive_at_detach = entry && navigation.editor() == nullptr;
+        });
+        fixture.model->close();
+        QVERIFY(fixture.settle());
+
+        QCOMPARE(editor_changed.count(), 1);
+        QVERIFY(entry_alive_at_detach);
+        QVERIFY(navigation.editor() == nullptr);
+    }
+
     void actualWorkersKeepCoreCallsOffGuiAndPublishTheReceiptOnGui(){
         const auto gui = QThread::currentThread();
         std::atomic<int> reads{0}, writes{0};
@@ -134,7 +160,8 @@ private Q_SLOTS:
     void originalHandoffCannotConsumeASuccessorEdit(){
         Fixture f;QVERIFY(f.settle());f.entry("maxmempool")->editText("400");QVERIFY(f.settle());
         f.model->save();f.domain();QVERIFY(f.step(Lane::Core));
-        QVERIFY(f.step(Lane::Domain));while(f.publish()){}
+        f.domain();
+        QVERIFY(f.shared.hasWork(Lane::Core));
         QCOMPARE(f.model->phase(),SettingsEditorModel::Saving);QCOMPARE(f.writes,0);
         f.entry("maxmempool")->editText("500");f.domain();
         QCOMPARE(f.entry("maxmempool")->text(),QStringLiteral("500"));QCOMPARE(f.writes,0);
@@ -145,7 +172,8 @@ private Q_SLOTS:
     void originalHandoffSurvivesParentCloseAndFacadeRetirement(){
         Fixture f;QVERIFY(f.settle());f.entry("maxmempool")->editText("400");QVERIFY(f.settle());
         f.model->save();f.domain();QVERIFY(f.step(Lane::Core));
-        QVERIFY(f.step(Lane::Domain));while(f.publish()){}
+        f.domain();
+        QVERIFY(f.shared.hasWork(Lane::Core));
         QCOMPARE(f.model->phase(),SettingsEditorModel::Saving);QCOMPARE(f.writes,0);
         f.model->retire();
         f.shared.drain();QCOMPARE(f.writes,1);QVERIFY(f.native_released);QVERIFY(f.shared.quiescent());
@@ -163,7 +191,8 @@ private Q_SLOTS:
     void cancelledAcceptedHandoffSettlesItsOriginalNoWriteReceipt(){
         Fixture f;QVERIFY(f.settle());f.entry("maxmempool")->editText("400");QVERIFY(f.settle());
         f.model->save();f.domain();QVERIFY(f.step(Lane::Core));
-        QVERIFY(f.step(Lane::Domain));while(f.publish()){}
+        f.domain();
+        QVERIFY(f.shared.hasWork(Lane::Core));
         QCOMPARE(f.model->phase(),SettingsEditorModel::Saving);QCOMPARE(f.writes,0);
         const auto held=f.shared.take(Lane::Core);QVERIFY(held);
         f.cancel_write=true; held();
@@ -204,7 +233,6 @@ private Q_SLOTS:
         };
         node.map_port_fn = [&](bool) { if (closed) ++reads_after_close; };
 
-        ManualRoutedExecution legacy;
         std::deque<std::function<void()>> gui;
         ManualStartupExecution shared;
         const auto publish = [&] {
@@ -216,8 +244,8 @@ private Q_SLOTS:
         };
         const auto settle = [&] {
             for (int i = 0; i < 4096; ++i) {
-                if (legacy.stepNext() || shared.step(Lane::Core) || shared.step(Lane::Utility)) continue;
-                if (gui.empty()) return legacy.transportIdle() && shared.quiescent();
+                if (shared.step(Lane::Core) || shared.step(Lane::Utility)) continue;
+                if (gui.empty()) return shared.quiescent();
                 publish();
             }
             return false;
@@ -228,7 +256,7 @@ private Q_SLOTS:
         };
 
         {
-            OptionsQmlModel options{node, args, {legacy.scheduler, [&](auto fn) { gui.push_back(std::move(fn)); }}, &shared.executor()};
+            OptionsQmlModel options{node, args, [&](auto fn) { gui.push_back(std::move(fn)); }, &shared.executor()};
             const auto finish = qScopeGuard([&] { options.beginShutdown(); settle(); });
             QVERIFY(settle());
             auto* editor = options.createSettingsEditor();
@@ -261,7 +289,7 @@ private Q_SLOTS:
             QCOMPARE(reads_after_close, 0);
         }
         QVERIFY(settle());
-        QVERIFY(legacy.quiescent());
+        QVERIFY(shared.quiescent());
     }
 
     void retirementWhileReviewIsPendingDoesNotWrite()

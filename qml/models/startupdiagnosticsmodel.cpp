@@ -3,8 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/startupdiagnosticsmodel.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedvalue.h>
+#include <qml/retainedsnapshot.h>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QSet>
 #include <cstdlib>
 #include <stdexcept>
@@ -44,8 +45,8 @@ int startupdiagnostics::FinalExitStatus(int original, bool diagnostic_loss) {
     return original == EXIT_SUCCESS && diagnostic_loss ? EXIT_FAILURE : original;
 }
 void startupdiagnostics::Collection::seal() const { std::lock_guard lock{mutex}; sealed = true; }
-std::shared_ptr<const QString> startupdiagnostics::RetainText(const std::shared_ptr<execution::Scheduler>& scheduler,
-    const std::shared_ptr<TextBudget>& budget, QString message) {
+std::shared_ptr<const QString> startupdiagnostics::RetainText(const std::shared_ptr<TextBudget>& budget, QString message,
+    const PresentationServices::RetireValue& retire) {
     if (!budget || static_cast<uint64_t>(message.size()) > TextBudget::MAX_CHARS) return {};
     const auto chars = static_cast<uint64_t>(message.size());
     const auto before = budget->used.fetch_add(chars);
@@ -56,21 +57,40 @@ std::shared_ptr<const QString> startupdiagnostics::RetainText(const std::shared_
         uint64_t chars;
         ~Text() { budget->used.fetch_sub(chars); }
     };
+    bool transferred{false};
+    const auto refund = qScopeGuard([&] { if (!transferred) budget->used.fetch_sub(chars); });
     std::shared_ptr<Text> retained;
     try {
-        retained = execution::RetainValues<Text>(scheduler, [&] {
-            return std::unique_ptr<Text>{new Text{std::move(message), budget, chars}};
-        });
-    } catch (...) { budget->used.fetch_sub(chars); return {}; }
-    if (!retained) { budget->used.fetch_sub(chars); return {}; }
+        const auto make = [&] {
+            auto text = std::unique_ptr<Text>{new Text{std::move(message), budget, chars}};
+            transferred = true;
+            return text;
+        };
+        retained = execution::RetainSnapshot<Text>(retire, make);
+    } catch (...) { return {}; }
+    if (!retained) return {};
     return std::shared_ptr<const QString>{retained, &retained->value};
 }
-std::shared_ptr<startupdiagnostics::Collection> startupdiagnostics::Create(const std::shared_ptr<execution::Scheduler>& scheduler) {
-    return execution::RetainValues<Collection>(scheduler, [] { return std::make_unique<Collection>(); });
+namespace {
+template <typename T>
+std::shared_ptr<T> RetainDiagnostic(const PresentationServices::RetireValue& retire)
+{
+    return execution::RetainSnapshot<T>(retire, [] { return std::make_unique<T>(); });
 }
-StartupDiagnosticsModel::StartupDiagnosticsModel(execution::SnapshotServices services, QObject* parent)
-    : QAbstractListModel(parent), m_services(std::move(services)), m_input(startupdiagnostics::Create(m_services.scheduler)) {
-    m_services.post = presentation::ReliablePost(std::move(m_services.post));
+} // namespace
+
+std::shared_ptr<startupdiagnostics::Collection> startupdiagnostics::Create(const PresentationServices::RetireValue& retire)
+{
+    return RetainDiagnostic<Collection>(retire);
+}
+
+StartupDiagnosticsModel::StartupDiagnosticsModel(presentation::Post post, PresentationServices& diagnostics, QObject* parent)
+    : QAbstractListModel(parent),
+      m_post(presentation::ReliablePost(std::move(post))),
+      m_observation_post(diagnostics.observationPost()),
+      m_retire_value(diagnostics.valueRetirement())
+{
+    m_input = m_observation_post ? startupdiagnostics::Create(m_retire_value) : nullptr;
     if (!m_input) m_error = tr("Startup diagnostic is unavailable.");
 }
 StartupDiagnosticsModel::~StartupDiagnosticsModel() { retire(false); }
@@ -102,19 +122,18 @@ bool StartupDiagnosticsModel::adopt(std::shared_ptr<const startupdiagnostics::Co
 }
 bool StartupDiagnosticsModel::project(bool success, QString failure, QString warning_heading, QString error_prefix, bool normalize) {
     if (m_closed || m_busy || !m_input) return false;
-    const auto scheduler = m_diagnostic_scope ? m_diagnostic_scope : m_services.scheduler;
-    auto prepared = execution::RetainValues<Prepared>(scheduler, [] { return std::make_unique<Prepared>(); });
+    auto prepared = RetainDiagnostic<Prepared>(m_retire_value);
     if (!prepared) { m_error = tr("Startup diagnostic is unavailable."); m_deferred_changed = true; flushChanges(); return false; }
     const QPointer<StartupDiagnosticsModel> observer{this};
-    auto operation = std::make_shared<execution::OwnedCommand<std::shared_ptr<Prepared>>>(scheduler,
-        [post = m_services.post, fallback = presentation::QueuedPost(), observer] {
+    auto operation = std::make_shared<execution::OwnedCommand<std::shared_ptr<Prepared>>>(
+        [post = m_post, fallback = presentation::QueuedPost(), observer] {
             const auto wake = [observer] { if (observer) observer->publish(); };
             try { post(wake); } catch (...) { fallback(wake); }
         });
     auto input = m_input;
     const auto generation = ++m_generation;
     m_operation = operation; m_busy = true; m_error.clear(); m_authoritative_input = input;
-    const auto admitted = operation->start([input, prepared, success, failure = std::move(failure), warning_heading = std::move(warning_heading), error_prefix = std::move(error_prefix), normalize, intake_error = m_intake_error] {
+    auto work = [input, prepared, success, failure = std::move(failure), warning_heading = std::move(warning_heading), error_prefix = std::move(error_prefix), normalize, intake_error = m_intake_error] {
         QStringList warnings, errors; QSet<QString> warning_set, error_set;
         // Explicit stack avoids recursively walking adopted collections.
         struct Cursor { const startupdiagnostics::Collection* collection; std::list<startupdiagnostics::Collection::Batch>::const_iterator next; };
@@ -146,14 +165,12 @@ bool StartupDiagnosticsModel::project(bool success, QString failure, QString war
         if (text.size() > 16384) prepared->summary += QObject::tr("\n[Complete diagnostics are available below.]");
         for (qsizetype offset = 0; offset < text.size(); offset += 1024) prepared->rows.push_back(text.mid(offset, 1024));
         return prepared;
-    }, {execution::Lane::Domain, {}, execution::WorkClass::Action});
+    };
+    const auto admitted = operation->startWith([&](auto done, auto failed) {
+        return m_observation_post(execution::MakeTask(std::move(work), std::move(done), std::move(failed)));
+    });
     if (generation == m_generation && m_operation == operation && !m_closed) {
-        if (admitted) {
-            m_input.reset();
-            // Accepted work owns the original capability through its outcome.
-            // The facade retains only value leases after that handoff.
-            m_diagnostic_scope.reset();
-        }
+        if (admitted) m_input.reset();
         else { m_busy = false; m_operation.reset(); m_error = tr("Startup diagnostics could not be shown. Try again."); }
     }
     m_deferred_changed = true; flushChanges();
@@ -192,12 +209,9 @@ void StartupDiagnosticsModel::publish() {
     flushChanges();
     if (observer && !m_closed && generation == m_generation && !m_operation) Q_EMIT finished();
 }
-bool StartupDiagnosticsModel::resetInput(std::shared_ptr<execution::Scheduler> original_diagnostic_scope) {
+bool StartupDiagnosticsModel::resetInput() {
     const QPointer<StartupDiagnosticsModel> observer{this};
-    // Only the original lifecycle operation supplies this one-shot capability.
-    // General model admission remains closed during fatal presentation.
-    m_diagnostic_scope = std::move(original_diagnostic_scope);
-    auto input = startupdiagnostics::Create(m_diagnostic_scope ? m_diagnostic_scope : m_services.scheduler);
+    auto input = m_observation_post ? startupdiagnostics::Create(m_retire_value) : nullptr;
     ++m_generation;
     m_operation.reset(); m_busy = false; m_closed = false; m_error.clear(); m_intake_error.clear(); m_input = input; m_authoritative_input.reset();
     m_publication_pending = false; m_rows_reset_pending = true; m_deferred_changed = true;
@@ -211,7 +225,7 @@ void StartupDiagnosticsModel::retire(bool notify) {
     if (m_closed) return;
     ++m_generation;
     m_closed = true; m_busy = false;
-    m_input.reset(); m_authoritative_input.reset(); m_operation.reset(); m_diagnostic_scope.reset();
+    m_input.reset(); m_authoritative_input.reset(); m_operation.reset();
     m_publication_pending = false;
     if (!notify) { m_prepared.reset(); return; }
     m_rows_reset_pending = true; m_deferred_changed = true;
@@ -233,7 +247,7 @@ void StartupDiagnosticsModel::schedulePresentation() {
     if (m_presentation_scheduled) return;
     m_presentation_scheduled = true;
     const QPointer<StartupDiagnosticsModel> observer{this};
-    m_services.post([observer] { if (observer) observer->deliverPresentation(); });
+    m_post([observer] { if (observer) observer->deliverPresentation(); });
 }
 void StartupDiagnosticsModel::deliverPresentation() {
     m_presentation_scheduled = false;

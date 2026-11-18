@@ -2,9 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/texteditsessionmodel.h>
-#include <qml/atomicsharedptr.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedsnapshot.h>
 #include <QPointer>
 #include <QUuid>
 #include <limits>
@@ -49,11 +47,9 @@ struct TextEditSessionModel::Mailbox {
 struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
     State(QString editor_id, QString entity, Ports ports, std::shared_ptr<Mailbox> mailbox, std::function<void()> notify)
         : editor({editor_id.toStdString(), entity.toStdString()}), ports(std::move(ports)),
-          scope(this->ports.execution.scheduler->openActionScope()), key(this->ports.execution.scheduler->allocateKey()), notify(std::move(notify)), mailbox(std::move(mailbox)) {}
+          notify(std::move(notify)), mailbox(std::move(mailbox)) {}
     Reducer editor;
     const Ports ports;
-    ownership::AtomicSharedPtr<execution::Scheduler> scope;
-    const execution::ResourceKey key;
     const std::function<void()> notify;
     TextEditError error;
     TextEditSaveResult result;
@@ -61,7 +57,7 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
     bool reading{false}, error_from_save{false}, validation_valid{false};
     uint64_t rejection{0};
     TextEditError rejected_error;
-    struct PendingSave { QString value; uint64_t input; Writer writer; std::shared_ptr<execution::Scheduler> scope; uint64_t request; };
+    struct PendingSave { QString value; uint64_t input; Writer writer; uint64_t request; };
     std::optional<std::pair<QString, uint64_t>> pending_input;
     // Close was asked while input typed during Loading waited for the value;
     // it is asked again once that input is in the draft, so Close can ask.
@@ -70,17 +66,18 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
     const std::shared_ptr<Mailbox> mailbox;
     ~State() { mailbox->drained.store(true); try { notify(); } catch (...) {} }
 
-    execution::SubmitResult postUsing(const std::shared_ptr<execution::Scheduler>& target, std::function<void(State&)> command)
+    bool post(std::function<void(State&)> command)
     {
-        if (!target) return {{}, execution::Rejection::Closed};
-        const auto self = shared_from_this();
-        return execution::Submit(*target, [self, command = std::move(command)] {
-            if (self->mailbox->retired.load()) self->retire(); else command(*self);
-        }, [] {}, {},
-            {execution::Lane::Domain, key, execution::WorkClass::Action});
+        auto work = [self = shared_from_this(), command = std::move(command)] {
+            if (self->mailbox->retired.load()) self->retire();
+            else command(*self);
+        };
+        const auto task = execution::MakeTask(std::move(work), [] {}, {});
+        return ports.postWork([task] {
+            task->execute();
+            task->deliver();
+        });
     }
-    execution::SubmitResult post(std::function<void(State&)> command) { return postUsing(scope.load(), std::move(command)); }
-    execution::SubmitResult ingress(std::function<void(State&)> command) { return postUsing(ports.execution.scheduler, std::move(command)); }
     bool evaluate() const
     {
         try { return editor.draft()[0].size() <= 32768 && (!ports.validate || ports.validate(editor.draft()[0])); }
@@ -117,8 +114,8 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
                 if (!self->error_from_save && self->editor.phase() != persistentedit::Phase::Uncertain)
                     self->error = self->validation_valid ? TextEditError{} : TextEditError{TextEditError::Invalid, tr("The text is too long or is not valid.")};
                 const auto queued = std::exchange(self->pending_input, {});
-                if (const auto save = std::exchange(self->pending_save, {})) {
-                    self->edit(save->value, save->input); self->save(save->writer, save->scope, save->request);
+                if (auto save = std::exchange(self->pending_save, {})) {
+                    self->edit(save->value, save->input); self->save(std::move(save->writer), save->request);
                 }
                 if (queued) self->edit(queued->first, queued->second);
                 self->read_failed = false;
@@ -154,10 +151,10 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
         result.outcome = static_cast<TextEditSaveResult::Outcome>(outcome);
         result.value = persisted ? value : QString{}; result.error = failure;
     }
-    void save(Writer writer, std::shared_ptr<execution::Scheduler> action, uint64_t request)
+    void save(Writer writer, uint64_t request)
     {
         if (editor.phase() == persistentedit::Phase::Loading && pending_input) {
-            pending_save = PendingSave{pending_input->first, pending_input->second, std::move(writer), std::move(action), request}; return;
+            pending_save = PendingSave{pending_input->first, pending_input->second, std::move(writer), request}; return;
         }
         seen_request = std::max(seen_request, request);
         // A loaded editor can save its captured draft while a refresh is in
@@ -183,13 +180,11 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
         reading = false;
         publish();
         const auto self = shared_from_this();
-        const auto done = [self, accepted, action](Write value) {
-            // Retain the original intent through its independently owned outcome.
-            (void)action;
+        const auto done = [self, accepted](Write value) {
             self->finish(accepted, value, false);
         };
         try {
-            if (writer && writer(accepted, done, action)) return;
+            if (writer && writer(accepted, done)) return;
             Write rejected; rejected.outcome = persistentedit::Outcome::Rejected;
             rejected.error = {TextEditError::Refused, tr("Saving could not start. Try again.")};
             finish(accepted, rejected, false);
@@ -218,7 +213,7 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
         if (pending_save) seen_request = std::max(seen_request, pending_save->request);
         pending_save.reset(); pending_input.reset();
         error = {TextEditError::Closed, tr("This editor is closed.")};
-        editor.retire(); scope.store({}); publish();
+        editor.retire(); publish();
     }
     void reconcile()
     {
@@ -239,15 +234,16 @@ struct TextEditSessionModel::State : std::enable_shared_from_this<State> {
 };
 
 TextEditSessionModel::TextEditSessionModel(QString entity, Ports ports, QObject* parent)
-    : QObject(parent), m_editor_id(QUuid::createUuid().toString(QUuid::WithoutBraces)), m_entity_id(std::move(entity)), m_execution(ports.execution)
+    : QObject(parent), m_editor_id(QUuid::createUuid().toString(QUuid::WithoutBraces)), m_entity_id(std::move(entity))
 {
-    Q_ASSERT(m_execution.scheduler);
-    m_execution.post = presentation::ReliablePost(std::move(m_execution.post));
-    ports.execution = m_execution;
+    Q_ASSERT(ports.postWork && ports.value_cleanup);
+    auto post = presentation::ReliablePost(std::move(ports.post));
     const QPointer<TextEditSessionModel> observer{this};
     m_mailbox = std::make_shared<Mailbox>();
-    m_state_owner = execution::RetainSnapshot<std::shared_ptr<State>>(m_execution.scheduler,
-        [editor_id = m_editor_id, entity_id = m_entity_id, ports = std::move(ports), mailbox = m_mailbox, observer, post = m_execution.post]() mutable {
+    const auto value_cleanup = ports.value_cleanup;
+    const bool can_post = bool(ports.postWork);
+    auto make_state =
+        [editor_id = m_editor_id, entity_id = m_entity_id, ports = std::move(ports), mailbox = m_mailbox, observer, post = std::move(post)]() mutable {
             return std::make_unique<std::shared_ptr<State>>(std::make_shared<State>(editor_id, entity_id, std::move(ports), mailbox, [mailbox, observer, post] {
                 if (mailbox->notice_pending.exchange(true)) return;
                 try { post([mailbox, observer] {
@@ -255,10 +251,10 @@ TextEditSessionModel::TextEditSessionModel(QString entity, Ports ports, QObject*
                     if (observer) observer->publish();
                 }); } catch (...) { mailbox->notice_pending.store(false); throw; }
             }));
-        });
+        };
+    if (value_cleanup && can_post) m_state_owner = execution::RetainValues<std::shared_ptr<State>>(value_cleanup, std::move(make_state));
     if (m_state_owner) {
-        // Frontend locks borrow the reserved cleanup lease, never the actor's
-        // shared_from_this counter. Their last release cannot destroy State on GUI.
+        // GUI references release the original owner on its worker queue.
         m_state = std::shared_ptr<State>{m_state_owner, m_state_owner->get()};
         m_mailbox = (*m_state_owner)->mailbox;
     }
@@ -300,7 +296,7 @@ bool TextEditSessionModel::submit(std::function<void(State&)> command, const QSt
     bool admitted{false};
     {
         const auto state = m_state.lock();
-        admitted = available() && state && bool(state->ingress(std::move(command)));
+        admitted = available() && state && state->post(std::move(command));
     }
     if (!guard) return false;
     if (admitted) { m_immediate_error = {}; return true; }
@@ -377,7 +373,7 @@ void TextEditSessionModel::save() { saveCommand(); }
 void TextEditSessionModel::saveCommand(std::optional<uint64_t> close_token)
 {
     if (refuseBusy(QStringLiteral("save"))) return;
-    const auto action = available() && !m_input_invalid && m_next_save_sequence != UINT64_MAX ? m_execution.scheduler->openActionScope() : nullptr;
+    const bool can_submit = available() && !m_input_invalid && m_next_save_sequence != UINT64_MAX;
     const auto request = m_next_save_sequence == UINT64_MAX ? 0 : m_next_save_sequence + 1;
     const auto value = m_text.text(); const auto sequence = m_input_sequence;
     const QPointer<TextEditSessionModel> observer{this};
@@ -385,17 +381,19 @@ void TextEditSessionModel::saveCommand(std::optional<uint64_t> close_token)
     {
         const auto state = m_state.lock();
         Writer writer;
-        try { if (action && state) writer = state->ports.admitWrite ? state->ports.admitWrite() : state->ports.write; }
+        try {
+            if (can_submit && state) writer = state->ports.admitWrite ? state->ports.admitWrite() : state->ports.write;
+        }
         catch (...) {}
         if (!observer) return;
-        admitted = action && writer && state && bool(state->postUsing(action, [writer = std::move(writer), action, close_token, value, sequence, request](State& state) {
+        admitted = writer && state->post([writer = std::move(writer), close_token, value, sequence, request](State& state) mutable {
             state.edit(value, sequence);
             if (close_token && !state.editor.answerClose(*close_token, persistentedit::CloseChoice::Save)) {
                 state.seen_request = std::max(state.seen_request, request);
                 state.reject({TextEditError::Changed, tr("The close question changed. Review the current edit before answering.")}); state.publish(); return;
             }
-            state.save(writer, action, request);
-        }));
+            state.save(std::move(writer), request);
+        });
     }
     if (!observer) return;
     if (admitted) {
@@ -443,8 +441,7 @@ void TextEditSessionModel::retire()
     if (std::exchange(m_retired, true)) return;
     if (m_mailbox) m_mailbox->retired.store(true);
     if (const auto state = m_state.lock()) state->post([](State& owner) { owner.retire(); });
-    // The detached GUI projection must not hold the wallet scheduler's cleanup
-    // lease or lifetime scope. Accepted effects retain their own original owner.
+    // Accepted effects retain their original owner through worker delivery.
     m_state_owner.reset();
     const QPointer<TextEditSessionModel> guard{this};
     m_text.setAvailable(false);

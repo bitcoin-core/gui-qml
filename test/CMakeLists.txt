@@ -36,8 +36,6 @@ add_test(NAME bitcoinqml_test_directory_checks
 
 add_executable(bitcoinqml_bootstrap_tests
   test_bootstrap.cpp
-  ../qml/backendexecutor.cpp
-  ../qml/execution.cpp
   ../qml/executor.cpp
   ../qml/quithandler.h
 )
@@ -351,6 +349,13 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/settingsvalues.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/settingssession.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingseditormodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingseditorsource.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingsnavigationcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingsnavigationcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandtarget.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/signerconfiguration.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/signerdiscoverymodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/walletcreation.h
@@ -363,8 +368,6 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/bitcoinaddress.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/uipreferences.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/uipreferences.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/execution.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/amountparse.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinamount.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
@@ -374,6 +377,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/presentationservices.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/executor.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/retainedvalue.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/qrimageprovider.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/globalsettings.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/motionpreference.h

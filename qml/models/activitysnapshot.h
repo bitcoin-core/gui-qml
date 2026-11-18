@@ -192,14 +192,13 @@ struct Snapshot {
  * references before its lease so native cleanup owns every large last ref. */
 struct Hold {
     std::shared_ptr<const Snapshot> snapshot;
-    std::shared_ptr<execution::ResourceLease> lease;
+    std::shared_ptr<void> lease;
     ~Hold() { snapshot.reset(); lease.reset(); }
 };
 class Source {
 public:
     virtual ~Source() = default;
     virtual std::shared_ptr<const Hold> preparedSnapshot() const = 0;
-    virtual execution::SnapshotServices activityServices() const = 0;
     virtual std::shared_ptr<walletopening::Session> opening() const = 0;
     virtual activityexport::Files activityFiles() const { return {}; }
     virtual bool activityLoading() const = 0;
@@ -207,15 +206,6 @@ public:
     virtual int activityRowForId(const QString& id) const = 0;
     virtual QList<QMetaObject::Connection> observeActivity(QObject* receiver, std::function<void()> changed) = 0;
 };
-inline execution::Borrow HoldValues(const std::shared_ptr<execution::Scheduler>& scheduler, std::function<void()> cleanup)
-{
-    const auto key = scheduler->allocateKey();
-    const auto reserved = execution::Submit(*scheduler, std::move(cleanup), [] {}, {}, {execution::Lane::Cleanup, key}, true);
-    if (!reserved) return {{}, reserved.rejection};
-    auto held = scheduler->borrow(key);
-    scheduler->activateCleanup(reserved.id);
-    return held;
-}
 } // namespace activityview
 Q_DECLARE_INTERFACE(activityview::Source, "org.bitcoincore.qt.activitysnapshot/1.0")
 

@@ -2,9 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/models/walletbalancereader.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <QScopeGuard>
@@ -12,6 +12,7 @@
 #include <QtTest/QtTest>
 
 #include <atomic>
+#include <deque>
 #include <stdexcept>
 
 namespace {
@@ -20,13 +21,15 @@ using walletbalance::Result;
 using walletbalance::Status;
 
 struct Fixture {
-    ManualRoutedExecution env;
+    ManualStartupExecution env;
+    const std::shared_ptr<execution::SerialQueue> core{std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core))};
+    const std::shared_ptr<execution::SerialQueue> utility{std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility))};
     std::shared_ptr<std::atomic_bool> closed{std::make_shared<std::atomic_bool>(false)};
     int reads{0}, wakeups{0};
     Result result{Status::Ready, walletbalance::Snapshot{42, "first observed block"}};
     std::function<void()> during_read, during_notify;
     bool throw_read{false};
-    std::shared_ptr<walletbalance::Reader> reader{std::make_shared<walletbalance::Reader>(env.scheduler, [this] {
+    std::shared_ptr<walletbalance::Reader> reader{std::make_shared<walletbalance::Reader>(core, utility, [this] {
         ++reads;
         const auto captured = result;
         if (during_read) std::exchange(during_read, {})();
@@ -63,32 +66,62 @@ private Q_SLOTS:
     void retirementWaitsForAdmittedPacket()
     {
         QFETCH(bool, finish_effect);
-        ManualRoutedExecution env;
+        std::deque<std::function<void()>> effects, outcomes;
+        execution::Executor executor{[&](Lane lane, execution::UtilityWorker, std::function<void()> task) {
+            (lane == Lane::Core ? effects : outcomes).push_back(std::move(task));
+            return true;
+        }};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        const auto step = [](auto& pending) {
+            if (pending.empty()) return false;
+            auto task = std::move(pending.front());
+            pending.pop_front();
+            task();
+            return true;
+        };
         const auto closed = std::make_shared<std::atomic_bool>(false);
         int reads{0}, retired{0};
-        auto reader = std::make_shared<walletbalance::Reader>(env.scheduler, [&] {
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, [&] {
             ++reads;
             return Result{Status::Ready, walletbalance::Snapshot{42, "held packet"}};
         }, [] {}, closed, [&] { ++retired; });
+        const auto drain = qScopeGuard([&] {
+            while (step(effects) || step(outcomes)) {}
+        });
         QCOMPARE(reader->refresh(), execution::Rejection::None);
-        if (finish_effect) QVERIFY(env.step(Lane::Core));
+        if (finish_effect) QVERIFY(step(effects));
         reader->close();
         QCOMPARE(retired, 0);
-        if (!finish_effect) QVERIFY(env.step(Lane::Core));
+        if (!finish_effect) QVERIFY(step(effects));
         QCOMPARE(reads, finish_effect ? 1 : 0);
         QCOMPARE(retired, 0);
-        QVERIFY(env.step(Lane::Domain));
+        QVERIFY(step(outcomes));
         QCOMPARE(retired, 1);
         reader->close();
         QCOMPARE(retired, 1);
-        QVERIFY(env.quiescent());
+        QVERIFY(effects.empty() && outcomes.empty());
+    }
+    void closingUtilityPreservesAdmittedBalanceOutcome()
+    {
+        Fixture f;
+        f.refresh();
+        f.utility->close();
+        QVERIFY(f.env.step(Lane::Core));
+        QCOMPARE(f.reads, 1);
+        QCOMPARE(f.wakeups, 0);
+        QVERIFY(f.env.step(Lane::Utility));
+        QCOMPARE(f.wakeups, 1);
+        QCOMPARE(f.takeReady().trusted, int64_t{42});
     }
     void idleRetirementMayReenterWithoutHoldingReaderMutex()
     {
-        ManualRoutedExecution env;
+        ManualStartupExecution env;
+        const auto core = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility));
         int retired{0};
         std::shared_ptr<walletbalance::Reader> reader;
-        reader = std::make_shared<walletbalance::Reader>(env.scheduler, [] { return Result{}; }, [] {},
+        reader = std::make_shared<walletbalance::Reader>(core, utility, [] { return Result{}; }, [] {},
             std::make_shared<std::atomic_bool>(false), [&] {
                 ++retired;
                 QCOMPARE(reader->refresh(), execution::Rejection::Closed);
@@ -102,23 +135,30 @@ private Q_SLOTS:
     }
     void retirementAfterRejectedAdmissionStillRetires()
     {
-        ManualRoutedExecution env;
-        env.rejectLane(execution::Lane::Core);
+        int rejected{0};
+        execution::Executor executor{[&](Lane lane, execution::UtilityWorker, std::function<void()>) {
+            if (lane == Lane::Core) ++rejected;
+            return false;
+        }};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
         int retired{0}, reads{0};
-        auto reader = std::make_shared<walletbalance::Reader>(env.scheduler, [&] { ++reads; return Result{}; }, [] {},
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, [&] { ++reads; return Result{}; }, [] {},
             std::make_shared<std::atomic_bool>(false), [&] { ++retired; });
         QCOMPARE(reader->refresh(), execution::Rejection::Transport);
         reader->close();
         QCOMPARE(reads, 0);
         QCOMPARE(retired, 1);
-        QVERIFY(env.quiescent());
+        QCOMPARE(rejected, 1);
     }
     void retirementInsideReadWaitsForItsOutcomeRelease()
     {
-        ManualRoutedExecution env;
+        ManualStartupExecution env;
+        const auto core = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility));
         int retired{0}, wakes{0};
         std::weak_ptr<walletbalance::Reader> weak;
-        auto reader = std::make_shared<walletbalance::Reader>(env.scheduler, [&] {
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, [&] {
             weak.lock()->close();
             if (retired != 0) throw std::runtime_error("Retired before the active read returned");
             return Result{Status::Ready, walletbalance::Snapshot{42, "closed during read"}};
@@ -127,7 +167,7 @@ private Q_SLOTS:
         QCOMPARE(reader->refresh(), execution::Rejection::None);
         QVERIFY(env.step(Lane::Core));
         QCOMPARE(retired, 0);
-        QVERIFY(env.step(Lane::Domain));
+        QVERIFY(env.step(Lane::Utility));
         QCOMPARE(retired, 1);
         QCOMPARE(wakes, 0);
         QVERIFY(!reader->take());
@@ -135,9 +175,11 @@ private Q_SLOTS:
     }
     void admittedPacketRetainsRetirementAfterObserverLoss()
     {
-        ManualRoutedExecution env;
+        ManualStartupExecution env;
+        const auto core = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility));
         int retired{0};
-        auto reader = std::make_shared<walletbalance::Reader>(env.scheduler, [] { return Result{}; }, [] {},
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, [] { return Result{}; }, [] {},
             std::make_shared<std::atomic_bool>(false), [&] { ++retired; });
         const std::weak_ptr<walletbalance::Reader> weak{reader};
         QCOMPARE(reader->refresh(), execution::Rejection::None);
@@ -152,11 +194,15 @@ private Q_SLOTS:
     }
     void retirementOfOneReaderLeavesOtherOpeningUsable()
     {
-        ManualRoutedExecution env;
+        ManualStartupExecution env;
+        const auto core = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility));
         int retired_a{0}, retired_b{0}, reads_b{0};
-        auto a = std::make_shared<walletbalance::Reader>(env.scheduler, [] { return Result{}; }, [] {},
+        auto a = std::make_shared<walletbalance::Reader>(core, utility, [] { return Result{}; }, [] {},
             std::make_shared<std::atomic_bool>(false), [&] { ++retired_a; });
-        auto b = std::make_shared<walletbalance::Reader>(env.scheduler, [&] {
+        const auto other_core = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Core));
+        const auto other_utility = std::make_shared<execution::SerialQueue>(env.executor().makeQueue(Lane::Utility));
+        auto b = std::make_shared<walletbalance::Reader>(other_core, other_utility, [&] {
             ++reads_b;
             return Result{Status::Ready, walletbalance::Snapshot{84, "other opening"}};
         }, [] {}, std::make_shared<std::atomic_bool>(false), [&] { ++retired_b; });
@@ -185,7 +231,7 @@ private Q_SLOTS:
         QCOMPARE(f.reads, 1);
         QCOMPARE(f.wakeups, 0);
         QVERIFY(!f.reader->take());
-        QVERIFY(f.env.step(Lane::Domain));
+        QVERIFY(f.env.step(Lane::Utility));
         QCOMPARE(f.wakeups, 1);
         const auto value = f.reader->take();
         QVERIFY(value && value->snapshot);
@@ -199,7 +245,7 @@ private Q_SLOTS:
     {
         Fixture f;
         for (int i = 0; i < 1000; ++i) f.refresh();
-        QCOMPARE(f.env.scheduler->pending(), size_t{1});
+        QCOMPARE(f.env.queuedCount(), size_t{1});
         f.env.drain();
         QCOMPARE(f.reads, 1);
         QCOMPARE(f.wakeups, 1);
@@ -222,7 +268,7 @@ private Q_SLOTS:
         f.throw_read = false;
         f.result.snapshot = walletbalance::Snapshot{99, "successor block"};
         for (int i = 0; i < 100; ++i) f.refresh();
-        QVERIFY(f.env.step(Lane::Domain));
+        QVERIFY(f.env.step(Lane::Utility));
         QCOMPARE(f.wakeups, 1);
         const auto earlier = f.reader->take();
         QVERIFY(earlier);
@@ -294,7 +340,7 @@ private Q_SLOTS:
             QVERIFY(f.env.step(Lane::Core));
             // A timer/notice arrives during every read, without a quiet turn.
             f.refresh();
-            QVERIFY(f.env.step(Lane::Domain));
+            QVERIFY(f.env.step(Lane::Utility));
             QCOMPARE(f.takeReady().trusted, int64_t{i});
         }
         QCOMPARE(f.reads, 10);
@@ -350,7 +396,7 @@ private Q_SLOTS:
         Fixture f;
         f.refresh();
         if (boundary >= 1) QVERIFY(f.env.step(Lane::Core));
-        if (boundary >= 2) QVERIFY(f.env.step(Lane::Domain));
+        if (boundary >= 2) QVERIFY(f.env.step(Lane::Utility));
         f.reader->close();
         QCOMPARE(f.reader->refresh(), execution::Rejection::Closed);
         f.env.drain();
@@ -371,7 +417,7 @@ private Q_SLOTS:
     void rejectionRetainsInterestWithoutSpinning()
     {
         Fixture f;
-        f.env.rejectLane(Lane::Core);
+        f.env.reject_core = true;
         QCOMPARE(f.reader->refresh(), execution::Rejection::Transport);
         const auto rejected = f.reader->take();
         QVERIFY(rejected);
@@ -410,21 +456,57 @@ private Q_SLOTS:
         QCOMPARE(f.takeReady().trusted, int64_t{78});
         QVERIFY(f.env.quiescent());
     }
-    void transportFailureAfterAcceptedQueueingRetainsRetry()
+    void rejectedSuccessorKeepsLastBalanceUntilExplicitRetry()
     {
         Fixture f;
-        QVERIFY(execution::Submit(*f.env.scheduler, [] {}, [] {}));
-        f.refresh(); // Core is occupied; the reader is accepted but not sent yet.
-        f.env.rejectLane(Lane::Core);
-        f.env.drain();
-        const auto value = f.reader->take();
-        QVERIFY(value);
-        QCOMPARE(value->status, Status::Rejected);
-        QCOMPARE(f.reads, 0);
+        f.refresh();
+        QVERIFY(f.env.step(Lane::Core));
+        f.refresh();
+        f.env.reject_core = true;
+        QVERIFY(f.env.step(Lane::Utility));
+        const auto rejected = f.reader->take();
+        QVERIFY(rejected && rejected->snapshot);
+        QCOMPARE(rejected->status, Status::Rejected);
+        QCOMPARE(rejected->snapshot->trusted, int64_t{42});
+        QCOMPARE(f.reads, 1);
         QVERIFY(f.env.quiescent());
+        f.result.snapshot->trusted = 84;
         f.refresh();
         f.env.drain();
-        QCOMPARE(f.takeReady().trusted, int64_t{42});
+        QCOMPARE(f.takeReady().trusted, int64_t{84});
+        QCOMPARE(f.reads, 2);
+    }
+    void transportFailureAfterAcceptedQueueingRetainsRetry()
+    {
+        std::shared_ptr<execution::Task> pending;
+        int reads{0}, submissions{0};
+        auto reader = std::make_shared<walletbalance::Reader>([&](auto task) {
+            ++submissions;
+            pending = std::move(task);
+            return execution::SubmitResult{{}, execution::Rejection::None};
+        }, [&] {
+            ++reads;
+            return Result{Status::Ready, walletbalance::Snapshot{42, "retry"}};
+        }, [] {}, std::make_shared<std::atomic_bool>(false));
+        QCOMPARE(reader->refresh(), execution::Rejection::None);
+        QVERIFY(pending);
+        pending->notStarted(execution::NotStarted::Cause::Transport);
+        pending->deliver();
+        pending.reset();
+        const auto value = reader->take();
+        QVERIFY(value);
+        QCOMPARE(value->status, Status::Rejected);
+        QCOMPARE(reads, 0);
+        QCOMPARE(submissions, 1);
+        QCOMPARE(reader->refresh(), execution::Rejection::None);
+        QVERIFY(pending);
+        pending->execute();
+        pending->deliver();
+        const auto retry = reader->take();
+        QVERIFY(retry && retry->snapshot);
+        QCOMPARE(retry->snapshot->trusted, int64_t{42});
+        QCOMPARE(reads, 1);
+        QCOMPARE(submissions, 2);
     }
     void lostObserverStillConsumesTheOutcome()
     {
@@ -436,20 +518,22 @@ private Q_SLOTS:
         QCOMPARE(f.reads, 1);
         QVERIFY(f.env.quiescent());
         // Restore only for Fixture teardown; this reader is a new opening.
-        f.reader = std::make_shared<walletbalance::Reader>(f.env.scheduler, [] { return Result{}; }, [] {}, f.closed);
+        f.reader = std::make_shared<walletbalance::Reader>(f.core, f.utility, [] { return Result{}; }, [] {}, f.closed);
     }
     void realWorkersConsumeOffGuiAndPreservePendingRefresh()
     {
         struct State {
-            QSemaphore entered, release;
+            QSemaphore entered, release, consumed;
             std::atomic<int> reads{0}, notices{0};
             std::atomic<QThread*> effect_thread{nullptr}, domain_thread{nullptr};
         };
         const auto state = std::make_shared<State>();
+        execution::Executor executor{execution::Executor::Config{}};
         const auto release_on_exit = qScopeGuard([&] { state->release.release(); });
-        BackendExecutor executor{execution::Options{}};
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
         const auto closed = std::make_shared<std::atomic_bool>(false);
-        auto reader = std::make_shared<walletbalance::Reader>(executor.scheduler(), [state] {
+        auto reader = std::make_shared<walletbalance::Reader>(core, utility, [state] {
             const int read = ++state->reads;
             state->effect_thread = QThread::currentThread();
             if (read == 1) {
@@ -470,7 +554,12 @@ private Q_SLOTS:
         QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection);
         QTRY_VERIFY(heartbeat);
         state->release.release();
-        QTRY_COMPARE(executor.scheduler()->pending(), size_t{0});
+        QTRY_COMPARE(state->reads.load(), 2);
+        QVERIFY(core->post([utility, state] {
+            utility->post([state] { state->consumed.release(); });
+        }));
+        QTRY_VERIFY(state->consumed.available() > 0);
+        QVERIFY(state->consumed.tryAcquire());
         QCOMPARE(state->notices.load(), 1);
         const auto value = reader->take();
         QVERIFY(value && value->snapshot);
@@ -480,8 +569,7 @@ private Q_SLOTS:
         QVERIFY(state->domain_thread.load() != qApp->thread());
         QVERIFY(state->effect_thread.load() != state->domain_thread.load());
         reader->close();
-        executor.shutdown();
-        QTRY_VERIFY(executor.isDrained());
+        executor.stopAndJoin();
     }
 
 };

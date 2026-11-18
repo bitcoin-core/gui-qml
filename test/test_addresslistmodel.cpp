@@ -6,6 +6,8 @@
 
 #include <test/mocks/mockwallet.h>
 #include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/walletsession.h>
 #include <QThread>
 #include <QScopeGuard>
 #include <QPointer>
@@ -21,7 +23,7 @@
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <qml/models/transactionactivitymodel.h>
-#include <qml/backendexecutor.h>
+#include <test/mocks/manualwalletdrain.h>
 #include <test/mocks/receiverequesttest.h>
 #include <uint256.h>
 #include <wallet/coincontrol.h>
@@ -124,81 +126,52 @@ interfaces::WalletTx WalletTxFor(const std::vector<CTxDestination>& destinations
     return wallet_tx;
 }
 
-struct AddressAdmissionHook {
-    bool armed{false};
-    int reservation{1}, seen{0}, calls{0};
-    execution::TaskId original{};
-    std::function<void()> effect;
-};
-
-class AddressAdmissionScheduler final : public execution::Scheduler {
-public:
-    AddressAdmissionScheduler(std::shared_ptr<execution::Scheduler> target, std::shared_ptr<AddressAdmissionHook> hook)
-        : m_target(std::move(target)), m_hook(std::move(hook)) {}
-    execution::SubmitResult submit(std::shared_ptr<execution::Task> task, execution::TaskSpec spec) override {
-        return m_target->submit(std::move(task), spec);
-    }
-    execution::SubmitResult reserveCleanup(std::shared_ptr<execution::Task> task, execution::TaskSpec spec) override {
-        const auto admitted = m_target->reserveCleanup(std::move(task), spec);
-        if (admitted && m_hook->armed && ++m_hook->seen == m_hook->reservation) {
-            m_hook->armed = false;
-            ++m_hook->calls;
-            m_hook->original = admitted.id;
-            m_hook->effect();
-        }
-        return admitted;
-    }
-    std::shared_ptr<execution::Scheduler> openActionScope() override {
-        auto scope = m_target->openActionScope();
-        return scope ? std::make_shared<AddressAdmissionScheduler>(std::move(scope), m_hook) : nullptr;
-    }
-    bool activateCleanup(execution::TaskId id) override { return m_target->activateCleanup(id); }
-    execution::Borrow borrow(execution::ResourceKey key) override { return m_target->borrow(key); }
-    execution::ResourceKey allocateKey() override { return m_target->allocateKey(); }
-    size_t pending() const override { return m_target->pending(); }
-    void stopAcceptingWork() override { m_target->stopAcceptingWork(); }
-    bool cancelQueued(execution::TaskId id) override { return m_target->cancelQueued(id); }
-private:
-    const std::shared_ptr<execution::Scheduler> m_target;
-    const std::shared_ptr<AddressAdmissionHook> m_hook;
-};
-
 struct ManualAddressFixture {
-    ManualExecutionEnvironment environment;
+    ManualStartupExecution worker;
+    std::deque<std::function<void()>> publications;
     const std::shared_ptr<TestAddressWallet> wallet{std::make_shared<TestAddressWallet>()};
+    const std::shared_ptr<std::atomic_bool> shutdown_gate{std::make_shared<std::atomic_bool>(false)};
     const std::shared_ptr<walletopening::Session> opening;
     std::unique_ptr<AddressListModel> model;
     bool admitted{false};
-    explicit ManualAddressFixture(std::shared_ptr<AddressAdmissionHook> hook = {})
-        : opening(std::make_shared<walletopening::Session>(
-            hook ? std::make_shared<AddressAdmissionScheduler>(environment.scheduler, std::move(hook)) :
-                std::shared_ptr<execution::Scheduler>{environment.scheduler},
-            environment.scheduler, std::make_shared<std::atomic_bool>(false), [] {}))
+    ManualAddressFixture()
+        : opening(std::make_shared<walletopening::Session>(shutdown_gate, [] {},
+              walletopening::Session::Preferences{}, std::chrono::steady_clock::now, nullptr,
+              walletopening::NativeEvents{}, WalletSessionQueues(worker.executor(), worker.executor())))
     {
         for (uint8_t seed{1}; seed <= 96; ++seed)
             wallet->m_addresses.emplace_back(TestDestination(seed), true, wallet::AddressPurpose::RECEIVE, "original");
         admitted = bool(opening->start(wallet));
-        environment.drain();
+        worker.drain();
         opening->take();
         model = std::make_unique<AddressListModel>();
         model->setShowUsed(true);
-        model->configureSession(opening, {environment.scheduler,
-            [this](auto callback) { environment.post(std::move(callback)); }});
+        model->configureSession(opening, [this](auto callback) { publications.push_back(std::move(callback)); });
     }
+    bool publishNext()
+    {
+        if (publications.empty()) return false;
+        auto turn = std::move(publications.front());
+        publications.pop_front();
+        turn();
+        return true;
+    }
+    void publishAll() { while (publishNext()) {} }
     void settle()
     {
-        for (int turn{0}; turn < 64 && (!environment.turnsIdle() || !environment.publicationsIdle()); ++turn) {
-            environment.drain();
-            environment.publishAll();
+        for (int turn{0}; turn < 64 && (!worker.quiescent() || !publications.empty()); ++turn) {
+            worker.drain();
+            publishAll();
         }
     }
     bool finish()
     {
         if (model) model->close();
-        opening->retire();
         model.reset();
+        auto stopped = std::make_shared<bool>(false);
+        opening->stop(false, [stopped] { *stopped = true; });
         settle();
-        return environment.quiescent();
+        return *stopped && worker.quiescent() && publications.empty();
     }
     ~ManualAddressFixture()
     {
@@ -275,10 +248,10 @@ void AddressListModelTests::labelsCanBeEdited()
         {dest, true, wallet::AddressPurpose::RECEIVE, "first label"},
     };
     WalletQmlModel wallet_model{std::move(wallet)};
-    const auto backend = wallet_model.backendExecutor();
+    const auto native_drained = WatchWalletNativeDrain(wallet_model);
     const auto cleanup = qScopeGuard([&] {
         wallet_model.beginShutdown();
-        if (!QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && backend->isDrained(); }, 5000))
+        if (!QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && *native_drained; }, 5000))
             QTest::qFail("The original label-edit wallet did not physically drain", __FILE__, __LINE__);
     });
     AddressListModel* model{wallet_model.addressListModel()};
@@ -321,7 +294,7 @@ void AddressListModelTests::labelsCanBeEdited()
     QVERIFY(stable.isValid());
     QCOMPARE(stable.data(AddressListModel::AddressRole).toString(), address);
     wallet_model.beginShutdown();
-    QVERIFY(QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && backend->isDrained(); }, 5000));
+    QVERIFY(QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && *native_drained; }, 5000));
     QCOMPARE(all_history_reads->load(), history_before);
 }
 
@@ -377,10 +350,11 @@ void AddressListModelTests::labelEditorInventoryKeepsDirtyOriginalsAndDrainsBefo
 {
     auto wallet = std::make_unique<TestAddressWallet>(); auto* backend_wallet = wallet.get();
     for (uint8_t seed{1}; seed <= 96; ++seed) wallet->m_addresses.emplace_back(TestDestination(seed), true, wallet::AddressPurpose::RECEIVE, "original");
-    WalletQmlModel wallet_model{std::move(wallet)}; const auto backend = wallet_model.backendExecutor();
+    WalletQmlModel wallet_model{std::move(wallet)};
+    const auto native_drained = WatchWalletNativeDrain(wallet_model);
     const auto cleanup = qScopeGuard([&] {
         wallet_model.beginShutdown();
-        if (!QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && backend->isDrained(); }, 5000))
+        if (!QTest::qWaitFor([&] { return wallet_model.shutdownComplete() && *native_drained; }, 5000))
             QTest::qFail("Retained label projections held the original worker graph", __FILE__, __LINE__);
     });
     auto* addresses = wallet_model.addressListModel();
@@ -405,7 +379,7 @@ void AddressListModelTests::labelEditorInventoryKeepsDirtyOriginalsAndDrainsBefo
     QTRY_COMPARE(next->phase(), TextEditSessionModel::Editing);
     QVERIFY(editors[1]); QCOMPARE(editors[1]->text()->text(), QStringLiteral("draft 1")); QVERIFY(editors[1]->dirty());
     wallet_model.beginShutdown();
-    QTRY_VERIFY(wallet_model.shutdownComplete() && backend->isDrained());
+    QTRY_VERIFY(wallet_model.shutdownComplete() && *native_drained);
     // The wallet facade and its remaining editor QObjects still exist here.
     QVERIFY(editors[1]); QCOMPARE(editors[1]->phase(), TextEditSessionModel::Closed);
 }
@@ -423,10 +397,11 @@ void AddressListModelTests::labelEditorRoundTripsItsSupportedUnicodeBoundary()
     auto wallet = std::make_unique<TestAddressWallet>(); auto* native = wallet.get();
     const auto destination = TestDestination(1);
     wallet->m_addresses.emplace_back(destination, true, wallet::AddressPurpose::RECEIVE, "original");
-    WalletQmlModel model{std::move(wallet)}; const auto backend = model.backendExecutor();
+    WalletQmlModel model{std::move(wallet)};
+    const auto native_drained = WatchWalletNativeDrain(model);
     const auto cleanup = qScopeGuard([&] {
         model.beginShutdown();
-        if (!QTest::qWaitFor([&] { return model.shutdownComplete() && backend->isDrained(); }, 5000))
+        if (!QTest::qWaitFor([&] { return model.shutdownComplete() && *native_drained; }, 5000))
             QTest::qFail("Unicode note editor did not drain", __FILE__, __LINE__);
     });
     auto* addresses = model.addressListModel(); QTRY_COMPARE(addresses->count(), 1);
@@ -475,24 +450,23 @@ void AddressListModelTests::localeFormattingUsesTheWalletDisplayConvention()
 
 void AddressListModelTests::manualProjectionBudgetsAndPersistentIdentity()
 {
-    ManualExecutionEnvironment environment;
+    ManualStartupExecution worker, gui;
     auto wallet = std::make_shared<TestAddressWallet>();
     for (uint8_t seed = 1; seed <= 96; ++seed) wallet->m_addresses.emplace_back(TestDestination(seed), true, wallet::AddressPurpose::RECEIVE, "label");
-    auto opening = std::make_shared<walletopening::Session>(environment.scheduler, environment.scheduler,
-        std::make_shared<std::atomic_bool>(false), [] {});
-    QVERIFY(opening->start(wallet)); environment.drain(); opening->take();
+    auto opening = MakeWalletSession(worker.executor(), [] {});
+    QVERIFY(opening->start(wallet)); worker.drain(); opening->take();
     AddressListModel model;
     QSignalSpy inserted{&model, &QAbstractItemModel::rowsInserted};
     QSignalSpy resets{&model, &QAbstractItemModel::modelReset};
-    model.configureSession(opening, {environment.scheduler, [&](auto turn) { environment.post(std::move(turn)); }});
+    model.configureSession(opening, [&](auto turn) { QVERIFY(gui.outcomes.post(std::move(turn))); });
     QCOMPARE(wallet->reads.load(), 0); QCOMPARE(model.count(), 0);
-    QVERIFY(environment.step()); // Public wallet reads and formatting.
+    QVERIFY(worker.step(execution::Lane::Core)); // Public wallet reads and formatting.
     QCOMPARE(wallet->reads.load(), 1); QCOMPARE(model.count(), 0);
-    QVERIFY(environment.step()); // Domain owns the immutable delta plan.
+    QVERIFY(worker.step(execution::Lane::Utility)); // Utility owns the immutable delta plan.
     QCOMPARE(model.count(), 0);
-    QVERIFY(environment.publishNext()); QCOMPARE(model.count(), 32); QCOMPARE(inserted.size(), 32);
-    QVERIFY(environment.publishNext()); QCOMPARE(model.count(), 64); QCOMPARE(inserted.size(), 64);
-    QVERIFY(environment.publishNext()); QCOMPARE(model.count(), 96); QCOMPARE(inserted.size(), 96);
+    QVERIFY(gui.step(execution::Lane::Utility)); QCOMPARE(model.count(), 32); QCOMPARE(inserted.size(), 32);
+    QVERIFY(gui.step(execution::Lane::Utility)); QCOMPARE(model.count(), 64); QCOMPARE(inserted.size(), 64);
+    QVERIFY(gui.step(execution::Lane::Utility)); QCOMPARE(model.count(), 96); QCOMPARE(inserted.size(), 96);
     const auto reads = wallet->reads.load();
     const QPersistentModelIndex stable{model.index(60)};
     const auto address = stable.data(AddressListModel::AddressRole).toString();
@@ -503,12 +477,12 @@ void AddressListModelTests::manualProjectionBudgetsAndPersistentIdentity()
     std::erase_if(wallet->m_addresses, [&](const auto& entry) { return removed.contains(QString::fromStdString(EncodeDestination(entry.dest))); });
     for (auto& entry : wallet->m_addresses) if (QString::fromStdString(EncodeDestination(entry.dest)) == address) entry.name = "new label";
     QCOMPARE(wallet->reads.load(), reads); // Cached getters performed no reads.
-    model.refresh(); environment.drain(); environment.publishAll();
+    model.refresh(); worker.drain(); gui.drain();
     QCOMPARE(model.count(), 56); QVERIFY(stable.isValid()); QCOMPARE(stable.row(), 20);
     QCOMPARE(stable.data(AddressListModel::AddressRole).toString(), address);
     QCOMPARE(stable.data(AddressListModel::LabelRole).toString(), QStringLiteral("new label"));
     wallet->m_addresses.insert(wallet->m_addresses.end(), saved.begin(), saved.end());
-    model.refresh(); environment.drain(); environment.publishAll();
+    model.refresh(); worker.drain(); gui.drain();
     QCOMPARE(model.count(), 96); QVERIFY(stable.isValid()); QCOMPARE(stable.row(), 60);
     QCOMPARE(stable.data(AddressListModel::AddressRole).toString(), address);
     const auto complete = wallet->m_addresses;
@@ -517,19 +491,19 @@ void AddressListModelTests::manualProjectionBudgetsAndPersistentIdentity()
     std::erase_if(wallet->m_addresses, [&](const auto& entry) {
         return !survivors.contains(QString::fromStdString(EncodeDestination(entry.dest)));
     });
-    model.refresh(); environment.drain(); environment.publishAll();
+    model.refresh(); worker.drain(); gui.drain();
     QCOMPARE(model.count(), 48); QVERIFY(stable.isValid()); QCOMPARE(stable.row(), 30);
     QCOMPARE(stable.data(AddressListModel::AddressRole).toString(), address);
-    model.refresh(); environment.drain(); environment.publishAll(); // Clone an unchanged retained version.
+    model.refresh(); worker.drain(); gui.drain(); // Clone an unchanged retained version.
     QCOMPARE(model.count(), 48); QVERIFY(stable.isValid());
     wallet->m_addresses = complete;
-    model.refresh(); environment.drain(); environment.publishAll();
+    model.refresh(); worker.drain(); gui.drain();
     QCOMPARE(model.count(), 96); QVERIFY(stable.isValid()); QCOMPARE(stable.row(), 60);
-    wallet->m_addresses.clear(); model.refresh(); environment.drain(); environment.publishAll();
+    wallet->m_addresses.clear(); model.refresh(); worker.drain(); gui.drain();
     QCOMPARE(model.count(), 0); QVERIFY(!stable.isValid());
     QCOMPARE(resets.size(), 0);
-    model.close(); opening->retire(); environment.drain(); environment.publishAll();
-    QVERIFY(environment.quiescent());
+    model.close(); opening->stop(false, {}); worker.drain(); gui.drain();
+    QVERIFY(worker.quiescent()); QVERIFY(gui.quiescent());
 }
 
 void AddressListModelTests::manualStaleFailureAndQuietClose_data()
@@ -543,43 +517,42 @@ void AddressListModelTests::manualStaleFailureAndQuietClose_data()
 void AddressListModelTests::manualStaleFailureAndQuietClose()
 {
     QFETCH(int, scenario);
-    ManualExecutionEnvironment environment;
+    ManualStartupExecution worker, gui;
     auto wallet = std::make_shared<TestAddressWallet>();
     for (uint8_t seed = 1; seed <= 96; ++seed) wallet->m_addresses.emplace_back(TestDestination(seed), true, wallet::AddressPurpose::RECEIVE, "label");
-    auto opening = std::make_shared<walletopening::Session>(environment.scheduler, environment.scheduler,
-        std::make_shared<std::atomic_bool>(false), [] {});
-    QVERIFY(opening->start(wallet)); environment.drain(); opening->take();
+    auto opening = MakeWalletSession(worker.executor(), [] {});
+    QVERIFY(opening->start(wallet)); worker.drain(); opening->take();
     AddressListModel model;
     QSignalSpy inserted{&model, &QAbstractItemModel::rowsInserted};
     QSignalSpy count_changed{&model, &AddressListModel::countChanged};
     QSignalSpy errors{&model, &AddressListModel::readErrorChanged};
-    model.configureSession(opening, {environment.scheduler, [&](auto turn) { environment.post(std::move(turn)); }});
-    environment.drain();
+    model.configureSession(opening, [&](auto turn) { QVERIFY(gui.outcomes.post(std::move(turn))); });
+    worker.drain();
     if (scenario == 0) {
         model.setCategory(AddressListModel::Change);
-        environment.drain(); environment.publishAll();
+        worker.drain(); gui.drain();
         QCOMPARE(wallet->reads.load(), 2); QCOMPARE(model.count(), 0); QCOMPARE(inserted.size(), 0);
     } else if (scenario == 3) {
-        QVERIFY(environment.publishNext()); QCOMPARE(model.count(), 32);
+        QVERIFY(gui.step(execution::Lane::Utility)); QCOMPARE(model.count(), 32);
         const auto notices = inserted.size(); const auto counts = count_changed.size(); const auto failures = errors.size();
         model.close();
         QCOMPARE(inserted.size(), notices); QCOMPARE(count_changed.size(), counts); QCOMPARE(errors.size(), failures);
-        environment.drain(); environment.publishAll();
+        worker.drain(); gui.drain();
         QCOMPARE(inserted.size(), notices); QCOMPARE(count_changed.size(), counts); QCOMPARE(errors.size(), failures);
     } else {
-        environment.publishAll(); QCOMPARE(model.count(), 96);
+        gui.drain(); QCOMPARE(model.count(), 96);
         const auto reads = wallet->reads.load();
-        if (scenario == 1) environment.rejectNext(true);
+        if (scenario == 1) worker.reject_core = true;
         else wallet->fail_read = true;
-        model.refresh(); environment.drain(); environment.publishAll();
+        model.refresh(); worker.drain(); gui.drain();
         QCOMPARE(model.count(), 96); QVERIFY(!model.readError().isEmpty());
         QCOMPARE(wallet->reads.load(), reads + (scenario == 2 ? 1 : 0));
         wallet->fail_read = false;
-        model.refresh(); environment.drain(); environment.publishAll();
+        model.refresh(); worker.drain(); gui.drain();
         QCOMPARE(model.count(), 96); QVERIFY(model.readError().isEmpty());
     }
-    model.close(); opening->retire(); environment.drain(); environment.publishAll();
-    QVERIFY(environment.quiescent());
+    model.close(); opening->stop(false, {}); worker.drain(); gui.drain();
+    QVERIFY(worker.quiescent()); QVERIFY(gui.quiescent());
 }
 
 void AddressListModelTests::labelRefreshPreservesInventoryAndOriginalInterest_data()
@@ -657,38 +630,38 @@ void AddressListModelTests::labelRefreshPreservesInventoryAndOriginalInterest()
         QVERIFY(f.finish());
         return;
     }
-    f.environment.drain();
+    f.worker.drain();
     QVERIFY(f.model->refreshPending()); // Actual Native/Domain outcome held before GUI.
     QCOMPARE(changes.size(), 0);
     if (boundary == 7) {
         f.model->refreshLabels();
         const auto reads = f.wallet->reads.load();
-        QVERIFY(f.environment.publishNext()); // Superseded original receipt only.
+        QVERIFY(f.publishNext()); // Superseded original receipt only.
         QCOMPARE(changes.size(), 0);
         QVERIFY(f.model->readError().isEmpty());
         QVERIFY(f.model->refreshPending());
         QCOMPARE(f.wallet->reads.load(), reads);
         QCOMPARE(f.wallet->history_reads->load(), history_before);
         QCOMPARE(f.wallet->coin_reads.load(), coins_before);
-        QCOMPARE(f.environment.publicationCount(), size_t{1}); // Successor is a separate GUI turn.
-        QVERIFY(f.environment.publishNext());
+        QCOMPARE(f.publications.size(), size_t{1}); // Successor is a separate GUI turn.
+        QVERIFY(f.publishNext());
         QCOMPARE(changes.size(), 0);
         QVERIFY(f.model->refreshPending());
         QCOMPARE(f.wallet->reads.load(), reads); // Admission alone cannot perform Native reads.
-        f.environment.drain();
+        f.worker.drain();
     }
     if (boundary == 3 || boundary == 6) {
         if (boundary == 6) f.model->setCategory(AddressListModel::Change);
         else f.model->refresh();
-        f.environment.publishAll(); // Only the superseded original label notice exists.
+        f.publishAll(); // Only the superseded original label notice exists.
         QCOMPARE(changes.size(), 0);
         QVERIFY(f.model->refreshPending());
         QCOMPARE(f.wallet->history_reads->load(), history_before);
         QCOMPARE(f.wallet->coin_reads.load(), coins_before);
-        f.environment.drain();
+        f.worker.drain();
     }
     if (boundary == 5) {
-        QVERIFY(f.environment.publishNext());
+        QVERIFY(f.publishNext());
         QCOMPARE(changes.size(), 32);
         QVERIFY(f.model->refreshPending());
         const auto notices = pending.size();
@@ -704,10 +677,10 @@ void AddressListModelTests::labelRefreshPreservesInventoryAndOriginalInterest()
         return;
     }
     if (boundary == 0) {
-        QVERIFY(f.environment.publishNext());
+        QVERIFY(f.publishNext());
         QCOMPARE(changes.size(), 32);
         QVERIFY(f.model->refreshPending());
-        QVERIFY(f.environment.publishNext());
+        QVERIFY(f.publishNext());
         QCOMPARE(changes.size(), 64);
         QVERIFY(f.model->refreshPending());
     }
@@ -768,20 +741,21 @@ void AddressListModelTests::labelRefreshFailureKeepsOriginalRowsAndRetry()
     QSignalSpy changes{f.model.get(), &QAbstractItemModel::dataChanged};
     QSignalSpy errors{f.model.get(), &AddressListModel::readErrorChanged};
     QSignalSpy resets{f.model.get(), &QAbstractItemModel::modelReset};
-    if (failure == 1) f.environment.rejectNext();
+    if (failure == 1) f.worker.reject_core = true;
     f.model->refreshLabels();
     QVERIFY(f.model->refreshPending());
     if (failure == 2) {
-        QVERIFY(f.environment.step()); // Actual public getAddresses completes.
+        QVERIFY(f.worker.step(execution::Lane::Core)); // Actual public getAddresses completes.
         QCOMPARE(f.wallet->reads.load(), addresses_before + 1);
         QCOMPARE(changes.size(), 0);
-        f.environment.rejectNext(); // Refuse the subsequent Domain planning admission.
+        f.shutdown_gate->store(true); // Refuse the subsequent Domain planning admission.
     }
-    f.environment.drain();
+    f.worker.drain();
+    f.shutdown_gate->store(false);
     QVERIFY(f.model->refreshPending());
     QCOMPARE(changes.size(), 0);
     QVERIFY(f.model->readError().isEmpty()); // Failure receipt is still held.
-    f.environment.publishAll();
+    f.publishAll();
     QVERIFY(!f.model->refreshPending());
     QVERIFY(!f.model->readError().isEmpty());
     QCOMPARE(errors.size(), 1);
@@ -798,7 +772,7 @@ void AddressListModelTests::labelRefreshFailureKeepsOriginalRowsAndRetry()
     }
     f.model->refreshLabels();
     QVERIFY(f.model->refreshPending());
-    f.environment.drain();
+    f.worker.drain();
     QCOMPARE(original.data(AddressListModel::LabelRole).toString(), QStringLiteral("original"));
     QVERIFY(f.model->refreshPending());
     f.settle();
@@ -874,24 +848,22 @@ void AddressListModelTests::labelSuccessCannotHideFailedInventoryRefresh()
 
 void AddressListModelTests::labelReservationsKeepOriginalViewDuringReentrancy_data()
 {
-    QTest::addColumn<int>("reservation");
+    QTest::addColumn<bool>("read_completed");
     QTest::addColumn<int>("action");
-    for (int reservation : {1, 2}) {
+    for (bool read_completed : {false, true}) {
         for (int action : {0, 1, 2}) {
             const char* operation = action == 0 ? "close" : action == 1 ? "delete" : "new-category";
-            const auto name = QStringLiteral("reservation-%1-%2").arg(reservation).arg(QString::fromLatin1(operation)).toUtf8();
-            QTest::newRow(name.constData()) << reservation << action;
+            const QByteArray name = QByteArray(operation) + (read_completed ? "-after-read" : "-before-read");
+            QTest::newRow(name.constData()) << read_completed << action;
         }
     }
 }
 
 void AddressListModelTests::labelReservationsKeepOriginalViewDuringReentrancy()
 {
-    QFETCH(int, reservation);
+    QFETCH(bool, read_completed);
     QFETCH(int, action);
-    const auto hook = std::make_shared<AddressAdmissionHook>();
-    ManualAddressFixture f{hook};
-    const auto disarm = qScopeGuard([hook] { hook->armed = false; hook->effect = {}; });
+    ManualAddressFixture f;
     QVERIFY(f.admitted);
     f.settle();
     QCOMPARE(f.model->count(), 96);
@@ -912,28 +884,22 @@ void AddressListModelTests::labelReservationsKeepOriginalViewDuringReentrancy()
     const QPointer<AddressListModel> original{f.model.get()};
     QSignalSpy changes{f.model.get(), &QAbstractItemModel::dataChanged};
     QSignalSpy errors{f.model.get(), &AddressListModel::readErrorChanged};
-    hook->reservation = reservation;
-    hook->effect = [&f, action] {
-        if (action == 0) f.model->close();
-        else if (action == 1) f.model.reset();
-        else f.model->setCategory(AddressListModel::Change);
-    };
-    hook->armed = true;
     f.model->refreshLabels();
-    QCOMPARE(hook->calls, 1);
-    QCOMPARE(hook->seen, reservation);
-    QVERIFY(hook->original.value != 0);
-    QVERIFY(f.environment.scheduler->phase(hook->original));
+    if (read_completed) QVERIFY(f.worker.step(execution::Lane::Core));
+    const auto expected_reads = addresses_before + int(read_completed);
+    QCOMPARE(f.wallet->reads.load(), expected_reads);
+    if (action == 0) f.model->close();
+    else if (action == 1) f.model.reset();
+    else f.model->setCategory(AddressListModel::Change);
     QCOMPARE(changes.size(), 0);
-    QCOMPARE(f.wallet->reads.load(), addresses_before);
     if (action == 2) {
         QVERIFY(original);
         QCOMPARE(f.model->category(), AddressListModel::Change);
         QVERIFY(f.model->refreshPending());
-        f.environment.publishAll();
+        f.publishAll();
         QCOMPARE(changes.size(), 0);
         QVERIFY(f.model->refreshPending());
-        f.environment.drain();
+        f.worker.drain();
         QVERIFY(f.model->refreshPending());
         f.settle();
         QVERIFY(!f.model->refreshPending());
@@ -942,7 +908,7 @@ void AddressListModelTests::labelReservationsKeepOriginalViewDuringReentrancy()
         QCOMPARE(f.model->addressAt(0), address);
         QCOMPARE(f.model->data(f.model->index(0), AddressListModel::LabelRole).toString(), QStringLiteral("new category label"));
         QCOMPARE(f.model->data(f.model->index(0), AddressListModel::CategoryRole).toString(), QStringLiteral("change"));
-        QCOMPARE(f.wallet->reads.load(), addresses_before + 1);
+        QCOMPARE(f.wallet->reads.load(), expected_reads + 1);
         QCOMPARE(f.wallet->history_reads->load(), history_before + 1);
         QCOMPARE(f.wallet->coin_reads.load(), coins_before + 1);
     } else {
@@ -951,12 +917,11 @@ void AddressListModelTests::labelReservationsKeepOriginalViewDuringReentrancy()
         f.settle();
         QCOMPARE(changes.size(), 0);
         QCOMPARE(errors.size(), 0);
-        QCOMPARE(f.wallet->reads.load(), addresses_before);
+        QCOMPARE(f.wallet->reads.load(), expected_reads);
         QCOMPARE(f.wallet->history_reads->load(), history_before);
         QCOMPARE(f.wallet->coin_reads.load(), coins_before);
     }
     QVERIFY(f.finish());
-    QVERIFY(!f.environment.scheduler->phase(hook->original));
 }
 
 void AddressListModelTests::closeInsideStructuralChangeKeepsBalancedOriginalRows_data()
@@ -1007,9 +972,9 @@ void AddressListModelTests::closeInsideStructuralChangeKeepsBalancedOriginalRows
     QSignalSpy changes{f.model.get(), &QAbstractItemModel::dataChanged};
     QSignalSpy resets{f.model.get(), &QAbstractItemModel::modelReset};
     f.model->refresh();
-    f.environment.drain();
+    f.worker.drain();
     QCOMPARE(about, 0);
-    QVERIFY(f.environment.publishNext());
+    QVERIFY(f.publishNext());
     QCOMPARE(about, 1);
     QCOMPARE(completed, 1);
     QCOMPARE(before_close, 96);

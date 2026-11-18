@@ -2,9 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/nodelifecycleworker.h>
-#include <qml/atomicsharedptr.h>
-#include <qml/retainedsnapshot.h>
-#include <qml/retainedvalue.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -37,10 +34,9 @@ struct Driver::Mailbox {
     {
         std::lock_guard lock{mutex};
         if (closed) {
-            // Close releases Native diagnostic borrowers/capabilities before
-            // physical drain. Existing projection consumers retain their own
-            // original diagnostic; the mailbox keeps scalar effect receipts.
-            next.diagnostic.reset(); next.diagnostic_scope.reset();
+            // Existing projection copies keep the original diagnostic.
+            // The closed mailbox retains the effect outcomes.
+            next.diagnostic.reset();
             if (next.phase == Phase::Ready) next.phase = Phase::Stopping;
         }
         value = std::move(next);
@@ -68,7 +64,7 @@ struct Driver::Mailbox {
         std::lock_guard lock{mutex};
         if (closed) return;
         closed = true;
-        value.diagnostic.reset(); value.diagnostic_scope.reset();
+        value.diagnostic.reset();
         if (value.phase != Phase::Fatal && value.phase != Phase::Stopped) {
             if (value.phase != Phase::Draining) value.phase = Phase::Stopping;
             value.event = Event::State;
@@ -77,103 +73,125 @@ struct Driver::Mailbox {
     }
 };
 
-struct Driver::State {
-    State(execution::SnapshotServices services, Effects effect_ports, Publish projection,
-          std::shared_ptr<std::atomic_bool> stop, std::shared_ptr<Mailbox> mailbox)
-        : execution(std::move(services)), effects(std::move(effect_ports)), publish(std::move(projection)),
-          stopping(std::move(stop)), mailbox(std::move(mailbox)), scope(execution.scheduler->openActionScope()),
-          domain_key(execution.scheduler->allocateKey()), native_key(execution.scheduler->allocateKey()),
-          control_key(execution.scheduler->allocateKey()) {}
-    const execution::SnapshotServices execution;
+struct Driver::State : std::enable_shared_from_this<State> {
+    State(Post native, Post priority, Effects effects, Publish publish,
+          std::shared_ptr<std::atomic_bool> stopping, std::shared_ptr<Mailbox> mailbox)
+        : native(std::move(native)), priority(std::move(priority)), effects(std::move(effects)),
+          publish(std::move(publish)), stopping(std::move(stopping)), mailbox(std::move(mailbox)) {}
+
+    ~State() { if (effects.retire) effects.retire(); }
+
+    const Post native;
+    const Post priority;
     const Effects effects;
     const Publish publish;
     const std::shared_ptr<std::atomic_bool> stopping;
     const std::shared_ptr<Mailbox> mailbox;
-    ownership::AtomicSharedPtr<execution::Scheduler> scope;
-    const execution::ResourceKey domain_key, native_key, control_key;
-    std::weak_ptr<State> owner;
+    std::mutex mutex;
     Flow flow;
     std::optional<NativeInitialization> initialization;
-    std::shared_ptr<execution::Scheduler> shutdown_action;
-    bool retired{false}, initialization_pending{false}, shutdown_requested{false};
+    bool initialization_pending{false}, shutdown_requested{false};
 
-    bool notify(Event event = Event::State, std::shared_ptr<const QString> diagnostic = {},
-                std::shared_ptr<execution::Scheduler> diagnostic_scope = {}, bool deliver = true)
+    void notify(Event event = Event::State, std::shared_ptr<const QString> diagnostic = {}, bool deliver = true)
     {
         Projection value;
         if (flow.phase() == Phase::Fatal && event != Event::Fatal) {
-            // A late accepted result must not replace the first fatal receipt
-            // while its original notification is awaiting explicit retry.
-            value = mailbox->read(); value.event = Event::Fatal;
+            // A late initialization receipt must preserve the original fatal text.
+            value = mailbox->read();
+            value.event = Event::Fatal;
         } else {
-            value.event = event; value.diagnostic = std::move(diagnostic);
-            value.diagnostic_scope = std::move(diagnostic_scope);
+            value.event = event;
+            value.diagnostic = std::move(diagnostic);
         }
-        value.phase = flow.phase(); value.initialization = initialization;
+        value.phase = flow.phase();
+        value.initialization = initialization;
         value.core_exit_status = flow.coreExitStatus();
         mailbox->record(std::move(value));
-        return deliver && mailbox->deliver(publish, stopping->load());
+        if (deliver) mailbox->deliver(publish, stopping->load());
     }
-    bool post(const std::shared_ptr<execution::Scheduler>& action, std::function<void(State&)> command,
+
+    bool post(const Post& queue, std::function<void(State&)> command,
               std::function<void(State&, std::exception_ptr)> failure = {})
     {
-        const auto self = owner.lock();
-        if (!self || !action) return false;
-        return bool(execution::Submit(*action, [self, command = std::move(command)] { command(*self); }, [] {},
-            [self, failure = std::move(failure)](std::exception_ptr error) { if (failure) failure(*self, error); },
-            {execution::Lane::Domain, domain_key, execution::WorkClass::Action}));
+        const auto self = shared_from_this();
+        return queue(execution::MakeTask([self, command = std::move(command)] { command(*self); }, [] {},
+            [self, failure = std::move(failure)](std::exception_ptr error) {
+                if (failure) failure(*self, error);
+            }));
     }
-    bool postControl(const std::shared_ptr<execution::Scheduler>& action, std::function<void(State&)> command)
+
+    bool terminal() const { return flow.phase() == Phase::Fatal || flow.phase() == Phase::Stopped; }
+
+    bool initialize()
     {
-        const auto self = owner.lock();
-        if (!self || !action) return false;
-        // Its reserved receipt carries this decision into Domain even when
-        // ordinary admission is closed/full. The Native preparation turn
-        // performs no Core operation and changes no Domain state.
-        return bool(execution::Submit(*execution.scheduler, [] {},
-            [self, action, command = std::move(command)] { command(*self); },
-            [self, action](std::exception_ptr error) { self->rejected(Operation::Interrupt, self->flow.attempt(), error, action); },
-            {execution::Lane::Control, control_key, execution::WorkClass::Action}));
-    }
-    bool terminal() const { return retired || flow.phase() == Phase::Fatal || flow.phase() == Phase::Stopped; }
-    void begin(Operation operation, const std::shared_ptr<execution::Scheduler>& action)
-    {
-        if (terminal()) return;
-        uint64_t attempt = flow.attempt();
-        if (operation == Operation::Initialize) {
+        uint64_t attempt;
+        {
+            std::lock_guard lock{mutex};
             const auto accepted = flow.start();
-            if (!accepted) return;
-            attempt = *accepted; initialization_pending = true;
-            if (stopping->load()) flow.stop();
-        } else if (operation == Operation::Interrupt) {
-            if (!flow.beginInterrupt()) return;
-        } else {
-            if (!flow.beginShutdown()) return;
+            if (!accepted) return false;
+            attempt = *accepted;
+            initialization_pending = true;
+            notify();
         }
-        notify();
-        dispatch(operation, attempt, action);
+        if (post(native, [attempt](State& state) {
+                if (!state.dispatch(Operation::Initialize, attempt)) {
+                    state.rejected(Operation::Initialize, attempt,
+                        std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}));
+                }
+            },
+                [attempt](State& state, std::exception_ptr error) {
+                    state.rejected(Operation::Initialize, attempt, error);
+                })) return true;
+        rejected(Operation::Initialize, attempt, std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}));
+        return false;
     }
-    void requestShutdown(const std::shared_ptr<execution::Scheduler>& action)
+
+    void begin(Operation operation)
     {
-        if (terminal()) return;
-        if (!shutdown_requested) { shutdown_requested = true; shutdown_action = action; }
-        flow.stop();
-        if (flow.phase() == Phase::Draining) maybeShutdown();
-        else begin(Operation::Interrupt, action);
+        uint64_t attempt;
+        {
+            std::lock_guard lock{mutex};
+            if (terminal()) return;
+            attempt = flow.attempt();
+            if (operation == Operation::Interrupt) {
+                if (!flow.beginInterrupt()) return;
+            } else {
+                if (!flow.beginShutdown()) return;
+            }
+            notify();
+        }
+        if (dispatch(operation, attempt)) return;
+        std::lock_guard lock{mutex};
+        fatal(std::make_shared<const QString>(QStringLiteral("The node action may not have finished.")));
     }
+
+    void requestShutdown()
+    {
+        bool interrupted;
+        {
+            std::lock_guard lock{mutex};
+            if (terminal()) return;
+            shutdown_requested = true;
+            flow.stop();
+            interrupted = flow.phase() == Phase::Draining;
+        }
+        if (interrupted) maybeShutdown();
+        else begin(Operation::Interrupt);
+    }
+
     void maybeShutdown()
     {
-        if (!terminal() && shutdown_requested && !initialization_pending && shutdown_action)
-            begin(Operation::Shutdown, shutdown_action);
-    }
-    void dispatch(Operation operation, uint64_t attempt, const std::shared_ptr<execution::Scheduler>& action)
-    {
-        const auto self = owner.lock();
-        const auto diagnostic = execution::RetainValues<QString>(action, [] { return std::make_unique<QString>(); });
-        if (!diagnostic) {
-            rejected(operation, attempt, std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}), action);
-            return;
+        {
+            std::lock_guard lock{mutex};
+            if (terminal() || !shutdown_requested || initialization_pending) return;
         }
+        begin(Operation::Shutdown);
+    }
+
+    bool dispatch(Operation operation, uint64_t attempt)
+    {
+        const auto self = shared_from_this();
+        const auto diagnostic = std::make_shared<QString>();
         const auto work = [self, operation, diagnostic] {
             Result result{};
             try {
@@ -184,147 +202,119 @@ struct Driver::State {
                 }
             } catch (...) {
                 result.fatal = true;
-                try { *diagnostic = self->effects.describe ? self->effects.describe(std::current_exception()) : QStringLiteral("The node lifecycle effect failed."); }
-                catch (...) { *diagnostic = QStringLiteral("The node lifecycle diagnostic could not be prepared."); }
+                try {
+                    *diagnostic = self->effects.describe
+                        ? self->effects.describe(std::current_exception())
+                        : QStringLiteral("The node lifecycle effect failed.");
+                } catch (...) {
+                    *diagnostic = QStringLiteral("The node lifecycle diagnostic could not be prepared.");
+                }
             }
             return result;
         };
-        const auto done = [self, operation, attempt, diagnostic, action](Result result) {
-            self->completed(operation, attempt, std::move(result), diagnostic, action);
+        const auto done = [self, operation, attempt, diagnostic](Result result) {
+            self->completed(operation, attempt, std::move(result), diagnostic);
         };
-        const auto failed = [self, operation, attempt, action](std::exception_ptr error) {
-            self->rejected(operation, attempt, error, action);
-            // This is the already admitted asynchronous outcome turn. Only
-            // it may advance a shutdown waiting for initialization accounting.
-            self->maybeShutdown();
+        const auto failed = [self, operation, attempt](std::exception_ptr error) {
+            self->rejected(operation, attempt, error);
         };
-        const bool control = operation == Operation::Interrupt;
-        const auto scheduler = control ? execution.scheduler : action;
-        // Action scopes deliberately reject Control. The root's Control
-        // reservation owns this effect; its diagnostic/action capability is
-        // independently captured by the completion and failure receipts.
-        if (!execution::Submit(*scheduler, work, done, failed,
-                {control ? execution::Lane::Control : execution::Lane::Core, control ? control_key : native_key, execution::WorkClass::Action}))
-            rejected(operation, attempt, std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}), action);
+        const auto& queue = operation == Operation::Interrupt ? priority : native;
+        return queue(execution::MakeTask(work, done, failed));
     }
-    void fatal(const std::shared_ptr<const QString>& diagnostic, const std::shared_ptr<execution::Scheduler>& action)
+
+    void fatal(const std::shared_ptr<const QString>& diagnostic)
     {
-        shutdown_action.reset();
-        if (flow.fatal(diagnostic ? *diagnostic : QStringLiteral("The result of the node action could not be shown.")))
-            notify(Event::Fatal, diagnostic, action);
+        if (flow.fatal(*diagnostic)) notify(Event::Fatal, diagnostic);
     }
-    void completed(Operation operation, uint64_t attempt, Result result, const std::shared_ptr<QString>& diagnostic,
-                   const std::shared_ptr<execution::Scheduler>& action)
+
+    void completed(Operation operation, uint64_t attempt, Result result, const std::shared_ptr<QString>& diagnostic)
     {
-        if (operation == Operation::Initialize) initialization_pending = false;
-        if (result.fatal) { fatal(diagnostic, action); return; }
-        switch (operation) {
-        case Operation::Initialize:
-            // Stop is an ingress fence, including before its Domain command
-            // arrives. The raw successful Native receipt stays unchanged.
-            if (stopping->load()) flow.stop();
-            initialization = result.initialization;
-            if (flow.initialized({attempt, result.initialization.attempted, result.initialization.success, result.initialization.cancelled})) {
-                notify(Event::Initialized, {}, {}, flow.phase() != Phase::Fatal);
+        {
+            std::lock_guard lock{mutex};
+            if (operation == Operation::Initialize) initialization_pending = false;
+            if (result.fatal) {
+                fatal(diagnostic);
+                return;
+            }
+            switch (operation) {
+            case Operation::Initialize:
+                // The raw successful native outcome remains readable across a stop.
+                if (stopping->load()) flow.stop();
+                initialization = result.initialization;
+                if (flow.initialized({attempt, result.initialization.attempted, result.initialization.success, result.initialization.cancelled})) {
+                    notify(Event::Initialized, {}, flow.phase() != Phase::Fatal);
+                } else {
+                    fatal(std::make_shared<const QString>(QStringLiteral("The saved startup record is not valid.")));
+                }
+                break;
+            case Operation::Interrupt:
+                if (flow.interrupted()) notify(Event::Interrupted);
+                break;
+            case Operation::Shutdown:
+                if (flow.coreStopped(result.exit_status) && flow.drained()) notify(Event::Shutdown);
+                break;
+            }
+        }
+        maybeShutdown();
+    }
+
+    void rejected(Operation operation, uint64_t attempt, std::exception_ptr error)
+    {
+        {
+            std::lock_guard lock{mutex};
+            if (operation == Operation::Initialize) {
+                initialization_pending = false;
+                if (const auto cause = execution::NotStartedCause(error)) {
+                    if (stopping->load()) flow.stop();
+                    const bool cancelled = *cause == execution::NotStarted::Cause::Cancelled;
+                    if (flow.initialized({attempt, false, false, cancelled})) {
+                        initialization = NativeInitialization{.cancelled = cancelled};
+                        notify(Event::Initialized, {}, flow.phase() != Phase::Fatal);
+                    }
+                } else {
+                    fatal(std::make_shared<const QString>(QStringLiteral("The node action may not have finished.")));
+                }
             } else {
-                const auto invalid = execution::RetainValues<QString>(action, [] {
-                    return std::make_unique<QString>(QStringLiteral("The saved startup record is not valid."));
-                });
-                fatal(invalid, action);
+                fatal(std::make_shared<const QString>(QStringLiteral("The node action may not have finished.")));
             }
-            maybeShutdown();
-            break;
-        case Operation::Interrupt:
-            if (flow.interrupted()) notify(Event::Interrupted);
-            maybeShutdown();
-            break;
-        case Operation::Shutdown:
-            if (flow.coreStopped(result.exit_status) && flow.drained()) {
-                retired = true; shutdown_action.reset();
-                // Failed terminal notification retains only its original
-                // read-only publication capability until retry or close.
-                if (notify(Event::Shutdown)) scope.store({});
-            }
-            break;
         }
+        maybeShutdown();
     }
-    void rejected(Operation operation, uint64_t attempt, std::exception_ptr error,
-                  const std::shared_ptr<execution::Scheduler>& action)
-    {
-        // Leaf accounting also serves synchronous dispatch rejection. Forward
-        // shutdown progress belongs to the already admitted outcome callback,
-        // never to this path back into the Native dispatcher.
-        if (operation == Operation::Initialize) initialization_pending = false;
-        if (const auto cause = execution::NotStartedCause(error); operation == Operation::Initialize && cause) {
-            if (stopping->load()) flow.stop();
-            const bool cancelled = cause == execution::NotStarted::Cause::Cancelled;
-            if (flow.initialized({attempt, false, false, cancelled})) {
-                initialization = NativeInitialization{};
-                initialization->cancelled = cancelled;
-                notify(Event::Initialized, {}, {}, flow.phase() != Phase::Fatal);
-            }
-            return;
-        }
-        const auto text = execution::RetainValues<QString>(action, [] {
-            return std::make_unique<QString>(QStringLiteral("The node action may not have finished."));
-        });
-        fatal(text, action);
-    }
-    void rejectedBeforeStart(std::exception_ptr error, const std::shared_ptr<execution::Scheduler>& action)
-    {
-        if (flow.attempt() || terminal()) return;
-        const auto attempt = flow.start();
-        if (attempt) {
-            rejected(Operation::Initialize, *attempt, error, action);
-            maybeShutdown();
-        } else {
-            initialization = NativeInitialization{};
-            initialization->cancelled = stopping->load();
-            notify(Event::Initialized);
-        }
-    }
+
     void retryNotification()
     {
-        if (mailbox->deliver(publish, stopping->load()) && flow.phase() == Phase::Stopped) scope.store({});
+        std::lock_guard lock{mutex};
+        mailbox->deliver(publish, stopping->load());
     }
 };
 
-Driver::Driver(execution::SnapshotServices services, Effects effects, Publish publish)
-    : m_execution(std::move(services)), m_stopping(std::make_shared<std::atomic_bool>(false)), m_mailbox(std::make_shared<Mailbox>())
+Driver::Driver(Post native, Post priority, Effects effects, Publish publish)
+    : m_stopping(std::make_shared<std::atomic_bool>(false)), m_mailbox(std::make_shared<Mailbox>())
 {
-    if (!m_execution.scheduler || !effects.initialize || !effects.interrupt || !effects.shutdown)
+    if (!native || !priority || !effects.initialize || !effects.interrupt || !effects.shutdown)
         throw std::invalid_argument{"Missing node lifecycle effect port"};
-    m_owner = execution::RetainSnapshot<State>(m_execution.scheduler, [&] {
-        return std::make_unique<State>(m_execution, std::move(effects), std::move(publish), m_stopping, m_mailbox);
-    });
-    m_state = m_owner;
-    if (m_owner) m_owner->owner = m_owner;
-    else { Projection failure; failure.phase = Phase::Fatal; failure.event = Event::Fatal; failure.publication_failed = true; m_mailbox->record(std::move(failure)); }
+    m_state = std::make_shared<State>(std::move(native), std::move(priority), std::move(effects),
+                                      std::move(publish), m_stopping, m_mailbox);
 }
 Driver::~Driver() { close(); }
 bool Driver::initialize()
 {
-    const auto state = m_state.lock();
-    if (!state || m_stopping->load()) return false;
-    const auto action = m_execution.scheduler->openActionScope();
-    return action && state->post(action, [action](State& state) { state.begin(Operation::Initialize, action); },
-        [action](State& state, std::exception_ptr error) { state.rejectedBeforeStart(error, action); });
+    const auto state = m_state;
+    return state && !m_stopping->load() && state->initialize();
 }
 bool Driver::interrupt()
 {
     m_stopping->store(true);
-    const auto state = m_state.lock();
-    if (!state) return false;
-    const auto action = state->scope.load();
-    return state->postControl(action, [action](State& state) { state.begin(Operation::Interrupt, action); });
+    const auto state = m_state;
+    return state && state->post(state->priority, [](State& state) { state.begin(Operation::Interrupt); },
+        [](State& state, std::exception_ptr error) { state.rejected(Operation::Interrupt, 0, error); });
 }
 bool Driver::shutdown()
 {
     m_stopping->store(true);
-    const auto state = m_state.lock();
-    if (!state) return false;
-    const auto action = state->scope.load();
-    return state->postControl(action, [action](State& state) { state.requestShutdown(action); });
+    const auto state = m_state;
+    return state && state->post(state->priority, [](State& state) { state.requestShutdown(); },
+        [](State& state, std::exception_ptr error) { state.rejected(Operation::Shutdown, 0, error); });
 }
 Projection Driver::projection() const
 {
@@ -334,21 +324,16 @@ Projection Driver::projection() const
 }
 bool Driver::retryPublish()
 {
-    const auto state = m_state.lock();
-    return state && state->post(state->scope.load(), [](State& state) { state.retryNotification(); });
+    const auto state = m_state;
+    return state && state->post(state->native, [](State& state) { state.retryNotification(); });
 }
 void Driver::close()
 {
-    m_stopping->store(true); m_mailbox->close();
-    if (const auto state = m_state.lock()) {
-        const auto action = state->scope.exchange({});
-        state->post(action, [](State& state) {
-            state.flow.stop(); state.notify(Event::State, {}, {}, false);
-            // An already accepted shutdown retains its original action across
-            // observer close. No new public ingress can reach this owner.
-            state.maybeShutdown();
-        });
+    m_stopping->store(true);
+    m_mailbox->close();
+    if (const auto state = std::exchange(m_state, {})) {
+        std::lock_guard lock{state->mutex};
+        if (state->flow.phase() != Phase::Constructed) state->flow.stop();
     }
-    m_owner.reset(); m_state.reset();
 }
 } // namespace nodelifecycle

@@ -5,7 +5,7 @@
 #define BITCOIN_QML_TEST_MOCKS_RECEIVEEDITORTEST_H
 #include <qml/models/walletreceivemodel.h>
 #include <qml/sourceepoch.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 
 #include <deque>
 #include <map>
@@ -17,7 +17,13 @@ struct ReceiveEditorPorts {
     using Source = requestedit::Source;
     using Values = requestedit::Editor::Values;
     using Error = walletrequests::Error;
-    ManualRoutedExecution execution;
+    ManualStartupExecution execution;
+    const std::shared_ptr<execution::ValueCleanupQueue> outcomes{std::make_shared<execution::ValueCleanupQueue>(
+        std::make_shared<execution::SerialQueue>(execution.executor().makeQueue(execution::Lane::Utility)))};
+    ManualStartupExecution editor_work;
+    const std::shared_ptr<execution::ValueCleanupQueue> editor_values{std::make_shared<execution::ValueCleanupQueue>(
+        std::make_shared<execution::SerialQueue>(editor_work.executor().makeQueue(execution::Lane::Utility)))};
+    bool accepting_edits{true};
     std::deque<std::function<void()>> gui;
     const walletopening::Opening opening{std::make_shared<const walletopening::Identity>()};
     const std::shared_ptr<ChangeCounter> epoch{std::make_shared<ChangeCounter>()};
@@ -73,16 +79,21 @@ struct ReceiveEditorPorts {
     PaymentRequestEditorModel::Ports editors()
     {
         PaymentRequestEditorModel::Ports ports;
-        ports.execution = {execution.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }};
+        ports.post = [this](auto turn) { gui.push_back(std::move(turn)); };
+        ports.postWork = [this](auto work) { return editor_work.outcomes.post(std::move(work)); };
+        ports.value_cleanup = [this](auto cleanup) {
+            return editor_values->hold(std::move(cleanup));
+        };
         ports.read = [this](int64_t id, uint64_t view, auto done) {
-            return execution::Submit(*execution.scheduler, [this, id, view] { return snapshot(id, view); },
-                std::move(done), {}, {execution::Lane::Domain});
+            const bool accepted = editor_work.outcomes.post([this, id, view, done = std::move(done)] {
+                done(snapshot(id, view));
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
         };
         ports.admitWrite = [this]() -> PaymentRequestEditorModel::Writer {
-            const auto original = execution.scheduler->openActionScope();
-            if (!original || closed) return {};
-            return [this, original](const requestedit::Intent& intent, auto done, const auto&) {
-                return execution::Submit(*original, [this, intent] {
+            if (!accepting_edits || closed) return {};
+            return [this](const requestedit::Intent& intent, auto done) {
+                const bool accepted = editor_work.core.post([this, intent, done = std::move(done)] {
                     ++writes; attempts.push_back(intent);
                     requestedit::Write receipt;
                     receipt.actual.id = intent.source.id > 0 ? intent.source.id : 47;
@@ -102,8 +113,12 @@ struct ReceiveEditorPorts {
                         }
                         epoch->advance();
                     }
-                    return receipt;
-                }, std::move(done), {}, {execution::Lane::Core});
+                    const bool admitted = editor_work.outcomes.post([done, receipt = std::move(receipt)] {
+                        done(receipt);
+                    });
+                    Q_ASSERT(admitted);
+                });
+                return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
             };
         };
         return ports;
@@ -111,15 +126,14 @@ struct ReceiveEditorPorts {
     ReceiveReservationModel::Ports reservations()
     {
         ReceiveReservationModel::Ports ports;
-        ports.execution = {execution.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }};
+        ports.post = [this](auto turn) { gui.push_back(std::move(turn)); };
         const auto submit = [this](walletrequests::Command command, std::function<void(const walletrequests::Result&)> done, bool authorized) {
-            const auto original = execution.scheduler->openActionScope();
-            if (!original || closed) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
+            if (closed) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
             auto intent = command.resume;
             if (!intent) intent = std::make_shared<const walletrequests::AddressIntent>(walletrequests::AddressIntent{
                 opening, ++token, command.view, command.view_revision, command.draft, command.next, command.explicit_type, false,
                 command.kind == walletrequests::Kind::SelectAddress, command.remember_type});
-            const auto submitted = execution::Submit(*original, [this, command, intent, authorized] {
+            auto task = execution::MakeTask( [this, command, intent, authorized] {
                 walletrequests::Result result;
                 if (command.kind == walletrequests::Kind::ForgetAddress) {
                     reservation.reset(); draft.reservation.reset(); epoch->advance(); return result;
@@ -145,7 +159,8 @@ struct ReceiveEditorPorts {
                 reservation = intent; draft.reservation = intent; draft.address = address; draft.address_type = type;
                 draft.used = false; draft.current = true; epoch->advance();
                 return result;
-            }, [done = std::move(done), original](walletrequests::Result result) { done(result); }, {}, {execution::Lane::Core});
+            }, [done = std::move(done)](walletrequests::Result result) { done(result); }, {});
+            const auto submitted = outcomes->postWithOutcome(execution.core, std::move(task));
             return ReceiveReservationModel::Admission{intent, {}, submitted.rejection};
         };
         ports.submit = [submit](auto command, auto done) { return submit(std::move(command), std::move(done), false); };
@@ -155,9 +170,11 @@ struct ReceiveEditorPorts {
     requestshare::Services sharing()
     {
         requestshare::Services ports;
-        ports.execution = {execution.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }};
+        ports.post = [this](auto turn) { gui.push_back(std::move(turn)); };
+        ports.submit = [this](auto task, auto lane) { return outcomes->postWithOutcome(lane == execution::Lane::Core ? execution.core : execution.outcomes, std::move(task)); };
+        ports.hold = [] { return std::make_shared<int>(); };
         ports.read = [this](int64_t id, auto done) {
-            return execution::Submit(*execution.scheduler, [this, id] {
+            auto task = execution::MakeTask([this, id] {
                 requestshare::Source result; result.opening = opening; result.request_id = id;
                 const auto source = snapshot(id, 0); result.record_revision = source.revision; result.current = source.permission;
                 if (closed) result.error = requestshare::Error::Closed;
@@ -168,7 +185,8 @@ struct ReceiveEditorPorts {
                 // independent QR decoding have separate Core/renderer oracles.
                 else result.payload = QStringLiteral("bitcoin:bcrt1q-original?amount=0.000001&message=original%20message");
                 return result;
-            }, std::move(done), {}, {execution::Lane::Domain});
+            }, std::move(done), {});
+            return outcomes->postWithOutcome(execution.outcomes, std::move(task));
         };
         ports.render = [](const QString&) { QImage image{21, 21, QImage::Format_RGB32}; image.fill(Qt::black); return image; };
         ports.deliver = [this](requestshare::Kind kind, const QString& text, const QImage& image) {
@@ -190,8 +208,20 @@ struct ReceiveEditorPorts {
     }
     WalletReceiveModel::Ports all() { return {editors(), reservations(), sharing()}; }
     void publish() { for (size_t turns{0}; !gui.empty() && turns < 1000; ++turns) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); } }
-    void drain() { for (size_t turns{0}; turns < 1000; ++turns) { execution.drain(); if (gui.empty()) return; publish(); } }
-    void domain() { while (execution.step(execution::Lane::Domain)) {} publish(); }
+    void drainWorkers()
+    {
+        do {
+            execution.drain();
+            editor_work.drain();
+        } while (!execution.quiescent() || !editor_work.quiescent());
+    }
+    void drain() { for (size_t turns{0}; turns < 1000; ++turns) { drainWorkers(); if (gui.empty()) return; publish(); } }
+    void domain()
+    {
+        while (execution.step(execution::Lane::Utility) || editor_work.step(execution::Lane::Utility)) {}
+        publish();
+    }
+    bool quiescent() { return execution.quiescent() && editor_work.quiescent(); }
     void useDraft() { draft.used = true; epoch->advance(); }
     void useSaved(int64_t id) { records.at(id).used = true; ++records.at(id).revision; epoch->advance(); }
 };

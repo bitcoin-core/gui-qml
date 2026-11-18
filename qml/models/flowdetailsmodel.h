@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_MODELS_FLOWDETAILSMODEL_H
 #define BITCOIN_QML_MODELS_FLOWDETAILSMODEL_H
+#include <qml/guipresentation.h>
+#include <qml/retainedvalue.h>
 #include <qml/snapshotquery.h>
 #include <QAbstractListModel>
 #include <QPointer>
@@ -48,7 +50,8 @@ class FlowDetailsModel final : public QObject
 public:
     explicit FlowDetailsModel(QObject* parent = nullptr);
     ~FlowDetailsModel() override;
-    void setServices(execution::SnapshotServices services);
+    void setServices(presentation::Post publish, execution::SnapshotQuery<FlowDetailProjection>::Post submit,
+                     execution::ValueCleanup hold);
     void publishSource(const QVariantMap& flow, const QVariantList& recipients, QObject* context,
                        quint64 revision, std::shared_ptr<const void> original_anchor = {}, int display_unit = 0);
     void clearSource();
@@ -75,7 +78,9 @@ private:
     void publishDocument();
     void clearRows(bool quiet);
     const std::shared_ptr<std::atomic_bool> m_closed{std::make_shared<std::atomic_bool>(false)};
-    execution::SnapshotServices m_services;
+    presentation::Post m_publish;
+    execution::SnapshotQuery<FlowDetailProjection>::Post m_submit;
+    execution::ValueCleanup m_hold;
     std::shared_ptr<State> m_state;
     std::shared_ptr<execution::SnapshotQuery<FlowDetailProjection>> m_query;
     std::shared_ptr<execution::OwnedCommand<std::shared_ptr<const FlowDetailSnapshot>>> m_document_command;

@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/runtimepromptworker.h>
+#include <qml/executor.h>
 #include <qml/retainedsnapshot.h>
-#include <qml/atomicsharedptr.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -30,22 +30,22 @@ struct Service::Publication {
 };
 struct Service::Owner {
     struct Completion {std::function<void()> done;~Completion(){try{if(done)done();}catch(...){}}};
-    Completion completion; // Last destroyed, after every request/port/scope.
-    struct Slot { std::shared_ptr<const Request> request; bool blocking{false}; Id id{0}; std::shared_ptr<execution::ResourceLease> completion; };
-    const execution::ResourceKey key;
+    Completion completion; // Last destroyed, after every request and port.
+    struct Slot { std::shared_ptr<const Request> request; bool blocking{false}; Id id{0}; std::function<void()> completion; };
+    const std::shared_ptr<execution::SerialQueue> utility;
     const std::shared_ptr<Publication> publication;
     const std::function<void()> changed;
-    ownership::AtomicSharedPtr<execution::Scheduler> scope;
     Queue queue;
     // Fixed capacity bounds Native ingress before Domain has consumed it.
     std::mutex mutex;
     std::array<Slot,32> slots;
     std::atomic_bool stopping{false};
-    bool retired{false}; // Domain only
-    Owner(execution::SnapshotServices execution, std::shared_ptr<Publication> output,
-          std::function<void()> notify, std::function<void()> done, Limits limits)
-        : completion{std::move(done)}, key(execution.scheduler->allocateKey()), publication(std::move(output)), changed(std::move(notify)),
-          scope(execution.scheduler->openActionScope()), queue(limits) {}
+    std::recursive_mutex reducer_mutex;
+    bool retired{false};
+    Owner(std::shared_ptr<Publication> output,
+          std::function<void()> notify, std::function<void()> done, Limits limits, std::shared_ptr<execution::SerialQueue> utility)
+        : completion{std::move(done)}, utility(std::move(utility)), publication(std::move(output)),
+          changed(std::move(notify)), queue(limits) {}
     void publish(Disposition last = Disposition::Accepted)
     {
         { std::lock_guard lock{publication->mutex}; publication->value={queue.state(),queue.active(),queue.size(),last}; }
@@ -53,9 +53,7 @@ struct Service::Owner {
     }
     bool post(std::function<void()> turn)
     {
-        const auto original=scope.load();
-        return original && bool(execution::Submit(*original,std::move(turn),[] {},{},
-            {execution::Lane::Domain,key,execution::WorkClass::Action}));
+        return utility->post(std::move(turn));
     }
     void release(size_t slot,const std::shared_ptr<const Request>& request)
     {
@@ -67,21 +65,21 @@ struct Service::Owner {
     {
         bool empty;
         { std::lock_guard lock{mutex}; empty=std::all_of(slots.begin(),slots.end(),[](const auto& slot){return !slot.request;}); }
-        if (empty && !retired) { queue.close();retired=true;scope.store({}); }
+        if (empty && !retired) { queue.close(); retired=true; }
     }
     void acknowledged(size_t slot,const std::shared_ptr<const Request>& request)
     {
+        std::lock_guard reduce{reducer_mutex};
         Id id;
         { std::lock_guard lock{mutex}; if(slots.at(slot).request!=request)return; id=slots.at(slot).id; }
         if(stopping)queue.close();
         if(id)queue.delivered(id);
         release(slot,request);publish();
     }
-    void intake(size_t slot)
+    void intake(size_t slot,const std::shared_ptr<const Request>& request)
     {
-        std::shared_ptr<const Request> request;
-        { std::lock_guard lock{mutex}; request=slots.at(slot).request; }
-        if(!request)return;
+        std::lock_guard reduce{reducer_mutex};
+        { std::lock_guard lock{mutex}; if(slots.at(slot).request!=request)return; }
         const auto admission=queue.enqueue(request);
         { std::lock_guard lock{mutex}; slots.at(slot).id=admission.id; }
         if(!admission){
@@ -92,6 +90,7 @@ struct Service::Owner {
     }
     void command(Id id,int kind,uint32_t button)
     {
+        std::lock_guard reduce{reducer_mutex};
         Disposition result{Disposition::InvalidRequest};
         switch(kind){
         case 0:result=queue.visible(id);break;
@@ -109,19 +108,28 @@ struct Service::Owner {
     }
     void finishNonblocking(size_t index,const std::shared_ptr<const Request>& request)
     {
-        std::shared_ptr<execution::ResourceLease> completed;
-        {std::lock_guard lock{mutex};if(slots[index].request==request&&!slots[index].blocking)completed=std::exchange(slots[index].completion,{});}
-        // Releasing the pre-admitted lease activates its reserved Native turn
-        // and mandatory Domain outcome. No fresh admission is required.
+        std::function<void()> completed;
+        { std::lock_guard lock{mutex};if(slots[index].request==request&&!slots[index].blocking)completed=std::exchange(slots[index].completion,{});}
+        if (completed) completed();
     }
-
+    void closeQueue()
+    {
+        std::lock_guard reduce{reducer_mutex};
+        queue.close();
+        retireIfEmpty();
+        publish();
+    }
 };
-Service::Service(execution::SnapshotServices execution,std::function<void()> changed,std::function<void()> drained,Limits limits)
+Service::Service(Queues queues, std::function<void()> changed,
+                 std::function<void()> drained, Limits limits)
     :m_publication(std::make_shared<Publication>())
 {
-    if(!execution.scheduler)throw std::invalid_argument{"Missing runtime prompt scheduler"};
-    m_owner=execution::RetainSnapshot<Owner>(execution.scheduler,[&]{return std::make_unique<Owner>(execution,m_publication,std::move(changed),std::move(drained),limits);});
-    if(m_owner&&m_owner->scope.load()){m_state=m_owner;}else{m_owner.reset();m_publication->value.state=State::Stopped;m_publication->value.last=Disposition::NotReady;}
+    if (!queues.utility || !queues.retire)
+        throw std::invalid_argument{"Missing runtime prompt execution"};
+    m_owner = execution::RetainSnapshot<Owner>(queues.retire, [&] {
+        return std::make_unique<Owner>(m_publication, std::move(changed), std::move(drained), limits, std::move(queues.utility));
+    });
+    m_state = m_owner;
 }
 Service::~Service(){close();}
 bool Service::enqueue(std::shared_ptr<const Request> request,bool blocking,std::shared_ptr<Continuation>& continuation)
@@ -135,30 +143,30 @@ bool Service::enqueue(std::shared_ptr<const Request> request,bool blocking,std::
      if(!state->stopping)for(size_t i=0;i<state->slots.size();++i)if(!state->slots[i].request){slot=i;state->slots[i]={request,blocking,0,{}};{std::lock_guard output_lock{m_publication->mutex};++m_publication->owned;}break;}}
     if(!slot){request->answer->cancel();m_publication->refused(Disposition::Overflow);try{if(state->changed)state->changed();}catch(...){}return false;}
     bool completion_admitted{false};
-    std::shared_ptr<execution::ResourceLease> lease;
-    try{
-        const auto original=state->scope.load();
-        if(original){
-            const auto key=original->allocateKey();
-            const auto reserved=execution::Submit(*original,[]{},[state,index=*slot,request]{state->acknowledged(index,request);},{},
-                {execution::Lane::Cleanup,key,execution::WorkClass::Action},true);
-            if(reserved){
-                completion_admitted=true;
-                auto held=original->borrow(key);original->activateCleanup(reserved.id);
-                if(held)lease=std::make_shared<execution::ResourceLease>(std::move(*held.lease));
-            }
+    std::function<void()> complete;
+    try {
+        const auto acknowledge = [state, index = *slot, request] { state->acknowledged(index, request); };
+        complete = [state, acknowledge] {
+            // An accepted producer owns its return even if Utility refuses
+            // the wake. Serialize the original receipt in that case.
+            try { if (state->post(acknowledge)) return; } catch (...) {}
+            acknowledge();
+        };
+        completion_admitted = true;
+        if (blocking) {
+            continuation = std::make_shared<Continuation>(request, complete);
+            complete = {};
+        } else {
+            std::lock_guard lock{state->mutex};
+            if (!state->stopping) state->slots[*slot].completion = std::exchange(complete, {});
         }
-        if(lease){
-            if(blocking)continuation=std::make_shared<Continuation>(request,[held=std::move(lease)]()mutable{held.reset();});
-            else {std::lock_guard lock{state->mutex};state->slots[*slot].completion=std::move(lease);}
-            if(state->post([state,index=*slot]{state->intake(index);}))return true;
-        }
-    }catch(...){}
+        if (!state->stopping && state->post([state, index = *slot, request] { state->intake(index, request); })) return true;
+    } catch (...) {}
     m_publication->refused(Disposition::NotReady);
     request->answer->cancel();if(continuation)continuation->rejected();continuation.reset();
-    state->finishNonblocking(*slot,request);lease.reset();
-    // A reserved completion owns its own eventual rollback acknowledgment.
-    // Without one there is no original callback or queue entry to retain.
+    state->finishNonblocking(*slot,request);
+    if (complete) complete();
+    // An installed completion owns the rollback acknowledgment.
     if(!completion_admitted){std::lock_guard lock{state->mutex};if(state->slots[*slot].request==request){state->slots[*slot]={};std::lock_guard output_lock{m_publication->mutex};--m_publication->owned;}}
     return false;
 }
@@ -183,22 +191,15 @@ void Service::close()
     {std::lock_guard lock{m_publication->mutex};m_publication->closing=true;}
     const auto state=m_state.lock();
     if(state&&!state->stopping.exchange(true)){
-        std::array<std::shared_ptr<execution::ResourceLease>,32> completed;
+        std::array<std::function<void()>,32> completed;
         bool empty{true};
         {std::lock_guard lock{state->mutex};for(size_t i=0;i<state->slots.size();++i)if(state->slots[i].request){
             empty=false;state->slots[i].request->answer->cancel();
             if(!state->slots[i].blocking)completed[i]=std::exchange(state->slots[i].completion,{});
         }}
-        // Waiting Native producers keep their own leases until the original
-        // answer is returned. Other prompts retire through these pre-admitted
-        // acknowledgments even with ordinary admission full/closed.
-        completed={};
-        if(empty){
-            const bool posted=state->post([state]{state->queue.close();state->retireIfEmpty();state->publish();});
-            // No accepted request is stranded if this optional empty-owner
-            // publication cannot be queued; its Native cleanup still retires.
-            if(!posted)state->scope.store({});
-        }
+        // Blocking producers still own their return receipts after cancellation.
+        for (auto& complete : completed) if (complete) complete();
+        if (empty) state->post([state] { state->closeQueue(); });
     }
     m_owner.reset();
 }

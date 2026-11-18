@@ -3,13 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/walletprepare.h>
-#include <qml/backendexecutor.h>
+#include <test/mocks/walletsession.h>
+#include <QScopeGuard>
 #include <QSemaphore>
 #include <QThread>
 #include <string_view>
 #include <qml/snapshotquery.h>
 #include <qml/retainedvalue.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 #include <chainparams.h>
@@ -205,15 +206,15 @@ private Q_SLOTS:
     }
     void capturedPasswordOwnsOriginalPreparation()
     {
-        QFETCH(int,scenario);ManualRoutedExecution commands,retirement;
+        QFETCH(int,scenario);ManualStartupExecution commands;
         auto wallet=std::make_shared<PrepareWallet>();wallet->encrypted=true;wallet->expected_password=std::string(40'000,'x');
-        auto opening=std::make_shared<walletopening::Session>(commands.scheduler,retirement.scheduler,std::make_shared<std::atomic_bool>(false),[]{});
+        auto opening=MakeWalletSession(commands.executor(), [] {});
         QVERIFY(opening->start(wallet));commands.drain();opening->take();auto action=opening->startAction();QVERIFY(action);
-        QString source=QString::fromStdString(wallet->expected_password);auto captured=secretinput::Capture(commands.scheduler,source);QVERIFY(captured);
+        QString source=QString::fromStdString(wallet->expected_password);auto captured=secretinput::Capture(opening,source);QVERIFY(captured);
         auto request=Request();request.captured_passphrase=captured.input;
         auto output=walletopening::RetainValues<walletprepare::Result>(opening,[]{return std::make_unique<walletprepare::Result>();});QVERIFY(output);
-        auto operation=std::make_shared<execution::OwnedCommand<walletprepare::Result>>(commands.scheduler,[]{});
-        if(scenario==2)commands.rejectLane(execution::Lane::Core);
+        auto operation=std::make_shared<execution::OwnedCommand<walletprepare::Result>>([]{});
+        if(scenario==2)commands.reject_core = true;
         const auto admitted=operation->startWith([&,request=std::move(request)](auto done,auto failed)mutable{
             return opening->perform(action,[request=std::move(request),output](interfaces::Wallet& original)mutable{return walletprepare::ExecuteInto(original,std::move(request),output);},std::move(done),std::move(failed));
         });
@@ -221,23 +222,36 @@ private Q_SLOTS:
         if(scenario==2){QVERIFY(!admitted);commands.drain();QCOMPARE(wallet->unlocks,0);QCOMPARE(wallet->creates,0);}
         else{QVERIFY(admitted);if(scenario==1)opening->close();QVERIFY(commands.step(execution::Lane::Core));
             QCOMPARE(wallet->unlocks,1);QCOMPARE(wallet->creates,1);QCOMPARE(wallet->locks,1);QVERIFY(wallet->locked);QVERIFY(!operation->result());
-            QVERIFY(commands.step(execution::Lane::Domain));QVERIFY(operation->result()->value);QCOMPARE(operation->result()->value->error,walletprepare::Error::None);QVERIFY(operation->result()->value->review);}
-        captured.input.reset();operation.reset();output.reset();action.reset();opening->retire();commands.drain();retirement.drain();QVERIFY(commands.quiescent());QVERIFY(retirement.quiescent());
+            QVERIFY(commands.step(execution::Lane::Utility));QVERIFY(operation->result()->value);QCOMPARE(operation->result()->value->error,walletprepare::Error::None);QVERIFY(operation->result()->value->review);}
+        captured.input.reset();operation.reset();output.reset();action.reset();opening->stop(false, {});commands.drain();QVERIFY(commands.quiescent());
     }
     void capturedPreparationPasswordUnlocksOnRealWorker()
     {
-        BackendExecutor commands{execution::Options{}},retirement{execution::Options{}};
+        execution::Executor executor{execution::Executor::Config{}};
+        auto opening = MakeWalletSession(executor, [] {});
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto shutdown = qScopeGuard([&] {
+            opening->stop(false, [stopped] { *stopped = true; });
+            const bool drained = QTest::qWaitFor([&] { return stopped->load(); }, 5'000);
+            executor.stopAndJoin();
+            QVERIFY(drained);
+        });
         auto wallet=std::make_shared<PrepareWallet>();wallet->encrypted=true;wallet->expected_password=std::string(40'000,'p');
-        auto opening=std::make_shared<walletopening::Session>(commands.scheduler(),retirement.scheduler(),std::make_shared<std::atomic_bool>(false),[]{});
         auto client=opening->start(wallet).borrower;QVERIFY(client);
-        auto captured=secretinput::Capture(commands.scheduler(),QString::fromStdString(wallet->expected_password));QVERIFY(captured);
+        auto captured=secretinput::Capture(opening,QString::fromStdString(wallet->expected_password));QVERIFY(captured);
         auto request=Request();request.captured_passphrase=captured.input;
         auto output=walletopening::RetainValues<walletprepare::Result>(opening,[]{return std::make_unique<walletprepare::Result>();});QVERIFY(output);
-        auto action=opening->startAction();QVERIFY(action);auto operation=std::make_shared<execution::OwnedCommand<walletprepare::Result>>(commands.scheduler(),[]{});
+        auto action=opening->startAction();QVERIFY(action);auto operation=std::make_shared<execution::OwnedCommand<walletprepare::Result>>([]{});
         QVERIFY(operation->startWith([&,request=std::move(request)](auto done,auto failed)mutable{return opening->perform(action,[request=std::move(request),output](interfaces::Wallet& original)mutable{return walletprepare::ExecuteInto(original,std::move(request),output);},std::move(done),std::move(failed));}));
         QTRY_VERIFY(operation->result().has_value());QVERIFY(operation->result()->value);QCOMPARE(operation->result()->value->error,walletprepare::Error::None);
         QVERIFY(wallet->unlock_thread.load());QVERIFY(wallet->unlock_thread.load()!=QThread::currentThread());QVERIFY(wallet->locked);
-        captured.input.reset();operation.reset();output.reset();action.reset();opening->retire();client.reset();commands.shutdown();QTRY_VERIFY(commands.isDrained());opening.reset();retirement.shutdown();QTRY_VERIFY(retirement.isDrained());
+        captured.input.reset();
+        operation.reset();
+        output.reset();
+        action.reset();
+        client.reset();
+        opening->stop(false, [stopped] { *stopped = true; });
+        QTRY_VERIFY(stopped->load());
     }
     void unknownSweepCannotPublishReviewAndRestoresLock()
     {
@@ -306,9 +320,8 @@ private Q_SLOTS:
     }
     void retainedValueReleaseWaitsForCleanup()
     {
-        ManualRoutedExecution commands, retirement;
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        ManualStartupExecution commands;
+        auto opening = MakeWalletSession(commands.executor(), [] {});
         int destroyed{0};
         struct Value { int* destroyed; ~Value() { ++*destroyed; } };
         auto value = walletopening::RetainValues<Value>(opening, [&] { return std::unique_ptr<Value>{new Value{&destroyed}}; });
@@ -319,40 +332,43 @@ private Q_SLOTS:
         QCOMPARE(destroyed, 0);
         alias.reset();
         QCOMPARE(destroyed, 0);
-        QVERIFY(commands.step(execution::Lane::Cleanup));
+        QVERIFY(commands.step(execution::Lane::Utility));
         QCOMPARE(destroyed, 1);
         commands.drain();
     }
     void admittedPreparationOwnsReviewAfterFullClosure()
     {
         using namespace execution;
-        ManualRoutedExecution commands, retirement;
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        ManualStartupExecution commands;
+        auto opening = MakeWalletSession(commands.executor(), [] {});
         PrepareWallet wallet;
         auto output = walletopening::RetainValues<walletprepare::Result>(opening, [] { return std::make_unique<walletprepare::Result>(); });
         QVERIFY(output);
         std::optional<walletprepare::Result> observed;
-        const auto admitted = Submit(*commands.scheduler,
-            [output, &wallet] { return walletprepare::ExecuteInto(wallet, Request(), output); },
-            [&](auto value) { observed = std::move(value); });
-        QVERIFY(admitted); output.reset();
-        commands.scheduler->close();
+        const auto admitted = commands.core.post([output, &wallet, &observed, &commands] {
+            auto value = walletprepare::ExecuteInto(wallet, Request(), output);
+            QVERIFY(commands.outcomes.post([&observed, value = std::move(value)]() mutable {
+                observed = std::move(value);
+            }));
+        });
+        QVERIFY(admitted);
+        output.reset();
+        commands.core.close();
+        opening->stop(false, {});
         commands.drain();
         QVERIFY(observed); QCOMPARE(observed->error, walletprepare::Error::None);
         QVERIFY(observed->review); QVERIFY(observed->lifetime); QCOMPARE(wallet.creates, 1); QCOMPARE(wallet.internals, 0);
         auto original_review = observed->review;
-        observed.reset(); commands.drain(); retirement.drain();
+        observed.reset(); commands.drain();
         QVERIFY(original_review->transaction); QCOMPARE(original_review->amount, CAmount{1000});
-        original_review.reset(); commands.drain(); retirement.drain();
-        QVERIFY(commands.quiescent()); QVERIFY(retirement.quiescent());
+        original_review.reset(); commands.drain();
+        QVERIFY(commands.quiescent());
     }
     void closedCommandsDoNotCaptureValues()
     {
-        ManualRoutedExecution commands, retirement;
-        commands.scheduler->close();
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        ManualStartupExecution commands;
+        auto opening = MakeWalletSession(commands.executor(), [] {});
+        opening->stop(false, {});
         int factories{0};
         const auto value = walletopening::RetainValues<int>(opening, [&] { ++factories; return std::make_unique<int>(1); });
         QVERIFY(!value);
@@ -360,15 +376,14 @@ private Q_SLOTS:
     }
     void acceptedPreparationRetainsReviewAcrossCloseWithoutPresentation()
     {
-        ManualRoutedExecution commands, retirement;
+        ManualStartupExecution commands;
         auto wallet = std::make_shared<PrepareWallet>();
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        auto opening = MakeWalletSession(commands.executor(), [] {});
         QVERIFY(opening->start(wallet)); commands.drain(); opening->take();
         auto action = opening->startAction();
         QVERIFY(action);
         int notices{0};
-        auto operation = std::make_shared<execution::OwnedCommand<walletprepare::Result>>(commands.scheduler, [&] { ++notices; });
+        auto operation = std::make_shared<execution::OwnedCommand<walletprepare::Result>>([&] { ++notices; });
         QVERIFY(operation->startWith([&](auto done, auto failed) {
             return opening->perform(action, [](interfaces::Wallet& wallet) { return walletprepare::Execute(wallet, Request()); },
                 std::move(done), std::move(failed));
@@ -378,12 +393,12 @@ private Q_SLOTS:
         QCOMPARE(wallet->creates, 1); QVERIFY(!operation->result());
         opening->close();
         QVERIFY(!opening->startAction());
-        QVERIFY(commands.step(execution::Lane::Domain));
+        QVERIFY(commands.step(execution::Lane::Utility));
         QCOMPARE(notices, 1);
         QVERIFY(operation->result()->value->review);
         QCOMPARE(wallet->creates, 1); QCOMPARE(wallet->internals, 0);
-        opening->retire(); operation.reset(); action.reset();
-        commands.drain(); retirement.drain();
+        opening->stop(false, {}); operation.reset(); action.reset();
+        commands.drain();
     }
 };
 BITCOINQML_REGISTER_QT_TEST(WalletPrepareTests)

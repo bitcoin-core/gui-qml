@@ -2,20 +2,25 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/paymentimport.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <qml/paymentimportreview.h>
 #include <qml/models/bitcoinurimodel.h>
 #include <qml/psbtwork.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/walletopening.h>
+#include <test/mocks/walletmodelservices.h>
+#include <qml/retainedvalue.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <test/mocks/mockwallet.h>
 #include <test/mocks/manualwalletdrain.h>
 #include <test/mocks/psbtfeefixture.h>
 #include <key_io.h>
+#include <QDir>
 #include <QFile>
 #include <QEvent>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QUrl>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -35,8 +40,29 @@ paymentimport::Inspection Psbt()
 }
 paymentimport::Target Target(uint64_t revision = 7, bool conflict = false)
 { static const auto opening = std::make_shared<const walletopening::Identity>(); return {opening, 2, revision, 3, true, true, conflict}; }
+execution::SubmitResult PostTask(execution::SerialQueue& queue, std::shared_ptr<execution::Task> task)
+{
+    const bool accepted = queue.post([task = std::move(task)] {
+        task->execute();
+        task->deliver();
+    });
+    return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+}
+paymentimport::ReviewServices ReviewPorts(ManualStartupExecution& worker)
+{
+    auto cleanup = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    auto values = std::make_shared<execution::ValueCleanupQueue>(cleanup);
+    paymentimport::ReviewServices services;
+    services.observe = [&worker](auto task) { return PostTask(worker.outcomes, std::move(task)); };
+    services.retire = [cleanup](auto work) {
+        return execution::SubmitResult{{}, cleanup->post(std::move(work)) ? execution::Rejection::None : execution::Rejection::Transport};
+    };
+    services.hold = [values](auto cleanup) { return values->hold(std::move(cleanup)); };
+    return services;
+}
 struct Fixture {
-    ManualRoutedExecution source, target;
+    ManualStartupExecution source, file_work;
+    ManualStartupExecution target;
     paymentimport::Snapshot snapshot;
     std::chrono::steady_clock::time_point now{};
     std::vector<std::function<void()>> wakes;
@@ -49,24 +75,26 @@ struct Fixture {
     Fixture() {
         port->opening = facts.opening; port->draft = facts.draft; port->recipient = facts.recipient;
         port->observe = [this](auto, auto done, auto failed) {
-            return execution::Submit(*target.scheduler, [this] { return facts; }, std::move(done), std::move(failed), {execution::Lane::Domain});
+            return PostTask(target.outcomes, execution::MakeTask([this] { return facts; }, std::move(done), std::move(failed)));
         };
         port->dispatch = [this](auto, auto child, auto, auto done, auto failed) {
-            return execution::Submit(*target.scheduler, [this, child] {
+            return PostTask(target.outcomes, execution::MakeTask([this, child] {
                 ++dispatches;
                 if (!facts.available) result = paymentimport::ChildReply{{child, paymentimport::Outcome::Rejected, 0, facts.revision}, facts, {}, {}};
                 else if (child.target.revision != facts.revision) result = paymentimport::ChildReply{{child, paymentimport::Outcome::Stale, 0, facts.revision}, facts, {}, {}};
                 else { ++writes; result = paymentimport::ChildReply{{child, paymentimport::Outcome::Applied, facts.revision + 1, facts.revision + 1}, {}, {}, {}}; }
                 return *result;
-            }, [this, done](auto reply) { if (!lose_reply) done(std::move(reply)); }, std::move(failed), {execution::Lane::Domain});
+            }, [this, done](auto reply) { if (!lose_reply) done(std::move(reply)); }, std::move(failed)));
         };
         port->query = [this](auto, auto child, auto done, auto failed) {
-            return execution::Submit(*target.scheduler, [this, child] {
+            return PostTask(target.outcomes, execution::MakeTask([this, child] {
                 ++queries; return unknown_query || !result ? paymentimport::ChildReply{{child, paymentimport::Outcome::Unknown, 0, 0}, {}, {}, {}} : *result;
-            }, std::move(done), std::move(failed), {execution::Lane::Domain});
+            }, std::move(done), std::move(failed)));
         };
         port->acknowledge = [this](auto, auto) { ++acks; return execution::SubmitResult{{}, reject_ack ? execution::Rejection::Transport : execution::Rejection::None}; };
-        paymentimport::Services services; services.scheduler = source.scheduler;
+        paymentimport::Services services;
+        services.reads = std::make_shared<execution::SerialQueue>(file_work.executor().makeQueue(execution::Lane::Utility));
+        services.outcomes = std::make_shared<execution::SerialQueue>(source.executor().makeQueue(execution::Lane::Utility));
         services.read = [this](const auto& input) { ++reads; if (read_fail) { paymentimport::Inspection failed; failed.error = "read unavailable"; return failed; } return paymentimport::ReadSource(input); };
         services.analyze = [this](const auto& input) { ++analyses; return paymentimport::AnalyzeSource(input); };
         services.now = [this] { return now; }; services.wake = [this](auto, auto wake) { wakes.push_back(std::move(wake)); };
@@ -78,7 +106,13 @@ struct Fixture {
         // manual transport drain; its queued cleanup must outlive the fixture.
         wakes.clear(); owner.reset(); snapshot = {}; port.reset(); result.reset(); drain();
     }
-    void drain() { for (size_t n{0}; n < 20 && (!source.queuedIdle() || !target.queuedIdle()); ++n) { source.drain(); target.drain(); } }
+    void drainSource() { do { source.drain(); file_work.drain(); } while (!source.quiescent() || !file_work.quiescent()); }
+    void drain() {
+        for (size_t n{0}; n < 20 && (!source.quiescent() || !file_work.quiescent() || !target.quiescent()); ++n) {
+            drainSource();
+            target.drain();
+        }
+    }
     void inspect() { owner->inspect({paymentimport::Input::Kind::Text, Uri()}); owner->chooseTarget(port); drain(); }
     void advance() { now += std::chrono::milliseconds{100}; auto pending = std::exchange(wakes, {}); for (auto& wake : pending) wake(); drain(); }
 };
@@ -90,6 +124,23 @@ class PaymentImportTests : public QObject
 private Q_SLOTS:
     void initTestCase() { m_ecc = std::make_unique<ECC_Context>(); }
     void cleanupTestCase() { m_ecc.reset(); }
+    void acceptedReadRetiresAfterOutcomeQueueCloses()
+    {
+        Fixture f;
+        QVERIFY(f.owner->inspect({paymentimport::Input::Kind::Text, Uri()}));
+        f.source.drain();
+        QCOMPARE(f.reads, 0);
+        f.source.executor().stopAndJoin();
+        QVERIFY(f.owner->close());
+        f.source.drain();
+        QCOMPARE(f.retired, 0);
+        f.file_work.drain();
+        QCOMPARE(f.reads, 1);
+        QCOMPARE(f.retired, 0);
+        f.source.drain();
+        QCOMPARE(f.retired, 1);
+    }
+
     void pastedUriAppliesWithoutPromptingForItsOwnField() {
         Fixture f;
         paymentimport::Input input{paymentimport::Input::Kind::Text, Uri()}; input.field = paymentimport::SourceField::Address;
@@ -121,7 +172,7 @@ private Q_SLOTS:
         auto omitted = original.payment; omitted.amount.reset(); QVERIFY(paymentimport::MatchesPaymentRequest(current, omitted));
     }
     void capturedFileSourceCannotBeReusedOrRevived() {
-        ManualRoutedExecution commands; BitcoinUriModel importer; QObject view; importer.setServices({commands.scheduler, {}});
+        ManualStartupExecution commands; BitcoinUriModel importer; QObject view; importer.setServices({}, &commands.executor());
         QTemporaryDir dir; QVERIFY(dir.isValid()); const auto path = dir.filePath("request-without-extension");
         { QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(Uri().toUtf8()), Uri().toUtf8().size()); }
         auto* source = importer.captureImport(nullptr, nullptr, &view); QVERIFY(source); commands.drain();
@@ -176,14 +227,34 @@ private Q_SLOTS:
     }
     void sourceAndTargetExecutorsKeepSeparateDecisions() {
         Fixture f; f.owner->inspect({paymentimport::Input::Kind::Text, Uri()}); f.owner->chooseTarget(f.port);
-        f.source.drain(); QCOMPARE(f.reads, 1); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Inspecting);
+        f.drainSource(); QCOMPARE(f.reads, 1); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Inspecting);
         QVERIFY(!f.snapshot.can_apply); QCOMPARE(f.writes, 0);
         f.target.drain(); QVERIFY(!f.snapshot.can_apply); // Foreign Domain only fills a reply cell.
-        f.source.drain(); QVERIFY(f.snapshot.can_apply); QCOMPARE(f.writes, 0);
-        f.owner->apply(); f.source.drain(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applying);
+        f.drainSource(); QVERIFY(f.snapshot.can_apply); QCOMPARE(f.writes, 0);
+        f.owner->apply(); f.drainSource(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applying);
         f.target.drain(); QCOMPARE(f.writes, 1); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applying);
-        f.source.drain(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applied); QVERIFY(!f.snapshot.pending); QCOMPARE(f.acks, 1);
+        f.drainSource(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applied); QVERIFY(!f.snapshot.pending); QCOMPARE(f.acks, 1);
     }
+    void acceptedTargetReplySurvivesOutcomeQueueClosure()
+    {
+        Fixture f;
+        f.inspect();
+        QVERIFY(f.snapshot.can_apply);
+        QVERIFY(f.owner->apply());
+        f.drainSource();
+        QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applying);
+        f.source.executor().stopAndJoin();
+        f.target.drain();
+        QCOMPARE(f.writes, 1);
+        QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applying);
+        f.drainSource();
+        QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applied);
+        QCOMPARE(f.acks, 1);
+        QVERIFY(f.owner->close());
+        f.drain();
+        QCOMPARE(f.retired, 1);
+    }
+
     void explicitUseWaitsForInspectionAndOriginalTarget() {
         Fixture f; f.owner->use(); f.owner->inspect({paymentimport::Input::Kind::Text, Uri()}); f.owner->chooseTarget(f.port); f.drain();
         QCOMPARE(f.writes, 1); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applied);
@@ -208,11 +279,11 @@ private Q_SLOTS:
     }
     void lostReviewFactoryAcknowledgmentQueriesOriginalResultWithoutReplay() {
         Fixture f; int creates{0}, projections{0};
-        paymentimport::ReviewServices services; services.scheduler = f.target.scheduler; services.view = 7; services.current = [] { return true; };
+        auto services = ReviewPorts(f.target); services.view = 7; services.current = [] { return true; };
         services.prepare = [&](auto, auto done, auto failed) {
-            return execution::Submit(*f.target.scheduler, [&, done] {
+            return PostTask(f.target.core, execution::MakeTask([&, done] {
                 ++creates; psbtwork::ImportResult result; result.review = std::make_shared<const walletreview::Snapshot>(); result.document = Document(); done(result);
-            }, [] {}, std::move(failed), {execution::Lane::Core});
+            }, [] {}, std::move(failed)));
         };
         services.present = [&](auto, auto, auto, auto) { ++projections; };
         const auto factory = paymentimport::WithReviewFactory(f.port, services); QVERIFY(factory);
@@ -231,11 +302,11 @@ private Q_SLOTS:
         Fixture f; int creates{0}; bool target_open{true};
         auto second = std::make_shared<paymentimport::TargetPort>(*f.port);
         second->opening = std::make_shared<const walletopening::Identity>(); second->draft = 4; second->recipient = 5;
-        paymentimport::ReviewServices services; services.scheduler = f.target.scheduler; services.view = 7; services.current = [&] { return target_open; };
+        auto services = ReviewPorts(f.target); services.view = 7; services.current = [&] { return target_open; };
         services.prepare = [&](auto, auto done, auto failed) {
-            return execution::Submit(*f.target.scheduler, [&, done] {
+            return PostTask(f.target.core, execution::MakeTask([&, done] {
                 ++creates; psbtwork::ImportResult result; result.review = std::make_shared<const walletreview::Snapshot>(); result.document = Document(); done(result);
-            }, [] {}, std::move(failed), {execution::Lane::Core});
+            }, [] {}, std::move(failed)));
         };
         const auto factory = paymentimport::WithReviewFactory(second, services); QVERIFY(factory);
         auto lossy = std::make_shared<paymentimport::TargetPort>(*factory);
@@ -243,10 +314,10 @@ private Q_SLOTS:
             return factory->dispatch(key, child, std::move(source), [](auto) {}, std::move(failed));
         };
         f.owner->inspect({paymentimport::Input::Kind::Text, QString::fromLatin1(psbtwork::SerializeRaw(*Document()).toBase64())}); f.owner->chooseTarget(f.port);
-        while (f.source.step(execution::Lane::Domain)) {}
-        QVERIFY(f.source.step(execution::Lane::Core)); while (f.source.step(execution::Lane::Domain)) {}
+        while (f.source.step(execution::Lane::Utility)) {}
+        QVERIFY(f.file_work.step(execution::Lane::Utility)); while (f.source.step(execution::Lane::Utility)) {}
         QCOMPARE(f.snapshot.phase, paymentimport::Phase::Analyzing); QCOMPARE(f.analyses, 0);
-        f.owner->chooseTarget(lossy); while (f.source.step(execution::Lane::Domain)) {}
+        f.owner->chooseTarget(lossy); while (f.source.step(execution::Lane::Utility)) {}
         f.drain(); QCOMPARE(f.analyses, 1); QVERIFY(f.snapshot.can_review); QCOMPARE(f.snapshot.target->opening, second->opening);
         f.owner->openReview(); f.drain(); QCOMPARE(creates, 1); QCOMPARE(f.snapshot.phase, paymentimport::Phase::CreatingReview);
         target_open = false; f.owner->chooseTarget(f.port); f.advance();
@@ -261,7 +332,7 @@ private Q_SLOTS:
     }
     void rejectedOutcomeQueryCanRetryWithoutRepeatingApply() {
         Fixture f; f.lose_reply = true; f.inspect(); f.owner->apply(); f.drain();
-        f.target.rejectLane(execution::Lane::Domain); f.advance();
+        f.target.reject_utility = true; f.advance();
         QCOMPARE(f.snapshot.phase, paymentimport::Phase::Reconciling); QVERIFY(f.snapshot.can_reconcile); QCOMPARE(f.writes, 1);
         f.advance(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Applied); QCOMPARE(f.writes, 1); QCOMPARE(f.queries, 1);
     }
@@ -325,14 +396,14 @@ private Q_SLOTS:
         QVERIFY(ledger.query({42, 1})); QVERIFY(ledger.acknowledge({42, 1}, child)); QVERIFY(!ledger.query({42, 1}));
     }
     void reviewFactoryQueriesOriginalOutcomeWithoutRecreating() {
-        ManualRoutedExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
+        ManualStartupExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
         base->opening = Target().opening; base->draft = 2; base->recipient = 3;
         int creates{0}, presentations{0}; bool current{true};
-        paymentimport::ReviewServices services; services.scheduler = commands.scheduler; services.view = 7; services.current = [&] { return current; };
+        auto services = ReviewPorts(commands); services.view = 7; services.current = [&] { return current; };
         services.prepare = [&](auto, auto done, auto failed) {
-            return execution::Submit(*commands.scheduler, [&, done] {
+            return PostTask(commands.core, execution::MakeTask([&, done] {
                 ++creates; psbtwork::ImportResult result; result.review = std::make_shared<const walletreview::Snapshot>(); result.document = Document(); done(result);
-            }, [] {}, std::move(failed), {execution::Lane::Core});
+            }, [] {}, std::move(failed)));
         };
         services.present = [&](auto, auto, auto, auto) { ++presentations; };
         auto port = paymentimport::WithReviewFactory(base, services); QVERIFY(port);
@@ -340,43 +411,153 @@ private Q_SLOTS:
         std::optional<paymentimport::ChildReply> queried; const auto source = std::make_shared<const paymentimport::Inspection>(Psbt());
         QVERIFY(port->dispatch({42, 1}, child, source, [](auto) {}, {}));
         commands.drain(); QCOMPARE(creates, 1); QCOMPARE(presentations, 1);
-        current = false; commands.scheduler->stopAcceptingWork();
+        current = false; commands.core.close(); commands.outcomes.close();
         QVERIFY(port->query({42, 1}, child, [&](auto reply) { queried = reply; }, {})); commands.drain();
         QVERIFY(queried); QCOMPARE(queried->receipt.outcome, paymentimport::Outcome::ReviewOpened); QCOMPARE(creates, 1);
         QVERIFY(port->acknowledge({42, 1}, child)); commands.drain();
         queried.reset(); port.reset(); commands.drain();
         QVERIFY(commands.quiescent());
     }
+    void reviewReceiptRetiresOnUtilityAfterOriginalOpeningStops()
+    {
+        using execution::Lane;
+        std::deque<std::pair<Lane, std::function<void()>>> turns;
+        execution::Executor executor{[&](Lane lane, execution::UtilityWorker, auto turn) {
+            turns.emplace_back(lane, std::move(turn));
+            return true;
+        }};
+        std::optional<Lane> running;
+        const auto drain = [&] {
+            while (!turns.empty()) {
+                auto [lane, turn] = std::move(turns.front());
+                turns.pop_front();
+                running = lane;
+                turn();
+            }
+            running.reset();
+        };
+        const auto core = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Core));
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        const auto native_cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        auto opening = std::make_shared<walletopening::Session>(std::make_shared<std::atomic_bool>(false),
+            [] {}, walletopening::Session::Preferences{}, std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            walletopening::Session::Queues{native_cleanup, [core, utility](auto done) {
+                core->close();
+                core->whenDrained([utility, done = std::move(done)]() mutable {
+                    utility->close();
+                    utility->whenDrained(std::move(done));
+                });
+            }, core, utility});
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            opening->stop(false, [&] { stopped = true; });
+            drain();
+            QVERIFY(stopped);
+        });
+        QVERIFY(opening->start(std::make_shared<StubWallet>()));
+        drain();
+        QVERIFY(opening->available());
+
+        auto facts = Target();
+        facts.opening = opening->identity();
+        auto base = std::make_shared<paymentimport::TargetPort>();
+        base->opening = facts.opening;
+        base->draft = facts.draft;
+        base->recipient = facts.recipient;
+        int prepared{0};
+        std::function<void()> show;
+        int shown{0};
+        bool prepared_on_core{false}, queried_on_utility{false};
+        paymentimport::ReviewServices services;
+        services.observe = opening->observationPost(execution::Lane::Domain);
+        services.retire = [opening](auto work) { return opening->retireValues(std::move(work)); };
+        services.hold = [opening](auto cleanup) { return opening->holdValues(std::move(cleanup)); };
+        services.view = facts.revision;
+        services.current = [opening] { return opening->available(); };
+        services.prepare = [&](auto source, auto done, auto failed) {
+            return opening->read([&, source, done = std::move(done)](interfaces::Wallet&) {
+                ++prepared;
+                prepared_on_core = running == Lane::Core;
+                psbtwork::ImportResult result;
+                result.review = std::make_shared<const walletreview::Snapshot>();
+                result.document = source->psbt->document;
+                done(std::move(result));
+                return true;
+            }, [](bool) {}, std::move(failed));
+        };
+        services.present = [&](auto, auto, auto, auto permitted) {
+            show = [&, permitted] { if (permitted->load()) ++shown; };
+        };
+        auto port = paymentimport::WithReviewFactory(base, std::move(services));
+        QVERIFY(port);
+        const auto source = std::make_shared<const paymentimport::Inspection>(Psbt());
+        std::optional<paymentimport::Target> observed;
+        QVERIFY(port->observe(source, [&](auto target) { observed = std::move(target); }, {}));
+        drain();
+        QCOMPARE(observed, std::optional{facts});
+        const paymentimport::CommandKey key{42, 1};
+        const paymentimport::Child child{1, 1, paymentimport::ChildKind::CreateReview, facts, false};
+        QVERIFY(port->dispatch(key, child, source, [](auto) {}, {}));
+        drain();
+        QCOMPARE(prepared, 1);
+        QVERIFY(prepared_on_core);
+        QVERIFY(show);
+        port->retire(key, child);
+        show();
+        QCOMPARE(shown, 0);
+        opening->stop(false, [&] { stopped = true; });
+        drain();
+        QVERIFY(!stopped);
+
+        std::optional<paymentimport::ChildReply> reply;
+        QVERIFY(port->query(key, child, [&](auto result) {
+            queried_on_utility = running == Lane::Utility;
+            reply = std::move(result);
+        }, {}));
+        drain();
+        QVERIFY(queried_on_utility && reply);
+        QCOMPARE(reply->receipt.outcome, paymentimport::Outcome::ReviewOpened);
+        QCOMPARE(reply->review->document, source->psbt->document);
+        QCOMPARE(prepared, 1);
+        QVERIFY(port->acknowledge(key, child));
+        drain();
+        QVERIFY(!port->query(key, child, [](auto) {}, {}));
+        port.reset();
+        drain();
+        QVERIFY(!stopped);
+        reply.reset();
+        drain();
+        QVERIFY(stopped);
+    }
     void rejectedApplyAdmissionIsKnownNoEffect() {
-        Fixture f; f.inspect(); f.target.rejectLane(execution::Lane::Domain); f.owner->apply(); f.drain();
+        Fixture f; f.inspect(); f.target.reject_utility = true; f.owner->apply(); f.drain();
         QCOMPARE(f.snapshot.phase, paymentimport::Phase::Failed); QVERIFY(!f.snapshot.pending);
         QCOMPARE(f.writes, 0); QCOMPARE(f.queries, 0); QVERIFY(!f.snapshot.error.isEmpty());
     }
     void closeWhileNativeReadIsHeldCannotResurrectTargetObservation() {
         Fixture f; f.owner->inspect({paymentimport::Input::Kind::Text, Uri()});
-        QVERIFY(f.source.step(execution::Lane::Domain));
+        QVERIFY(f.source.step(execution::Lane::Utility));
         f.owner->chooseTarget(f.port); f.owner->close();
-        // Deliver reserved close through Cleanup while the original Core read
-        // stays held. Its lifecycle decision still runs only on Domain.
-        while (f.source.step(execution::Lane::Cleanup) || f.source.step(execution::Lane::Domain)) {}
+        // Run the close decision while the original file read stays queued.
+        f.source.drain();
         QCOMPARE(f.reads, 0); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Closing); QCOMPARE(f.retired, 0);
         f.drain(); QCOMPARE(f.snapshot.phase, paymentimport::Phase::Closed); QCOMPARE(f.retired, 1);
         QCOMPARE(f.writes, 0); QVERIFY(!f.snapshot.can_apply);
     }
     void replacedTargetCannotReceiveOldObservation() {
-        Fixture f; f.owner->inspect({paymentimport::Input::Kind::Text, Uri()}); f.owner->chooseTarget(f.port); f.source.drain();
-        f.owner->chooseTarget({}); f.source.drain(); f.target.drain(); f.source.drain();
+        Fixture f; f.owner->inspect({paymentimport::Input::Kind::Text, Uri()}); f.owner->chooseTarget(f.port); f.drainSource();
+        f.owner->chooseTarget({}); f.drainSource(); f.target.drain(); f.drainSource();
         QVERIFY(!f.snapshot.target); QVERIFY(!f.snapshot.can_apply); QCOMPARE(f.writes, 0);
     }
     void reviewCloseRevokesOnlyUnusedPresentationAndRetainsLogicalOutcome() {
-        ManualRoutedExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
+        ManualStartupExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
         base->opening = Target().opening; base->draft = 2; base->recipient = 3;
         int creates{0}, installs{0}; std::function<void()> gui;
-        paymentimport::ReviewServices services; services.scheduler = commands.scheduler; services.view = 7; services.current = [] { return true; };
+        auto services = ReviewPorts(commands); services.view = 7; services.current = [] { return true; };
         services.prepare = [&](auto, auto done, auto failed) {
-            return execution::Submit(*commands.scheduler, [&, done] {
+            return PostTask(commands.core, execution::MakeTask([&, done] {
                 ++creates; psbtwork::ImportResult value; value.review = std::make_shared<const walletreview::Snapshot>(); done(value);
-            }, [] {}, std::move(failed), {execution::Lane::Core});
+            }, [] {}, std::move(failed)));
         };
         services.present = [&](auto, auto, auto, auto allowed) { gui = [&, allowed] { if (allowed->load()) ++installs; }; };
         auto port = paymentimport::WithReviewFactory(base, services); QVERIFY(port);
@@ -392,12 +573,12 @@ private Q_SLOTS:
         QVERIFY(commands.quiescent());
     }
     void reviewFactoryRetainsKnownFailuresForLostAcknowledgment() {
-        ManualRoutedExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
+        ManualStartupExecution commands; auto base = std::make_shared<paymentimport::TargetPort>();
         base->opening = Target().opening; base->draft = 2; base->recipient = 3; int creates{0};
-        paymentimport::ReviewServices services; services.scheduler = commands.scheduler; services.view = 7; services.current = [] { return true; };
+        auto services = ReviewPorts(commands); services.view = 7; services.current = [] { return true; };
         services.prepare = [&](auto, auto done, auto failed) {
-            return execution::Submit(*commands.scheduler, [&] { ++creates; throw std::runtime_error{"read failure"}; },
-                [] {}, std::move(failed), {execution::Lane::Core});
+            return PostTask(commands.core, execution::MakeTask([&] { ++creates; throw std::runtime_error{"read failure"}; },
+                [] {}, std::move(failed)));
         };
         auto port = paymentimport::WithReviewFactory(base, services); QVERIFY(port);
         const paymentimport::Child child{1, 1, paymentimport::ChildKind::CreateReview, Target(), false};
@@ -410,9 +591,9 @@ private Q_SLOTS:
         QVERIFY(commands.quiescent());
     }
     void originalExportRequiresMatchingSourceToken() {
-        ManualRoutedExecution commands; std::deque<std::function<void()>> gui;
+        ManualStartupExecution commands; std::deque<std::function<void()>> gui;
         BitcoinUriModel model; QObject owner;
-        model.setServices({commands.scheduler, [&](auto post) { gui.push_back(std::move(post)); }});
+        model.setServices([&](auto post) { gui.push_back(std::move(post)); }, &commands.executor());
         const auto bytes = psbtwork::SerializeRaw(*Document());
         auto* operation = model.requestImport({paymentimport::Input::Kind::Text, QString::fromLatin1(bytes.toBase64())}, {}, &owner); QVERIFY(operation);
         commands.drain(); while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }
@@ -428,27 +609,122 @@ private Q_SLOTS:
         do {
             commands.drain();
             while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }
-        } while (!commands.queuedIdle() || !commands.activeIdle());
+        } while (!commands.quiescent());
         QVERIFY(commands.quiescent());
     }
+    void originalExportDrainsOnUtility_data()
+    {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("retire-unanswered-overwrite") << 0;
+        QTest::newRow("finish-admitted-write") << 1;
+        QTest::newRow("refuse-wallet-file") << 2;
+    }
+
+    void originalExportDrainsOnUtility()
+    {
+        QFETCH(int, mode);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("original.psbt"));
+        const QByteArray previous{"original contents"};
+        if (mode != 1) {
+            QFile existing{path};
+            QVERIFY(existing.open(QIODevice::WriteOnly));
+            QCOMPARE(existing.write(previous), previous.size());
+        }
+        const auto bytes = psbtwork::SerializeRaw(*Document());
+        const auto coordinator = std::make_shared<backup::InstallCoordinator>();
+        if (mode == 2) coordinator->wallet_files = [path] { return std::vector<std::string>{path.toStdString()}; };
+        execution::Executor executor{execution::Executor::Config{}};
+        BitcoinUriModel model;
+        model.setServices(presentation::QueuedPost(), &executor);
+        model.setExportCoordinator(coordinator);
+        auto view = std::make_unique<QObject>();
+        const auto drained = std::make_shared<std::atomic_bool>(false);
+        const auto close = [&] {
+            model.close();
+            model.whenDrained([drained] { drained->store(true); });
+        };
+        const auto cleanup = qScopeGuard([&] {
+            if (!drained->load()) close();
+            QVERIFY(QTest::qWaitFor([&] { return drained->load(); }, 5000));
+        });
+
+        auto* operation = model.requestImport({paymentimport::Input::Kind::Text, QString::fromLatin1(bytes.toBase64())}, {}, view.get());
+        QVERIFY(operation);
+        QTRY_VERIFY(operation->canExport());
+        std::unique_lock install_lock{coordinator->mutex, std::defer_lock};
+        if (mode == 1) install_lock.lock();
+        QVERIFY(operation->requestSaveOriginal(operation->exportToken(), path));
+        const QPointer<FileExportOperationModel> export_operation{operation->fileExportOperation()};
+        QVERIFY(export_operation);
+        if (mode == 1) {
+            // Installation follows staging and will wait on the shared lock.
+            // Retiring here leaves the already admitted writer in charge.
+            QTRY_VERIFY(!QDir(directory.path()).entryList({QStringLiteral(".bitcoin-backup-*")}, QDir::Dirs | QDir::Hidden).isEmpty());
+            close();
+            view.reset();
+            QVERIFY(!export_operation);
+            QVERIFY(!drained->load());
+            QVERIFY(!QFileInfo::exists(path));
+            install_lock.unlock();
+        } else if (mode == 0) {
+            QTRY_VERIFY(export_operation->confirmationRequired());
+            close();
+            QTRY_VERIFY(!export_operation->busy());
+            QVERIFY(!export_operation->saved());
+        } else {
+            QTRY_VERIFY(!export_operation->busy());
+            QCOMPARE(export_operation->error(), QStringLiteral("Choose a file that is not a wallet."));
+            QVERIFY(!export_operation->confirmationRequired());
+            close();
+        }
+        QTRY_VERIFY(drained->load());
+        QFile saved{path};
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        QCOMPARE(saved.readAll(), mode == 1 ? bytes : previous);
+    }
     void closedTypedSourcesReleaseTheirActionScopes() {
-        ManualRoutedExecution commands; BitcoinUriModel importer; QObject view;
-        importer.setServices({commands.scheduler, {}});
+        ManualStartupExecution commands; BitcoinUriModel importer; QObject view;
+        importer.setServices({}, &commands.executor());
         for (int n{0}; n < 32; ++n) {
             auto* operation = importer.requestImport({paymentimport::Input::Kind::Text, Uri()}, {}, &view); QVERIFY(operation);
             commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
             operation->cancel(); commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); commands.drain();
         }
-        importer.close(); commands.drain();
+        bool drained{false};
+        importer.close();
+        importer.whenDrained([&] { drained = true; });
+        commands.drain();
+        QVERIFY(drained);
+        QVERIFY(commands.quiescent());
     }
     void closedSchedulerAndUnusedActorCannotRetainScope() {
-        ManualRoutedExecution refused; refused.scheduler->close(); paymentimport::Services services; services.scheduler = refused.scheduler;
-        QVERIFY(!paymentimport::Owner::Create(89, std::move(services), {}));
-        refused.drain(); QCOMPARE(refused.scheduler->pending(), size_t{0});
-        ManualRoutedExecution unused; services = {}; services.scheduler = unused.scheduler;
-        auto owner = paymentimport::Owner::Create(90, std::move(services), {}); QVERIFY(owner);
-        const std::weak_ptr<paymentimport::Owner> original{owner}; owner.reset();
-        unused.drain(); QVERIFY(original.expired()); QCOMPARE(unused.scheduler->pending(), size_t{0});
+        ManualStartupExecution refused;
+        paymentimport::Services services;
+        services.reads = std::make_shared<execution::SerialQueue>(refused.executor().makeQueue(execution::Lane::Utility));
+        services.outcomes = std::make_shared<execution::SerialQueue>(refused.executor().makeQueue(execution::Lane::Utility));
+        services.outcomes->close();
+        int publications{0};
+        auto rejected = paymentimport::Owner::Create(89, services, [&](auto) { ++publications; });
+        QVERIFY(rejected);
+        QCOMPARE(rejected->inspect({paymentimport::Input::Kind::Text, Uri()}).rejection, execution::Rejection::Transport);
+        const std::weak_ptr<paymentimport::Owner> original_rejected{rejected};
+        rejected.reset();
+        refused.drain();
+        QCOMPARE(publications, 0);
+        QVERIFY(original_rejected.expired());
+        QVERIFY(refused.quiescent());
+        ManualStartupExecution unused;
+        services.reads = std::make_shared<execution::SerialQueue>(unused.executor().makeQueue(execution::Lane::Utility));
+        services.outcomes = std::make_shared<execution::SerialQueue>(unused.executor().makeQueue(execution::Lane::Utility));
+        auto owner = paymentimport::Owner::Create(90, std::move(services), {});
+        QVERIFY(owner);
+        const std::weak_ptr<paymentimport::Owner> original{owner};
+        owner.reset();
+        unused.drain();
+        QVERIFY(original.expired());
+        QVERIFY(unused.quiescent());
     }
     void throwingRetireKeepsOriginalChildOutcomeAndDoesNotDispatchAgain() {
         Fixture f; f.inspect(); f.lose_reply = true;
@@ -461,24 +737,47 @@ private Q_SLOTS:
         QVERIFY(f.snapshot.result); QCOMPARE(f.snapshot.result->outcome, paymentimport::Outcome::Applied);
     }
     void realThreadSourceReadAndDomainDecisionsStayOutsideGui() {
-        BackendExecutor executor{execution::Options{}};
-        std::atomic<QThread*> native{nullptr}, domain{nullptr};
-        {
-            paymentimport::Snapshot observed;
-            const auto gui = presentation::QueuedPost();
-            paymentimport::Services services; services.scheduler = executor.scheduler();
-            services.read = [&](const auto& input) { native.store(QThread::currentThread()); return paymentimport::ReadSource(input); };
-            auto owner = paymentimport::Owner::Create(73, services, [&](auto snapshot) {
-                domain.store(QThread::currentThread()); gui([&, snapshot = std::move(snapshot)] { observed = snapshot; });
-            });
-            QVERIFY(owner); QVERIFY(owner->inspect({paymentimport::Input::Kind::Text, Uri()}));
-            QTRY_COMPARE(observed.phase, paymentimport::Phase::Inspecting);
-            QVERIFY(native.load()); QVERIFY(domain.load());
-            QVERIFY(native.load() != QThread::currentThread()); QVERIFY(domain.load() != QThread::currentThread());
-            QVERIFY(native.load() != domain.load()); QCOMPARE(observed.inspection->payment.address, Address());
-            owner->close(); QTRY_COMPARE(observed.phase, paymentimport::Phase::Closed); owner.reset();
-        }
-        executor.shutdown(); QTRY_VERIFY(executor.isDrained());
+        execution::Executor executor{execution::Executor::Config{}};
+        std::atomic<QThread*> native{nullptr}, decision{nullptr};
+        QSemaphore entered, release;
+        paymentimport::Snapshot observed;
+        QObject receiver;
+        paymentimport::Services services;
+        services.reads = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        services.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        services.read = [&](const auto& input) {
+            native = QThread::currentThread();
+            entered.release();
+            release.acquire();
+            return paymentimport::ReadSource(input);
+        };
+        auto owner = paymentimport::Owner::Create(73, services, [&](auto snapshot) {
+            decision = QThread::currentThread();
+            QMetaObject::invokeMethod(&receiver, [&, snapshot = std::move(snapshot)] { observed = snapshot; }, Qt::QueuedConnection);
+        });
+        const auto cleanup = qScopeGuard([&] {
+            release.release();
+            bool retired{true};
+            if (owner) {
+                owner->close();
+                retired = QTest::qWaitFor([&] { return observed.phase == paymentimport::Phase::Closed; }, 5'000);
+                owner.reset();
+            }
+            executor.stopAndJoin();
+            QVERIFY(retired);
+        });
+        QVERIFY(owner);
+        QVERIFY(owner->inspect({paymentimport::Input::Kind::Text, Uri()}));
+        QTRY_VERIFY(entered.available() > 0);
+        QTRY_COMPARE(observed.phase, paymentimport::Phase::Reading);
+        QVERIFY(!observed.inspection);
+        release.release();
+        QTRY_COMPARE(observed.phase, paymentimport::Phase::Inspecting);
+        QVERIFY(native.load()); QVERIFY(decision.load());
+        QVERIFY(native.load() != QThread::currentThread());
+        QVERIFY(decision.load() != QThread::currentThread());
+        QVERIFY(native.load() == decision.load());
+        QCOMPARE(observed.inspection->payment.address, Address());
     }
     void realTypedConsumerUsesPublicReviewFactoryAndOriginalView_data() {
         QTest::addColumn<int>("boundary");
@@ -491,19 +790,20 @@ private Q_SLOTS:
     }
     void realTypedConsumerUsesPublicReviewFactoryAndOriginalView() {
         QFETCH(int, boundary);
-        ManualRoutedExecution commands, sources;
+        ManualStartupExecution commands;
+        ManualStartupExecution sources;
         std::deque<std::function<void()>> target_gui, source_gui;
         FeeReadServices fees; fees.post = [&](auto post) { target_gui.push_back(std::move(post)); };
         auto wallet = std::make_shared<MockWallet>();
-        WalletQmlModel model{WalletQmlModel::SharedWallet{wallet, commands.scheduler}, nullptr, fees, {}, {}};
+        WalletQmlModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
         ManualWalletDrain drain{commands, &model};
         BitcoinUriModel importer; QObject view;
-        importer.setServices({sources.scheduler, [&](auto post) { source_gui.push_back(std::move(post)); }});
+        importer.setServices([&](auto post) { source_gui.push_back(std::move(post)); }, &sources.executor());
         const auto publish = [](auto& queue) { while (!queue.empty()) { auto turn = std::move(queue.front()); queue.pop_front(); turn(); } };
         const auto pump = [&] { sources.drain(); commands.drain(); publish(target_gui); publish(source_gui); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); };
         const auto cleanup = qScopeGuard([&] {
             importer.close(); model.beginShutdown();
-            if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && model.backendExecutor()->isDrained() && commands.quiescent(); }, 3000))
+            if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && drain.nativeDrained() && commands.quiescent(); }, 3000))
                 QTest::qFail("Original typed import and wallet graph did not physically drain", __FILE__, __LINE__);
         });
         QVERIFY(QTest::qWaitFor([&] { pump(); return model.capabilitiesKnown() && !model.sendRecipientList()->validationPending(); }, 5000));
@@ -542,17 +842,18 @@ private Q_SLOTS:
         }
     }
     void actualDraftReceiptSurvivesSourceDismissalAndQuietTargetClose() {
-        ManualRoutedExecution commands, sources; std::deque<std::function<void()>> target_gui, source_gui;
+        ManualStartupExecution commands;
+        ManualStartupExecution sources; std::deque<std::function<void()>> target_gui, source_gui;
         FeeReadServices fees; fees.post = [&](auto post) { target_gui.push_back(std::move(post)); };
         auto wallet = std::make_shared<MockWallet>();
-        WalletQmlModel model{WalletQmlModel::SharedWallet{wallet, commands.scheduler}, nullptr, fees, {}, {}};
+        WalletQmlModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
         ManualWalletDrain drain{commands, &model}; BitcoinUriModel importer; QObject view;
-        importer.setServices({sources.scheduler, [&](auto post) { source_gui.push_back(std::move(post)); }});
+        importer.setServices([&](auto post) { source_gui.push_back(std::move(post)); }, &sources.executor());
         const auto publish = [](auto& queue) { while (!queue.empty()) { auto turn = std::move(queue.front()); queue.pop_front(); turn(); } };
         const auto pump = [&] { sources.drain(); commands.drain(); publish(target_gui); publish(source_gui); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); };
         const auto cleanup = qScopeGuard([&] {
             importer.close(); model.beginShutdown();
-            if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && model.backendExecutor()->isDrained() && commands.quiescent() && sources.quiescent() && target_gui.empty() && source_gui.empty(); }, 3000))
+            if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && drain.nativeDrained() && commands.quiescent() && sources.quiescent() && target_gui.empty() && source_gui.empty(); }, 3000))
                 QTest::qFail("Original applied import graph did not physically drain", __FILE__, __LINE__);
         });
         QVERIFY(QTest::qWaitFor([&] { pump(); return model.capabilitiesKnown() && !model.sendRecipientList()->validationPending(); }, 5000));
@@ -569,16 +870,182 @@ private Q_SLOTS:
         QCOMPARE(operation->sourceKind(), PaymentImportOperation::SourceKind::PaymentSource);
         operation->apply(); sources.drain(); commands.drain(); publish(source_gui);
         QCOMPARE(dispatches, 1); QCOMPARE(operation->state(), PaymentImportOperation::State::Applying);
-        model.close(); commands.scheduler->stopAcceptingWork(); operation->cancel();
+        model.close(); model.opening()->coreQueue()->close(); operation->cancel();
         QVERIFY(QTest::qWaitFor([&] { pump(); return operation->state() == PaymentImportOperation::State::Closed; }, 5000));
         QCOMPARE(operation->outcome(), PaymentImportOperation::Outcome::AppliedOutcome);
         QVERIFY(operation->resultId() > 0); QCOMPARE(dispatches, 1); QVERIFY(queries >= 1); QVERIFY(!operation->pending());
         delete operation; // Release the retained Source snapshot before its manual Native transport.
     }
+    void appliedDraftReceiptStaysOnOriginalUtilityQueueThroughClose()
+    {
+        const auto node_free_wallet = std::make_shared<MockWallet>();
+        WalletQmlModel model{WalletQmlModel::SharedWallet{node_free_wallet}, nullptr, {}, {}, {}};
+        const auto native_drained = WatchWalletNativeDrain(model);
+        const auto cleanup = qScopeGuard([&] {
+            model.beginShutdown();
+            QVERIFY(QTest::qWaitFor([&] { return model.shutdownComplete() && *native_drained; }, 5000));
+        });
+        const auto opening = model.opening();
+        QVERIFY(opening && opening->utilityQueue());
+        QTRY_VERIFY(model.capabilitiesKnown() && !model.sendRecipientList()->validationPending());
+        auto* recipient = model.sendRecipientList()->currentRecipient();
+        QVERIFY(recipient);
+        recipient->setLabel(QStringLiteral("private note"));
+        QTRY_VERIFY(!model.sendRecipientList()->validationPending());
+        QVERIFY(opening->utilityQueue());
+        auto port = model.importTarget(recipient);
+        QVERIFY(port);
+
+        auto source = std::make_shared<const paymentimport::Inspection>(
+            paymentimport::ReadSource({paymentimport::Input::Kind::Text, Uri()}));
+        struct Replies {
+            QSemaphore observed, applied, queried;
+            paymentimport::Target facts;
+            std::optional<paymentimport::ChildReply> reply;
+            QThread* observation_thread{nullptr};
+            QThread* query_thread{nullptr};
+        };
+        const auto replies = std::make_shared<Replies>();
+        QVERIFY(port->observe(source, [replies](auto facts) {
+            replies->facts = std::move(facts);
+            replies->observation_thread = QThread::currentThread();
+            replies->observed.release();
+        }, {}));
+        QVERIFY(replies->observed.tryAcquire(1, 5000));
+        QVERIFY(replies->facts.compatible);
+        QVERIFY(replies->observation_thread != QThread::currentThread());
+        QCOMPARE(replies->facts.recipient, recipient->identity());
+        const paymentimport::CommandKey key{42, 1};
+        const paymentimport::Child child{1, 1, paymentimport::ChildKind::Apply, replies->facts, false};
+        QSignalSpy changed{recipient->amount(), &BitcoinAmount::amountChanged};
+        QVERIFY(port->dispatch(key, child, source, [replies](auto) { replies->applied.release(); }, {}));
+        QVERIFY(replies->applied.tryAcquire(1, 5000));
+        QTRY_COMPARE(recipient->cAmount(), CAmount{12'345'678});
+        QCOMPARE(recipient->label(), QStringLiteral("private note"));
+        QCOMPARE(changed.size(), 1);
+
+        model.beginShutdown();
+        QVERIFY(!model.available());
+        QVERIFY(!*native_drained);
+        QVERIFY(port->query(key, child, [replies](auto reply) {
+            replies->reply = std::move(reply);
+            replies->query_thread = QThread::currentThread();
+            replies->queried.release();
+        }, {}));
+        QVERIFY(replies->queried.tryAcquire(1, 5000));
+        QVERIFY(replies->query_thread == replies->observation_thread);
+        QVERIFY(replies->reply && replies->reply->applied);
+        QCOMPARE(replies->reply->receipt.outcome, paymentimport::Outcome::Applied);
+        QCOMPARE(replies->reply->receipt.revision, replies->facts.revision + 1);
+        QCOMPARE(replies->reply->applied->projection->label, QStringLiteral("private note"));
+        QVERIFY(port->acknowledge(key, child));
+        port.reset();
+        QVERIFY(!*native_drained);
+        replies->reply.reset();
+        QTRY_VERIFY(*native_drained && model.shutdownComplete());
+    }
+    void sourceImportUsesUtilityAndDrainsItsOriginalReceipt()
+    {
+        std::deque<std::function<void()>> work, gui;
+        execution::Executor executor{[&](execution::Lane lane, execution::UtilityWorker worker, auto turn) {
+            if (lane != execution::Lane::Utility || worker != execution::UtilityWorker::IO) return false;
+            work.push_back(std::move(turn));
+            return true;
+        }};
+        const auto drain = [](auto& turns) {
+            while (!turns.empty()) {
+                auto turn = std::move(turns.front());
+                turns.pop_front();
+                turn();
+            }
+        };
+        BitcoinUriModel model;
+        QObject view;
+        model.setServices([&](auto turn) { gui.push_back(std::move(turn)); }, &executor);
+        auto target = std::make_shared<paymentimport::TargetPort>();
+        const auto original = Target();
+        target->opening = original.opening;
+        target->draft = original.draft;
+        target->recipient = original.recipient;
+        target->observe = [original](auto, auto done, auto) {
+            done(original);
+            return execution::SubmitResult{};
+        };
+        int applies{0}, queries{0}, acknowledged{0}, retired{0};
+        std::optional<paymentimport::ChildReply> receipt;
+        paymentimport::TargetPort::Completed late_dispatch, late_query;
+        target->dispatch = [&](auto, auto child, auto, auto done, auto) {
+            ++applies;
+            receipt = paymentimport::ChildReply{{child, paymentimport::Outcome::Applied, 7, original.revision + 1}, {}, {}, {}};
+            late_dispatch = std::move(done);
+            return execution::SubmitResult{};
+        };
+        target->query = [&](auto, auto, auto done, auto) {
+            ++queries;
+            late_query = std::move(done);
+            return execution::SubmitResult{};
+        };
+        target->acknowledge = [&](auto, auto) { ++acknowledged; return execution::SubmitResult{}; };
+        target->retire = [&](auto, auto) { ++retired; };
+        const auto finish_receipt = [&] {
+            if (!receipt) return;
+            if (auto reply = std::exchange(late_query, {})) reply(*receipt);
+            if (auto reply = std::exchange(late_dispatch, {})) reply(*receipt);
+        };
+        bool drained{false};
+        const auto cleanup = qScopeGuard([&] {
+            model.close();
+            drain(work);
+            finish_receipt();
+            drain(work);
+            drain(gui);
+        });
+
+        auto* operation = model.requestImport({paymentimport::Input::Kind::Text, Uri()}, target, &view);
+        QVERIFY(operation);
+        QVERIFY(operation->pending());
+        QVERIFY(operation->address().isEmpty());
+        drain(work);
+        QVERIFY(operation->address().isEmpty());
+        drain(gui);
+        QCOMPARE(operation->address(), Address());
+        QCOMPARE(operation->amount(), qint64{12'345'678});
+        QVERIFY(operation->canApply());
+        operation->apply();
+        drain(work);
+        drain(gui);
+        QCOMPARE(applies, 1);
+        QCOMPARE(operation->state(), PaymentImportOperation::State::Applying);
+
+        model.close();
+        model.whenDrained([&] { drained = true; });
+        drain(work);
+        drain(gui);
+        QCOMPARE(operation->state(), PaymentImportOperation::State::Closing);
+        QCOMPARE(queries, 1);
+        QCOMPARE(retired, 1);
+        QVERIFY(!drained);
+        QVERIFY(receipt && late_query && late_dispatch);
+
+        auto delayed = std::exchange(late_dispatch, {});
+        std::exchange(late_query, {})(*receipt);
+        drain(work);
+        drain(gui);
+        QVERIFY(drained);
+        QCOMPARE(acknowledged, 1);
+        QCOMPARE(operation->state(), PaymentImportOperation::State::Closed);
+        QCOMPARE(operation->outcome(), PaymentImportOperation::Outcome::AppliedOutcome);
+        QCOMPARE(operation->resultId(), quint64{7});
+        delayed(*receipt);
+        drain(work);
+        drain(gui);
+        QCOMPARE(applies, 1);
+        QCOMPARE(acknowledged, 1);
+    }
     void typedFacadePublishesBoundedSourceWithoutTargetOrGuiParsing() {
-        ManualRoutedExecution commands; std::deque<std::function<void()>> gui;
+        ManualStartupExecution commands; std::deque<std::function<void()>> gui;
         BitcoinUriModel model; QObject owner;
-        model.setServices({commands.scheduler, [&](auto post) { gui.push_back(std::move(post)); }});
+        model.setServices([&](auto post) { gui.push_back(std::move(post)); }, &commands.executor());
         auto* operation = model.requestImport({paymentimport::Input::Kind::Text, Uri()}, {}, &owner); QVERIFY(operation); QVERIFY(operation->pending());
         commands.drain(); QVERIFY(operation->address().isEmpty());
         while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }
@@ -590,7 +1057,7 @@ private Q_SLOTS:
         do {
             commands.drain();
             while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }
-        } while (!commands.queuedIdle() || !commands.activeIdle());
+        } while (!commands.quiescent());
         QVERIFY(commands.quiescent());
     }
 };

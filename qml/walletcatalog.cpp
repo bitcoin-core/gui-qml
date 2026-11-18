@@ -5,9 +5,10 @@
 #include <qml/walletcatalog.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/execution.h>
+#include <qml/retainedvalue.h>
 #include <qml/walletidentity.h>
 #include <QDir>
-#include <qml/retainedsnapshot.h>
 
 #include <QCoreApplication>
 #include <QSet>
@@ -136,12 +137,6 @@ std::map<QString, QString> ReadAliases(const Catalog& catalog)
 } // namespace
 
 struct Reader::Data {
-    // Declared first, destroyed last: terminal publication follows release of
-    // pending commands and catalog storage on the reserved Cleanup lane.
-    struct Retirement {
-        std::function<void()> released;
-        ~Retirement() { if (released) released(); }
-    } retirement;
     std::deque<Input> pending;
     std::optional<Input> discovery;
     Catalog catalog;
@@ -165,36 +160,31 @@ struct Reader::Control {
 };
 struct Reader::Attempt { bool started{false}, completed{false}; };
 
-Reader::Reader(std::shared_ptr<execution::Scheduler> scheduler, Read read, Notify notify)
-    : m_scheduler(std::move(scheduler)), m_key(m_scheduler->allocateKey()), m_read(std::move(read)),
-      m_notify(std::move(notify)), m_control(std::make_shared<Control>()),
-      m_data(execution::RetainSnapshot<Data>(m_scheduler, [control = m_control, wake = m_notify] {
-          auto data = std::make_unique<Data>();
-          data->retirement.released = [control, wake] {
-              {
-                  std::lock_guard lock{control->mutex};
-                  if (!control->closed) return;
-                  control->observation.phase = Phase::Stopped;
-              }
-              control->notify(wake);
-          };
-          return data;
-      }))
+Reader::Reader(execution::Executor& executor, Read read, Notify notify)
+    : m_core(executor.makeQueue(execution::Lane::Core)), m_utility(std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))),
+      m_outcomes(std::make_shared<execution::ValueCleanupQueue>(m_utility)),
+      m_read(std::move(read)), m_notify(std::move(notify)), m_control(std::make_unique<Control>()),
+      m_data(std::make_unique<Data>())
 {
-    if (!m_data) {
-        m_control->observation.phase = Phase::Failed;
-        m_control->observation.error = CatalogError("Wallet catalog is unavailable.");
-    }
+    auto closing = std::make_shared<std::shared_ptr<Reader>>();
+    auto retirement = m_outcomes->hold([closing] {
+        if (*closing) (*closing)->retire();
+    });
+    if (!retirement) throw std::invalid_argument("Wallet catalog queue is closed");
+    m_post_retirement = [closing, retirement = std::move(retirement)](auto self) mutable {
+        *closing = std::move(self);
+        retirement.reset();
+    };
 }
+
+Reader::~Reader() = default;
 
 void Reader::request(Input input)
 {
-    std::shared_ptr<Data> data;
     bool start{false};
     {
         std::lock_guard lock{m_control->mutex};
-        if (m_control->closed || !m_data) return;
-        data = m_data;
+        if (m_control->closed) return;
         input.revision = ++m_control->observation.revision;
         if (input.kind == Input::Kind::Directory || input.kind == Input::Kind::Availability) {
             input.directory_revision = ++m_control->desired_directory;
@@ -203,27 +193,26 @@ void Reader::request(Input input)
         if (input.kind == Input::Kind::Availability) m_control->observation.availability = input.availability;
         // Discovery has no ordering effect on registry observations. Its one
         // replaceable slot bounds a burst without scanning on the GUI thread.
-        if (input.kind == Input::Kind::Directory) data->discovery = std::move(input);
-        else data->pending.push_back(std::move(input));
+        if (input.kind == Input::Kind::Directory) m_data->discovery = std::move(input);
+        else m_data->pending.push_back(std::move(input));
         if (!m_control->active) {
             m_control->active = true; m_control->started = false; start = true;
             m_control->observation.phase = Phase::Scheduled;
         } else if (m_control->started) m_control->observation.phase = Phase::ReadingWithPendingWork;
     }
-    if (start) submit(std::move(data));
+    if (start) submit();
 }
 
-void Reader::submit(std::shared_ptr<Data> data)
+void Reader::submit()
 {
     const auto self = shared_from_this();
     const auto attempt = std::make_shared<Attempt>();
-    execution::SubmitResult submitted;
+    bool submitted{false};
     try {
-        submitted = execution::Submit(*m_scheduler,
-            [self, data, attempt] { return self->read(data, attempt); },
-            [self, data, attempt](std::shared_ptr<const Snapshot> snapshot) { self->complete(data, attempt, std::move(snapshot), false); },
-            [self, data, attempt](std::exception_ptr) { self->complete(data, attempt, {}, true); },
-            {execution::Lane::Core, m_key, execution::WorkClass::Observation});
+        auto task = execution::MakeTask([self, attempt] { return self->read(attempt); },
+            [self, attempt](std::shared_ptr<const Snapshot> snapshot) { self->complete(attempt, std::move(snapshot), false); },
+            [self, attempt](std::exception_ptr) { self->complete(attempt, {}, true); });
+        submitted = bool(m_outcomes->postWithOutcome(m_core, std::move(task)));
     } catch (...) { rejected(attempt); return; }
     if (!submitted) rejected(attempt);
 }
@@ -245,46 +234,44 @@ void Reader::rejected(const std::shared_ptr<Attempt>& attempt)
     notify();
 }
 
-std::shared_ptr<const Snapshot> Reader::read(const std::shared_ptr<Data>& data, const std::shared_ptr<Attempt>& attempt)
+std::shared_ptr<const Snapshot> Reader::read(const std::shared_ptr<Attempt>& attempt)
 {
     std::deque<Input> pending;
     std::optional<Input> directory;
     std::shared_ptr<const Snapshot> published;
+    // Retirement cannot release Data until both queues have finished.
+    auto& data = *m_data;
     {
         std::lock_guard lock{m_control->mutex};
         if (m_control->closed) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
-        pending.swap(data->pending);
-        directory.swap(data->discovery);
+        pending.swap(data.pending);
+        directory.swap(data.discovery);
         published = m_control->published;
         attempt->started = true; m_control->started = true; m_control->observation.phase = Phase::Reading;
     }
     notify();
     quint64 discovery{0};
     for (const auto& input : pending) {
-        data->catalog.apply(input);
+        data.catalog.apply(input);
         discovery = std::max(discovery, input.directory_revision);
     }
-    if (directory) { data->catalog.apply(*directory); discovery = std::max(discovery, directory->directory_revision); }
-    if (discovery && data->catalog.availability == Availability::Available) {
+    if (directory) { data.catalog.apply(*directory); discovery = std::max(discovery, directory->directory_revision); }
+    if (discovery && data.catalog.availability == Availability::Available) {
         try {
             auto entries = m_read();
-            data->catalog.directory = std::move(entries);
-            data->catalog.loaded = true; ++data->catalog.directory_epoch;
-            data->catalog.directory_revision = discovery; data->catalog.read_error.clear();
-        } catch (...) { data->catalog.read_error = CatalogError("Wallet directory could not be read."); }
+            data.catalog.directory = std::move(entries);
+            data.catalog.loaded = true; ++data.catalog.directory_epoch;
+            data.catalog.directory_revision = discovery; data.catalog.read_error.clear();
+        } catch (...) { data.catalog.read_error = CatalogError("Wallet directory could not be read."); }
     }
     {
         std::lock_guard lock{m_control->mutex};
-        if (!m_control->closed) m_control->observation.phase = data->hasPending() ? Phase::ReadingWithPendingWork : Phase::Applying;
+        if (!m_control->closed) m_control->observation.phase = data.hasPending() ? Phase::ReadingWithPendingWork : Phase::Applying;
     }
-    const auto aliases = ReadAliases(data->catalog);
-    auto snapshot = execution::RetainSnapshot<Snapshot>(m_scheduler, [&] { return data->catalog.project(published, aliases); });
-    if (!snapshot) throw std::runtime_error("Wallet catalog projection is unavailable");
-    return snapshot;
+    return data.catalog.project(published, ReadAliases(data.catalog));
 }
 
-void Reader::complete(const std::shared_ptr<Data>& data, const std::shared_ptr<Attempt>& attempt,
-                      std::shared_ptr<const Snapshot> snapshot, bool failed)
+void Reader::complete(const std::shared_ptr<Attempt>& attempt, std::shared_ptr<const Snapshot> snapshot, bool failed)
 {
     bool again{false};
     {
@@ -294,7 +281,7 @@ void Reader::complete(const std::shared_ptr<Data>& data, const std::shared_ptr<A
         if (!m_control->closed) {
             // Rejection before Core starts retains the batch for an explicit
             // retry. A failed admitted read still drains newer required work.
-            again = data->hasPending() && attempt->started;
+            again = m_data->hasPending() && attempt->started;
             const bool current = snapshot && snapshot->directory_revision == m_control->desired_directory;
             // A superseded read failure cannot replace a newer discovery's
             // error. Its coherent registry observations may still be shown.
@@ -310,7 +297,7 @@ void Reader::complete(const std::shared_ptr<Data>& data, const std::shared_ptr<A
         }
     }
     notify();
-    if (again) submit(data);
+    if (again) submit();
 }
 
 void Reader::notify()
@@ -326,7 +313,7 @@ Update Reader::take()
 {
     std::lock_guard lock{m_control->mutex};
     m_control->notification_pending = false;
-    return {m_control->observation, std::exchange(m_control->latest, {})};
+    return {m_control->observation, m_control->closed ? nullptr : std::exchange(m_control->latest, {})};
 }
 void Reader::published(std::shared_ptr<const Snapshot> snapshot)
 {
@@ -335,16 +322,44 @@ void Reader::published(std::shared_ptr<const Snapshot> snapshot)
 }
 void Reader::close()
 {
-    std::shared_ptr<Data> retired;
     {
         std::lock_guard lock{m_control->mutex};
         if (std::exchange(m_control->closed, true)) return;
-        m_control->observation.phase = m_data ? Phase::Stopping : Phase::Stopped;
+        m_control->observation.phase = Phase::Stopping;
         m_control->observation.fresh = false;
-        m_control->latest.reset(); m_control->published.reset(); retired.swap(m_data);
     }
-    // The cleanup lease releases pending inputs and domain rows off GUI.
-    retired.reset();
+    m_core.close();
+    const auto self = shared_from_this();
+    m_core.whenDrained([self] {
+        auto post = std::move(self->m_post_retirement);
+        post(self);
+        self->m_utility->close();
+    });
+    notify();
+}
+
+void Reader::whenRetired(Notify done)
+{
+    m_utility->whenDrained(std::move(done));
+}
+
+void Reader::retire()
+{
+    // No future input can be admitted. Release the catalog on Utility after
+    // all Core turns and their outcomes have finished.
+    m_data.reset();
+    std::shared_ptr<const Snapshot> latest, published;
+    {
+        std::lock_guard lock{m_control->mutex};
+        latest = std::move(m_control->latest);
+        published = std::move(m_control->published);
+    }
+    latest.reset();
+    published.reset();
+    {
+        std::lock_guard lock{m_control->mutex};
+        m_control->observation.phase = Phase::Stopped;
+    }
     notify();
 }
 } // namespace walletcatalog

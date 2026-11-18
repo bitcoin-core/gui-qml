@@ -59,7 +59,7 @@ class ReceiveIntegrationTests : public QObject
                 utility->whenDrained(done);
             });
         };
-        return std::make_shared<walletopening::Session>(nullptr, nullptr, std::make_shared<std::atomic_bool>(false),
+        return std::make_shared<walletopening::Session>(std::make_shared<std::atomic_bool>(false),
             [] {}, walletopening::Session::Preferences{}, std::chrono::steady_clock::now, nullptr,
             walletopening::NativeEvents{}, walletopening::Session::Queues{cleanup, std::move(stop), core, utility});
     }

@@ -2,10 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
 #include <qml/executor.h>
 #include <qml/ownedwork.h>
-#include <qml/retainedsnapshot.h>
+#include <qml/snapshotquery.h>
+#include <qml/retainedvalue.h>
 #include <qml/asyncjoin.h>
 
 #include <QCoreApplication>
@@ -20,6 +20,7 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -44,269 +45,322 @@ private Q_SLOTS:
     void lastIdleOriginalScopeWakesActualNativeShutdown()
     {
         QFETCH(bool, routed);
-        auto executor = routed ? std::make_unique<BackendExecutor>(execution::Options{}) : std::make_unique<BackendExecutor>();
-        auto scope = executor->scheduler()->openActionScope(); QVERIFY(scope);
-        struct Probe { std::atomic<int> acknowledged{0}; std::atomic_bool on_gui{false}; };
-        const auto probe = std::make_shared<Probe>();
-        executor->m_shutdown_started_for_testing = [probe] { if (QThread::currentThread() == qApp->thread()) probe->on_gui = true; ++probe->acknowledged; };
-        const auto cleanup = qScopeGuard([&] { scope.reset(); executor->shutdown(); QVERIFY(QTest::qWaitFor([&] { return executor->isDrained(); }, TIMEOUT)); });
-        QSignalSpy drained(executor.get(), &BackendExecutor::drained);
-        executor->shutdown();
-        QTRY_COMPARE_WITH_TIMEOUT(probe->acknowledged.load(), routed ? 5 : 1, TIMEOUT);
-        QVERIFY(!probe->on_gui); QVERIFY(!executor->isDrained()); QCOMPARE(drained.size(), 0);
-        bool heartbeat{false}; QTimer::singleShot(0, [&] { heartbeat = true; }); QTRY_VERIFY_WITH_TIMEOUT(heartbeat, TIMEOUT);
-        scope.reset(); // No task, result, resource borrower or cleanup turn remains to wake a worker.
-        QTRY_VERIFY_WITH_TIMEOUT(executor->isDrained(), TIMEOUT); QCOMPARE(drained.size(), 1);
+        using namespace execution;
+        const auto executor = std::make_shared<Executor>(Executor::Config{});
+        const auto values = std::make_shared<ValueCleanupQueue>(
+            std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility)));
+        const auto gui = QThread::currentThread();
+        const auto retired_off_gui = std::make_shared<std::atomic_bool>(false);
+        auto held = values->hold([retired_off_gui, gui] { *retired_off_gui = QThread::currentThread() != gui; });
+        QVERIFY(held);
+        if (routed) {
+            auto core = executor->makeQueue(Lane::Core);
+            auto ran = std::make_shared<QSemaphore>();
+            QVERIFY(core.post([ran] { ran->release(); }));
+            QVERIFY(ran->tryAcquire(1, TIMEOUT));
+        }
+        QObject receiver;
+        bool joined{false}, heartbeat{false};
+        auto join = JoinThreadAfterDrain([executor] { executor->stopAndJoin(); }, &receiver, [&] { joined = true; });
+        values->close(std::move(join));
+        QTimer::singleShot(0, &receiver, [&] { heartbeat = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(heartbeat, TIMEOUT);
+        QVERIFY(!joined);
+        QVERIFY(!retired_off_gui->load());
+        held.reset();
+        QTRY_VERIFY_WITH_TIMEOUT(joined, TIMEOUT);
+        QVERIFY(retired_off_gui->load());
     }
 
     void compatibilityWorkCannotBlockMigratedCoreReads()
     {
         using namespace execution;
-        BackendExecutor executor{Options{}};
-        const auto scheduler = executor.scheduler();
+        const auto executor = std::make_shared<Executor>(Executor::Config{});
+        auto rpc = executor->makeQueue(Lane::Rpc);
+        auto core = executor->makeQueue(Lane::Core);
+        const auto outcome = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility));
         const auto gate = std::make_shared<Gate>();
         const auto release = qScopeGuard([gate] { gate->release.release(); });
         struct Probe {
-            std::atomic<QThread*> compatibility{nullptr}, core{nullptr};
-            QSemaphore outcome;
+            std::atomic<QThread*> rpc{nullptr}, core{nullptr}, utility{nullptr};
+            QSemaphore ready;
             std::atomic_int value{0};
         };
         const auto probe = std::make_shared<Probe>();
         const auto gui = QThread::currentThread();
-        QVERIFY(executor.submit(this, [gate, probe] {
-            probe->compatibility = QThread::currentThread();
+        QVERIFY(rpc.post([gate, probe] {
+            probe->rpc = QThread::currentThread();
             gate->entered.release();
             gate->release.acquire();
-        }, [] {}));
-        QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-        QVERIFY(Submit(*scheduler, [probe] {
-            probe->core = QThread::currentThread();
-            return 42;
-        }, [probe](int value) {
-            probe->value = value;
-            probe->outcome.release();
         }));
-        // No GUI event processing and no legacy completion are needed for the
-        // migrated read and its owned Domain outcome to make progress.
-        QVERIFY(probe->outcome.tryAcquire(1, TIMEOUT));
+        QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+        QVERIFY(core.post([outcome, probe] {
+            probe->core = QThread::currentThread();
+            outcome->post([probe] {
+                probe->utility = QThread::currentThread();
+                probe->value = 42;
+                probe->ready.release();
+            });
+        }));
+        QVERIFY(probe->ready.tryAcquire(1, TIMEOUT));
         QCOMPARE(probe->value.load(), 42);
-        QVERIFY(probe->compatibility.load() != gui);
+        QVERIFY(probe->rpc.load() != gui);
         QVERIFY(probe->core.load() != gui);
-        QVERIFY(probe->compatibility.load() != probe->core.load());
-        QSignalSpy drained{&executor, &BackendExecutor::drained};
-        executor.shutdown();
-        QVERIFY(drained.empty());
+        QVERIFY(probe->utility.load() != gui);
+        QVERIFY(probe->rpc.load() != probe->core.load());
+        QVERIFY(probe->rpc.load() != probe->utility.load());
         gate->release.release();
-        QTRY_COMPARE(drained.size(), 1);
-        QCOMPARE(scheduler->pending(), size_t{0});
-        QVERIFY(executor.isDrained());
+        executor->stopAndJoin();
     }
     void activeGuiCallbackRetainsOwningPacketThroughReentrantShutdown()
     {
-        struct Probe {
-            std::atomic_bool destroyed{false}, off_gui{false}, callback_done{false}, shutdown_seen{false};
-            QSemaphore inactive_released;
-        };
-        auto probe = std::make_shared<Probe>();
+        using namespace execution;
+        Executor executor{Executor::Config{}};
+        auto utility = executor.makeQueue(Lane::Utility);
+        const auto values = std::make_shared<ValueCleanupQueue>(
+            std::make_shared<SerialQueue>(executor.makeQueue(Lane::Utility)));
         const auto gui = QThread::currentThread();
         struct Value {
-            std::shared_ptr<Probe> probe;
             QThread* gui;
-            bool marker;
-            Value(std::shared_ptr<Probe> p, QThread* thread, bool is_marker) : probe(std::move(p)), gui(thread), marker(is_marker) {}
-            ~Value()
-            {
-                if (marker) probe->inactive_released.release();
-                else { probe->off_gui = QThread::currentThread() != gui; probe->destroyed = true; }
-            }
+            std::atomic_bool& destroyed_off_gui;
+            ~Value() { destroyed_off_gui = QThread::currentThread() != gui; }
         };
-        auto executor = std::make_unique<BackendExecutor>();
-        QVERIFY(executor->submit(this, [probe, gui] { return std::make_shared<Value>(probe, gui, false); },
-            [&, probe, gui](const std::shared_ptr<Value>& value) {
-                if (!value) return;
-                executor->submit(this, [probe, gui] { return std::make_shared<Value>(probe, gui, true); }, [](const std::shared_ptr<Value>&) {});
-                executor.reset();
-                // The inactive marker is released only by beginShutdown. Hold
-                // GUI completion until that actual worker boundary is reached.
-                probe->shutdown_seen = probe->inactive_released.tryAcquire(1, TIMEOUT);
-                probe->callback_done = true;
-            }));
-        QTRY_VERIFY(probe->callback_done.load());
-        QVERIFY(probe->shutdown_seen.load());
-        QTRY_VERIFY(probe->destroyed.load());
-        QVERIFY(probe->off_gui.load());
+        std::atomic_bool destroyed_off_gui{false};
+        auto owner = std::make_unique<OwnedWork>(executor);
+        const auto stop = qScopeGuard([&] {
+            owner.reset();
+            executor.stopAndJoin();
+        });
+        bool callback_done{false};
+        const auto drained = std::make_shared<std::atomic_bool>(false);
+        QVERIFY(owner->submit([values, gui, &destroyed_off_gui] {
+            return RetainValues<Value>([values](auto cleanup) { return values->hold(std::move(cleanup)); },
+                [&] { return std::unique_ptr<Value>{new Value{gui, destroyed_off_gui}}; });
+        }, [&](const std::shared_ptr<Value>& result) {
+            QVERIFY(result);
+            owner.reset();
+            values->close([drained] { *drained = true; });
+            auto marker = std::make_shared<QSemaphore>();
+            QVERIFY(utility.post([marker] { marker->release(); }));
+            QVERIFY(marker->tryAcquire(1, TIMEOUT));
+            QVERIFY(!destroyed_off_gui);
+            QVERIFY(!drained->load());
+            callback_done = true;
+        }, [](std::exception_ptr) { QFAIL("An accepted operation failed"); }));
+        QTRY_VERIFY(callback_done);
+        QTRY_VERIFY(drained->load());
+        QVERIFY(destroyed_off_gui);
     }
     void routedControlAndCleanupProgressWhileCoreIsHeld()
     {
         using namespace execution;
-        BackendExecutor executor{Options{}};
-        auto scheduler = executor.scheduler();
-        auto gate = std::make_shared<Gate>();
+        const auto executor = std::make_shared<Executor>(Executor::Config{});
+        auto core = executor->makeQueue(Lane::Core);
+        auto priority = executor->makeQueue(Lane::Priority);
+        const auto utility = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility));
+        const auto gate = std::make_shared<Gate>();
         const auto release = qScopeGuard([gate] { gate->release.release(); });
-        const auto gui = QThread::currentThread();
         struct Probe {
-            std::atomic<QThread*> core{nullptr}, domain{nullptr}, control{nullptr}, cleanup{nullptr};
-            std::atomic<int> written{0}, consumed{0};
-            QSemaphore control_done, cleanup_done;
-            bool heartbeat{false};
+            std::atomic<QThread*> core{nullptr}, priority{nullptr}, utility{nullptr};
+            std::atomic_int written{0}, consumed{0};
+            QSemaphore interrupted, retired;
         };
         const auto probe = std::make_shared<Probe>();
-        QVERIFY(Submit(*scheduler, [gate, probe] {
+        QVERIFY(core.post([gate, probe, utility] {
             probe->core = QThread::currentThread();
-            gate->entered.release(); gate->release.acquire();
-            probe->written = 1;
-            return 42;
-        }, [probe](int value) { probe->domain = QThread::currentThread(); probe->consumed = value; }));
+            gate->entered.release();
+            gate->release.acquire();
+            ++probe->written;
+            utility->post([probe] { probe->consumed = 42; });
+        }));
         QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-        scheduler->stopAcceptingWork();
-        QCOMPARE(Submit(*scheduler, [] {}, [] {}).rejection, Rejection::Closed);
-        QVERIFY(Submit(*scheduler, [probe] { probe->control = QThread::currentThread(); }, [probe] {
-            probe->domain = QThread::currentThread(); probe->control_done.release();
-        }, {}, {Lane::Control}));
-        QVERIFY(Submit(*scheduler, [probe] { probe->cleanup = QThread::currentThread(); }, [probe] {
-            probe->domain = QThread::currentThread(); probe->cleanup_done.release();
-        }, {}, {Lane::Cleanup}));
-        // GUI processing is withheld: all three background transports progress.
-        QVERIFY(probe->control_done.tryAcquire(1, TIMEOUT));
-        QVERIFY(probe->cleanup_done.tryAcquire(1, TIMEOUT));
+        core.close();
+        QVERIFY(!core.post([] {}));
+        QVERIFY(priority.post([probe] {
+            probe->priority = QThread::currentThread();
+            probe->interrupted.release();
+        }));
+        QVERIFY(utility->post([probe] {
+            probe->utility = QThread::currentThread();
+            probe->retired.release();
+        }));
+        QVERIFY(probe->interrupted.tryAcquire(1, TIMEOUT));
+        QVERIFY(probe->retired.tryAcquire(1, TIMEOUT));
         QCOMPARE(probe->written.load(), 0);
-        for (auto* thread : {probe->core.load(), probe->domain.load(), probe->control.load(), probe->cleanup.load()}) {
-            QVERIFY(thread); QVERIFY(thread != gui);
+        const auto gui = QThread::currentThread();
+        for (auto* worker : {probe->core.load(), probe->priority.load(), probe->utility.load()}) {
+            QVERIFY(worker && worker != gui);
         }
-        QCOMPARE(std::set<QThread*>({probe->core.load(), probe->domain.load(), probe->control.load(), probe->cleanup.load()}).size(), size_t{4});
-        QSignalSpy drained{&executor, &BackendExecutor::drained};
-        executor.shutdown();
-        QTimer::singleShot(0, &executor, [probe] { probe->heartbeat = true; });
-        QTRY_VERIFY(probe->heartbeat);
-        QVERIFY(drained.empty());
+        QCOMPARE(std::set<QThread*>({probe->core.load(), probe->priority.load(), probe->utility.load()}).size(), size_t{3});
+        bool drained{false}, heartbeat{false};
+        QObject receiver;
+        auto join = JoinThreadAfterDrain([executor] { executor->stopAndJoin(); }, &receiver, [&] { drained = true; });
+        core.whenDrained([utility, join = std::move(join)] {
+            utility->close();
+            utility->whenDrained(join);
+        });
+        QTimer::singleShot(0, &receiver, [&] { heartbeat = true; });
+        QTRY_VERIFY(heartbeat);
+        QVERIFY(!drained);
         QCOMPARE(probe->consumed.load(), 0);
         gate->release.release();
-        QTRY_COMPARE(drained.size(), 1);
+        QTRY_VERIFY(drained);
         QCOMPARE(probe->written.load(), 1);
         QCOMPARE(probe->consumed.load(), 42);
-        QCOMPARE(scheduler->pending(), size_t{0});
-        QVERIFY(executor.isDrained());
     }
     void nativeCleanupAffinityRetiresOnCoreWhileControlRemainsIndependent()
     {
         using namespace execution;
-        BackendExecutor executor{Options{},nullptr,BackendExecutor::CleanupAffinity::Core};
-        const auto scheduler=executor.scheduler();
-        const auto gate=std::make_shared<Gate>();
-        const auto release=qScopeGuard([gate]{gate->release.release();});
+        const auto executor = std::make_shared<Executor>(Executor::Config{});
+        const auto core = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Core));
+        auto priority = executor->makeQueue(Lane::Priority);
+        const auto values = std::make_shared<ValueCleanupQueue>(core);
+        const auto gate = std::make_shared<Gate>();
+        const auto release = qScopeGuard([gate] { gate->release.release(); });
         struct Probe {
-            std::atomic<QThread*> core{nullptr},cleanup{nullptr},control{nullptr};
+            std::atomic<QThread*> core{nullptr}, cleanup{nullptr}, priority{nullptr};
             std::atomic_int retired{0};
-            std::atomic_bool heartbeat{false};
-            QSemaphore read,interrupted;
+            QSemaphore read, interrupted;
         };
-        const auto probe=std::make_shared<Probe>();
-        QVERIFY(Submit(*scheduler,[probe]{probe->core=QThread::currentThread();},[probe]{probe->read.release();}));
-        QVERIFY(probe->read.tryAcquire(1,TIMEOUT));
-        struct Native {
-            std::shared_ptr<Probe> probe;std::shared_ptr<Gate> gate;
-            Native(std::shared_ptr<Probe> p,std::shared_ptr<Gate> g):probe(std::move(p)),gate(std::move(g)){}
-            ~Native(){probe->cleanup=QThread::currentThread();gate->entered.release();gate->release.acquire();++probe->retired;}
-        };
-        auto value=RetainSnapshot<Native>(scheduler,[&]{return std::make_unique<Native>(probe,gate);});
-        QVERIFY(value);value.reset();
-        QVERIFY(gate->entered.tryAcquire(1,TIMEOUT));
-        QCOMPARE(probe->cleanup.load(),probe->core.load());QVERIFY(probe->core.load()!=qApp->thread());
-        QVERIFY(Submit(*scheduler,[probe]{probe->control=QThread::currentThread();probe->interrupted.release();},[] {},{}, {Lane::Control}));
-        QVERIFY(probe->interrupted.tryAcquire(1,TIMEOUT));
-        QVERIFY(probe->control.load()!=probe->core.load());QVERIFY(probe->control.load()!=qApp->thread());
-        QTimer::singleShot(0,this,[probe]{probe->heartbeat=true;});
-        executor.shutdown();QTRY_VERIFY(probe->heartbeat);QVERIFY(!executor.isDrained());QCOMPARE(probe->retired.load(),0);
-        gate->release.release();QTRY_VERIFY(executor.isDrained());QCOMPARE(probe->retired.load(),1);
+        const auto probe = std::make_shared<Probe>();
+        QVERIFY(core->post([probe] {
+            probe->core = QThread::currentThread();
+            probe->read.release();
+        }));
+        QVERIFY(probe->read.tryAcquire(1, TIMEOUT));
+        auto held = values->hold([probe, gate] {
+            probe->cleanup = QThread::currentThread();
+            gate->entered.release();
+            gate->release.acquire();
+            ++probe->retired;
+        });
+        QVERIFY(held);
+        held.reset();
+        QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+        QVERIFY(probe->cleanup.load() == probe->core.load());
+        QVERIFY(probe->core.load() != qApp->thread());
+        QVERIFY(priority.post([probe] {
+            probe->priority = QThread::currentThread();
+            probe->interrupted.release();
+        }));
+        QVERIFY(probe->interrupted.tryAcquire(1, TIMEOUT));
+        QVERIFY(probe->priority.load() != probe->core.load());
+        QVERIFY(probe->priority.load() != qApp->thread());
+        QObject receiver;
+        bool drained{false}, heartbeat{false};
+        values->close(JoinThreadAfterDrain([executor] { executor->stopAndJoin(); }, &receiver, [&] { drained = true; }));
+        QTimer::singleShot(0, &receiver, [&] { heartbeat = true; });
+        QTRY_VERIFY(heartbeat);
+        QVERIFY(!drained);
+        QCOMPARE(probe->retired.load(), 0);
+        gate->release.release();
+        QTRY_VERIFY(drained);
+        QCOMPARE(probe->retired.load(), 1);
     }
     void routedOwningOutcomeSurvivesDestroyedGuiOwner()
     {
         using namespace execution;
-        auto executor = std::make_unique<BackendExecutor>(Options{});
-        auto scheduler = executor->scheduler();
+        auto executor = std::make_shared<Executor>(Executor::Config{});
+        auto core = executor->makeQueue(Lane::Core);
+        const auto utility = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility));
+        auto observer = std::make_unique<QObject>();
+        const QPointer<QObject> view{observer.get()};
+        const auto post = presentation::QueuedPost();
+        const auto publications = std::make_shared<int>(0);
         auto gate = std::make_shared<Gate>();
         const auto release = qScopeGuard([gate] { gate->release.release(); });
         const auto gui = QThread::currentThread();
         struct Probe {
             QSemaphore wrote;
-            std::atomic<int> effects{0}, outcomes{0};
-            bool drained{false}, heartbeat{false};
+            std::atomic_int effects{0}, outcomes{0};
+            std::atomic_bool destroyed_off_gui{false};
         };
         const auto probe = std::make_shared<Probe>();
-        auto destroyed = std::make_shared<std::atomic_bool>(false);
-        auto destroyed_off_gui = std::make_shared<std::atomic_bool>(false);
-        struct Value {
-            std::shared_ptr<std::atomic_bool> destroyed, off_gui;
-            QThread* gui;
-            Value(std::shared_ptr<std::atomic_bool> d, std::shared_ptr<std::atomic_bool> off, QThread* thread)
-                : destroyed(std::move(d)), off_gui(std::move(off)), gui(thread) {}
-            ~Value() { *off_gui = QThread::currentThread() != gui; *destroyed = true; }
-        };
-        QVERIFY(Submit(*scheduler, [gate] {
-            gate->entered.release(); gate->release.acquire();
-        }, [] {}, {}, {Lane::Domain}));
+        QVERIFY(utility->post([gate] {
+            gate->entered.release();
+            gate->release.acquire();
+        }));
         QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-        QVERIFY(Submit(*scheduler, [probe, destroyed, destroyed_off_gui, gui] {
-            auto result = std::make_unique<Value>(destroyed, destroyed_off_gui, gui);
-            ++probe->effects; probe->wrote.release(); return result;
-        }, [probe, gui](std::unique_ptr<Value> value) {
-            if (value && probe->effects == 1 && QThread::currentThread() != gui) ++probe->outcomes;
+        QVERIFY(core.post([utility, probe, gui, view, post, publications] {
+            auto result = std::shared_ptr<int>{new int{42}, [probe, gui](int* value) {
+                probe->destroyed_off_gui = QThread::currentThread() != gui;
+                delete value;
+            }};
+            ++probe->effects;
+            utility->post([probe, gui, view, post, publications, result = std::move(result)] {
+                if (*result == 42 && probe->effects == 1 && QThread::currentThread() != gui) ++probe->outcomes;
+                post([view, publications] { if (view) ++*publications; });
+            });
+            probe->wrote.release();
         }));
         QVERIFY(probe->wrote.tryAcquire(1, TIMEOUT));
-        executor.reset();
+        observer.reset();
         QCOMPARE(probe->effects.load(), 1);
         QCOMPARE(probe->outcomes.load(), 0);
-        QVERIFY(!destroyed->load());
-        WaitForThreadJoins(this, [probe] { probe->drained = true; });
-        QTimer::singleShot(0, this, [probe] { probe->heartbeat = true; });
-        QTRY_VERIFY(probe->heartbeat);
-        QVERIFY(!probe->drained);
+        QVERIFY(!probe->destroyed_off_gui);
+        core.close();
+        utility->close();
+        QObject receiver;
+        bool drained{false}, heartbeat{false};
+        JoinThreadAsync([executor = std::move(executor)] { executor->stopAndJoin(); }, &receiver, [&] { drained = true; });
+        QTimer::singleShot(0, &receiver, [&] { heartbeat = true; });
+        QTRY_VERIFY(heartbeat);
+        QVERIFY(!drained);
         gate->release.release();
-        QTRY_VERIFY(probe->drained);
+        QTRY_VERIFY(drained);
         QCOMPARE(probe->outcomes.load(), 1);
-        QVERIFY(destroyed->load()); QVERIFY(destroyed_off_gui->load());
-        QCOMPARE(scheduler->pending(), size_t{0});
+        QVERIFY(probe->destroyed_off_gui);
+        QCOMPARE(*publications, 0);
     }
     void domainCompletionDoesNotNeedGuiTurn() {
-        BackendExecutor executor;
-        auto scheduler = executor.scheduler();
-        QSemaphore completed;
-        std::atomic<bool> worker_ok{false}, completion_ok{false};
-        execution::SubmitResult admitted;
+        using namespace execution;
+        Executor executor{Executor::Config{}};
+        OwnedWork owner{executor};
+        auto post = owner.queuePost();
+        struct Probe { QSemaphore completed; std::atomic_bool worker_ok{false}, completion_ok{false}; };
+        const auto probe = std::make_shared<Probe>();
+        bool admitted{false};
         std::thread submitter{[&] {
-            admitted = execution::Submit(*scheduler, [&] {
-                worker_ok = QThread::currentThread() != qApp->thread();
+            admitted = post(Lane::Domain, MakeTask([probe] {
+                probe->worker_ok = QThread::currentThread() != qApp->thread();
                 return 17;
-            }, [&](int value) {
-                completion_ok = value == 17 && QThread::currentThread() != qApp->thread();
-                completed.release();
-            });
+            }, [probe](int value) {
+                probe->completion_ok = value == 17 && QThread::currentThread() != qApp->thread();
+                probe->completed.release();
+            }, {}));
         }};
         submitter.join();
         QVERIFY(admitted);
-        // Intentionally withhold GUI processing: a GUI completion hop fails.
-        QVERIFY(completed.tryAcquire(1, TIMEOUT));
-        QVERIFY(worker_ok);
-        QVERIFY(completion_ok);
-        QTRY_COMPARE(scheduler->pending(), size_t{0});
+        QVERIFY(probe->completed.tryAcquire(1, TIMEOUT));
+        QVERIFY(probe->worker_ok);
+        QVERIFY(probe->completion_ok);
+        owner.close();
+        executor.stopAndJoin();
     }
     void acceptedDomainOutcomeSurvivesOwnerDestruction() {
-        auto executor = std::make_unique<BackendExecutor>();
-        auto scheduler = executor->scheduler();
+        using namespace execution;
+        auto executor = std::make_shared<Executor>(Executor::Config{});
+        auto owner = std::make_unique<OwnedWork>(*executor);
+        auto post = owner->queuePost();
         auto gate = std::make_shared<Gate>();
         const auto release = qScopeGuard([gate] { gate->release.release(); });
-        std::atomic<int> consumed{0};
-        QVERIFY(execution::Submit(*scheduler, [gate] {
+        const auto consumed = std::make_shared<std::atomic_int>(0);
+        QVERIFY(post(Lane::Domain, MakeTask([gate] {
             gate->entered.release();
             gate->release.acquire();
             return 3;
-        }, [&](int value) { consumed = value; }));
+        }, [consumed](int value) { *consumed = value; }, {})));
         QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-        executor.reset();
-        QCOMPARE(execution::Submit(*scheduler, [] {}, [] {}).rejection, execution::Rejection::Closed);
+        QObject receiver;
+        bool joined{false};
+        owner->whenQueuesDrained(JoinThreadAfterDrain([worker = std::move(executor)] { worker->stopAndJoin(); }, &receiver, [&] { joined = true; }));
+        owner->close();
+        QVERIFY(!owner->submit([] { return 7; }, [](int) { QFAIL("Work was accepted after close"); }, [](std::exception_ptr) {}));
+        owner.reset();
+        QCOMPARE(consumed->load(), 0);
         gate->release.release();
-        QTRY_COMPARE(consumed.load(), 3);
-        QTRY_COMPARE(scheduler->pending(), size_t{0});
+        QTRY_VERIFY(joined);
+        QCOMPARE(consumed->load(), 3);
     }
     void threadJoinCompletesOnGui();
     void finalDrainIncludesDestroyedValueOwners();
@@ -493,7 +547,7 @@ void BackendExecutorTests::finalDrainIncludesDestroyedValueOwners()
 void BackendExecutorTests::serialWorkPublishesOwnedResultsOnGui()
 {
     execution::Executor executor{execution::Executor::Config{}};
-    execution::OwnedWork owner{{}, &executor};
+    execution::OwnedWork owner{executor};
     const auto gui_thread = QThread::currentThread();
     auto sequence = std::make_shared<std::vector<int>>();
     std::vector<int> results;
@@ -522,7 +576,7 @@ void BackendExecutorTests::serialWorkPublishesOwnedResultsOnGui()
 void BackendExecutorTests::failureDoesNotStopLaterCommands()
 {
     execution::Executor executor{execution::Executor::Config{}};
-    execution::OwnedWork owner{{}, &executor};
+    execution::OwnedWork owner{executor};
     bool failed{false};
     bool succeeded{false};
     bool wrong_completion{false};
@@ -546,8 +600,8 @@ void BackendExecutorTests::failureDoesNotStopLaterCommands()
 void BackendExecutorTests::receiverDestructionDiscardsCompletion()
 {
     execution::Executor executor{execution::Executor::Config{}};
-    execution::OwnedWork successor{{}, &executor};
-    auto receiver = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{}, &executor);
+    execution::OwnedWork successor{executor};
+    auto receiver = std::make_unique<execution::OwnedWork>(executor);
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
     bool called{false};
@@ -571,7 +625,7 @@ void BackendExecutorTests::receiverDestructionDiscardsCompletion()
 void BackendExecutorTests::shutdownDrainsWithoutWaitingAndDiscardsResults()
 {
     execution::Executor executor{execution::Executor::Config{}};
-    execution::OwnedWork owner{{}, &executor};
+    execution::OwnedWork owner{executor};
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
     auto commands = std::make_shared<std::atomic<int>>(0);
@@ -601,7 +655,7 @@ void BackendExecutorTests::shutdownDrainsWithoutWaitingAndDiscardsResults()
 void BackendExecutorTests::destructionReleasesBackendCapturesOnWorker()
 {
     execution::Executor executor{execution::Executor::Config{}};
-    auto owner = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{}, &executor);
+    auto owner = std::make_unique<execution::OwnedWork>(executor);
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
     const auto gui_thread = QThread::currentThread();
@@ -634,7 +688,7 @@ void BackendExecutorTests::discardedOwningResultIsDestroyedOnWorker()
 {
     for (const bool shutdown : {false, true}) {
         execution::Executor executor{execution::Executor::Config{}};
-        auto owner = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{}, &executor);
+        auto owner = std::make_unique<execution::OwnedWork>(executor);
         auto gate = std::make_shared<Gate>();
         const auto unblock = qScopeGuard([gate] { gate->release.release(); });
         auto destroyed = std::make_shared<std::atomic_bool>(false);
@@ -661,7 +715,7 @@ void BackendExecutorTests::completionCanDestroyExecutor()
 {
     for (bool fail : {false, true}) {
         auto executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
-        auto owner = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{}, executor.get());
+        auto owner = std::make_unique<execution::OwnedWork>(*executor);
         bool completed{false};
         const auto destroy_owner = [&] {
             owner->whenQueuesDrained(JoinThreadAfterDrain([worker = executor] { worker->stopAndJoin(); }, this, [] {}));
@@ -686,7 +740,7 @@ void BackendExecutorTests::ownerDestructionAfterResultOrException()
 {
     for (int attempt = 0; attempt < 32; ++attempt) {
         auto executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
-        auto owner = std::make_unique<execution::OwnedWork>(execution::SnapshotServices{}, executor.get());
+        auto owner = std::make_unique<execution::OwnedWork>(*executor);
         bool completed{false};
         const bool fail = attempt % 2;
         QVERIFY(owner->submit([fail] {
@@ -704,53 +758,44 @@ void BackendExecutorTests::ownerDestructionAfterResultOrException()
 
 void BackendExecutorTests::taskOutcomesAreDeliveredOnGui()
 {
-    BackendExecutor executor;
-    QObject receiver;
+    using namespace execution;
+    Executor executor{Executor::Config{}};
+    OwnedWork owner{executor};
+    const auto send = owner.queuePost();
     const auto gui_thread = QThread::currentThread();
-    auto worker_thread = std::make_shared<std::atomic<QThread*>>(nullptr);
-    std::vector<int> completed;
-    const auto first = executor.submitTask(&receiver, [worker_thread] {
+    const auto worker_thread = std::make_shared<std::atomic<QThread*>>(nullptr);
+    const auto post = presentation::QueuedPost();
+    auto completed = std::make_shared<std::vector<int>>();
+    const auto guard = std::make_unique<QObject>();
+    const QPointer<QObject> view{guard.get()};
+    const auto expect = [post, completed, view, gui_thread](int value) {
+        post([view, completed, value, gui_thread] {
+            if (!view) return;
+            QCOMPARE(QThread::currentThread(), gui_thread);
+            completed->push_back(value);
+        });
+    };
+    QVERIFY(send(Lane::Core, MakeTask([worker_thread] {
         *worker_thread = QThread::currentThread();
         return 42;
-    }, [&](BackendExecutor::Outcome<int> outcome) {
-        completed.push_back(1);
-        QCOMPARE(QThread::currentThread(), gui_thread);
-        QVERIFY(std::holds_alternative<int>(outcome));
-        QCOMPARE(std::get<int>(outcome), 42);
-    });
-    const auto second = executor.submitTask(&receiver, [] {}, [&](BackendExecutor::Outcome<void> outcome) {
-        completed.push_back(2);
-        QCOMPARE(QThread::currentThread(), gui_thread);
-        QVERIFY(std::holds_alternative<std::monostate>(outcome));
-    });
-    const auto third = executor.submitTask(&receiver, [value = std::make_unique<int>(7)]() mutable {
+    }, [expect](int value) { expect(value == 42 ? 1 : -1); }, {})));
+    QVERIFY(send(Lane::Core, MakeTask([] {}, [expect] { expect(2); }, {})));
+    QVERIFY(send(Lane::Core, MakeTask([value = std::make_unique<int>(7)]() mutable {
         return std::move(value);
-    }, [&](BackendExecutor::Outcome<std::unique_ptr<int>> outcome) {
-        completed.push_back(3);
-        QCOMPARE(QThread::currentThread(), gui_thread);
-        QVERIFY(std::holds_alternative<std::unique_ptr<int>>(outcome));
-        QCOMPARE(*std::get<std::unique_ptr<int>>(outcome), 7);
-    });
-    const auto fourth = executor.submitTask(&receiver, []() -> int { throw std::runtime_error{"backend error"}; },
-        [&](BackendExecutor::Outcome<int> outcome) {
-            completed.push_back(4);
-            QCOMPARE(QThread::currentThread(), gui_thread);
-            QVERIFY(std::holds_alternative<std::exception_ptr>(outcome));
-            try {
-                std::rethrow_exception(std::get<std::exception_ptr>(outcome));
-            } catch (const std::runtime_error& error) {
-                QCOMPARE(QString::fromUtf8(error.what()), QString{"backend error"});
-            }
-        });
-    QVERIFY(first != 0 && first < second && second < third && third < fourth);
-    QVERIFY(completed.empty());
-    QTRY_COMPARE_WITH_TIMEOUT(completed.size(), size_t{4}, TIMEOUT);
-    QCOMPARE(completed, (std::vector<int>{1, 2, 3, 4}));
-    QVERIFY(worker_thread->load() != gui_thread);
-    QVERIFY(!executor.cancel(first));
-    executor.shutdown();
-    QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), TIMEOUT);
-    QCOMPARE(completed.size(), size_t{4});
+    }, [expect](std::unique_ptr<int> value) { expect(value && *value == 7 ? 3 : -3); }, {})));
+    QVERIFY(send(Lane::Core, MakeTask([]() -> int { throw std::runtime_error{"backend error"}; },
+        [expect](int) { expect(-4); }, [expect](std::exception_ptr error) {
+            try { std::rethrow_exception(error); }
+            catch (const std::runtime_error& failure) { expect(std::string_view{failure.what()} == "backend error" ? 4 : -4); }
+        })));
+    QVERIFY(completed->empty());
+    QTRY_COMPARE_WITH_TIMEOUT(completed->size(), size_t{4}, TIMEOUT);
+    QCOMPARE(*completed, (std::vector<int>{1, 2, 3, 4}));
+    QVERIFY(worker_thread->load() && worker_thread->load() != gui_thread);
+    owner.close();
+    executor.stopAndJoin();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+    QCOMPARE(completed->size(), size_t{4});
 }
 
 void BackendExecutorTests::queuedTaskCancellationSkipsWork_data()
@@ -766,59 +811,50 @@ void BackendExecutorTests::queuedTaskCancellationSkipsWork()
 {
     QFETCH(bool, shutdown);
     QFETCH(bool, destroy_executor);
-    auto executor = std::make_unique<BackendExecutor>();
-    QObject receiver;
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    const auto core = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Core));
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    QVERIFY(executor->submit(&receiver, [gate] {
-        gate->entered.release();
-        gate->release.acquire();
-    }, [] {}));
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
-    auto ran = std::make_shared<std::atomic_bool>(false);
-    auto released_on_worker = std::make_shared<std::atomic_bool>(false);
+    QVERIFY(core->post([gate] { gate->entered.release(); gate->release.acquire(); }));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+    const auto ran = std::make_shared<std::atomic_bool>(false);
+    const auto released_on_worker = std::make_shared<std::atomic_bool>(false);
+    const auto notifications = std::make_shared<std::atomic_int>(0);
     const auto gui_thread = QThread::currentThread();
     auto backend = std::shared_ptr<int>{new int{1}, [released_on_worker, gui_thread](int* value) {
         *released_on_worker = QThread::currentThread() != gui_thread;
         delete value;
     }};
     const std::weak_ptr<int> backend_guard{backend};
-    int completions{0};
-    const auto id = executor->submitTask(&receiver, [ran, backend = std::move(backend)] {
+    auto query = std::make_shared<SnapshotQuery<int>>([ran, backend = std::move(backend)] {
         *ran = true;
         return *backend;
-    }, [&](BackendExecutor::Outcome<int> outcome) {
-        ++completions;
-        QCOMPARE(QThread::currentThread(), gui_thread);
-        QVERIFY(std::holds_alternative<BackendExecutor::Cancelled>(outcome));
-        QCOMPARE(std::get<BackendExecutor::Cancelled>(outcome).reason, BackendExecutor::Cancelled::Reason::Requested);
+    }, [notifications] { ++*notifications; }, [core](auto task) {
+        const bool accepted = core->post([task] { task->execute(); task->deliver(); });
+        return SubmitResult{{}, accepted ? Rejection::None : Rejection::Transport};
     });
-    QVERIFY(executor->cancel(id));
-    QVERIFY(!executor->cancel(id));
-    QVERIFY(!executor->cancel(0));
-    QCOMPARE(completions, 0);
-    if (shutdown) executor->shutdown();
+    query->request();
+    query->close();
+    query->close();
+    query.reset();
+    if (shutdown || destroy_executor) core->close();
+    QObject receiver;
+    bool joined{false};
+    auto done = JoinThreadAfterDrain([worker = executor] { worker->stopAndJoin(); }, &receiver, [&] { joined = true; });
     if (destroy_executor) executor.reset();
-    QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
     QVERIFY(!ran->load());
+    QCOMPARE(notifications->load(), 0);
     QVERIFY(!backend_guard.expired());
-    if (executor) {
-        QVERIFY(!executor->isDrained());
-        QVERIFY(!executor->cancel(id));
-        executor->shutdown();
-    }
-    bool drained{false};
-    WaitForThreadJoins(&receiver, [&] {
-        drained = true;
-        QCOMPARE(completions, 1);
-        QVERIFY(backend_guard.expired());
-        QVERIFY(released_on_worker->load());
-    });
-    QVERIFY(!drained);
+    QVERIFY(!joined);
+    core->close();
+    core->whenDrained(std::move(done));
     gate->release.release();
-    QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
+    QTRY_VERIFY_WITH_TIMEOUT(joined, TIMEOUT);
     QVERIFY(!ran->load());
-    QCOMPARE(completions, 1);
+    QCOMPARE(notifications->load(), 0);
+    QVERIFY(backend_guard.expired());
+    QVERIFY(released_on_worker->load());
 }
 
 void BackendExecutorTests::runningTaskCancellation_data()
@@ -835,71 +871,78 @@ void BackendExecutorTests::runningTaskCancellation()
 {
     QFETCH(bool, discard_result);
     QFETCH(bool, fail);
-    BackendExecutor executor;
-    QObject receiver;
+    using namespace execution;
+    Executor executor{Executor::Config{}};
+    OwnedWork owner{executor};
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    auto effects = std::make_shared<std::atomic<int>>(0);
+    auto effects = std::make_shared<std::atomic_int>(0);
     int completions{0};
-    const auto id = executor.submitTask(&receiver, [gate, effects, fail] {
+    QVERIFY(owner.submit([gate, effects, fail] {
         gate->entered.release();
         gate->release.acquire();
         ++*effects;
         if (fail) throw std::runtime_error{"backend error"};
         return 42;
-    }, [&](BackendExecutor::Outcome<int> outcome) {
+    }, [&](int value) {
         ++completions;
+        QVERIFY(!fail);
         QCOMPARE(effects->load(), 1);
-        if (discard_result) {
-            QVERIFY(std::holds_alternative<BackendExecutor::Cancelled>(outcome));
-            QCOMPARE(std::get<BackendExecutor::Cancelled>(outcome).reason, BackendExecutor::Cancelled::Reason::Requested);
-        } else if (fail) {
-            QVERIFY(std::holds_alternative<std::exception_ptr>(outcome));
-        } else {
-            QVERIFY(std::holds_alternative<int>(outcome));
-            QCOMPARE(std::get<int>(outcome), 42);
-        }
-    }, discard_result ? BackendExecutor::CancelPolicy::DiscardRunningResult : BackendExecutor::CancelPolicy::QueuedOnly);
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
-    QCOMPARE(executor.cancel(id), discard_result);
-    QVERIFY(!executor.cancel(id));
+        QCOMPARE(value, 42);
+    }, [&](std::exception_ptr error) {
+        ++completions;
+        QVERIFY(fail);
+        QCOMPARE(effects->load(), 1);
+        try { std::rethrow_exception(error); }
+        catch (const std::runtime_error& failure) { QCOMPARE(QString::fromUtf8(failure.what()), QStringLiteral("backend error")); }
+    }));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+    if (discard_result) { owner.close(); owner.close(); }
     bool gui_progress{false};
+    QObject receiver;
     QTimer::singleShot(0, &receiver, [&] { gui_progress = true; });
     QTRY_VERIFY_WITH_TIMEOUT(gui_progress, TIMEOUT);
     QCOMPARE(completions, 0);
     QCOMPARE(effects->load(), 0);
     gate->release.release();
-    QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
-    QVERIFY(!executor.cancel(id));
-    executor.shutdown();
-    QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), TIMEOUT);
-    QCOMPARE(completions, 1);
+    if (!discard_result) QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
+    const auto drained = std::make_shared<std::atomic_bool>(false);
+    owner.close([drained] { *drained = true; });
+    QTRY_VERIFY_WITH_TIMEOUT(drained->load(), TIMEOUT);
+    QCOMPARE(effects->load(), 1);
+    QCOMPARE(completions, discard_result ? 0 : 1);
 }
 
 void BackendExecutorTests::cancellationAfterWorkFinishesKeepsOutcome()
 {
-    BackendExecutor executor;
-    QObject receiver;
+    using namespace execution;
+    Executor executor{Executor::Config{}};
+    auto core = executor.makeQueue(Lane::Core);
+    auto observer = std::make_unique<QObject>();
+    const QPointer<QObject> view{observer.get()};
+    const auto post = presentation::QueuedPost();
+    const auto completions = std::make_shared<int>(0);
+    const auto command = std::make_shared<OwnedCommand<int>>([view, post, completions] {
+        post([view, completions] { if (view) ++*completions; });
+    });
+    QVERIFY(command->startWith([&core](auto done, auto failed) {
+        auto task = MakeTask([] { return 42; }, std::move(done), std::move(failed));
+        const bool accepted = core.post([task] { task->execute(); task->deliver(); });
+        return SubmitResult{{}, accepted ? Rejection::None : Rejection::Transport};
+    }));
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    int completions{0};
-    const auto id = executor.submitTask(&receiver, [] { return 42; }, [&](BackendExecutor::Outcome<int> outcome) {
-        ++completions;
-        QVERIFY(std::holds_alternative<int>(outcome));
-        QCOMPARE(std::get<int>(outcome), 42);
-    }, BackendExecutor::CancelPolicy::DiscardRunningResult);
-    QVERIFY(executor.submit(&receiver, [gate] {
-        gate->entered.release();
-        gate->release.acquire();
-    }, [] {}));
-    // The next job proves the result is settled without dispatching its GUI completion.
+    QVERIFY(core.post([gate] { gate->entered.release(); gate->release.acquire(); }));
     QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-    QCOMPARE(completions, 0);
-    QVERIFY(!executor.cancel(id));
+    QCOMPARE(*completions, 0);
+    observer.reset();
+    QVERIFY(command->result());
+    QCOMPARE(command->result()->value, std::optional<int>{42});
     gate->release.release();
-    QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
-    executor.shutdown();
-    QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), TIMEOUT);
+    executor.stopAndJoin();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+    QCOMPARE(*completions, 0);
+    QCOMPARE(command->result()->value, std::optional<int>{42});
 }
 
 void BackendExecutorTests::rejectedTaskCompletesAsynchronously_data()
@@ -912,120 +955,144 @@ void BackendExecutorTests::rejectedTaskCompletesAsynchronously_data()
 void BackendExecutorTests::rejectedTaskCompletesAsynchronously()
 {
     QFETCH(bool, already_drained);
-    BackendExecutor executor;
-    QObject receiver;
-    executor.shutdown();
-    if (already_drained) QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), TIMEOUT);
-    auto ran = std::make_shared<std::atomic_bool>(false);
+    using namespace execution;
+    Executor executor{[](Lane, UtilityWorker, auto) { return false; }};
+    OwnedWork owner{executor};
+    if (already_drained) executor.stopAndJoin();
+    const auto ran = std::make_shared<std::atomic_bool>(false);
     int completions{0};
     const auto gui_thread = QThread::currentThread();
-    const auto id = executor.submitTask(&receiver, [ran] { *ran = true; }, [&](BackendExecutor::Outcome<void> outcome) {
+    QVERIFY(!owner.submit([ran] { *ran = true; return 42; }, [](int) { QFAIL("Rejected work ran"); }, [&](std::exception_ptr error) {
         ++completions;
         QCOMPARE(QThread::currentThread(), gui_thread);
-        QVERIFY(std::holds_alternative<BackendExecutor::Cancelled>(outcome));
-        QCOMPARE(std::get<BackendExecutor::Cancelled>(outcome).reason, BackendExecutor::Cancelled::Reason::Rejected);
-    });
-    QVERIFY(id != 0);
-    QVERIFY(!executor.cancel(id));
+        QVERIFY(NotStartedCause(error) == NotStarted::Cause::Transport);
+    }));
     QCOMPARE(completions, 0);
     QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
     QVERIFY(!ran->load());
-    QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), TIMEOUT);
-    QCOMPARE(completions, 1);
 }
 
 void BackendExecutorTests::taskShutdownPreservesOutcomesAndCleanup()
 {
-    BackendExecutor executor;
-    QObject receiver;
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto core = executor->makeQueue(Lane::Core);
+    const auto utility = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility));
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    auto effects = std::make_shared<std::atomic<int>>(0);
-    std::vector<int> completed;
-    executor.submitTask(&receiver, [gate, effects] {
+    const auto effects = std::make_shared<std::atomic_int>(0);
+    const auto completed = std::make_shared<std::vector<int>>();
+    QObject receiver;
+    const QPointer<QObject> view{&receiver};
+    const auto post = presentation::QueuedPost();
+    const auto enqueue = [&](std::function<int()> work) {
+        return core.post([utility, work = std::move(work), post, view, completed] {
+            const int result = work();
+            utility->post([post, view, completed, result] {
+                post([view, completed, result] { if (view) completed->push_back(result); });
+            });
+        });
+    };
+    QVERIFY(enqueue([gate, effects] {
         gate->entered.release();
         gate->release.acquire();
-        return ++*effects;
-    }, [&](BackendExecutor::Outcome<int> outcome) {
-        QVERIFY(std::holds_alternative<int>(outcome));
-        completed.push_back(std::get<int>(outcome));
-    });
-    executor.submitTask(&receiver, [effects] { return ++*effects; }, [&](BackendExecutor::Outcome<int> outcome) {
-        QVERIFY(std::holds_alternative<int>(outcome));
-        completed.push_back(std::get<int>(outcome));
-    });
-    bool legacy_completion{false};
-    QVERIFY(executor.submit(&receiver, [effects] { ++*effects; }, [&] { legacy_completion = true; }));
+        ++*effects;
+        return 1;
+    }));
+    QVERIFY(enqueue([effects] { ++*effects; return 2; }));
+    OwnedWork owner{*executor};
+    bool view_called{false};
+    QVERIFY(owner.submit([effects] { ++*effects; return 3; }, [&](int) { view_called = true; },
+        [](std::exception_ptr) { QFAIL("An accepted operation failed"); }));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+    owner.close();
+    core.close();
     bool drained{false};
-    connect(&executor, &BackendExecutor::drained, &receiver, [&] {
-        drained = true;
-        QCOMPARE(completed, (std::vector<int>{1, 2}));
-        QCOMPARE(effects->load(), 3);
+    auto join = JoinThreadAfterDrain([worker = std::move(executor)] { worker->stopAndJoin(); }, &receiver, [&] { drained = true; });
+    core.whenDrained([utility, join = std::move(join)] {
+        utility->close();
+        utility->whenDrained(join);
     });
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
-    executor.shutdown();
-    executor.shutdown();
     QVERIFY(!drained);
     gate->release.release();
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
-    QVERIFY(!legacy_completion);
-    QCOMPARE(completed, (std::vector<int>{1, 2}));
+    QCOMPARE(*completed, (std::vector<int>{1, 2}));
+    QCOMPARE(effects->load(), 3);
+    QVERIFY(!view_called);
 }
 
 void BackendExecutorTests::taskCompletionSurvivesExecutorDestruction()
 {
-    auto executor = std::make_unique<BackendExecutor>();
-    QObject receiver;
-    auto gate = std::make_shared<Gate>();
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto owner = std::make_unique<OwnedWork>(*executor);
+    const auto enqueue = owner->queuePost();
+    const auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    int completions{0};
-    executor->submitTask(&receiver, [gate] {
+    const auto post = presentation::QueuedPost();
+    QObject receiver;
+    const QPointer<QObject> view{&receiver};
+    auto completions = std::make_shared<int>(0);
+    QVERIFY(enqueue(Lane::Core, MakeTask([gate] {
         gate->entered.release();
         gate->release.acquire();
         return 42;
-    }, [&](BackendExecutor::Outcome<int> outcome) {
-        ++completions;
-        QVERIFY(std::holds_alternative<int>(outcome));
-        QCOMPARE(std::get<int>(outcome), 42);
-    });
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
+    }, [view, post, completions](int value) {
+        post([view, completions, value] {
+            if (!view) return;
+            QCOMPARE(value, 42);
+            ++*completions;
+        });
+    }, {})));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
     bool executor_drained{false};
-    executor->whenDrained(&receiver, [&] {
+    owner->whenQueuesDrained(JoinThreadAfterDrain([worker = std::move(executor)] { worker->stopAndJoin(); }, &receiver, [&] {
         executor_drained = true;
-        QCOMPARE(completions, 1);
-    });
-    executor.reset();
+        QCOMPARE(*completions, 1);
+    }));
+    owner.reset();
     bool drained{false};
-    WaitForThreadJoins(&receiver, [&] {
-        drained = true;
-        QCOMPARE(completions, 1);
-    });
+    WaitForThreadJoins(&receiver, [&] { drained = true; QCOMPARE(*completions, 1); });
     QVERIFY(!drained);
     gate->release.release();
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
-    QTRY_VERIFY_WITH_TIMEOUT(executor_drained, TIMEOUT);
-    QCOMPARE(completions, 1);
+    QVERIFY(executor_drained);
+    QCOMPARE(*completions, 1);
 }
 
 void BackendExecutorTests::taskCompletionCanDestroyOwners()
 {
+    using namespace execution;
     for (const bool fail : {false, true}) {
-        auto executor = std::make_unique<BackendExecutor>();
+        auto executor = std::make_shared<Executor>(Executor::Config{});
+        auto owner = std::make_unique<OwnedWork>(*executor);
         auto receiver = std::make_unique<QObject>();
         int completions{0};
-        executor->submitTask(receiver.get(), [fail] {
-            if (fail) throw std::runtime_error{"backend error"};
-        }, [&](BackendExecutor::Outcome<void> outcome) {
+        const auto finish = [&] {
             ++completions;
             receiver.reset();
-            executor.reset();
-            QCOMPARE(std::holds_alternative<std::exception_ptr>(outcome), fail);
-        });
+            owner->whenQueuesDrained(JoinThreadAfterDrain([worker = std::move(executor)] { worker->stopAndJoin(); }, this, [] {}));
+            owner.reset();
+        };
+        QVERIFY(owner->submit([fail] {
+            if (fail) throw std::runtime_error{"backend error"};
+            return true;
+        }, [&](bool value) {
+            QVERIFY(value);
+            QVERIFY(!fail);
+            finish();
+        }, [&](std::exception_ptr error) {
+            QVERIFY(fail);
+            QVERIFY(error);
+            finish();
+        }));
         QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
+        QVERIFY(!owner);
         QVERIFY(!executor);
         QVERIFY(!receiver);
+        QObject waiter;
         bool drained{false};
-        WaitForThreadJoins(this, [&] { drained = true; });
+        WaitForThreadJoins(&waiter, [&] { drained = true; });
         QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
         QCOMPARE(completions, 1);
     }
@@ -1041,69 +1108,59 @@ void BackendExecutorTests::taskDrainWaitsForCompletionCleanup_data()
 void BackendExecutorTests::taskDrainWaitsForCompletionCleanup()
 {
     QFETCH(bool, bounded);
-    auto owner = bounded ? std::make_unique<BackendExecutor>(execution::Options{}) : std::make_unique<BackendExecutor>();
-    auto& executor = *owner;
-    QObject receiver;
-    auto gate = std::make_shared<Gate>();
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto retire = std::make_shared<SerialQueue>(executor->makeQueue(Lane::Utility));
+    auto probe = bounded ? executor->makeQueue(Lane::Core) : executor->makeQueue(Lane::Utility);
+    const auto values = std::make_shared<ValueCleanupQueue>(retire);
+    auto owner = std::make_unique<OwnedWork>(*executor);
+    const auto gui = QThread::currentThread();
+    struct State {
+        std::atomic_bool result_off_gui{false}, completion_on_gui{false}, completion_released{false};
+    };
+    const auto observed = std::make_shared<State>();
+    struct Result {
+        std::shared_ptr<State> observed;
+        QThread* gui;
+        ~Result() { observed->result_off_gui = QThread::currentThread() != gui; }
+    };
+    const auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    const auto gui_thread = QThread::currentThread();
-    auto worker_result = std::make_shared<std::weak_ptr<QObject>>();
-    auto result_released_on_worker = std::make_shared<std::atomic_bool>(false);
-    bool callback_active{false};
-    std::atomic_bool completion_released{false};
-    std::atomic_bool released_on_gui{false};
-    auto completion_capture = std::shared_ptr<int>{new int{1}, [&](int* value) {
-        completion_released = true;
-        released_on_gui = QThread::currentThread() == gui_thread;
+    auto cleanup_capture = std::shared_ptr<int>{new int, [observed, gui](int* value) {
+        observed->completion_on_gui = QThread::currentThread() == gui;
+        observed->completion_released = true;
         delete value;
     }};
-    bool drained{false};
-    executor.whenDrained(&receiver, [&] {
-        drained = true;
-        QVERIFY(!callback_active);
-        QVERIFY(completion_released.load());
-        QVERIFY(released_on_gui.load());
-        QVERIFY(result_released_on_worker->load());
-    });
+    bool callback_active{false}, drained{false};
+    QObject receiver;
     int completions{0};
-    const auto id = executor.submitTask(&receiver, [gate, gui_thread, worker_result, result_released_on_worker] {
+    QVERIFY(owner->submit([gate, values, observed, gui] {
         gate->entered.release();
         gate->release.acquire();
-        auto result = std::shared_ptr<QObject>{new QObject, [gui_thread, result_released_on_worker](QObject* value) {
-            *result_released_on_worker = QThread::currentThread() != gui_thread;
-            delete value;
-        }};
-        *worker_result = result;
-        return result;
-    }, [&, completion_capture = std::move(completion_capture)](BackendExecutor::Outcome<std::shared_ptr<QObject>> outcome) {
+        return RetainValues<Result>([values](auto cleanup) { return values->hold(std::move(cleanup)); },
+            [observed, gui] { return std::unique_ptr<Result>{new Result{observed, gui}}; });
+    }, [&, kept = std::move(cleanup_capture)](const std::shared_ptr<Result>& result) {
+        QVERIFY(result);
+        QVERIFY(kept);
         ++completions;
-        QVERIFY(std::holds_alternative<BackendExecutor::Cancelled>(outcome));
-        QVERIFY(completion_capture);
         callback_active = true;
-        executor.shutdown();
-        auto probe = worker_result->lock();
-        QVERIFY(probe);
-        auto acknowledged = std::make_shared<bool>(false);
-        // The second worker hop follows any cleanup queued by the shutdown
-        // barrier while this completion is still inside a nested event loop.
-        QMetaObject::invokeMethod(probe.get(), [probe, acknowledged] {
-            QMetaObject::invokeMethod(QCoreApplication::instance(), [probe, acknowledged] {
-                QMetaObject::invokeMethod(probe.get(), [probe, acknowledged]() mutable {
-                    probe.reset();
-                    QMetaObject::invokeMethod(QCoreApplication::instance(), [acknowledged] {
-                        *acknowledged = true;
-                    }, Qt::QueuedConnection);
-                }, Qt::QueuedConnection);
-            }, Qt::QueuedConnection);
-        }, Qt::QueuedConnection);
-        QTRY_VERIFY_WITH_TIMEOUT(*acknowledged, TIMEOUT);
+        owner.reset();
+        values->close(JoinThreadAfterDrain([worker = executor] { worker->stopAndJoin(); }, &receiver, [&] {
+            QVERIFY(!callback_active);
+            QVERIFY(observed->completion_released);
+            QVERIFY(observed->completion_on_gui);
+            QVERIFY(observed->result_off_gui);
+            drained = true;
+        }));
+        const auto ran = std::make_shared<std::atomic_bool>(false);
+        QVERIFY(probe.post([ran] { *ran = true; }));
+        QTRY_VERIFY_WITH_TIMEOUT(ran->load(), TIMEOUT);
+        QVERIFY(!observed->completion_released);
+        QVERIFY(!observed->result_off_gui);
         QVERIFY(!drained);
-        QVERIFY(!executor.isDrained());
-        QVERIFY(!completion_released.load());
         callback_active = false;
-    }, BackendExecutor::CancelPolicy::DiscardRunningResult);
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
-    QVERIFY(executor.cancel(id));
+    }, [](std::exception_ptr) { QFAIL("An accepted operation failed"); }));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
     gate->release.release();
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
     QCOMPARE(completions, 1);
@@ -1122,42 +1179,37 @@ void BackendExecutorTests::discardedTaskResultIsDestroyedOnWorker()
 {
     QFETCH(bool, cancel);
     QFETCH(bool, destroy_executor);
-    auto executor = std::make_unique<BackendExecutor>();
-    auto receiver = std::make_unique<QObject>();
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto owner = std::make_unique<OwnedWork>(*executor);
     auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    auto destroyed_on_worker = std::make_shared<std::atomic_bool>(false);
+    const auto destroyed_on_worker = std::make_shared<std::atomic_bool>(false);
     const auto gui_thread = QThread::currentThread();
     int completions{0};
-    const auto id = executor->submitTask(receiver.get(), [gate, destroyed_on_worker, gui_thread] {
+    QVERIFY(owner->submit([gate, destroyed_on_worker, gui_thread] {
         gate->entered.release();
         gate->release.acquire();
         return std::shared_ptr<int>{new int{42}, [destroyed_on_worker, gui_thread](int* value) {
             *destroyed_on_worker = QThread::currentThread() != gui_thread;
             delete value;
         }};
-    }, [&](BackendExecutor::Outcome<std::shared_ptr<int>> outcome) {
-        ++completions;
-        QVERIFY(std::holds_alternative<BackendExecutor::Cancelled>(outcome));
-        QCOMPARE(std::get<BackendExecutor::Cancelled>(outcome).reason, BackendExecutor::Cancelled::Reason::Requested);
-    }, BackendExecutor::CancelPolicy::DiscardRunningResult);
-    QTRY_VERIFY_WITH_TIMEOUT(gate->entered.available(), TIMEOUT);
-    if (cancel) QVERIFY(executor->cancel(id));
-    else receiver.reset();
+    }, [&](const std::shared_ptr<int>&) { ++completions; },
+       [](std::exception_ptr) { QFAIL("An accepted operation failed"); }));
+    QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
+    bool drained{false};
+    QObject receiver;
+    owner->whenQueuesDrained(JoinThreadAfterDrain([worker = executor] { worker->stopAndJoin(); }, &receiver, [&] { drained = true; }));
+    if (cancel) owner->close();
+    else owner.reset();
     if (destroy_executor) executor.reset();
     QCOMPARE(completions, 0);
+    QVERIFY(!drained);
     QVERIFY(!destroyed_on_worker->load());
     gate->release.release();
-    QTRY_VERIFY_WITH_TIMEOUT(destroyed_on_worker->load(), TIMEOUT);
-    if (executor) executor->shutdown();
-    bool drained{false};
-    WaitForThreadJoins(this, [&] {
-        drained = true;
-        QCOMPARE(completions, cancel ? 1 : 0);
-        QVERIFY(destroyed_on_worker->load());
-    });
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);
-    QCOMPARE(completions, cancel ? 1 : 0);
+    QVERIFY(destroyed_on_worker->load());
+    QCOMPARE(completions, 0);
 }
 
 void BackendExecutorTests::drainCallbacksAreQueuedAndLifetimeGuarded_data()
@@ -1170,28 +1222,33 @@ void BackendExecutorTests::drainCallbacksAreQueuedAndLifetimeGuarded_data()
 void BackendExecutorTests::drainCallbacksAreQueuedAndLifetimeGuarded()
 {
     QFETCH(bool, bounded);
-    auto owner = bounded ? std::make_unique<BackendExecutor>(execution::Options{}) : std::make_unique<BackendExecutor>();
-    auto& executor = *owner;
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto queue = executor->makeQueue(bounded ? Lane::Core : Lane::Utility);
+    const auto completed = std::make_shared<std::atomic_bool>(false);
+    QVERIFY(queue.post([completed] { *completed = true; }));
     QObject receiver;
     int completions{0};
     bool destroyed_receiver_called{false};
     auto destroyed_receiver = std::make_unique<QObject>();
-    executor.whenDrained(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
+    JoinThreadAsync([worker = std::move(executor)] { worker->stopAndJoin(); }, &receiver, [&] {
+        QVERIFY(completed->load());
+        QCOMPARE(completions, 0);
+    });
+    WaitForThreadJoins(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
     destroyed_receiver.reset();
     const auto gui_thread = QThread::currentThread();
-    executor.whenDrained(&receiver, [&] {
+    WaitForThreadJoins(&receiver, [&] {
         ++completions;
-        QVERIFY(executor.isDrained());
+        QVERIFY(completed->load());
         QCOMPARE(QThread::currentThread(), gui_thread);
     });
-    connect(&executor, &BackendExecutor::drained, &receiver, [&] { QCOMPARE(completions, 0); });
-    executor.shutdown();
     QCOMPARE(completions, 0);
     QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
-    executor.whenDrained(&receiver, [&] { ++completions; });
+    WaitForThreadJoins(&receiver, [&] { ++completions; });
     QCOMPARE(completions, 1);
     destroyed_receiver = std::make_unique<QObject>();
-    executor.whenDrained(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
+    WaitForThreadJoins(destroyed_receiver.get(), [&] { destroyed_receiver_called = true; });
     destroyed_receiver.reset();
     QTRY_COMPARE_WITH_TIMEOUT(completions, 2, TIMEOUT);
     QVERIFY(!destroyed_receiver_called);
@@ -1200,33 +1257,33 @@ void BackendExecutorTests::drainCallbacksAreQueuedAndLifetimeGuarded()
 
 void BackendExecutorTests::groupedDrainWaitsForIndependentCoreAndOwnedTask()
 {
-    auto executor = std::make_unique<BackendExecutor>(execution::Options{});
-    const auto scheduler = executor->scheduler();
+    using namespace execution;
+    auto executor = std::make_shared<Executor>(Executor::Config{});
+    auto core = executor->makeQueue(Lane::Core);
+    auto utility = executor->makeQueue(Lane::Utility);
     const auto gate = std::make_shared<Gate>();
     const auto unblock = qScopeGuard([gate] { gate->release.release(); });
-    std::atomic_int consumed{0};
-    QVERIFY(execution::Submit(*scheduler, [gate] {
+    const auto consumed = std::make_shared<std::atomic_int>(0);
+    QVERIFY(core.post([gate, consumed] {
         gate->entered.release();
         gate->release.acquire();
-        return 17;
-    }, [&](int value) { consumed = value; }));
+        *consumed = 17;
+    }));
     QVERIFY(gate->entered.tryAcquire(1, TIMEOUT));
-    int completions{0};
-    executor->submitTask(this, [] { return 42; }, [&](BackendExecutor::Outcome<int> outcome) {
-        QVERIFY(std::holds_alternative<int>(outcome));
-        QCOMPARE(std::get<int>(outcome), 42);
-        ++completions;
-    });
+    const auto post = presentation::QueuedPost();
+    QObject receiver;
+    const auto completions = std::make_shared<int>(0);
+    QVERIFY(utility.post([post, view = QPointer<QObject>{&receiver}, completions] {
+        post([view, completions] { if (view) ++*completions; });
+    }));
     bool drained{false};
-    executor->whenDrained(this, [&] {
-        QCOMPARE(consumed.load(), 17);
-        QCOMPARE(completions, 1);
-        QCOMPARE(scheduler->pending(), size_t{0});
+    JoinThreadAsync([worker = std::move(executor)] { worker->stopAndJoin(); }, &receiver, [&] {
+        QCOMPARE(consumed->load(), 17);
+        QCOMPARE(*completions, 1);
         drained = true;
     });
-    executor.reset();
-    QTRY_COMPARE_WITH_TIMEOUT(completions, 1, TIMEOUT);
-    QCOMPARE(consumed.load(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(*completions, 1, TIMEOUT);
+    QCOMPARE(consumed->load(), 0);
     QVERIFY(!drained);
     gate->release.release();
     QTRY_VERIFY_WITH_TIMEOUT(drained, TIMEOUT);

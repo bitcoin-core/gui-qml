@@ -157,7 +157,6 @@ public:
     QString entryDetailsError() const { return m_entry_error; }
     quint64 requestEntryDetails(const QString& side, int row);
     std::shared_ptr<const activityview::Hold> preparedSnapshot() const override { return m_published; }
-    execution::SnapshotServices activityServices() const override { return {m_opening ? m_opening->scheduler() : nullptr, m_services.post}; }
     std::shared_ptr<walletopening::Session> opening() const override { return m_opening; }
     QString rawTransaction(const QString& txid) const;
     quint64 requestCopyRawTransaction(const QString& txid);
@@ -236,7 +235,7 @@ private:
     QString m_entry_error;
     std::shared_ptr<const Snapshot> m_core_state;
     activitystore::Revisions m_reader_revisions;
-    std::shared_ptr<execution::ResourceLease> m_core_lease;
+    std::shared_ptr<void> m_core_lease;
     quint64 m_projection_generation{0}, m_work_revision{0};
     std::shared_ptr<const activityview::Hold> m_published;
     activityview::Tree m_root;

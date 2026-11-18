@@ -5,13 +5,16 @@
 #ifndef BITCOIN_QML_MODELS_DESKTOPWINDOWBEHAVIORMODEL_H
 #define BITCOIN_QML_MODELS_DESKTOPWINDOWBEHAVIORMODEL_H
 
-#include <QObject>
+#include <qml/guipresentation.h>
 #include <qml/preferenceswatch.h>
 #include <qml/snapshotquery.h>
+
+#include <QObject>
+
 #include <map>
 #include <utility>
 
-class BackendExecutor;
+namespace execution { class Executor; class SerialQueue; }
 
 class DesktopWindowBehaviorModel : public QObject
 {
@@ -41,7 +44,8 @@ public:
               std::function<preferences::WatchPaths()> watch_paths = {})
             : read(std::move(read)), write(std::move(write)), write_fields(std::move(write_fields)), watch_paths(std::move(watch_paths)) {}
     };
-    DesktopWindowBehaviorModel(bool desktop_platform, execution::SnapshotServices services, Store store = {}, QObject* parent = nullptr);
+    DesktopWindowBehaviorModel(bool desktop_platform, presentation::Post post, Store store = {}, QObject* parent = nullptr,
+                               std::shared_ptr<execution::SerialQueue> utility = {});
     ~DesktopWindowBehaviorModel() override;
     void close();
     Q_INVOKABLE void retryPersistence();
@@ -80,10 +84,10 @@ private:
     void finishRefresh();
     void publish(quint64 id, bool load);
     void apply(Values values);
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     Store m_store;
-    std::unique_ptr<BackendExecutor> m_executor;
-    execution::ResourceKey m_key;
+    std::shared_ptr<execution::Executor> m_owned_executor;
+    std::shared_ptr<execution::SerialQueue> m_utility;
     struct Result { Values values; preferences::WatchPaths watch; };
     struct Pending { bool load; std::shared_ptr<execution::OwnedCommand<Result>> command; };
     std::map<quint64, Pending> m_operations;

@@ -3,10 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/walletreceipts.h>
-#include <qml/backendexecutor.h>
+#include <test/mocks/walletsession.h>
 #include <qml/retainedvalue.h>
 #include <qml/models/receiptreconciliationmodel.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
 #include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 
@@ -78,32 +78,40 @@ struct Wallet : StubWallet {
     }
 };
 struct Fixture {
-    ManualRoutedExecution commands, retirement;
+    QJsonArray command_trace, cleanup_trace;
+    ManualNodeObservations commands{[this](Lane lane) { command_trace.append(int(lane)); }};
+    ManualNodeObservations retirement{[this](Lane lane) { cleanup_trace.append(int(lane)); }};
     std::shared_ptr<Wallet> wallet{std::make_shared<Wallet>()};
     std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<interfaces::Wallet> client;
     std::shared_ptr<Reader> reader;
     std::chrono::steady_clock::time_point now{};
     int notices{0};
-    Fixture() {
-        opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+    explicit Fixture(bool hold_cleanup = false) {
+        opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            WalletSessionQueues(commands.executor(), hold_cleanup ? retirement.executor() : commands.executor()));
         client = opening->start(wallet).borrower;
         commands.drain();
         reader = std::make_shared<Reader>(opening, [this] { ++notices; }, [this] { return now; });
     }
+    void drain()
+    {
+        do {
+            commands.drain();
+            retirement.drain();
+        } while (!commands.turnsIdle());
+    }
     ~Fixture() {
-        reader->close(); opening->retire(); client.reset();
-        commands.drain(); retirement.drain();
+        reader->close(); opening->stop(false, {}); client.reset();
+        drain();
         const auto directory = qEnvironmentVariable("QT6_RECEIPT_TRACE_DIR");
         if (!directory.isEmpty()) {
-            QJsonArray command_trace, cleanup_trace;
-            for (const auto& event : commands.traceSnapshot()) command_trace.append(QString::fromStdString(event));
-            for (const auto& event : retirement.traceSnapshot()) cleanup_trace.append(QString::fromStdString(event));
             const QJsonObject trace{{"test", QTest::currentTestFunction()}, {"failed", QTest::currentTestFailed()},
                 {"commands", command_trace}, {"retirement", cleanup_trace}, {"reads", wallet->reads}, {"scans", wallet->scans},
                 {"virtual_ms", qint64(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count())},
-                {"quiescent", commands.quiescent() && retirement.quiescent()}};
+                {"quiescent", commands.turnsIdle() && retirement.turnsIdle()}};
             QVERIFY(QDir{}.mkpath(directory));
             QFile file{directory + "/" + QTest::currentTestFunction() + ".json"};
             QVERIFY(file.open(QIODevice::WriteOnly));
@@ -305,16 +313,22 @@ private Q_SLOTS:
             const std::shared_ptr<State> state;
         };
         const auto state = std::make_shared<State>();
-        BackendExecutor commands, retirement;
-        const auto unblock = qScopeGuard([state] { state->release.release(); });
+        execution::Executor executor{execution::Executor::Config{}};
+        auto opening = MakeWalletSession(executor, [state] { ++state->metadata; });
+        const auto stopped = std::make_shared<std::atomic_bool>(false);
+        const auto shutdown = qScopeGuard([&] {
+            state->release.release();
+            opening->stop(false, [stopped] { *stopped = true; });
+            const bool drained = QTest::qWaitFor([&] { return stopped->load(); }, 5'000);
+            executor.stopAndJoin();
+            QVERIFY(drained);
+        });
         auto native = std::make_shared<Native>(state);
         auto payment = Payment(1, 1000); const auto id = payment.tx->GetHash(); native->transactions.emplace(id, std::move(payment));
-        auto opening = std::make_shared<walletopening::Session>(commands.scheduler(), retirement.scheduler(),
-            std::make_shared<std::atomic_bool>(false), [state] { ++state->metadata; });
         auto client = opening->start(native).borrower;
         QTRY_VERIFY(state->metadata.load() > 0);
         auto reader = std::make_shared<Reader>(opening, [state] { ++state->notices; });
-        auto disposal = execution::RetainValues<std::shared_ptr<Reader>>(retirement.scheduler(), [&] {
+        auto disposal = walletopening::RetainValues<std::shared_ptr<Reader>>(opening, [&] {
             return std::make_unique<std::shared_ptr<Reader>>(reader);
         }); QVERIFY(disposal);
         QVERIFY(reader->onSnapshot([state](auto) { state->outcome = QThread::currentThread(); }));
@@ -338,9 +352,11 @@ private Q_SLOTS:
         const bool entered = state->entered.tryAcquire(1, 5000); if (!entered) state->release.release(); QVERIFY(entered);
         bool heartbeat{false}; QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection);
         QTRY_VERIFY(heartbeat); QVERIFY(!request.fresh()); QCOMPARE(request.receivedAmountSatoshi(), qint64{1000});
-        model.close(); reader->close(); opening->retire(); client.reset(); native.reset();
-        reader.reset(); disposal.reset(); state->release.release();
-        commands.shutdown(); retirement.shutdown(); QTRY_VERIFY(commands.isDrained() && retirement.isDrained());
+        model.close(); reader->close(); opening->stop(false, [stopped] { *stopped = true; }); client.reset(); native.reset();
+        reader.reset(); disposal.reset();
+        QVERIFY(!stopped->load());
+        state->release.release();
+        QTRY_VERIFY(stopped->load());
         QCOMPARE(request.receiptState(), RequestReceiptModel::Unknown); QVERIFY(request.historicallyUsed());
         QVERIFY(state->destroyed.load() && state->destroyed.load() != qApp->thread());
     }
@@ -363,7 +379,7 @@ private Q_SLOTS:
         }
         QCOMPARE(f.wallet->reads, 0); QCOMPARE(f.wallet->scans, 0); QVERIFY(!original.expired());
         model.close(); QVERIFY(!original.expired());
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(original.expired()); QCOMPARE(f.wallet->reads, 0); QCOMPARE(f.wallet->scans, 0);
     }
     void foreignOpeningReceiptIsRetiredWithoutPublishingIntoTheOriginalRequest()
@@ -379,7 +395,7 @@ private Q_SLOTS:
         request.setReader(&model); request.setSource("17", ADDRESS, false, true);
         QSignalSpy notices{&model, &ReceiptReconciliationModel::changed}; model.consume();
         QCOMPARE(notices.count(), 0); QCOMPARE(request.receivedAmountSatoshi(), qint64{0}); QVERIFY(!request.fresh());
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(foreign.expired()); QCOMPARE(f.wallet->reads, 0); QCOMPARE(f.wallet->scans, 0);
     }
     void committedReceiptNotificationEndsTheLegacyPublicationGuard()
@@ -399,7 +415,7 @@ private Q_SLOTS:
         const std::weak_ptr<const Snapshot> old = snapshot;
         f.reader->retire(std::move(snapshot));
         QVERIFY(!old.expired());
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(old.expired());
         QCOMPARE(f.wallet->scans, 0); QCOMPARE(f.wallet->reads, 0);
         QCOMPARE(f.notices, 0);
@@ -627,10 +643,10 @@ private Q_SLOTS:
         f.commands.drain();
         f.wallet->transaction_changed(id, CT_UPDATED);
         QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core)); // receipt captured for notice 1
         f.wallet->transaction_changed(id, CT_UPDATED); // notice 2 awaits Session capture
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         const auto stale = f.reader->take(); QVERIFY(stale);
         QCOMPARE(stale->status, Status::Pending); QVERIFY(!f.reader->settled());
         f.commands.drain(); const auto current = f.reader->take();
@@ -655,7 +671,7 @@ private Q_SLOTS:
         Fixture f; const auto id = f.add(1, 100);
         f.reader->changed({{id, CT_NEW}}, ADDRESSES);
         QCOMPARE(f.wallet->reads, 0);
-        QVERIFY(f.commands.step(Lane::Domain)); // plan on Domain
+        QVERIFY(f.commands.step(Lane::Utility)); // plan on Domain
         QCOMPARE(f.wallet->reads, 0);
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->reads, 1);
@@ -685,8 +701,8 @@ private Q_SLOTS:
         f.reader->changed({{original, CT_NEW}}, ADDRESSES); f.settle();
         const auto replacement = f.add(2, 100); f.wallet->inactive.insert(original);
         f.reader->changed({{replacement, CT_NEW}}, ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {} // Hold the original's next Core status read.
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        while (f.commands.step(Lane::Utility)) {} // Hold the original's next Core status read.
         QCOMPARE(f.wallet->reads, 2);
         const auto pending = f.reader->take();
         QVERIFY(pending && pending->status == Status::Pending);
@@ -713,8 +729,8 @@ private Q_SLOTS:
         const auto id = replacement.tx->GetHash();
         f.wallet->transactions[id] = std::move(replacement); f.wallet->inactive.insert(original);
         f.reader->changed({{id, CT_NEW}}, addresses);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {} // Hold the original's recheck.
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        while (f.commands.step(Lane::Utility)) {} // Hold the original's recheck.
         QCOMPARE(f.wallet->reads, 2);
         const auto pending = f.reader->take();
         QVERIFY(pending && pending->status == Status::Pending);
@@ -739,7 +755,7 @@ private Q_SLOTS:
     {
         Fixture f; const auto old = f.add(1, 100);
         f.reader->reload(ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
         const auto next = f.add(2, 200);
         f.reader->changed({{next, CT_NEW}}, ADDRESSES);
         const auto result = f.settle();
@@ -777,7 +793,7 @@ private Q_SLOTS:
     void rejectedPlanningRetainsTheNoticeForAClockedRetry()
     {
         Fixture f; const auto id = f.add(1, 100);
-        f.commands.rejectLane(Lane::Domain);
+        f.commands.rejectNext(Lane::Utility);
         f.reader->changed({{id, CT_NEW}}, ADDRESSES);
         auto rejected = f.reader->take();
         QVERIFY(rejected && rejected->status == Status::Rejected);
@@ -806,16 +822,16 @@ private Q_SLOTS:
         Fixture f;
         for (int i{0}; i < 300; ++i) f.add(i, 1);
         f.reader->reload(ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->scans, 1);
         QCOMPARE(f.wallet->reads, 0); // Bulk capture does not loop over status reads.
-        while (f.commands.step(Lane::Domain)) {} // Consume the planner acknowledgement and capture outcome.
+        while (f.commands.step(Lane::Utility)) {} // Consume the planner acknowledgement and capture outcome.
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->reads, 128);
         const auto peer_read = std::make_shared<bool>(false);
         QVERIFY(f.opening->read([peer_read](interfaces::Wallet&) { *peer_read = true; return 0; }, [](int) {}));
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core));
         QVERIFY(*peer_read); // A same-opening observation progresses before the next batch.
         QCOMPARE(f.wallet->reads, 128);
@@ -839,12 +855,12 @@ private Q_SLOTS:
         QCOMPARE(f.wallet->scans, 1);
         f.wallet->read_ids.clear();
         f.reader->poll();
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
         const auto peer_ran = std::make_shared<bool>(false);
         QVERIFY(f.opening->read([peer_ran](interfaces::Wallet&) { *peer_ran = true; return 0; }, [](int) {}));
-        while (f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core));
         QVERIFY(*peer_ran);
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
@@ -878,11 +894,11 @@ private Q_SLOTS:
         QVERIFY(initial && initial->status == Status::Ready);
         f.wallet->read_ids.clear();
         f.reader->poll();
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
         const auto original = f.wallet->read_ids.front();
-        while (f.commands.step(Lane::Domain)) {} // Admit the next original batch.
+        while (f.commands.step(Lane::Utility)) {} // Admit the next original batch.
         // The old ID was already consumed, but this new payment replaces it
         // without an original-ID notification. It must be reconsidered.
         f.wallet->inactive.insert(original);
@@ -902,7 +918,7 @@ private Q_SLOTS:
     }
     void largePollAppliesConfirmationAndConflictWithoutReusingAddresses()
     {
-        Fixture f;
+        Fixture f{true};
         constexpr int COUNT{513};
         for (int i{0}; i < COUNT; ++i) f.add(i, 1);
         f.reader->reload(ADDRESSES);
@@ -917,15 +933,15 @@ private Q_SLOTS:
         f.reader->poll();
         // Hold actual Cleanup while all bounded Domain/Core status batches
         // finish. Releasing the old all-unconfirmed root must not block them.
-        while (f.commands.step(Lane::Core) || f.commands.step(Lane::Domain)) {}
+        while (f.commands.step(Lane::Core) || f.commands.step(Lane::Utility)) {}
         const auto result = f.reader->take();
         QVERIFY(result && result->status == Status::Ready && !result->needs_poll);
         QCOMPARE(result->snapshot->totals.at(ADDRESS), CAmount{COUNT - 1});
         QVERIFY(result->snapshot->observed.contains(ADDRESS));
         QCOMPARE(f.wallet->read_ids.size(), size_t{COUNT});
-        QVERIFY(f.commands.queuedCountIf([](const auto& turn) { return turn.lane == Lane::Cleanup; }) > 0);
-        f.commands.drain();
-        QCOMPARE(f.commands.scheduler->pending(), size_t{0});
+        QVERIFY(f.retirement.hasWork(Lane::Utility));
+        f.retirement.drain();
+        QVERIFY(f.retirement.turnsIdle());
         f.reader->poll();
         f.commands.drain();
         QCOMPARE(f.wallet->read_ids.size(), size_t{COUNT});
@@ -941,11 +957,11 @@ private Q_SLOTS:
         QVERIFY(initial && initial->status == Status::Ready);
         f.wallet->read_ids.clear();
         f.reader->poll();
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
         f.reader->close();
-        f.opening->retire();
+        f.opening->stop(false, {});
         f.commands.drain();
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
         QVERIFY(!f.reader->settled());
@@ -954,7 +970,7 @@ private Q_SLOTS:
     }
     void heldCleanupBoundsReceiptInventoriesAndRetryRecovers()
     {
-        Fixture f;
+        Fixture f{true};
         constexpr int COUNT{1025};
         for (int i{0}; i < COUNT; ++i) f.add(i, 1);
         f.reader->reload(ADDRESSES);
@@ -963,7 +979,7 @@ private Q_SLOTS:
         const auto original_opening = initial->snapshot->opening;
         const auto run_without_cleanup = [&] {
             while (true) {
-                while (f.commands.step(Lane::Domain)) {}
+                while (f.commands.step(Lane::Utility)) {}
                 const auto before = f.wallet->read_ids.size();
                 if (!f.commands.step(Lane::Core)) break;
                 if (f.wallet->read_ids.size() - before > size_t{128}) return false;
@@ -982,7 +998,7 @@ private Q_SLOTS:
             const std::set<Txid> ids{f.wallet->read_ids.begin(), f.wallet->read_ids.end()};
             QCOMPARE(ids.size(), size_t{COUNT});
         }
-        QVERIFY(f.commands.queuedCountIf([](const auto& turn) { return turn.lane == Lane::Cleanup; }) > 0);
+        QVERIFY(f.retirement.hasWork(Lane::Utility));
         f.wallet->read_ids.clear();
         f.reader->poll();
         QVERIFY(run_without_cleanup());
@@ -992,7 +1008,7 @@ private Q_SLOTS:
         QVERIFY(f.wallet->read_ids.empty());
         QCOMPARE(f.wallet->scans, 1);
         // Only actual queued Native payload retirement returns inventory.
-        while (f.commands.step(Lane::Cleanup)) {}
+        f.retirement.drain();
         f.reader->retry();
         f.commands.drain();
         QVERIFY(f.wallet->read_ids.empty());
@@ -1009,12 +1025,11 @@ private Q_SLOTS:
         const std::set<Txid> ids{f.wallet->read_ids.begin(), f.wallet->read_ids.end()};
         QCOMPARE(ids.size(), size_t{COUNT});
         f.reader->close();
-        f.opening->retire();
+        f.opening->stop(false, {});
         f.client.reset();
-        f.commands.drain();
-        f.retirement.drain();
-        QVERIFY(f.commands.quiescent());
-        QVERIFY(f.retirement.quiescent());
+        f.drain();
+        QVERIFY(f.commands.turnsIdle());
+        QVERIFY(f.retirement.turnsIdle());
     }
     void rejectedLargePollRetriesOriginalOpeningWithoutLosingPayments()
     {
@@ -1028,11 +1043,11 @@ private Q_SLOTS:
         const auto original_opening = initial->snapshot->opening;
         f.wallet->read_ids.clear();
         f.reader->poll();
-        QVERIFY(f.commands.step(Lane::Domain));
+        QVERIFY(f.commands.step(Lane::Utility));
         QVERIFY(f.commands.step(Lane::Core));
         QCOMPARE(f.wallet->read_ids.size(), size_t{128});
-        f.commands.rejectLane(Lane::Core);
-        while (f.commands.step(Lane::Domain)) {}
+        f.commands.rejectNext(Lane::Core);
+        while (f.commands.step(Lane::Utility)) {}
         const auto rejected = f.reader->take();
         QVERIFY(rejected && rejected->status == Status::Rejected);
         QVERIFY(!f.reader->settled());
@@ -1048,7 +1063,7 @@ private Q_SLOTS:
         f.now += std::chrono::seconds{1};
         f.reader->retry();
         while (true) {
-            while (f.commands.step(Lane::Domain)) {}
+            while (f.commands.step(Lane::Utility)) {}
             const auto before = f.wallet->read_ids.size();
             if (!f.commands.step(Lane::Core)) break;
             QVERIFY(f.wallet->read_ids.size() - before <= size_t{128});
@@ -1068,24 +1083,23 @@ private Q_SLOTS:
         // Original snapshots and accepted reads must not retain an idle root
         // lease after explicit close of the still-live Reader.
         f.reader->close();
-        f.opening->retire();
+        f.opening->stop(false, {});
         f.client.reset();
-        f.commands.drain();
-        f.retirement.drain();
-        QVERIFY(f.commands.quiescent());
-        QVERIFY(f.retirement.quiescent());
+        f.drain();
+        QVERIFY(f.commands.turnsIdle());
+        QVERIFY(f.retirement.turnsIdle());
     }
     void closingBetweenHistoryBatchesCancelsTheRemainder()
     {
         Fixture f;
         for (int i{0}; i < 300; ++i) f.add(i, 1);
         f.reader->reload(ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {}
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {} // First reduction queues the second batch.
+        while (f.commands.step(Lane::Utility)) {} // First reduction queues the second batch.
         QCOMPARE(f.wallet->reads, 128);
-        f.reader->close(); f.opening->retire(); f.commands.drain();
+        f.reader->close(); f.opening->stop(false, {}); f.commands.drain();
         QCOMPARE(f.wallet->reads, 128);
         const auto result = f.reader->take();
         QVERIFY(!result || !result->snapshot);
@@ -1095,11 +1109,11 @@ private Q_SLOTS:
         Fixture f;
         for (int i{0}; i < 300; ++i) f.add(i, 1);
         f.reader->reload(ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        while (f.commands.step(Lane::Domain)) {}
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        while (f.commands.step(Lane::Utility)) {}
         QVERIFY(f.commands.step(Lane::Core));
-        f.commands.rejectLane(Lane::Core);
-        QVERIFY(f.commands.step(Lane::Domain));
+        f.commands.rejectNext(Lane::Core);
+        QVERIFY(f.commands.step(Lane::Utility));
         const auto rejected = f.reader->take();
         QVERIFY(rejected && rejected->status == Status::Rejected);
         QCOMPARE(f.wallet->reads, 128);
@@ -1112,24 +1126,23 @@ private Q_SLOTS:
     }
     void admittedResultRetainsNativeBorrowerThroughDomainConsumption()
     {
-        Fixture f; const auto id = f.add(1, 100);
+        Fixture f{true}; const auto id = f.add(1, 100);
         f.reader->changed({{id, CT_NEW}}, ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(f.commands.step(Lane::Core));
-        f.reader->close(); f.opening->retire(); f.client.reset();
-        QVERIFY(f.retirement.queuedIdle());
-        QCOMPARE(f.retirement.scheduler->pending(), size_t{2}); // cleanup reservation + actual borrower
+        QVERIFY(f.commands.step(Lane::Utility)); QVERIFY(f.commands.step(Lane::Core));
+        f.reader->close(); f.opening->stop(false, {}); f.client.reset();
+        QVERIFY(f.retirement.turnsIdle());
         f.commands.drain();
-        QCOMPARE(f.retirement.scheduler->pending(), size_t{1});
-        QVERIFY(f.retirement.step(Lane::Cleanup));
+        QVERIFY(f.retirement.hasWork(Lane::Utility));
+        QVERIFY(f.retirement.step(Lane::Utility));
         f.retirement.drain();
-        QVERIFY(f.retirement.quiescent());
+        QVERIFY(f.retirement.turnsIdle());
     }
     void closingCancelsUnstartedObservationWithoutRetargeting()
     {
         Fixture f; const auto id = f.add(1, 100);
         f.reader->changed({{id, CT_NEW}}, ADDRESSES);
-        QVERIFY(f.commands.step(Lane::Domain));
-        f.reader->close(); f.opening->retire();
+        QVERIFY(f.commands.step(Lane::Utility));
+        f.reader->close(); f.opening->stop(false, {});
         f.commands.drain();
         QCOMPARE(f.wallet->reads, 0);
         const auto result = f.reader->take();

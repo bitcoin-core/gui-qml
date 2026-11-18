@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/requestsharing.h>
+#include <qml/executor.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 #ifdef USE_QRCODE
 #include <qrencode.h>
@@ -12,6 +13,25 @@
 
 #include <algorithm>
 #include <limits>
+
+requestshare::Scope requestshare::WorkScope(const Services& services, bool retain)
+{
+    const auto lease = retain && services.hold ? services.hold() : nullptr;
+    if (retain && !lease) return {};
+    if (services.utility) {
+        return [queue = services.utility, lease](std::shared_ptr<execution::Task> task, execution::Lane) {
+            const bool accepted = queue->post([task = std::move(task), lease] {
+                task->execute();
+                task->deliver();
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+        };
+    }
+    if (!services.submit) return {};
+    return [submit = services.submit, lease](std::shared_ptr<execution::Task> task, execution::Lane lane) {
+        return submit(std::move(task), lane);
+    };
+}
 
 bool requestshare::View::active(uint64_t expected, std::optional<uint64_t> input_revision) const
 {

@@ -4,7 +4,8 @@
 #include <qml/models/startupdiagnosticsmodel.h>
 #include <qml/applicationmodels.h>
 #include <qml/executor.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/startuppolicy.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QScopeGuard>
 #include <QSemaphore>
@@ -17,20 +18,39 @@
 
 namespace {
 struct Fixture {
-    ManualRoutedExecution commands;
+    ManualStartupExecution worker;
     std::deque<std::function<void()>> publications;
+    presentation::Post post = [this](auto work) { publications.push_back(std::move(work)); };
+    std::shared_ptr<execution::SerialQueue> retirement =
+        std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    PresentationServices services{{post, [queue = retirement](auto work) {
+        return queue->post(std::move(work));
+    }, {}, std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility))}};
     std::unique_ptr<StartupDiagnosticsModel> model;
-    Fixture() : model(std::make_unique<StartupDiagnosticsModel>(execution::SnapshotServices{
-        commands.scheduler, [this](auto work) { publications.push_back(std::move(work)); }})) {}
-    ~Fixture() { model.reset(); commands.drain(); }
-    bool publishOne(bool newest = false) {
+
+    explicit Fixture(bool with_model = true)
+    {
+        if (with_model) model = makeModel();
+    }
+
+    ~Fixture() { model.reset(); worker.drain(); }
+
+    std::unique_ptr<StartupDiagnosticsModel> makeModel()
+    {
+        return std::make_unique<StartupDiagnosticsModel>(post, services);
+    }
+
+    bool publishOne(bool newest = false)
+    {
         if (publications.empty()) return false;
         auto work = std::move(newest ? publications.back() : publications.front());
         if (newest) publications.pop_back(); else publications.pop_front();
-        work(); return true;
+        work();
+        return true;
     }
+
     void publish() { while (publishOne()) {} }
-    void finish() { commands.drain(); publish(); commands.drain(); }
+    void finish() { worker.drain(); publish(); worker.drain(); }
 };
 QString Complete(const QAbstractItemModel& model) {
     QString text; for (int row = 0; row < model.rowCount(); ++row) text += model.data(model.index(row, 0), Qt::UserRole + 1).toString();
@@ -53,7 +73,7 @@ private Q_SLOTS:
         QFETCH(bool, publishing); QFETCH(bool, about); QFETCH(bool, reopen);
         Fixture f; QAbstractItemModelTester tester{f.model.get(), QAbstractItemModelTester::FailureReportingMode::QtTest};
         QVERIFY(f.model->append(QStringLiteral("Original visible diagnostic"), false)); QVERIFY(f.model->project(false));
-        f.commands.drain(); if (!publishing) f.publish();
+        f.worker.drain(); if (!publishing) f.publish();
         QString early_about, early_reset, late_reset; bool changed_outside{true}, coherent{true}, acted{false}; int depth{0};
         connect(f.model.get(), &QAbstractItemModel::modelAboutToBeReset, this, [&] { ++depth; early_about = Complete(*f.model); });
         connect(f.model.get(), &QAbstractItemModel::modelReset, this, [&] { early_reset = Complete(*f.model); });
@@ -91,7 +111,7 @@ private Q_SLOTS:
     void aSuccessorConsumesAnOlderQueuedClear() {
         QFETCH(bool, queued_turn_first); Fixture f;
         QAbstractItemModelTester tester{f.model.get(), QAbstractItemModelTester::FailureReportingMode::QtTest};
-        QVERIFY(f.model->append(QStringLiteral("Old generation"), false)); QVERIFY(f.model->project(false)); f.commands.drain();
+        QVERIFY(f.model->append(QStringLiteral("Old generation"), false)); QVERIFY(f.model->project(false)); f.worker.drain();
         bool replaced{false}; int finished{0}; QPersistentModelIndex successor;
         const QString expected = QStringLiteral("Exact successor diagnostic"); QString cached;
         connect(f.model.get(), &QAbstractItemModel::modelReset, this, [&] {
@@ -102,7 +122,7 @@ private Q_SLOTS:
             if (replaced) return;
             replaced = true;
             for (int request = 0; request < 3; ++request) QVERIFY(f.model->resetInput());
-            QVERIFY(f.model->append(expected, false)); QVERIFY(f.model->project(false)); f.commands.drain();
+            QVERIFY(f.model->append(expected, false)); QVERIFY(f.model->project(false)); f.worker.drain();
         });
         connect(f.model.get(), &StartupDiagnosticsModel::finished, this, [&] { ++finished; });
         QVERIFY(f.publishOne()); QVERIFY(replaced); QVERIFY(f.model->busy()); QCOMPARE(finished, 0);
@@ -111,7 +131,7 @@ private Q_SLOTS:
         QCOMPARE(cached, expected); QCOMPARE(Complete(*f.model), expected); QVERIFY(!f.model->busy()); QCOMPARE(finished, 1);
         QVERIFY(successor.isValid()); QSignalSpy extra_resets{f.model.get(), &QAbstractItemModel::modelReset};
         f.publish(); QCOMPARE(extra_resets.size(), 0); QVERIFY(successor.isValid()); QCOMPARE(cached, expected);
-        QCOMPARE(finished, 1); f.commands.drain();
+        QCOMPARE(finished, 1); f.worker.drain();
         QObject::disconnect(f.model.get(), nullptr, this, nullptr);
     }
     void anOutcomeDeliveredInsideResetIsNotLost_data() {
@@ -120,13 +140,13 @@ private Q_SLOTS:
     void anOutcomeDeliveredInsideResetIsNotLost() {
         QFETCH(bool, about); Fixture f;
         QAbstractItemModelTester tester{f.model.get(), QAbstractItemModelTester::FailureReportingMode::QtTest};
-        QVERIFY(f.model->append(QStringLiteral("Original result"), false)); QVERIFY(f.model->project(false)); f.commands.drain();
+        QVERIFY(f.model->append(QStringLiteral("Original result"), false)); QVERIFY(f.model->project(false)); f.worker.drain();
         bool replaced{false}; int finished{0};
         const QString expected = QStringLiteral("Outcome observed during the original reset");
         const auto replace = [&] {
             if (replaced) return;
             replaced = true; QVERIFY(f.model->resetInput()); QVERIFY(f.model->append(expected, false));
-            QVERIFY(f.model->project(false)); f.commands.drain();
+            QVERIFY(f.model->project(false)); f.worker.drain();
             // Explicitly deliver the actual successor wake while the original
             // reset signal is still on the stack, as a nested GUI loop can do.
             f.publish(); QVERIFY(f.model->busy());
@@ -146,14 +166,14 @@ private Q_SLOTS:
     void aQueuedTurnInsideAnotherResetDoesNotSpin() {
         QFETCH(bool, about); Fixture f;
         QAbstractItemModelTester tester{f.model.get(), QAbstractItemModelTester::FailureReportingMode::QtTest};
-        QVERIFY(f.model->append(QStringLiteral("First frame"), false)); QVERIFY(f.model->project(false)); f.commands.drain();
+        QVERIFY(f.model->append(QStringLiteral("First frame"), false)); QVERIFY(f.model->project(false)); f.worker.drain();
         bool restarted{false};
         connect(f.model.get(), &QAbstractItemModel::modelReset, this, [&] {
             if (!restarted) { restarted = true; QVERIFY(f.model->resetInput()); }
         });
         QVERIFY(f.publishOne()); QCOMPARE(f.publications.size(), size_t{1});
         const QString expected = QStringLiteral("New frame before the old clear");
-        QVERIFY(f.model->append(expected, false)); QVERIFY(f.model->project(false)); f.commands.drain();
+        QVERIFY(f.model->append(expected, false)); QVERIFY(f.model->project(false)); f.worker.drain();
         bool delivered{false}; int depth{0};
         connect(f.model.get(), &QAbstractItemModel::modelAboutToBeReset, this, [&] { ++depth; QCOMPARE(depth, 1); });
         const auto nested = [&] {
@@ -186,14 +206,14 @@ private Q_SLOTS:
         if (phase == 2) connect(f.model.get(), &StartupDiagnosticsModel::changed, this, destroy);
         if (close) f.model->close(); else QVERIFY(!f.model->resetInput());
         QVERIFY(!f.model); QCOMPARE(changed.size(), phase == 2 ? 1 : 0); QCOMPARE(finished.size(), 0);
-        f.finish(); QVERIFY(f.commands.quiescent());
+        f.finish(); QVERIFY(f.worker.quiescent());
     }
     void destructionRemainsSilentWithAHeldOutcome() {
         Fixture f; QVERIFY(f.model->append(QStringLiteral("Accepted original diagnostic"), false)); QVERIFY(f.model->project(false));
-        f.commands.drain(); QSignalSpy changed{f.model.get(), &StartupDiagnosticsModel::changed};
+        f.worker.drain(); QSignalSpy changed{f.model.get(), &StartupDiagnosticsModel::changed};
         QSignalSpy resets{f.model.get(), &QAbstractItemModel::modelReset}, finished{f.model.get(), &StartupDiagnosticsModel::finished};
-        f.model.reset(); f.publish(); f.commands.drain();
-        QCOMPARE(changed.size(), 0); QCOMPARE(resets.size(), 0); QCOMPARE(finished.size(), 0); QVERIFY(f.commands.quiescent());
+        f.model.reset(); f.publish(); f.worker.drain();
+        QCOMPARE(changed.size(), 0); QCOMPARE(resets.size(), 0); QCOMPARE(finished.size(), 0); QVERIFY(f.worker.quiescent());
     }
     void retirementKeepsResetAndPropertyNotificationsCoherent_data() {
         QTest::addColumn<int>("phase");
@@ -208,7 +228,7 @@ private Q_SLOTS:
         QAbstractItemModelTester tester{f.model.get(), QAbstractItemModelTester::FailureReportingMode::QtTest};
         QVERIFY(f.model->append(QStringLiteral("Original retained diagnostic"), false));
         QVERIFY(f.model->project(false));
-        f.commands.drain();
+        f.worker.drain();
         if (phase == 0) f.publish();
         const QPersistentModelIndex original = f.model->index(0, 0);
         if (phase == 0) QVERIFY(original.isValid());
@@ -258,7 +278,7 @@ private Q_SLOTS:
         f.finish();
         QVERIFY(!f.model->busy()); QCOMPARE(Complete(*f.model), QStringLiteral("New lifecycle diagnostic"));
         QObject::disconnect(f.model.get(), nullptr, this, nullptr);
-        f.model->close(); f.commands.drain(); QVERIFY(f.commands.quiescent());
+        f.model->close(); f.worker.drain(); QVERIFY(f.worker.quiescent());
     }
     void startupFacadeTracksDiagnosticOutcome_data() {
         QTest::addColumn<int>("outcome");
@@ -279,7 +299,7 @@ private Q_SLOTS:
         QVERIFY(!models.startupErrorPending());
         QVERIFY(f.model->append(QStringLiteral("Original complete diagnostic"), false));
         if (outcome == 1) {
-            f.commands.rejectLane(execution::Lane::Domain);
+            f.worker.reject_utility = true;
             QVERIFY(!f.model->project(false));
             QCOMPARE(models.startupError(), QStringLiteral("Startup diagnostics could not be shown. Try again."));
             QVERIFY(!models.startupErrorPending());
@@ -288,7 +308,7 @@ private Q_SLOTS:
             QVERIFY(models.startupErrorPending());
             QVERIFY(changed.count() > 0);
             const auto before = changed.count();
-            f.commands.drain();
+            f.worker.drain();
             QVERIFY(models.startupErrorPending()); // Publication belongs to GUI.
             if (outcome == 2) {
                 f.model->close();
@@ -303,7 +323,7 @@ private Q_SLOTS:
                 QCOMPARE(Complete(*models.startupErrorDetails()), QStringLiteral("Original complete diagnostic"));
             }
         }
-        f.model.reset(); f.commands.drain(); QVERIFY(f.commands.quiescent());
+        f.model.reset(); f.worker.drain(); QVERIFY(f.worker.quiescent());
     }
     void startupFacadeKeepsFallbackAndContextLifetime() {
         auto engine = std::make_unique<QQmlEngine>();
@@ -330,24 +350,55 @@ private Q_SLOTS:
         QVERIFY(f.model->append(QStringList{" first ", "first", "second"}, true));
         QVERIFY(f.model->project(true)); QSignalSpy finished{f.model.get(), &StartupDiagnosticsModel::finished};
         QVERIFY(f.model->busy()); QCOMPARE(f.model->rowCount(), 0);
-        QVERIFY(f.commands.step(execution::Lane::Domain)); f.model->retryPublication();
+        f.model->retryPublication();
         QVERIFY(f.model->busy()); QCOMPARE(finished.count(), 0);
-        QVERIFY(f.commands.step(execution::Lane::Domain)); QVERIFY(f.model->busy()); QCOMPARE(f.model->rowCount(), 0);
+        QVERIFY(f.worker.step(execution::Lane::Utility));
+        QVERIFY(!f.publications.empty()); QVERIFY(f.model->busy()); QCOMPARE(f.model->rowCount(), 0);
         f.publish(); QVERIFY(!f.model->busy()); QCOMPARE(finished.count(), 1);
         QCOMPARE(f.model->summary(), QString{"first\n\nsecond"}); QCOMPARE(Complete(*f.model), f.model->summary());
         QVERIFY(!f.model->append("late startup warning", true));
     }
     void completeLargeMessageSurvivesBoundedSummary() {
-        Fixture f;
+        Fixture f{/*with_model=*/false};
+        f.worker.core.close();
         const QString original = QStringLiteral("  leading\n") + QString(300'000, QChar{'x'}) + QStringLiteral("\nfinal diagnostic tail  ");
-        QVERIFY(f.model->append(original, false));
-        QVERIFY(f.model->project(false, {}, {}, {}, false)); f.finish();
-        QVERIFY(f.model->summary().size() < 16500); QVERIFY(f.model->rowCount() > 250);
-        for (int row = 0; row < f.model->rowCount(); ++row) QVERIFY(f.model->data(f.model->index(row, 0), Qt::UserRole + 1).toString().size() <= 1024);
-        QCOMPARE(Complete(*f.model), original);
+        auto early = startupdiagnostics::Create(f.services.valueRetirement());
+        QVERIFY(early);
+        QVERIFY(early->append(original, false));
+        early->seal();
+        const auto loss = std::make_shared<std::atomic_bool>(false);
+        auto details = startup::PrepareErrorDetails(f.post, QStringLiteral("fallback"),
+            std::move(early), nullptr, loss, f.services);
+        QVERIFY(details.model);
+        QVERIFY(details.model->busy());
+        QVERIFY(f.worker.step(execution::Lane::Utility));
+        QVERIFY(details.model->busy());
+        QCOMPARE(details.model->rowCount(), 0);
+        QVERIFY(!f.publications.empty());
+        f.publish();
+        QVERIFY(!details.model->busy());
+        QVERIFY(!loss->load());
+        QVERIFY(details.model->summary().size() < 16500);
+        QVERIFY(details.model->rowCount() > 250);
+        for (int row = 0; row < details.model->rowCount(); ++row) {
+            QVERIFY(details.model->data(details.model->index(row, 0), Qt::UserRole + 1).toString().size() <= 1024);
+        }
+        QCOMPARE(Complete(*details.model), original);
+
+        details.model->close();
+        f.services.close();
+        QObject receiver;
+        bool drained{false};
+        f.services.whenRetired(&receiver, [&] { drained = true; });
+        QVERIFY(f.services.pendingRetirements() > 0);
+        f.worker.drain();
+        QTRY_VERIFY(drained);
+        QCOMPARE(f.services.pendingRetirements(), size_t{0});
+        QCOMPARE(f.worker.coreSubmissions(), size_t{0});
+        QVERIFY(f.worker.quiescent());
     }
     void earlyCollectionsKeepOrderAndFailureOwnership() {
-        Fixture f; auto early = startupdiagnostics::Create(f.commands.scheduler); QVERIFY(early);
+        Fixture f; auto early = startupdiagnostics::Create(f.services.valueRetirement()); QVERIFY(early);
         QVERIFY(early->append(" early warning ", true)); QVERIFY(early->append("early warning", true));
         early->seal();
         QVERIFY(f.model->adopt(early)); QVERIFY(f.model->append(" later warning ", true));
@@ -357,14 +408,31 @@ private Q_SLOTS:
         QVERIFY(!early->append("arrived after seal", true)); early.reset();
     }
     void heldOldPublicationCannotOverwriteNewFatal() {
-        Fixture f; QVERIFY(f.model->append("old", true)); QVERIFY(f.model->project(true)); f.commands.drain();
-        QVERIFY(f.model->resetInput()); QVERIFY(f.model->append("new fatal detail", false));
-        QVERIFY(f.model->project(false, {}, {}, "Fatal error"));
-        f.publish(); QVERIFY(f.model->busy()); QCOMPARE(f.model->rowCount(), 0);
-        f.finish(); QCOMPARE(Complete(*f.model), QString{"Fatal error\n\nnew fatal detail"});
+        Fixture f{/*with_model=*/false};
+        f.worker.core.close();
+        StartupDiagnosticsModel model{f.post, f.services};
+        QVERIFY(model.append("old", true));
+        QVERIFY(model.project(true));
+        f.worker.drain();
+        QVERIFY(!f.publications.empty());
+        model.close();
+        QVERIFY(model.resetInput());
+        QVERIFY(model.append("new fatal detail", false));
+        QVERIFY(model.project(false, {}, {}, "Fatal error"));
+        f.publish();
+        QVERIFY(model.busy());
+        QCOMPARE(model.rowCount(), 0);
+        f.worker.drain();
+        f.publish();
+        QCOMPARE(Complete(model), QString{"Fatal error\n\nnew fatal detail"});
+        model.close();
+        f.services.close();
+        f.worker.drain();
+        QVERIFY(f.worker.quiescent());
+        QCOMPARE(f.worker.coreSubmissions(), size_t{0});
     }
     void closeAndDispatchRejectionAreExplicit() {
-        Fixture f; QVERIFY(f.model->append("important warning", true)); f.commands.rejectLane(execution::Lane::Domain);
+        Fixture f; QVERIFY(f.model->append("important warning", true)); f.worker.reject_utility = true;
         QVERIFY(!f.model->project(true)); QVERIFY(!f.model->busy()); QVERIFY(!f.model->error().isEmpty()); f.finish();
         QVERIFY(f.model->resetInput()); QVERIFY(f.model->append("closed", true)); QVERIFY(f.model->project(true));
         f.model->close(); f.finish(); QVERIFY(f.model->summary().isEmpty());
@@ -372,15 +440,15 @@ private Q_SLOTS:
     }
     void observerDestructionAndResetSignalsCannotPublishAfterClose() {
         Fixture f; QVERIFY(f.model->append(QString(200'000, QChar{'z'}), false)); QVERIFY(f.model->project(false));
-        f.commands.drain(); f.model.reset(); f.publish(); f.commands.drain(); QVERIFY(f.commands.quiescent());
-        f.model = std::make_unique<StartupDiagnosticsModel>(execution::SnapshotServices{f.commands.scheduler, [&f](auto work) { f.publications.push_back(std::move(work)); }});
+        f.worker.drain(); f.model.reset(); f.publish(); f.worker.drain(); QVERIFY(f.worker.quiescent());
+        f.model = f.makeModel();
         QVERIFY(f.model->append("reset destroys observer", false)); QVERIFY(f.model->project(false));
         connect(f.model.get(), &QAbstractItemModel::modelAboutToBeReset, this, [&f] { f.model.reset(); });
-        f.finish(); QVERIFY(!f.model); QVERIFY(f.commands.quiescent());
+        f.finish(); QVERIFY(!f.model); QVERIFY(f.worker.quiescent());
     }
     void refusalRetainsOriginalForRetry() {
         Fixture f; const QString original = "retained original diagnostic";
-        QVERIFY(f.model->append(original, false)); f.commands.rejectLane(execution::Lane::Domain);
+        QVERIFY(f.model->append(original, false)); f.worker.reject_utility = true;
         QVERIFY(!f.model->project(false)); QVERIFY(f.model->project(false)); f.finish();
         QCOMPARE(Complete(*f.model), original);
     }
@@ -395,13 +463,18 @@ private Q_SLOTS:
         QVERIFY(f.model->project(false)); f.finish(); QVERIFY(Complete(*f.model).endsWith("accepted later")); QVERIFY(!f.model->error().isEmpty());
     }
     void rawTextBudgetIsReleasedOnlyByNativeCleanup() {
-        Fixture f; auto budget = std::make_shared<startupdiagnostics::TextBudget>();
-        auto text = startupdiagnostics::RetainText(f.commands.scheduler, budget,
-            QString(startupdiagnostics::TextBudget::MAX_CHARS, QChar{'r'}));
+        Fixture f{/*with_model=*/false}; auto budget = std::make_shared<startupdiagnostics::TextBudget>();
+        f.worker.core.close();
+        const auto retire = f.services.valueRetirement();
+        auto text = startupdiagnostics::RetainText(budget,
+            QString(startupdiagnostics::TextBudget::MAX_CHARS, QChar{'r'}), retire);
         QVERIFY(text); QCOMPARE(budget->used.load(), startupdiagnostics::TextBudget::MAX_CHARS);
-        QVERIFY(!startupdiagnostics::RetainText(f.commands.scheduler, budget, "refused"));
+        QVERIFY(!startupdiagnostics::RetainText(budget, "refused", retire));
         text.reset(); QCOMPARE(budget->used.load(), startupdiagnostics::TextBudget::MAX_CHARS);
-        f.commands.drain(); QCOMPARE(budget->used.load(), uint64_t{0});
+        QVERIFY(f.worker.step(execution::Lane::Utility));
+        QCOMPARE(budget->used.load(), uint64_t{0});
+        QCOMPARE(f.worker.coreSubmissions(), size_t{0});
+        QVERIFY(f.worker.quiescent());
     }
     void reentrantSuccessorAtEveryPublicationPhaseKeepsItsOwnOutcome_data() {
         QTest::addColumn<int>("phase");
@@ -409,7 +482,7 @@ private Q_SLOTS:
     }
     void reentrantSuccessorAtEveryPublicationPhaseKeepsItsOwnOutcome() {
         QFETCH(int, phase); Fixture f;
-        QVERIFY(f.model->append("old result", false)); QVERIFY(f.model->project(false)); f.commands.drain();
+        QVERIFY(f.model->append("old result", false)); QVERIFY(f.model->project(false)); f.worker.drain();
         bool replaced{false}; bool replacement_ok{true}; int finished{0};
         const auto replace = [&] {
             if (replaced) return;
@@ -434,10 +507,10 @@ private Q_SLOTS:
     void realDomainThreadPreservesGuiHeartbeatAndExactTail() {
         execution::Executor worker{execution::Executor::Config{}};
         const auto utility = std::make_shared<execution::SerialQueue>(worker.makeQueue(execution::Lane::Utility));
-        PresentationServices services{{{}, {}, [utility](auto work) {
+        PresentationServices services{{{}, [utility](auto work) {
             return utility->post(std::move(work));
         }, {}, utility}};
-        StartupDiagnosticsModel model{{}, nullptr, &services};
+        StartupDiagnosticsModel model{{}, services};
         QSemaphore entered, release;
         std::atomic<QThread*> worker_thread{nullptr};
         const auto cleanup = qScopeGuard([&] {

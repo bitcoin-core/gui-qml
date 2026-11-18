@@ -5,7 +5,7 @@
 #include <qml/models/walletlistmodel.h>
 
 #include <interfaces/node.h>
-#include <qml/backendexecutor.h>
+#include <qml/asyncjoin.h>
 #include <qml/guipresentation.h>
 #include <qml/models/walletqmlmodel.h>
 
@@ -27,22 +27,29 @@ QList<int> RolesFor(unsigned fields)
 }
 } // namespace
 
-WalletListModel::WalletListModel(interfaces::Node& node, QObject* parent) : WalletListModel(node, execution::SnapshotServices{}, parent) {}
-WalletListModel::WalletListModel(interfaces::Node& node, execution::SnapshotServices services, QObject* parent)
-    : QAbstractListModel(parent), m_services(std::move(services))
+WalletListModel::WalletListModel(interfaces::Node& node, QObject* parent)
+    : WalletListModel(node, nullptr, {}, parent) {}
+WalletListModel::WalletListModel(interfaces::Node& node, execution::Executor& executor, presentation::Post post, QObject* parent)
+    : WalletListModel(node, &executor, std::move(post), parent) {}
+WalletListModel::WalletListModel(interfaces::Node& node, execution::Executor* executor, presentation::Post post, QObject* parent)
+    : QAbstractListModel(parent), m_post(post ? std::move(post) : presentation::QueuedPost()),
+      m_owned_executor(executor ? nullptr : std::make_shared<execution::Executor>(execution::Executor::Config{}))
 {
-    if (!m_services.scheduler) { m_owned_executor = std::make_shared<BackendExecutor>(execution::Options{}); m_services.scheduler = m_owned_executor->scheduler(); }
-    if (!m_services.post) {
-        m_bridge = presentation::MakeGuiObject();
-        m_services.post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
-    }
     const QPointer<WalletListModel> guard{this};
-    m_reader = std::make_shared<walletcatalog::Reader>(m_services.scheduler,
+    m_reader = std::make_shared<walletcatalog::Reader>(executor ? *executor : *m_owned_executor,
         [&node] { return node.walletLoader().listWalletDir(); },
-        [guard, post = m_services.post] { post([guard] { if (guard) guard->publishSnapshot(); }); });
+        [guard, post = m_post] { post([guard] { if (guard) guard->publishSnapshot(); }); });
     observe(m_reader->observation());
 }
-WalletListModel::~WalletListModel() { close(); m_reader.reset(); if (m_owned_executor) m_owned_executor->shutdown(); }
+WalletListModel::~WalletListModel()
+{
+    close();
+    if (m_owned_executor) {
+        auto join = JoinThreadAfterDrain([executor = std::move(m_owned_executor)] { executor->stopAndJoin(); },
+            QCoreApplication::instance(), [] {});
+        m_reader->whenRetired(std::move(join));
+    }
+}
 void WalletListModel::close()
 {
     if (std::exchange(m_stopping, true)) return;
@@ -51,6 +58,10 @@ void WalletListModel::close()
     observe(m_reader->observation());
     m_visible.reset();
     Q_EMIT projectionChanged();
+}
+void WalletListModel::whenRetired(std::function<void()> done)
+{
+    m_reader->whenRetired(std::move(done));
 }
 void WalletListModel::listWalletDir() { enqueue(walletcatalog::Input{walletcatalog::Input::Kind::Directory}); }
 void WalletListModel::refresh() { listWalletDir(); }
@@ -173,7 +184,7 @@ void WalletListModel::publishNotices(quint64 revision)
         if (!guard || m_stopping || m_visible != snapshot) return;
     }
     if (m_notice < snapshot->notices.size()) {
-        try { m_services.post([guard, revision] { if (guard) guard->publishNotices(revision); }); }
+        try { m_post([guard, revision] { if (guard) guard->publishNotices(revision); }); }
         catch (...) { m_error = tr("Wallet catalog presentation could not be delivered. Refresh to retry."); m_pending = false; m_fresh = false; m_phase = ReaderPhase::Failed; Q_EMIT projectionChanged(); }
     } else {
         if (revision == m_revision) m_pending = false;

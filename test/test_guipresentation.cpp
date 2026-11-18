@@ -2,10 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
+#include <qml/presentationservices.h>
+#include <qml/retainedsnapshot.h>
 #include <qml/retainedvalue.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <QPointer>
@@ -105,13 +107,15 @@ private Q_SLOTS:
         };
         const auto observed = std::make_shared<Observed>();
         const auto primary = std::make_shared<std::function<void()>>();
-        ManualRoutedExecution graph;
+        ManualStartupExecution graph;
+        auto outcomes = std::make_shared<execution::ValueCleanupQueue>(
+            std::make_shared<execution::SerialQueue>(graph.executor().makeQueue(execution::Lane::Utility)));
         auto post = presentation::ReliablePost([primary, enqueue_first](auto callback) {
             if (enqueue_first) *primary = std::move(callback);
             throw std::runtime_error("primary presentation transport refused");
         });
         const auto cleanup = qScopeGuard([&] {
-            graph.scheduler->close();
+            graph.core.close();
             graph.drain();
             *primary = {};
             post = {};
@@ -122,7 +126,7 @@ private Q_SLOTS:
             presentation::FlushRetirements();
         });
         int input{50'000};
-        const auto admitted = execution::Submit(*graph.scheduler,
+        auto task = execution::MakeTask(
             [observed, original = input] { ++observed->effects; return original; },
             [post, observed](int value) {
                 post([observed, value] {
@@ -130,20 +134,16 @@ private Q_SLOTS:
                     observed->value = value;
                     observed->delivered_on = QThread::currentThread();
                 });
-            }, {}, {execution::Lane::Core});
-        QVERIFY(admitted);
+            }, {});
+        const std::weak_ptr<execution::Task> original = task;
+        QVERIFY(outcomes->postWithOutcome(graph.core, std::move(task)));
         input = 60'000;
-        const auto effect = graph.dispatchNext(execution::Lane::Core);
-        QVERIFY(effect && *effect == admitted.id);
-        QVERIFY(graph.finishWork(*effect));
+        QVERIFY(graph.step(execution::Lane::Core));
         QCOMPARE(observed->effects, 1);
         QCOMPARE(observed->delivered, 0);
-        QCOMPARE(graph.scheduler->phase(*effect), std::make_optional(execution::Phase::OutcomeReady));
-        QVERIFY(graph.step(execution::Lane::Domain));
-        // A throwing primary cannot escape TaskQueue::deliver and strand its
-        // actual result. The queued GUI handoff is independently owned.
-        QVERIFY(!graph.scheduler->phase(*effect));
-        QCOMPARE(graph.scheduler->pending(), size_t{0});
+        QVERIFY(!original.expired());
+        QVERIFY(graph.step(execution::Lane::Utility));
+        QVERIFY(original.expired());
         QVERIFY(graph.quiescent());
         QCOMPARE(observed->delivered, 0);
         QCOMPARE(bool(*primary), enqueue_first);
@@ -183,16 +183,19 @@ private Q_SLOTS:
                 objects.clear(); state->finished.store(true);
             }
         };
-        BackendExecutor executor;
-        auto owners = execution::RetainValues<NativeOwners>(executor.scheduler(), [&] {
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices services{{{}, [retirement](auto retire) {
+            return retirement->post(std::move(retire));
+        }, {}, retirement}};
+        auto owners = execution::RetainSnapshot<NativeOwners>(services.valueRetirement(), [&] {
             return std::make_unique<NativeOwners>(state);
         });
         const auto cleanup = qScopeGuard([&] {
-            pulse.stop(); state->release.release(); owners.reset(); executor.shutdown();
-            if (!QTest::qWaitFor([&] { return executor.isDrained(); }, 5000)) {
-                QTest::qFail("The original Native retirement executor did not drain", __FILE__, __LINE__);
-                return;
-            }
+            pulse.stop();
+            state->release.release();
+            owners.reset();
+            executor.stopAndJoin();
             presentation::FlushRetirements();
         });
         QVERIFY(owners);
@@ -210,11 +213,11 @@ private Q_SLOTS:
             if (!released && state->entered.tryAcquire()) { released = true; state->release.release(); }
         });
         pulse.start(0);
-        owners.reset(); executor.shutdown();
-        QVERIFY(QTest::qWaitFor([&] { return executor.isDrained(); }, 5000));
+        owners.reset();
+        QVERIFY(QTest::qWaitFor([&] { return services.pendingRetirements() == 0; }, 5000));
+        executor.stopAndJoin();
         pulse.stop();
         QVERIFY(heartbeat > 0); QVERIFY(released); QVERIFY(state->finished.load());
-        QCOMPARE(executor.scheduler()->pending(), size_t{0});
         presentation::FlushRetirements();
         QCOMPARE(destroyed, 32);
         QVERIFY(!wrong_affinity);

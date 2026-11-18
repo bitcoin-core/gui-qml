@@ -21,6 +21,7 @@
 
 class WalletQmlModel;
 namespace interfaces { class Node; }
+namespace execution { class SerialQueue; }
 
 /** The app's wallet names and files: display names for open wallets, the
  * home folder for file dialogs, and showing a wallet's file location. It
@@ -41,12 +42,13 @@ public:
     using OpenLocalPath = std::function<bool(const QString&)>;
     struct Services {
         interfaces::Node* node{nullptr};
-        std::shared_ptr<execution::Scheduler> scheduler;
         presentation::Post post;
         //! The open wallet after \p wallet, or the first for null; null at the end.
         std::function<WalletQmlModel*(WalletQmlModel* wallet)> next_wallet;
         //! The controller's placeholder for "no wallet".
         WalletQmlModel* empty_wallet{nullptr};
+        std::shared_ptr<execution::SerialQueue> utility;
+        std::shared_ptr<execution::SerialQueue> outcomes;
     };
     WalletNamesController(Services services, QObject* parent);
 
@@ -88,6 +90,7 @@ private:
     void publishWrite(quint64 id);
     void publishLocation(quint64 id);
     void setLocationError(const QString& error);
+    execution::SnapshotQuery<std::shared_ptr<const Aliases>>::Post utilityPost() const;
 
     Services m_services;
     bool m_closed{false};

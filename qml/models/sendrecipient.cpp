@@ -64,32 +64,24 @@ SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
 }
 SendRecipient::~SendRecipient() { close(); }
 bool SendRecipient::inputLocked() const { return m_closed || (m_importing && m_importing->load()); }
-void SendRecipient::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void SendRecipient::setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post)
 {
     if (closed() || (m_opening && m_opening != opening) || m_query) return;
-    m_opening = std::move(opening); m_services = std::move(services);
+    m_opening = std::move(opening);
     const auto setup = ++m_setup_revision;
-    if (!m_services.scheduler && m_opening) m_services.scheduler = m_opening->scheduler();
     const QPointer<SendRecipient> observer{this};
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
-    const auto original_opening = m_opening;
-    const auto ports = m_services;
+    if (!post) post = presentation::QueuedPost();
+    if (!m_opening) return;
     const auto input = m_input;
-    const auto current = [observer, setup, original_opening, scheduler = ports.scheduler] {
-        return observer && !observer->closed() && observer->m_setup_revision == setup &&
-            observer->m_opening == original_opening && observer->m_services.scheduler == scheduler;
-    };
-    if (!current() || !ports.scheduler) return;
-    auto retired = execution::RetainValues<Retired>(ports.scheduler, [] { return std::make_unique<Retired>(); });
-    if (!current()) return;
+    auto retired = walletopening::RetainValues<Retired>(m_opening, [] { return std::make_unique<Retired>(); });
     if (!retired) { m_addressError = tr("Recipient cleanup is unavailable."); return; }
     m_retired = std::move(retired);
-    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Snapshot>>>(ports.scheduler,
-        [input, scheduler = ports.scheduler] {
+    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Snapshot>>>(
+        [input, opening = m_opening] {
             Snapshot draft; bool amount_set, wallet, balance_known; CAmount balance; CFeeRate dust;
             { std::lock_guard lock{input->mutex}; draft = input->draft; amount_set = input->amount_set; wallet = input->wallet;
               balance_known = input->balance_known; balance = input->balance; dust = input->dust; }
-            auto value = execution::RetainValues<Snapshot>(scheduler, [&] {
+            const auto make_value = [&] {
                 auto result = std::make_unique<Snapshot>(std::move(draft));
                 if (result->payment_request && result->address != result->request_address) {
                     result->payment_request = false; result->request_address.clear();
@@ -112,10 +104,12 @@ void SendRecipient::setOpening(std::shared_ptr<walletopening::Session> opening, 
                 }
                 result->valid = (!wallet || balance_known) && result->input_acceptable && result->address_valid && result->amount_error.isEmpty() && result->amount > 0;
                 return result;
-            });
+            };
+            auto value = walletopening::RetainValues<Snapshot>(opening, make_value);
             if (!value) throw std::runtime_error{"Recipient validation cleanup unavailable"};
             return std::shared_ptr<const Snapshot>{std::move(value)};
-        }, [post = ports.post, observer, setup] { post([observer, setup] { if (observer && observer->m_setup_revision == setup) observer->publishValidation(); }); }, execution::Lane::Domain);
+        }, [post = std::move(post), observer, setup] { post([observer, setup] { if (observer && observer->m_setup_revision == setup) observer->publishValidation(); }); },
+        m_opening->observationPost(execution::Lane::Domain));
     { std::lock_guard lock{input->mutex}; input->initialized = false; }
     requestValidation();
 }

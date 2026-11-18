@@ -5,7 +5,7 @@
 #include <qml/guipresentation.h>
 #include <qml/walletqmlcontroller.h>
 #include <qml/walletidentity.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/walletlifecycle.h>
 #include <qml/retainedsnapshot.h>
 
@@ -252,6 +252,22 @@ QString WalletQmlController::walletOperationName() const
     if (!m_command_receipt) return {};
     std::lock_guard lock{m_command_receipt->mutex}; return m_command_receipt->name;
 }
+execution::SubmitResult WalletQmlController::postNative(std::shared_ptr<execution::Task> task) const
+{
+    if (m_shutting_down) return {{}, execution::Rejection::Closed};
+    if (!task) return {{}, execution::Rejection::Invalid};
+    return commandServices().post(execution::Lane::Core, std::move(task));
+}
+
+walletcreation::Services WalletQmlController::commandServices() const
+{
+    walletcreation::Services services;
+    services.core = m_services.catalog_queues.core;
+    services.outcomes = m_services.catalog_queues.outcomes;
+    services.value_cleanup = m_registry->valueCleanup();
+    return services;
+}
+
 bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::unique_ptr<interfaces::Wallet>&)> effect,
     std::function<void(const CommandResult&)> done, std::function<void(std::exception_ptr)> failed, bool open_intent)
 {
@@ -268,7 +284,7 @@ bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::u
     m_result_wallet.clear();
     m_command_adopted = false;
     m_open_resolution.reset(); m_open_resolution_wallet.clear(); m_open_resolution_rejected = false;
-    const auto scheduler = backgroundScheduler();
+    const auto services = commandServices();
     const auto post = m_services.post;
     auto origin = newAdoptionOrigin();
     if (!observer || observer->m_shutting_down || id != observer->m_command_id) return false;
@@ -281,10 +297,10 @@ bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::u
     if (!observer || observer->m_shutting_down || id != observer->m_command_id) return false;
     auto receipt = std::make_shared<CommandReceipt>(); receipt->name = m_command_requested_target; m_command_receipt = receipt;
     auto weak = std::make_shared<std::weak_ptr<Command>>();
-    // The actual effect owns its backend cell through Domain receipt capture,
+    // The actual effect owns its backend cell through receipt capture,
     // including observer loss. Retained metadata owns no backend after that.
     auto completion_backend = std::make_shared<std::shared_ptr<CommandBackend>>();
-    auto command = std::make_shared<Command>(scheduler, [weak, receipt, observer, id, post, completion_backend] {
+    auto command = std::make_shared<Command>([weak, receipt, observer, id, post, completion_backend] {
         if (const auto command = weak->lock()) if (const auto result = command->result()) {
             auto description = result->value ? PrepareImportError(result->value->error).description : QString{};
             if (description.isEmpty()) description = WalletQmlController::tr("The selected file could not be restored as a wallet. Check that it is a valid wallet backup, then try another file.");
@@ -319,8 +335,8 @@ bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::u
         post([observer, id] { if (observer) observer->publishWalletCommand(id); });
     });
     *weak = command;
-    auto owner = execution::RetainSnapshot<std::shared_ptr<Command>>(scheduler, [&] { return std::make_unique<std::shared_ptr<Command>>(command); });
-    const auto backend = execution::RetainSnapshot<CommandBackend>(scheduler, [&] {
+    auto owner = services.retain<std::shared_ptr<Command>>([&] { return std::make_unique<std::shared_ptr<Command>>(command); });
+    const auto backend = services.retain<CommandBackend>([&] {
         auto value = std::make_unique<CommandBackend>(); value->lifetime = result_lifetime; return value;
     });
     *completion_backend = backend;
@@ -338,7 +354,7 @@ bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::u
     m_command = command; m_command_owner = std::move(owner); m_command_backend = backend;
     m_command_done = std::move(done); m_command_failed = std::move(failed);
     m_command_state = WalletOperationState::WalletOperationPending;
-    const auto submitted = command->start([effect = std::move(effect), backend, subscription = m_load_subscription] {
+    auto work = [effect = std::move(effect), backend, subscription = m_load_subscription] {
         std::unique_ptr<interfaces::Wallet> wallet;
         auto result = effect(wallet);
         result.has_wallet = bool(wallet);
@@ -347,8 +363,8 @@ bool WalletQmlController::submitWalletCommand(std::function<CommandResult(std::u
         result.reconcile_open = result.open_attempted && !result.has_wallet && !result.incomplete && !result.needs_migration && !result.needs_passphrase;
         if (result.open_attempted && subscription) result.notification_fence = subscription->notificationFence();
         return result;
-    },
-        {execution::Lane::Core, scheduler->allocateKey(), execution::WorkClass::Action});
+    };
+    const auto submitted = services.start(*command, std::move(work));
     if (!observer || observer->m_shutting_down || id != observer->m_command_id) return bool(submitted);
     if (!submitted) {
         m_command_state = WalletOperationState::WalletOperationFailed;
@@ -378,19 +394,20 @@ void WalletQmlController::publishWalletCommand(quint64 id)
             m_open_resolution_wallet = reconciledOpenWallet(*result->value);
             const auto session = m_open_resolution_wallet ? m_open_resolution_wallet->opening() : std::shared_ptr<walletopening::Session>{};
             const OpenIntentFacts facts{true, session ? session->identity() : walletopening::Opening{}, session};
-            m_open_resolution = std::make_shared<execution::OwnedCommand<OpenIntentResolution>>(backgroundScheduler(),
+            m_open_resolution = std::make_shared<execution::OwnedCommand<OpenIntentResolution>>(
                 [observer, id, post = m_services.post] { post([observer, id] { if (observer) observer->publishWalletCommand(id); }); });
             const auto resolution_owner = m_open_resolution;
-            const auto scheduler = backgroundScheduler();
+            const auto services = commandServices();
             const auto receipt = m_command_receipt;
             execution::SubmitResult submitted{{}, execution::Rejection::Transport};
             try {
-                submitted = resolution_owner->start([facts, receipt] {
+                auto work = [facts, receipt] {
                     const auto decision = resolveOpenIntent(facts);
                     { std::lock_guard lock{receipt->mutex}; receipt->open_intent_state = decision.state; }
                     return decision;
-                }, {execution::Lane::Domain, scheduler->allocateKey(), execution::WorkClass::Action});
-            } catch (...) { /* Pre-submitted failure has no Domain outcome to await. */ }
+                };
+                submitted = services.start(*resolution_owner, std::move(work), execution::Lane::Utility);
+            } catch (...) { /* Pre-submitted failure has no outcome to await. */ }
             if (!observer || m_shutting_down || id != m_command_id || m_open_resolution != resolution_owner) return;
             m_open_resolution_rejected = !submitted;
             if (submitted) return;
@@ -511,23 +528,49 @@ backup::Services WalletQmlController::backupServices() const
 }
 
 namespace {
-WalletQmlController::Services StandaloneControllerServices(execution::Options limits)
+WalletQmlController::Services StandaloneControllerServices()
 {
-    auto executor = std::make_shared<BackendExecutor>(limits);
-    executor->setObjectName(QStringLiteral("wallet-commands"));
-    auto bridge = presentation::MakeGuiObject();
-    return {executor->scheduler(), presentation::QueuedPost(),
-        [executor, bridge](auto drained) {
-            executor->whenDrained(bridge.get(), std::move(drained));
-            executor->shutdown();
-        }};
+    const auto executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
+    WalletQmlController::Services services;
+    services.post = presentation::QueuedPost();
+    const auto cleanup = std::make_shared<execution::SerialQueue>(executor->makeQueue(execution::Lane::Utility));
+    const auto native_cleanup = std::make_shared<execution::SerialQueue>(
+        executor->makeQueue(execution::Lane::Utility, execution::UtilityWorker::Cleanup));
+    services.make_wallet_services = [executor, cleanup, native_cleanup](bool) {
+        WalletQmlModel::Services wallet;
+        wallet.core = std::make_shared<execution::SerialQueue>(executor->makeQueue(execution::Lane::Core));
+        wallet.outcomes = std::make_shared<execution::SerialQueue>(executor->makeQueue(execution::Lane::Utility));
+        wallet.cleanup = cleanup;
+        wallet.native_cleanup = native_cleanup;
+        return wallet;
+    };
+    services.executor = executor.get();
+    services.owned_executor = executor;
+    return services;
 }
 
 WalletQmlController::Services ValidateControllerServices(WalletQmlController::Services services)
 {
-    if (bool(services.scheduler) != bool(services.shutdown) || bool(services.scheduler) != bool(services.post))
-        throw std::invalid_argument("Controller scheduler, GUI post, and shutdown must be supplied together");
-    if (!services.scheduler) return StandaloneControllerServices({});
+    if (!services.executor && !services.post && !services.shutdown &&
+        !services.make_wallet_services && !services.owned_executor && !services.catalog_queues.core && !services.catalog_queues.outcomes) {
+        services = StandaloneControllerServices();
+    }
+    if (!services.executor || !services.post || !services.make_wallet_services || services.shutdown ||
+        bool(services.catalog_queues.core) != bool(services.catalog_queues.outcomes))
+        throw std::invalid_argument("Incomplete wallet catalog queues");
+    if (!services.catalog_queues.core) {
+        services.catalog_queues.core = std::make_shared<execution::SerialQueue>(services.executor->makeQueue(execution::Lane::Core));
+        services.catalog_queues.outcomes = std::make_shared<execution::SerialQueue>(services.executor->makeQueue(execution::Lane::Utility));
+    }
+    services.shutdown = [core = services.catalog_queues.core, outcomes = services.catalog_queues.outcomes](auto done) {
+        // The registry has drained its retained values, including owners
+        // that could still submit a dependent Core stage.
+        core->close();
+        core->whenDrained([outcomes, done = std::move(done)]() mutable {
+            outcomes->close();
+            outcomes->whenDrained(std::move(done));
+        });
+    };
     return services;
 }
 }
@@ -536,17 +579,14 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, Services servic
     : WalletQmlController(node, {}, {}, std::move(services), parent) {}
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, QObject* parent)
-    : WalletQmlController(node, execution::Options{}, parent) {}
+    : WalletQmlController(node, Services{}, parent) {}
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences, QObject* parent)
     : WalletQmlController(node, std::move(preferences), {}, parent) {}
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences,
                                        walletopening::FeePolicy fee_policy, QObject* parent)
-    : WalletQmlController(node, std::move(preferences), std::move(fee_policy), StandaloneControllerServices({}), parent) {}
-
-WalletQmlController::WalletQmlController(interfaces::Node& node, execution::Options limits, QObject* parent)
-    : WalletQmlController(node, {}, {}, StandaloneControllerServices(limits), parent) {}
+    : WalletQmlController(node, std::move(preferences), std::move(fee_policy), Services{}, parent) {}
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences,
                                        walletopening::FeePolicy fee_policy, Services services, QObject* parent)
@@ -555,7 +595,7 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
     , m_preferences(std::move(preferences))
     , m_fee_policy(std::move(fee_policy))
     , m_services(ValidateControllerServices(std::move(services)))
-    , m_empty_wallet(new WalletQmlModel(&node, this))
+    , m_empty_wallet(new WalletQmlModel(&node, walletServices(/*detached=*/true), this))
     , m_notification_bridge(presentation::MakeGuiObject())
 {
     // Saves run on workers until shutdown drains them; the node outlives that.
@@ -583,7 +623,7 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
     host->adoptionUnavailable = [this](bool closed) { adoptionUnavailable(closed); };
     host->createFacade = [this](walletopening::Source wallet, const QString& name, walletopening::NativeEvents events,
                                 std::unique_ptr<interfaces::Handler> handler) {
-        return new WalletQmlModel(WalletQmlModel::SharedWallet{std::move(wallet), backgroundScheduler(), name, m_preferences, m_fee_policy, m_shutdown_gate, std::move(events), true, std::move(handler)}, &m_node, FeeReadServices{}, psbtServices(), backupServices());
+        return new WalletQmlModel(WalletQmlModel::SharedWallet{std::move(wallet), name, m_preferences, m_fee_policy, m_shutdown_gate, std::move(events), true, std::move(handler), walletServices()}, &m_node, FeeReadServices{}, psbtServices(), backupServices());
     };
     host->information = [this](WalletQmlModel* wallet, WalletRegistry::Information action) {
         switch (action) {
@@ -601,7 +641,17 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
     host->prepareForget = [this](WalletQmlModel* wallet) { m_selection->prepareForget(wallet); };
     host->forget = [this](WalletQmlModel* wallet, WalletQmlModel* successor) { m_selection->forget(wallet, successor); };
     host->contextChanged = [this] { updateNotificationContext(); };
-    m_registry = std::make_shared<WalletRegistry>(std::move(host), WalletRegistry::Services{backgroundScheduler(), m_notification_bridge, m_empty_wallet, m_services.post, m_services.shutdown});
+    WalletNamesController::Services names;
+    auto& executor = *m_services.executor;
+    auto value_cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+    names.utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+    names.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+    auto shutdown = [outcomes = names.outcomes, stop = m_services.shutdown](auto done) {
+        outcomes->whenDrained([stop, done = std::move(done)]() mutable { stop(std::move(done)); });
+    };
+    m_registry = std::make_shared<WalletRegistry>(std::move(host), WalletRegistry::Services{
+        m_notification_bridge, m_empty_wallet, m_services.post, std::move(shutdown), std::move(value_cleanup)});
+    if (const auto cleanup = m_registry->valueCleanup()) m_empty_wallet->setPsbtValueCleanup(cleanup);
     m_selection = new WalletSelectionModel(m_empty_wallet, [this](WalletQmlModel* wallet) { return m_registry->containsExact(wallet); }, this);
     connect(m_selection, &WalletSelectionModel::selectedWalletChanged, this, [this] {
         const QPointer<WalletQmlController> observer{this};
@@ -609,8 +659,8 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
         if (observer) Q_EMIT selectedWalletChanged();
     });
     m_registry->setNotificationOrigin(newAdoptionOrigin());
-    WalletNamesController::Services names;
-    names.node = &m_node; names.scheduler = backgroundScheduler(); names.post = m_services.post; names.empty_wallet = m_empty_wallet;
+    names.node = &m_node;
+    names.post = m_services.post; names.empty_wallet = m_empty_wallet;
     names.next_wallet = [this](WalletQmlModel* wallet) -> WalletQmlModel* {
         const auto& wallets = m_registry->information();
         const auto next = wallet ? wallets.upper_bound(wallet) : wallets.begin();
@@ -621,7 +671,8 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, walletopening::
     WalletCreationController::Host creation;
     creation.node = &m_node; creation.registry = m_registry; creation.admission = m_creation_admission;
     creation.names_ready = m_names_ready; creation.shutdown_gate = m_shutdown_gate;
-    creation.scheduler = backgroundScheduler(); creation.post = m_services.post;
+    creation.post = m_services.post;
+    creation.catalog_queues = m_services.catalog_queues;
     creation.accepting = [this] { return !m_shutting_down && m_initialized && !walletLoadInProgress() && !m_admitting_command && !m_publishing_command; };
     creation.loading = [this] { return walletLoadInProgress(); };
     creation.ready = [this] { return m_initialized && !m_initialization_failed && !m_shutting_down; };
@@ -650,6 +701,11 @@ WalletQmlController::~WalletQmlController()
     m_registry->detachPresentation();
     m_registry->detachController();
     m_registry.reset();
+}
+
+WalletQmlModel::Services WalletQmlController::walletServices(bool detached) const
+{
+    return m_services.make_wallet_services(detached);
 }
 
 void WalletQmlController::setSelectedWallet(QString path, QString wallet_format)
@@ -829,14 +885,20 @@ void WalletQmlController::beginShutdown()
 {
     if (std::exchange(m_shutdown_started, true)) return;
     close();
+    std::function<void(std::function<void()>)> notification_retirement;
     if (m_load_subscription) m_load_subscription->retire();
+    if (m_load_subscription) {
+        notification_retirement = [subscription = m_load_subscription](auto done) {
+            subscription->whenRetired(std::move(done));
+        };
+    }
     if (m_load_failure) { m_load_failure->deleteLater(); m_load_failure.clear(); Q_EMIT loadFailureChanged(); }
     const bool loaded_changed = std::exchange(m_is_wallet_loaded, false);
     const bool had_wallets = !m_registry->empty();
     const bool target_changed = m_close_target != nullptr; m_close_target = nullptr;
     m_initialized = false;
     m_empty_wallet->setParent(nullptr);
-    m_registry->beginRetirement();
+    m_registry->beginRetirement(std::move(m_services.owned_executor), std::move(notification_retirement));
     const QPointer<WalletQmlController> observer{this};
     m_selection->close(); if (!observer) return;
     m_selection->clear(); if (!observer) return;
@@ -1109,7 +1171,7 @@ void WalletQmlController::initialize()
     // coherent resynchronization capability. Seed once and retain notification
     // handles; the subtree wallet/node interfaces remain unchanged.
     m_load_subscription = std::make_shared<walletlife::LoadSubscription>(
-        backgroundScheduler(),
+        m_services.executor,
         [node = &m_node](walletlife::LoadSubscription::Callback callback) {
             return node->walletLoader().handleLoadWallet(std::move(callback));
         },
@@ -1170,7 +1232,7 @@ void WalletQmlController::finishInitialization()
     if (!handoff->entries.empty()) {
         for (auto& entry : handoff->entries) {
             if (entry.unload_observation->unloaded->load()) continue;
-            auto adoption = WalletRegistry::retain<OpeningAdoption>(backgroundScheduler(), [] { return std::make_unique<OpeningAdoption>(); });
+            auto adoption = m_registry->retain<OpeningAdoption>([] { return std::make_unique<OpeningAdoption>(); });
             if (!guard || m_shutting_down) return;
             if (!adoption) {
                 m_initialization_failed = true;
@@ -1181,9 +1243,9 @@ void WalletQmlController::finishInitialization()
             }
             adoption->unloaded = entry.unload_observation->unloaded;
             auto* wallet_model = new WalletQmlModel(WalletQmlModel::SharedWallet{
-                std::move(entry.initial_wallet), backgroundScheduler(), QString::fromStdString(entry.name),
+                std::move(entry.initial_wallet), QString::fromStdString(entry.name),
                 m_preferences, m_fee_policy, m_shutdown_gate, {m_registry->eventClock(), adoption->unloaded}, true,
-                std::move(entry.unload_observation->handler)}, &m_node, FeeReadServices{}, psbtServices(), backupServices());
+                std::move(entry.unload_observation->handler), walletServices()}, &m_node, FeeReadServices{}, psbtServices(), backupServices());
             if (!registerWalletModel(wallet_model, adoption)) {
                 if (!guard || m_shutting_down) return;
                 retireWallet(wallet_model, false);

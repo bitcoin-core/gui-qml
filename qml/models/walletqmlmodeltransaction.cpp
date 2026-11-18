@@ -239,7 +239,6 @@ void WalletQmlModelTransaction::refreshRecipientPresentation()
     const auto opening = m_opening;
     const auto original = m_review_lifetime;
     const auto post = m_post;
-    const auto scheduler = opening->scheduler();
     const auto owns = [observer, opening, revision, unit] {
         return observer && !observer->m_closed && observer->m_opening == opening && opening->observationOpen() &&
             observer->m_presentation_revision == revision && observer->m_requested_display_unit == unit;
@@ -252,7 +251,7 @@ void WalletQmlModelTransaction::refreshRecipientPresentation()
         Q_EMIT presentationChanged();
         return;
     }
-    const auto submitted = execution::Submit(*scheduler, [original, unit, rows] {
+    const auto submitted = opening->postDomain([original, unit, rows] {
         *rows = walletreview::FormatRecipients(original->recipients, unit);
         return rows;
     }, [post, observer, revision, unit](std::shared_ptr<QVariantList> result) {
@@ -287,7 +286,7 @@ void WalletQmlModelTransaction::refreshRecipientPresentation()
             observer->m_presentation_error = tr("Review presentation could not be prepared.");
             Q_EMIT observer->presentationChanged();
         });
-    }, {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    });
     if (!owns()) return;
     m_presentation_pending = bool(submitted);
     m_presentation_error = submitted ? QString{} : tr("The review could not be shown. Try again in a moment.");

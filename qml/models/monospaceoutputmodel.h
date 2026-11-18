@@ -14,7 +14,7 @@
 #include <functional>
 
 /** Bounded presentation adapter. Model roles are captured in small GUI turns;
- * text conversion, line/chunk projection and literal search run on Domain.
+ * text conversion, line/chunk projection and literal search run on Utility.
  * Worker notices contain no GUI payload and never dereference a QObject. */
 class MonospaceOutputModel : public QAbstractListModel
 {

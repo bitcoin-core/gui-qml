@@ -44,15 +44,16 @@ struct ErrorDetails {
     StartupDiagnosticsModel* model{nullptr};
     std::optional<QString> replacement_message;
 };
-ErrorDetails PrepareErrorDetails(const execution::SnapshotServices& services, const QString& summary,
+ErrorDetails PrepareErrorDetails(presentation::Post post, const QString& summary,
     std::shared_ptr<const startupdiagnostics::Collection> full_message,
-    StartupDiagnosticsModel* existing, const DiagnosticLoss& loss);
+    StartupDiagnosticsModel* existing, const DiagnosticLoss& loss, PresentationServices& diagnostics);
 void RecordProjectionOutcome(const StartupDiagnosticsModel& details, const DiagnosticLoss& loss);
 bool DeliverError(bool canceled, bool quitting, const std::function<bool()>& present);
 
 enum class PreferencesPhase { BeforeWindow, ErrorHandoff };
 UiPreferencesStore* InstallPreferences(QQmlApplicationEngine& engine,
-    const execution::SnapshotServices& services, UiPreferencesNamespace identity, PreferencesPhase phase);
+    execution::Executor& executor, execution::Lane lane, presentation::Post post,
+    UiPreferencesNamespace identity, PreferencesPhase phase);
 void FinishPreferences(UiPreferencesStore* store, QQuickWindow* window);
 
 struct SettingsWrite { bool success{false}; std::vector<std::string> errors; };

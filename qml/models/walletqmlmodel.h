@@ -14,7 +14,6 @@
 #include <qml/models/transactionreviewinterface.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/texteditsessionmodel.h>
-#include <qml/backendexecutor.h>
 #include <qml/reviewowner.h>
 #include <qml/walletopening.h>
 #include <qml/senddraft.h>
@@ -64,6 +63,8 @@
 #include <QThread>
 #include <QTimer>
 #include <QVariantList>
+
+namespace execution { class Executor; }
 
 namespace interfaces {
 class Node;
@@ -234,10 +235,15 @@ public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node,
                    FeeReadServices fee_services, psbtfee::Services proof_services, backup::Services backup_services,
                    QObject* parent = nullptr);
+    struct Services {
+        std::function<void(std::function<void()>)> shutdown;
+        std::shared_ptr<execution::SerialQueue> cleanup{};
+        std::shared_ptr<execution::SerialQueue> core{};
+        std::shared_ptr<execution::SerialQueue> outcomes{};
+        std::shared_ptr<execution::SerialQueue> native_cleanup{};
+    };
     struct SharedWallet {
         walletopening::Source wallet;
-        // Production composition shares the controller's bounded R08 lanes.
-        std::shared_ptr<execution::Scheduler> observations{};
         QString captured_name{};
         walletopening::Session::Preferences preferences{};
         walletopening::FeePolicy fee_policy{};
@@ -245,11 +251,13 @@ public:
         walletopening::NativeEvents native_events{};
         bool canonical_identity{false};
         std::unique_ptr<interfaces::Handler> unload_handler{};
+        Services services{};
     };
     WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
                    FeeReadServices fee_services, psbtfee::Services proof_services, backup::Services backup_services,
                    QObject* parent = nullptr);
     WalletQmlModel(interfaces::Node* node, QObject* parent = nullptr);
+    WalletQmlModel(interfaces::Node* node, Services services, QObject* parent);
     WalletQmlModel(QObject *parent = nullptr);
     ~WalletQmlModel();
 
@@ -361,7 +369,8 @@ public:
     Q_INVOKABLE void discardCurrentTransaction();
     PsbtQmlModel* importedPsbt() const { return m_imported_psbt_model; }
     interfaces::Node* node() const { return m_node; }
-    std::shared_ptr<BackendExecutor> backendExecutor() const { return m_backend_executor; }
+    std::shared_ptr<execution::SerialQueue> coreQueue() const { return m_services.core; }
+    void whenNativeDrained(QObject& receiver, std::function<void()> done);
     // False once the wallet is unloading or closing. Set from the unload
     // notification's own thread, before the GUI hears about it.
     bool shutdownComplete() const { return m_shutdown_finished; }
@@ -429,6 +438,7 @@ public:
     QString currentTransactionReviewMessage() const { return m_current_transaction ? m_current_transaction->reviewMessage() : QString{}; }
     QString settingsError() const { return m_settings_error; }
     void setNode(interfaces::Node* node);
+    void setPsbtValueCleanup(execution::ValueCleanup cleanup);
 
 Q_SIGNALS:
     void balanceObservationChanged();
@@ -489,9 +499,9 @@ Q_SIGNALS:
 private:
     using CurrentTransactionSource = WalletQmlModelTransaction::Source;
 
-    void initializeBackend();
+    void initializeBackend(bool detached = false);
     void initializeBalanceReader();
-    void checkShutdownFinished();
+    void finishShutdown();
     void publishBalance();
     void initializeFeeEstimator();
     void initializePreparationOwner();
@@ -541,7 +551,7 @@ private:
         std::shared_ptr<walletrequests::Store> store;
         std::shared_ptr<const walletopening::Session::Action> action;
         std::shared_ptr<QMap<QString, QString>> labels;
-        std::optional<execution::ResourceLease> label_lifetime;
+        std::shared_ptr<void> label_lifetime;
         bool valid{false};
         std::shared_ptr<QObject> bridge;
         QPointer<WalletQmlModel> observer;
@@ -581,7 +591,7 @@ private:
     void publishPsbtAction();
     std::shared_ptr<PsbtAction> m_psbt_action;
     std::shared_ptr<PsbtReceipt> m_psbt_receipt;
-    std::optional<execution::ResourceLease> m_psbt_action_lease, m_psbt_document_lease, m_preparation_lease;
+    std::shared_ptr<void> m_psbt_action_lease, m_psbt_document_lease, m_preparation_lease;
     PsbtActionState m_psbt_action_state{PsbtActionState::PsbtIdle};
     PsbtActionKind m_psbt_action_kind{PsbtActionKind::Import};
     PsbtImportResult m_psbt_import_result{PsbtImportResult::PsbtUnsupported};
@@ -605,7 +615,6 @@ private:
     void publishOpening();
     struct ReviewRetirement;
     std::shared_ptr<ReviewRetirement> m_review_retirement;
-    bool m_reviews_drained{true};
     std::shared_ptr<walletopening::Session> m_opening;
     std::optional<qint64> m_ready_send_total;
     qint64 m_coin_selection_target{0};
@@ -623,8 +632,11 @@ private:
     bool m_can_get_addresses{false}, m_taproot{false}, m_receive_preference_pending{false};
     QSet<QString> m_proven_receive_types;
     QString m_receive_preference, m_receive_preference_error;
-    bool m_metadata_known{false}, m_private_keys_disabled{false}, m_external_signer{false}, m_opening_drained{true};
-    std::shared_ptr<BackendExecutor> m_backend_executor{std::make_shared<BackendExecutor>(execution::Options{})};
+    bool m_metadata_known{false}, m_private_keys_disabled{false}, m_external_signer{false};
+    Services m_services;
+    std::shared_ptr<execution::Executor> m_standalone_executor;
+    struct NativeDrain;
+    std::shared_ptr<NativeDrain> m_native_drain;
     std::shared_ptr<QObject> m_notification_bridge;
     std::shared_ptr<walletbalance::Reader> m_balance_reader;
     QTimer m_balance_timer;
@@ -632,7 +644,7 @@ private:
     bool m_balance_known{false};
     BalanceState m_balance_state{BalanceState::Unavailable};
     bool m_stopping{false};
-    bool m_backend_drained{false}, m_balance_drained{true}, m_shutdown_finished{false};
+    bool m_shutdown_finished{false};
     interfaces::Node* m_node{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
@@ -642,6 +654,7 @@ private:
     SendRecipientsListModel* m_send_recipients{nullptr};
     SignVerifyMessageModel* m_sign_verify_message_model{nullptr};
     ReceiveRequestHistoryModel* m_receive_requests{nullptr};
+    std::shared_ptr<void> m_receipt_retirement;
     std::shared_ptr<walletreceipts::Reader> m_receipts;
     std::shared_ptr<walletrequests::Store> m_request_store;
     WalletReceiveModel* m_receive{nullptr};
@@ -672,7 +685,8 @@ private:
     void invalidateAutomaticMaximum();
     void initializePsbtFeeReader();
     bool requestPsbtFeeProof();
-    void applyPsbtFeeProof(const std::shared_ptr<const psbtfee::RequestIdentity>& token, psbtfee::Resolution result, bool publish = true);
+    void publishPsbtFeeProof();
+    void applyPsbtFeeProof(const std::shared_ptr<const psbtfee::FeeRequest>& token, psbtfee::Resolution result, bool publish = true);
     backup::Services m_backup_services;
     WalletBackups* m_backups{nullptr};
     BackupFileOperation* startBackup(const QString& path, QString& why, std::function<void(backup::Snapshot)> outcome);
@@ -680,7 +694,7 @@ private:
     QPointer<FileExportOperationModel> m_file_export_operation;
     psbtfee::Services m_psbt_fee_services;
     bool m_custom_psbt_lookup{false};
-    std::shared_ptr<const psbtfee::RequestIdentity> m_psbt_fee_request;
+    std::shared_ptr<psbtfee::FeeRequest> m_psbt_fee_request;
     bool m_psbt_fee_pending{false};
     quint64 m_approval_id{0};
     ApprovalState m_approval_state{ApprovalState::ApprovalInitial};
@@ -761,7 +775,6 @@ private:
     quint64 m_fee_estimate_request_id{0};
     int m_fee_estimate_revision{0};
     bool m_fee_estimate_pending{false};
-    bool m_fee_drained{true};
     std::string m_fee_observed_block;
     quint64 m_fee_backend_revision{0};
     QString m_transaction_error;

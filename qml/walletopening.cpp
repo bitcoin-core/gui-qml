@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/walletopening.h>
+#include <qml/executor.h>
+#include <qml/retainedvalue.h>
 
 #include <interfaces/chain.h>
 #include <addresstype.h>
@@ -10,6 +12,8 @@
 #include <univalue.h>
 
 #include <algorithm>
+#include <cassert>
+#include <exception>
 #include <stdexcept>
 #include <utility>
 
@@ -19,9 +23,11 @@ struct Session::Resources {
     std::shared_ptr<interfaces::Wallet> shared_wallet;
     std::unique_ptr<interfaces::Handler> unload_handler;
     std::vector<std::unique_ptr<interfaces::Handler>> handlers;
+    bool acquired{false};
 
     interfaces::Wallet* get() const { return wallet ? wallet.get() : shared_wallet.get(); }
 };
+
 namespace {
 Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& preferences)
 {
@@ -34,15 +40,30 @@ Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& pr
     return {std::move(name), wallet.privateKeysDisabled(), wallet.hasExternalSigner(), wallet.isCrypted(), wallet.isLocked(),
             wallet.canGetAddresses(), wallet.taprootEnabled(), std::move(saved)};
 }
+
+execution::SubmitResult PostUtility(execution::SerialQueue& queue, std::function<void()> work)
+{
+    const bool accepted = queue.post([work = std::move(work)] {
+        // These turns have no outcome callback. A failed turn must still
+        // leave the worker available for the next one.
+        try {
+            work();
+        } catch (...) {}
+    });
+    return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+}
 }
 
-Session::Session(std::shared_ptr<execution::Scheduler> commands,
-                 std::shared_ptr<execution::Scheduler> retirement,
-                 std::shared_ptr<std::atomic_bool> closed, Notify notify, Preferences preferences, Clock clock, std::shared_ptr<std::atomic_bool> shutdown_gate, NativeEvents native_events)
-    : m_commands(std::move(commands)), m_retirement(std::move(retirement)),
-      m_command_key(m_commands->allocateKey()), m_retirement_key(m_retirement->allocateKey()),
-      m_closed(std::move(closed)), m_shutdown_gate(std::move(shutdown_gate)), m_notify(std::move(notify)), m_preferences(std::move(preferences)), m_clock(std::move(clock)), m_native_events(std::move(native_events)), m_resources(std::make_shared<Resources>())
+Session::Session(std::shared_ptr<std::atomic_bool> closed, Notify notify, Preferences preferences, Clock clock,
+                 std::shared_ptr<std::atomic_bool> shutdown_gate, NativeEvents native_events, Queues queues)
+    : m_closed(std::move(closed)), m_shutdown_gate(std::move(shutdown_gate)), m_notify(std::move(notify)), m_preferences(std::move(preferences)), m_clock(std::move(clock)), m_native_events(std::move(native_events)),
+      m_cleanup_queue(std::move(queues.cleanup)), m_core_queue(std::move(queues.core)), m_outcomes(std::move(queues.outcomes)),
+      m_value_cleanup(std::make_shared<execution::ValueCleanupQueue>(m_cleanup_queue)),
+      m_native_cleanup(std::make_shared<execution::ValueCleanupQueue>(queues.native_cleanup ? queues.native_cleanup : m_cleanup_queue)),
+      m_outcome_delivery(std::make_shared<execution::ValueCleanupQueue>(m_outcomes)),
+      m_stop_work(std::move(queues.stop_work))
 {
+    assert(m_cleanup_queue && m_core_queue && m_outcomes && m_stop_work);
 }
 
 Session::Start Session::start(const std::shared_ptr<interfaces::Wallet>& wallet)
@@ -58,37 +79,57 @@ Session::Start Session::start(std::unique_ptr<interfaces::Wallet>& wallet, std::
     });
 }
 
+Session::Start Session::start(Source& source, std::unique_ptr<interfaces::Handler>& unload_handler)
+{
+    if (auto* wallet = std::get_if<std::unique_ptr<interfaces::Wallet>>(&source)) return start(*wallet, unload_handler);
+    auto& wallet = std::get<std::shared_ptr<interfaces::Wallet>>(source);
+    return startWith([&](Resources& resources) {
+        resources.shared_wallet = std::move(wallet);
+        resources.unload_handler = std::move(unload_handler);
+    });
+}
+
+void Session::retireUnclaimed(Source& source, std::unique_ptr<interfaces::Handler>& unload_handler)
+{
+    struct UnclaimedWallet {
+        Source source;
+        std::unique_ptr<interfaces::Handler> handler;
+
+        ~UnclaimedWallet()
+        {
+            try {
+                if (handler) handler->disconnect();
+            } catch (...) {
+                // Release both handles even when disconnection fails.
+            }
+        }
+    };
+    const auto make = [] { return std::make_unique<UnclaimedWallet>(); };
+    const auto unused = walletopening::RetainValues<UnclaimedWallet>(shared_from_this(), make);
+    if (!unused) std::terminate();
+    unused->source = std::move(source);
+    unused->handler = std::move(unload_handler);
+}
+
 Session::Start Session::startWith(const std::function<void(Resources&)>& acquire)
 {
+    const auto self = shared_from_this();
+    std::shared_ptr<Resources> resources;
     {
         std::lock_guard lock{m_mutex};
         if (m_started) return {{{}, execution::Rejection::Invalid}, {}};
-        if (m_drained) return {{{}, execution::Rejection::Closed}, {}};
-        m_started = true;
-    }
-    const auto self = shared_from_this();
-    const auto cleanup = execution::Submit(*m_retirement, [self] { return self->cleanup(); }, [self](bool failed) {
-        self->completeStop(failed);
-    }, {}, {execution::Lane::Cleanup, m_retirement_key}, true);
-    if (!cleanup) {
-        completeStop(true);
-        return {cleanup, {}};
-    }
-    {
-        std::lock_guard lock{m_mutex};
-        m_cleanup = cleanup.id;
-    }
-    // Pin initialization before acquiring a native resource. A concurrent
-    // retirement-root shutdown may activate its reservation immediately.
-    auto initialization = m_retirement->borrow(m_retirement_key);
-    if (!initialization) {
-        retire();
-        return {{{}, initialization.rejection}, {}};
-    }
-    {
-        std::lock_guard lock{m_mutex};
-        acquire(*m_resources);
+        if (m_drained || m_closed->load()) return {{{}, execution::Rejection::Closed}, {}};
+        auto native = std::make_shared<Resources>();
+        auto hold = m_native_cleanup->hold([self, native] {
+            if (native->acquired) self->completeStop(self->cleanup(*native));
+        });
+        if (!hold) return {{{}, execution::Rejection::Closed}, {}};
+        resources = std::shared_ptr<Resources>{std::move(hold), native.get()};
+        acquire(*resources);
+        resources->acquired = true;
+        m_resources = resources;
         m_refresh_pending = true;
+        m_started = true;
     }
     auto client = borrow();
     const auto admitted = read([self](interfaces::Wallet& value) {
@@ -121,14 +162,9 @@ Session::Start Session::startWith(const std::function<void(Resources&)>& acquire
 
 std::shared_ptr<interfaces::Wallet> Session::borrow() const
 {
-    auto borrowed = m_retirement->borrow(m_retirement_key);
-    if (!borrowed) return {};
     std::lock_guard lock{m_mutex};
-    if (!observationOpen()) return {};
-    auto* wallet = m_resources->get();
-    if (!wallet) return {};
-    auto lease = std::make_shared<execution::ResourceLease>(std::move(*borrowed.lease));
-    return {std::move(lease), wallet};
+    if (!observationOpen() || !m_resources || !m_resources->get()) return {};
+    return {m_resources, m_resources->get()};
 }
 
 void Session::close()
@@ -148,34 +184,58 @@ bool Session::admitAction()
 
 bool Session::control(std::function<void()> effect)
 {
-    return bool(execution::Submit(*m_commands, [] {}, std::move(effect), {},
-                                 {execution::Lane::Control, m_command_key}));
+    return bool(PostUtility(*m_outcomes, std::move(effect)));
 }
 
 execution::SubmitResult Session::postDomain(std::function<void()> work, execution::WorkClass kind)
 {
     if (kind == execution::WorkClass::Action ? !admitAction() : !available()) return {{}, execution::Rejection::Closed};
     const auto self = shared_from_this();
-    return execution::Submit(*m_commands, [self, work = std::move(work), kind] {
+    auto run = [self, work = std::move(work), kind] {
         // Accepted command planning must consume its outcome even after close.
         if (kind == execution::WorkClass::Action || self->available()) work();
-    }, [] {}, {}, {execution::Lane::Domain, m_command_key, kind});
+    };
+    return PostUtility(*m_outcomes, std::move(run));
+}
+
+execution::SubmitResult Session::postDomainTask(std::shared_ptr<execution::Task> packet, execution::WorkClass)
+{
+    if (!observationOpen()) return {{}, execution::Rejection::Closed};
+    return PostUtility(*m_outcomes, [packet = std::move(packet)] {
+        packet->execute();
+        packet->deliver();
+    });
+}
+
+std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)> Session::observationPost(
+    execution::Lane lane)
+{
+    assert(lane == execution::Lane::Core || lane == execution::Lane::Domain);
+    return [self = shared_from_this(), lane](std::shared_ptr<execution::Task> packet) {
+        if (lane == execution::Lane::Domain) return self->postDomainTask(std::move(packet), execution::WorkClass::Observation);
+        if (!self->observationOpen()) return execution::SubmitResult{{}, execution::Rejection::Closed};
+        return self->postCore(std::move(packet));
+    };
 }
 
 execution::SubmitResult Session::retireValues(std::function<void()> work)
 {
-    return execution::Submit(*m_commands, std::move(work), [] {}, {},
-        {execution::Lane::Cleanup, {}, execution::WorkClass::Action});
+    return PostUtility(*m_outcomes, std::move(work));
 }
 
-execution::Borrow Session::holdValues(std::function<void()> cleanup)
+std::shared_ptr<void> Session::holdValues(std::function<void()> cleanup)
 {
-    const auto key = m_commands->allocateKey();
-    const auto reserved = execution::Submit(*m_commands, std::move(cleanup), [] {}, {},
-        {execution::Lane::Cleanup, key, execution::WorkClass::Action}, true);
-    if (!reserved) return {{}, reserved.rejection};
-    auto held = m_commands->borrow(key);
-    m_commands->activateCleanup(reserved.id);
+    // A rejected callback can release an action and reenter releaseWork().
+    // Keep its captures alive until the admission lock has been released.
+    auto retire = std::make_shared<Notify>(std::move(cleanup));
+    std::lock_guard lock{m_mutex};
+    if (m_stop_requested) return {};
+    auto held = m_value_cleanup->hold([self = shared_from_this(), retire] {
+        try { (*retire)(); } catch (...) {}
+        *retire = {};
+        self->releaseWork();
+    });
+    if (held) ++m_work_references;
     return held;
 }
 
@@ -194,46 +254,54 @@ std::function<bool()> Session::observationGuard() const
     };
 }
 
+Session::Action::~Action()
+{
+    if (m_owner) m_owner->releaseWork();
+}
+
 std::shared_ptr<const Session::Action> Session::startAction()
 {
-    auto scope = m_commands->openActionScope();
-    if (!scope) return {};
-    execution::ResourceKey work_key;
-    try { work_key = m_commands->allocateKey(); } catch (...) { return {}; }
-    if (!admitAction()) return {};
-    auto wallet = borrow();
-    if (!wallet) return {};
-    return std::shared_ptr<const Action>{new Action{m_identity, std::move(scope), work_key, std::move(wallet)}};
+    auto action = std::shared_ptr<Action>{new Action{m_identity}};
+    std::lock_guard lock{m_mutex};
+    if (!available() || !m_resources || !m_resources->get()) return {};
+    action->m_owner = shared_from_this();
+    ++m_work_references;
+    ++m_consequences;
+    return action;
 }
 
-execution::SubmitResult Session::submitActionWork(const std::shared_ptr<const Action>& action,
-                                               std::function<void()> work)
+void Session::releaseWork()
 {
-    if (!action || action->m_identity != m_identity) return {{}, execution::Rejection::Invalid};
-    return execution::Submit(*action->m_scope, [action, work = std::move(work)] { work(); }, [] {}, {},
-        {execution::Lane::Core, action->m_work_key, execution::WorkClass::Action});
+    std::function<void(Notify)> stop_work;
+    {
+        std::lock_guard lock{m_mutex};
+        assert(m_work_references > 0);
+        if (--m_work_references == 0 && m_stop_requested) stop_work = std::exchange(m_stop_work, {});
+    }
+    if (stop_work) drainWork(std::move(stop_work));
 }
 
-execution::SubmitResult Session::reserveActionCleanup(const std::shared_ptr<const Action>& action,
-                                                   std::function<void()> work)
+interfaces::Wallet& Session::nativeWallet() const
 {
-    if (!action || action->m_identity != m_identity) return {{}, execution::Rejection::Invalid};
-    return execution::Submit(*action->m_scope, [action, work = std::move(work)] { work(); }, [] {}, {},
-        {execution::Lane::Cleanup, action->m_work_key, execution::WorkClass::Action}, true);
+    std::lock_guard lock{m_mutex};
+    auto* wallet = m_resources ? m_resources->get() : nullptr;
+    if (!wallet) throw std::logic_error{"The wallet opening has no native wallet"};
+    return *wallet;
 }
 
-bool Session::activateActionCleanup(const std::shared_ptr<const Action>& action, execution::TaskId id)
+execution::SubmitResult Session::postCore(std::shared_ptr<execution::Task> packet)
 {
-    if (!action || action->m_identity != m_identity) return false;
-    return action->m_scope->activateCleanup(id);
+    // Reserve Utility delivery before admitting Core work. A rejected Core
+    // submission releases the reservation with no completed packet.
+    return m_outcome_delivery->postWithOutcome(*m_core_queue, std::move(packet));
 }
 
 execution::SubmitResult Session::planAction(const std::shared_ptr<const Action>& action,
                                         std::function<void()> work)
 {
     if (!action || action->m_identity != m_identity) return {{}, execution::Rejection::Invalid};
-    return execution::Submit(*action->m_scope, [action, work = std::move(work)] { work(); }, [] {}, {},
-        {execution::Lane::Domain, m_command_key, execution::WorkClass::Action});
+    auto run = [action, work = std::move(work)] { work(); };
+    return PostUtility(*m_outcomes, std::move(run));
 }
 
 void Session::onTransactions(Transactions consumer)
@@ -287,26 +355,45 @@ void Session::answerClose(Question question, bool accept)
 
 void Session::retire(bool remove_wallet)
 {
-    stop(remove_wallet, {});
+    // Native ingress can report an unload while the facade still needs to
+    // stop its producers. The facade calls stop() after that handoff.
+    std::lock_guard lock{m_mutex};
+    m_closed->store(true);
+    m_remove |= remove_wallet;
+    m_pending = {};
 }
 
 void Session::stop(bool remove_wallet, Notify done)
 {
-    std::optional<execution::TaskId> cleanup;
+    std::function<void(Notify)> stop_work;
     {
         std::lock_guard lock{m_mutex};
         m_closed->store(true);
         m_remove |= remove_wallet;
         m_pending = {};
-        if (m_started && !m_drained) {
+        if (!m_drained) {
             if (done) m_stop_callbacks.push_back(std::exchange(done, {}));
-            cleanup = m_cleanup;
-        } else {
-            m_drained = true;
+            m_stop_requested = true;
+            // Accepted actions can still schedule follow-ups, and retained
+            // values can still post their final cleanup on Utility.
+            if (m_work_references == 0) stop_work = std::exchange(m_stop_work, {});
         }
     }
-    if (cleanup) m_retirement->activateCleanup(*cleanup);
+    if (stop_work) drainWork(std::move(stop_work));
     if (done) done();
+}
+
+void Session::drainWork(std::function<void(Notify)> stop_work)
+{
+    stop_work([self = shared_from_this()] {
+        std::shared_ptr<Resources> resources;
+        {
+            std::lock_guard lock{self->m_mutex};
+            resources = std::move(self->m_resources);
+        }
+        if (!resources) self->completeStop(false);
+        // The last borrower releases the wallet on its cleanup worker.
+    });
 }
 
 void Session::completeStop(bool failed)
@@ -325,22 +412,22 @@ void Session::completeStop(bool failed)
     for (const auto& callback : callbacks) callback();
 }
 
-bool Session::cleanup()
+bool Session::cleanup(Resources& resources)
 {
     m_closed->store(true);
     bool failed{false};
-    for (auto& handler : m_resources->handlers) {
+    for (auto& handler : resources.handlers) {
         try { if (handler) handler->disconnect(); } catch (...) { failed = true; }
     }
-    m_resources->handlers.clear();
+    resources.handlers.clear();
     bool remove;
     { std::lock_guard lock{m_mutex}; remove = m_remove; }
-    try { if (auto* wallet = m_resources->get(); wallet && remove) wallet->remove(); } catch (...) { failed = true; }
+    try { if (auto* wallet = resources.get(); wallet && remove) wallet->remove(); } catch (...) { failed = true; }
     // The original load observation records the removal before disconnecting.
-    try { if (m_resources->unload_handler) m_resources->unload_handler->disconnect(); } catch (...) { failed = true; }
-    m_resources->unload_handler.reset();
-    m_resources->wallet.reset();
-    m_resources->shared_wallet.reset();
+    try { if (resources.unload_handler) resources.unload_handler->disconnect(); } catch (...) { failed = true; }
+    resources.unload_handler.reset();
+    resources.wallet.reset();
+    resources.shared_wallet.reset();
     return failed;
 }
 
@@ -348,7 +435,11 @@ void Session::ingress(int kind, const Txid& txid, ChangeType change)
 {
     m_source_epoch->advance();
     if (kind == 3) m_native_events.observeUnload();
-    auto callback_lifetime = m_retirement->borrow(m_retirement_key);
+    std::shared_ptr<Resources> resources;
+    {
+        std::lock_guard lock{m_mutex};
+        resources = m_resources;
+    }
     if (kind == 3) {
         retire();
         Update closing; closing.unloaded = true; closing.phase = Phase::Closing;
@@ -362,7 +453,7 @@ void Session::ingress(int kind, const Txid& txid, ChangeType change)
         });
         return;
     }
-    if (!callback_lifetime) {
+    if (!resources) {
         if (available()) { retire(); Update failed; failed.failed = true; publish(std::move(failed)); }
         return;
     }

@@ -2,9 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/signerdiscoverymodel.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/walletcreation.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/mocknode.h>
 #include <test/qt_test_registry.h>
 #include <common/args.h>
@@ -13,6 +13,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QThread>
@@ -29,7 +31,7 @@ signerdiscovery::Result Healthy(QString config = QStringLiteral("config-a"), QSt
     return {{Executable(), config, true, QStringLiteral("Persistent")}, {{config + QLatin1Char(':') + fingerprint, name, fingerprint, true}}, Error::None, {}};
 }
 struct Fixture {
-    ManualRoutedExecution process, configuration;
+    ManualStartupExecution worker;
     std::deque<std::function<void()>> gui;
     std::function<void()> deadline;
     std::chrono::milliseconds now{0}, due{0};
@@ -37,11 +39,12 @@ struct Fixture {
     int reads{0}, writes{0};
     bool throw_save{false};
     std::unique_ptr<SignerDiscoveryModel> model;
-    Fixture()
+    explicit Fixture(execution::Executor* executor = nullptr)
     {
         SignerDiscoveryModel::Services services;
         auto post = [this](auto callback) { gui.push_back(std::move(callback)); };
-        services.discovery = {process.scheduler, post}; services.configuration = {configuration.scheduler, post};
+        services.executor = executor ? executor : &worker.executor();
+        services.discovery_post = post; services.configuration_post = post;
         services.retire = post;
         services.ports.configuration = [this] { return result.configuration; };
         services.ports.enumerate = [this](const auto&) { ++reads; if (result.error != Error::None) throw std::runtime_error(result.message.toStdString()); return result.devices; };
@@ -58,8 +61,8 @@ struct Fixture {
     bool settle()
     {
         for (int i{0}; i < 2048; ++i) {
-            if (process.stepNext() || configuration.stepNext() || publish()) continue;
-            return process.quiescent() && configuration.quiescent();
+            if (worker.step(Lane::Utility) || worker.step(Lane::Core) || worker.step(Lane::Utility, execution::UtilityWorker::Signer) || publish()) continue;
+            return worker.quiescent();
         }
         return false;
     }
@@ -72,7 +75,7 @@ private Q_SLOTS:
     void gettersNeverEnumerate() {
         Fixture f;
         for (int i{0}; i < 100; ++i) { QCOMPARE(f.model->rowCount(), 0); QVERIFY(f.model->uniqueSignerId().isEmpty()); QVERIFY(!f.model->fresh()); }
-        QCOMPARE(f.reads, 0); QCOMPARE(f.writes, 0); QVERIFY(f.process.quiescent());
+        QCOMPARE(f.reads, 0); QCOMPARE(f.writes, 0); QVERIFY(f.worker.quiescent());
         f.model->refresh(); QVERIFY(f.model->pending()); QCOMPARE(f.reads, 0);
         QVERIFY(f.settle()); QCOMPARE(f.reads, 1); QVERIFY(f.model->fresh()); QCOMPARE(f.model->uniqueSignerId(), QStringLiteral("config-a:00000001"));
     }
@@ -91,40 +94,40 @@ private Q_SLOTS:
         QCOMPARE(edited.count(), 2); QCOMPARE(changed.count(), 2); QCOMPARE(f.reads, 1); QCOMPARE(f.writes, 0);
     }
     void configurationChangeWhileDiscoveryOwnsOnlyOneSuccessor() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain));
-        auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {}
+        auto held = f.worker.take(Lane::Utility, execution::UtilityWorker::Signer); QVERIFY(held);
         f.result = Healthy("config-b", "00000002");
         for (int i{0}; i < 256; ++i) f.model->refresh();
-        QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle());
+        held(); QVERIFY(f.settle());
         QCOMPARE(f.reads, 2); QCOMPARE(f.model->effectiveConfigurationId(), QStringLiteral("config-b"));
         QCOMPARE(f.model->uniqueSignerId(), QStringLiteral("config-b:00000002")); QVERIFY(f.model->fresh());
     }
     void obsoleteFailureCannotReplaceCurrentIdentity() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain));
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {}
         f.result.error = Error::Backend; f.result.message = "Locked device";
-        QVERIFY(f.process.step(Lane::Core));
+        QVERIFY(f.worker.step(Lane::Utility, execution::UtilityWorker::Signer));
         f.result = Healthy("config-b", "00000002"); f.model->refresh();
         QVERIFY(f.settle()); QCOMPARE(f.reads, 2); QVERIFY(f.model->fresh());
         QCOMPARE(f.model->error().code, SignerDiscoveryError::None); QCOMPARE(f.model->uniqueSignerId(), QStringLiteral("config-b:00000002"));
     }
     void configurationMetadataRemainsResponsiveWhileTheProcessIsHeld() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain));
-        auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
-        QVERIFY(!f.model->configurationKnown()); f.configuration.drain(); while (f.publish()) {}
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {}
+        auto held = f.worker.take(Lane::Utility, execution::UtilityWorker::Signer); QVERIFY(held);
+        QVERIFY(!f.model->configurationKnown()); f.worker.drain(); while (f.publish()) {}
         QVERIFY(f.model->configurationKnown()); QCOMPARE(f.model->effectivePath(), Executable()); QVERIFY(f.model->editable());
         f.model->editPath(Executable() + " --next"); QVERIFY(f.model->canApply());
         QCOMPARE(f.reads, 0); QVERIFY(f.model->pending());
-        QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle());
+        held(); QVERIFY(f.settle());
     }
     void timeoutDoesNotCancelOrStartAnotherProcess() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain));
-        auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {}
+        auto held = f.worker.take(Lane::Utility, execution::UtilityWorker::Signer); QVERIFY(held);
         while (f.publish()) {}
-        f.advance(std::chrono::milliseconds{29999}); QVERIFY(!f.process.queuedCountIf([](auto turn) { return turn.lane == Lane::Core; }));
+        f.advance(std::chrono::milliseconds{29999}); QVERIFY(!f.worker.take(Lane::Utility, execution::UtilityWorker::Signer));
         QVERIFY(f.model->pending()); f.advance(std::chrono::milliseconds{1});
-        while (f.process.step(Lane::Domain)) {} while (f.publish()) {}
+        while (f.worker.step(Lane::Utility)) {} while (f.publish()) {}
         QCOMPARE(f.model->error().code, SignerDiscoveryError::Timeout); QVERIFY(!f.model->pending()); QVERIFY(f.model->invocationActive()); QVERIFY(!f.model->canRefresh());
-        QCOMPARE(f.reads, 0); QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle());
+        QCOMPARE(f.reads, 0); held(); QVERIFY(f.settle());
         QCOMPARE(f.reads, 1); QVERIFY(!f.model->invocationActive()); QVERIFY(f.model->canRefresh()); QVERIFY(!f.model->fresh());
         QCOMPARE(f.model->error().code, SignerDiscoveryError::Timeout);
         f.model->refresh(); QVERIFY(f.settle()); QCOMPARE(f.reads, 2); QVERIFY(f.model->fresh());
@@ -135,7 +138,26 @@ private Q_SLOTS:
     }
     void admissionRejectionIsTerminalAndRetryable_data() { QTest::addColumn<bool>("domain"); QTest::newRow("domain") << true; QTest::newRow("process") << false; }
     void admissionRejectionIsTerminalAndRetryable() {
-        QFETCH(bool, domain); Fixture f; f.process.rejectLane(domain ? Lane::Domain : Lane::Core); f.model->refresh(); QVERIFY(f.settle());
+        QFETCH(bool, domain);
+        std::function<void()> configuration;
+        int decisions{0};
+        bool rejected{false};
+        execution::Executor executor{[&](Lane lane, execution::UtilityWorker worker, auto turn) {
+            // Hold the configuration read so its result cannot occupy the
+            // decision queue when discovery requests admission.
+            if (lane == Lane::Core && !rejected) {
+                configuration = std::move(turn);
+                return true;
+            }
+            const bool discovery_decision = lane == Lane::Utility && worker == execution::UtilityWorker::IO && ++decisions == 2;
+            if (!rejected && (domain ? discovery_decision : worker == execution::UtilityWorker::Signer)) {
+                rejected = true;
+                return false;
+            }
+            turn();
+            return true;
+        }};
+        Fixture f{&executor}; f.model->refresh(); QVERIFY(configuration); configuration(); QVERIFY(f.settle()); QVERIFY(rejected);
         QCOMPARE(f.reads, 0); QCOMPARE(f.model->error().code, SignerDiscoveryError::Rejected); QVERIFY(!f.model->pending());
         f.model->refresh(); QVERIFY(f.settle()); QCOMPARE(f.reads, 1); QVERIFY(f.model->fresh());
     }
@@ -169,15 +191,15 @@ private Q_SLOTS:
         QCOMPARE(f.writes, 1); QCOMPARE(f.model->effectivePath(), Executable() + " --new"); QCOMPARE(f.model->editedPath(), QStringLiteral("/later/draft")); QVERIFY(!f.model->saving()); QVERIFY(f.model->fresh());
     }
     void configurationSaveAndDiscoveryAreIndependentLanes() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain)); auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
-        f.configuration.drain(); while (f.publish()) {}
-        f.model->editPath(Executable() + " --configuration"); QVERIFY(f.model->apply()); f.configuration.drain(); while (f.publish()) {}
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {} auto held = f.worker.take(Lane::Utility, execution::UtilityWorker::Signer); QVERIFY(held);
+        f.worker.drain(); while (f.publish()) {}
+        f.model->editPath(Executable() + " --configuration"); QVERIFY(f.model->apply()); f.worker.drain(); while (f.publish()) {}
         QCOMPARE(f.writes, 1); QCOMPARE(f.model->effectivePath(), Executable() + " --configuration"); QCOMPARE(f.reads, 0);
-        QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle()); QCOMPARE(f.reads, 2);
+        held(); QVERIFY(f.settle()); QCOMPARE(f.reads, 2);
     }
     void rejectedSaveCannotPersistOrRemainBusy() {
         Fixture f; f.model->refresh(); QVERIFY(f.settle()); f.model->editPath(Executable() + " --configuration");
-        f.configuration.rejectLane(Lane::Core); QVERIFY(!f.model->apply()); QVERIFY(f.settle());
+        f.worker.reject_core = true; QVERIFY(!f.model->apply()); QVERIFY(f.settle());
         QCOMPARE(f.writes, 0); QVERIFY(!f.model->saving()); QCOMPARE(f.model->effectivePath(), Executable());
         QCOMPARE(f.model->editError().code, SignerDiscoveryError::Rejected);
     }
@@ -191,9 +213,9 @@ private Q_SLOTS:
         QCOMPARE(f.writes, 0); QCOMPARE(f.model->editError().code, SignerDiscoveryError::InvalidPath);
     }
     void closeRetainsPhysicalCompletionAndRejectsLatePublication() {
-        Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain)); auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
+        Fixture f; f.model->refresh(); while (f.worker.step(Lane::Utility)) {} auto held = f.worker.take(Lane::Utility, execution::UtilityWorker::Signer); QVERIFY(held);
         f.model->close(); QVERIFY(!f.model->drained()); QSignalSpy finished{f.model.get(), &SignerDiscoveryModel::shutdownFinished};
-        QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle()); QCOMPARE(f.reads, 1); QVERIFY(f.model->drained()); QCOMPARE(finished.count(), 1);
+        held(); QVERIFY(f.settle()); QCOMPARE(f.reads, 1); QVERIFY(f.model->drained()); QCOMPARE(finished.count(), 1);
         QCOMPARE(f.model->rowCount(), 0); QVERIFY(!f.model->fresh());
     }
     void pathValidationUsesRealFilesystemFacts_data() {
@@ -283,9 +305,9 @@ private Q_SLOTS:
     }
     void closeWhileConfigurationIsHeldRetainsItsEffectAndDrain() {
         Fixture f; f.model->refresh(); QVERIFY(f.settle()); f.model->editPath(Executable() + " --new"); QVERIFY(f.model->apply());
-        auto held = f.configuration.dispatchNext(Lane::Core); QVERIFY(held);
+        auto held = f.worker.take(Lane::Core); QVERIFY(held);
         f.model->close(); while (f.publish()) {} QVERIFY(!f.model->drained()); QCOMPARE(f.writes, 0);
-        QVERIFY(f.configuration.finishWork(*held)); QVERIFY(f.settle());
+        held(); QVERIFY(f.settle());
         QCOMPARE(f.writes, 1); QVERIFY(f.model->drained()); QVERIFY(!f.model->pending());
     }
     void changedSignerVersionRejectsQueuedCreationBeforeCoreEntry_data() {
@@ -296,20 +318,84 @@ private Q_SLOTS:
         walletcreation::Request request; request.kind = walletcreation::Kind::ExternalSigner;
         request.signer.version = f.model->versionGate(); request.signer.admitted_version = f.model->admissionVersion();
         QVERIFY(request.signer.admitted_version);
+        MockNode node;
+        ManualStartupExecution native;
+        std::optional<walletcreation::NativeResult> result;
+        walletcreation::Decision decision; decision.name = QStringLiteral("never-created");
+        std::unique_ptr<interfaces::Wallet> wallet;
+        QVERIFY(native.core.post([&] { result = walletcreation::Create(node, request, decision, wallet); }));
+        QVERIFY(!result);
         if (change == 0) f.model->refresh();
         else if (change == 1) { f.model->editPath(Executable() + " --changed"); QVERIFY(f.model->apply()); }
         else f.model->close();
-        MockNode node; ManualRoutedExecution native; std::optional<walletcreation::NativeResult> result;
-        walletcreation::Decision decision; decision.name = QStringLiteral("never-created");
-        std::unique_ptr<interfaces::Wallet> wallet;
-        const auto admitted = execution::Submit(*native.scheduler, [&] { return walletcreation::Create(node, request, decision, wallet); }, [&](auto value) { result = std::move(value); }, [](std::exception_ptr) { QFAIL("Unexpected native guard exception"); });
-        QVERIFY(admitted); native.drain(); QVERIFY(result);
+        QVERIFY(native.step(Lane::Core));
+        QVERIFY(result);
         QVERIFY(!result->effect_started); QVERIFY(!result->created); QVERIFY(!result->uncertain); QVERIFY(!wallet);
         QVERIFY(result->error.contains("configuration changed")); QCOMPARE(node.calls.walletLoader.load(), 0); QVERIFY(native.quiescent());
     }
+    void sharedExecutorSeparatesSettingsFromDiscoveryAndWaitsForTheProcess()
+    {
+        execution::Executor executor{execution::Executor::Config{}};
+        auto core = executor.makeQueue(Lane::Core);
+        auto signer = executor.makeQueue(Lane::Utility, execution::UtilityWorker::Signer);
+        std::atomic<QThread*> core_thread{nullptr}, signer_thread{nullptr}, enumeration_thread{nullptr}, save_thread{nullptr};
+        QVERIFY(core.post([&] { core_thread = QThread::currentThread(); }));
+        QVERIFY(signer.post([&] { signer_thread = QThread::currentThread(); }));
+        QTRY_VERIFY(core_thread.load() && signer_thread.load());
+        QVERIFY(core_thread.load() != signer_thread.load());
+        QSemaphore release;
+        const QString command{Executable() + QStringLiteral(" --new")};
+        std::atomic_bool settings_saved{false};
+        std::atomic_int enumerations{0};
+        SignerDiscoveryModel::Services services;
+        services.executor = &executor;
+        services.ports.configuration = [&] {
+            auto configuration = Healthy().configuration;
+            if (settings_saved.load()) configuration.command = command;
+            return configuration;
+        };
+        services.ports.enumerate = [&](const auto&) {
+            enumeration_thread = QThread::currentThread();
+            if (++enumerations == 1) release.acquire();
+            return Healthy().devices;
+        };
+        services.ports.save = [&](const QString& value) {
+            save_thread = QThread::currentThread();
+            auto result = Healthy();
+            result.configuration.command = value;
+            result.persisted = true;
+            settings_saved = true;
+            return result;
+        };
+        SignerDiscoveryModel model{std::move(services)};
+        const auto cleanup = qScopeGuard([&] {
+            model.close();
+            release.release();
+            QTRY_VERIFY(model.drained());
+            executor.stopAndJoin();
+        });
+        model.refresh();
+        QTRY_VERIFY(enumeration_thread.load());
+        QVERIFY(enumeration_thread.load() == signer_thread.load());
+        QTRY_VERIFY(model.configurationKnown());
+        model.editPath(command);
+        QVERIFY(model.apply());
+        QTRY_COMPARE(model.effectivePath(), command);
+        QVERIFY(save_thread.load() == core_thread.load());
+        QSignalSpy finished{&model, &SignerDiscoveryModel::shutdownFinished};
+        model.close();
+        QVERIFY(!model.drained());
+        release.release();
+        QTRY_COMPARE(finished.count(), 1);
+        QVERIFY(model.drained());
+        QCOMPARE(enumerations.load(), 1);
+        QCOMPARE(model.rowCount(), 0);
+    }
     void actualThreadsNeverRunConfigurationOrDiscoveryOnGui() {
         const auto gui = QThread::currentThread(); std::atomic_bool native_config{false}, native_process{false};
+        execution::Executor executor{execution::Executor::Config{}};
         SignerDiscoveryModel::Services services;
+        services.executor = &executor;
         services.ports.configuration = [&] { native_config = QThread::currentThread() != gui; return Healthy().configuration; };
         services.ports.enumerate = [&](const auto&) { native_process = QThread::currentThread() != gui; return Healthy().devices; };
         SignerDiscoveryModel model{std::move(services)}; model.refresh(); QTRY_VERIFY(model.fresh());

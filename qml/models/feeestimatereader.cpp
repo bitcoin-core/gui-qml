@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/feeestimatereader.h>
 #include <qml/executor.h>
+#include <qml/retainedvalue.h>
 
-#include <cassert>
 #include <exception>
 #include <utility>
 namespace feeestimate {
@@ -21,18 +21,24 @@ FeeReadResult ReadFailure(std::exception_ptr error)
 } // namespace
 
 Reader::Drain::~Drain() { if (notify) notify(); }
-Reader::Reader(std::shared_ptr<execution::Scheduler> scheduler, Read read, std::function<void()> notify, std::function<void()> drained)
-    : m_drain(drained ? std::make_shared<Drain>(std::move(drained)) : nullptr), m_scheduler(std::move(scheduler)),
-      m_read(std::move(read)), m_notify(std::move(notify)), m_key(m_scheduler->allocateKey())
+Reader::Reader(Post core, Post outcomes, Read read, std::function<void()> notify, std::function<void()> drained)
+    : m_drain(drained ? std::make_shared<Drain>(std::move(drained)) : nullptr),
+      m_core(std::move(core)), m_outcomes(std::move(outcomes)), m_read(std::move(read)), m_notify(std::move(notify))
 {
 }
 
 Reader::Reader(std::shared_ptr<execution::SerialQueue> core, std::shared_ptr<execution::SerialQueue> outcomes,
                Read read, std::function<void()> notify, std::function<void()> drained)
-    : m_drain(drained ? std::make_shared<Drain>(std::move(drained)) : nullptr),
-      m_core(std::move(core)), m_outcomes(std::move(outcomes)), m_read(std::move(read)), m_notify(std::move(notify)), m_key{}
+    : Reader([core, delivery = std::make_shared<execution::ValueCleanupQueue>(outcomes)](std::shared_ptr<execution::Task> task) {
+          return delivery->postWithOutcome(*core, std::move(task));
+      }, [outcomes](std::shared_ptr<execution::Task> task) {
+          const bool accepted = outcomes->post([task = std::move(task)] {
+              task->execute();
+              task->deliver();
+          });
+          return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+      }, std::move(read), std::move(notify), std::move(drained))
 {
-    assert(m_core && m_outcomes);
 }
 
 execution::SubmitResult Reader::request(quint64 revision, FeeReadInput input)
@@ -59,16 +65,7 @@ execution::SubmitResult Reader::queueWake()
     const auto failed = [self, drain](std::exception_ptr) {
         self->rejected(QStringLiteral("The fee request could not be processed."));
     };
-    execution::SubmitResult submitted;
-    if (m_outcomes) {
-        if (!m_outcomes->post([wake = std::move(wake), failed] {
-            try { wake(); }
-            catch (...) { failed(std::current_exception()); }
-        })) submitted.rejection = execution::Rejection::Transport;
-    } else {
-        submitted = execution::Submit(*m_scheduler, std::move(wake), [drain] {}, failed,
-            {execution::Lane::Domain, {}, execution::WorkClass::Observation});
-    }
+    const auto submitted = m_outcomes(execution::MakeTask(std::move(wake), [drain] {}, failed));
     if (!submitted) rejected(QStringLiteral("The fee could not be updated. Try again."));
     return submitted;
 }
@@ -135,22 +132,8 @@ void Reader::consume()
     auto deliver = [self, drain, intent = intent](FeeReadResult result) mutable {
         self->complete(std::move(intent), std::move(result));
     };
-    bool accepted;
-    if (m_core) {
-        accepted = m_core->post([read = std::move(read), deliver = std::move(deliver), outcomes = m_outcomes]() mutable {
-            FeeReadResult result;
-            try { result = read(); }
-            catch (...) { result = ReadFailure(std::current_exception()); }
-            // The opening keeps Utility available through Core drain.
-            if (!outcomes->post([deliver = std::move(deliver), result = std::move(result)]() mutable {
-                deliver(std::move(result));
-            })) std::terminate();
-        });
-    } else {
-        auto failed = [deliver](std::exception_ptr error) mutable { deliver(ReadFailure(error)); };
-        accepted = bool(execution::Submit(*m_scheduler, std::move(read), std::move(deliver), std::move(failed),
-            {execution::Lane::Core, m_key, execution::WorkClass::Observation}));
-    }
+    auto failed = [deliver](std::exception_ptr error) mutable { deliver(ReadFailure(error)); };
+    const auto accepted = m_core(execution::MakeTask(std::move(read), std::move(deliver), std::move(failed)));
     if (!accepted) {
         m_active.reset();
         m_completed = intent.revision;

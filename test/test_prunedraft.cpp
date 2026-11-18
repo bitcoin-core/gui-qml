@@ -37,7 +37,7 @@ private Q_SLOTS:
         std::deque<std::function<void()>> gui;
         {
             CoreSettingsModel model{Original()};
-            model.configureServices({{}, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+            model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
             model.refresh();
             QVERIFY(Settle(transport, gui));
             QCOMPARE(model.pruneTargetText(), QStringLiteral("550"));
@@ -60,7 +60,7 @@ private Q_SLOTS:
         std::deque<std::function<void()>> gui;
         {
             CoreSettingsModel model{Original()};
-            model.configureServices({{}, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+            model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
             std::function<void(CoreSettingsModel::EffectResult)> complete;
             QmlCoreSettings::Values persisted;
             int admissions{0};

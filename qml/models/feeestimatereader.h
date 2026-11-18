@@ -25,7 +25,8 @@ struct Publication {
 class Reader : public std::enable_shared_from_this<Reader> {
 public:
     using Read = std::function<FeeReadResult(const FeeReadInput&)>;
-    Reader(std::shared_ptr<execution::Scheduler> scheduler, Read read, std::function<void()> notify, std::function<void()> drained = {});
+    using Post = std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)>;
+    Reader(Post core, Post outcomes, Read read, std::function<void()> notify, std::function<void()> drained = {});
     Reader(std::shared_ptr<execution::SerialQueue> core, std::shared_ptr<execution::SerialQueue> outcomes,
            Read read, std::function<void()> notify, std::function<void()> drained = {});
     execution::SubmitResult request(quint64 revision, FeeReadInput input);
@@ -41,11 +42,9 @@ private:
     void complete(Intent intent, FeeReadResult result);
     void publish(Publication value);
     void rejected(QString message);
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
-    const std::shared_ptr<execution::SerialQueue> m_core, m_outcomes;
+    const Post m_core, m_outcomes;
     const Read m_read;
     const std::function<void()> m_notify;
-    const execution::ResourceKey m_key;
     std::mutex m_mutex;
     std::optional<Intent> m_desired;
     std::optional<Publication> m_latest;

@@ -1,81 +1,52 @@
 // Copyright (c) 2024-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #include <qml/models/peerdetailsmodel.h>
-
-PeerDetailsModel::PeerDetailsModel(const CNodeCombinedStats* nodeStats, PeerListModel* parent)
-: QObject(parent)
-, m_node_id{static_cast<int>(nodeStats->nodeStats.nodeid)}
-, m_addr{nodeStats->nodeStats.addr}
-, m_combinedStats{nodeStats}
-, m_model{parent}
+#include <qml/models/peerlistmodel.h>
+PeerDetailsModel::PeerDetailsModel(PeerStatsHandle stats, PeerListModel* model) : PeerCommandTarget(model), m_model(model)
 {
-    for (int row = 0; row < m_model->rowCount(); ++row) {
-        QModelIndex index = m_model->index(row, 0);
-        int nodeIdInRow = m_model->data(index, PeerListModel::NetNodeId).toInt();
-        if (nodeIdInRow == m_node_id) {
-            m_row = row;
-            break;
-        }
-    }
-    connect(parent, &PeerListModel::rowsRemoved, this, &PeerDetailsModel::onModelRowsRemoved);
-    connect(parent, &PeerListModel::dataChanged, this, &PeerDetailsModel::onModelDataChanged);
-    connect(parent, &PeerListModel::modelReset, this, &PeerDetailsModel::onModelReset);
+    if (!stats || !model) return;
+    m_node_id = stats->nodeStats.nodeid;
+    if (m_node_id < 0) return;
+    const auto row = model->rowForKey(QString::number(m_node_id));
+    if (!row) { m_disconnected = true; return; }
+    const auto* record = static_cast<const PeerRecord*>(row->payload.get());
+    if (!SamePeerConnection(stats->nodeStats, record->raw.nodeStats)) return;
+    m_cache = record->presentation; m_connection = record->connection; m_disconnected = false;
+    model->watchDetails(m_node_id, this);
+    connect(model, &PeerListModel::commandsChanged, this, &PeerDetailsModel::dataChanged);
 }
-
-void PeerDetailsModel::onModelRowsRemoved(const QModelIndex&  parent, int first, int last)
-{
-    for (int row = first; row <= last; ++row) {
-        QModelIndex index = m_model->index(row, 0, parent);
-        int nodeIdInRow = m_model->data(index, PeerListModel::NetNodeId).toInt();
-        if (nodeIdInRow == this->nodeId()) {
-            if (!m_disconnected) {
-                m_disconnected = true;
-                Q_EMIT disconnected();
-            }
-            break;
-        }
-    }
-}
-
-void PeerDetailsModel::onModelDataChanged(const QModelIndex& /* top_left */, const QModelIndex& /* bottom_right */)
-{
-    if (m_model->data(m_model->index(m_row, 0), PeerListModel::NetNodeId).isNull() ||
-        m_model->data(m_model->index(m_row, 0), PeerListModel::NetNodeId).toInt() != nodeId()) {
-        if (!m_disconnected) {
-            m_disconnected = true;
-            Q_EMIT disconnected();
-        }
-        return;
-    }
-
-    m_combinedStats = m_model->data(m_model->index(m_row, 0), PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
-
-    // Only update when all information is available
-    if (m_combinedStats && m_combinedStats->fNodeStateStatsAvailable) {
-        Q_EMIT dataChanged();
-    }
-}
-
-void PeerDetailsModel::onModelReset()
-{
+void PeerDetailsModel::update(const PeerPresentation& value, bool available) {
     if (m_disconnected) return;
-
-    const int tracked_node_id = m_node_id;
-    for (int row = 0; row < m_model->rowCount(); ++row) {
-        const QModelIndex index = m_model->index(row, 0);
-        const int node_id_in_row = m_model->data(index, PeerListModel::NetNodeId).toInt();
-        if (node_id_in_row == tracked_node_id) {
-            m_row = row;
-            m_combinedStats = m_model->data(index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
-            if (m_combinedStats && m_combinedStats->fNodeStateStatsAvailable) {
-                Q_EMIT dataChanged();
-            }
-            return;
-        }
-    }
-
+    const auto row = m_model ? m_model->rowForKey(QString::number(m_node_id)) : NativeRowHandle{};
+    const auto* record = row ? static_cast<const PeerRecord*>(row->payload.get()) : nullptr;
+    if (!record || !SamePeerConnection(m_connection, record->connection)) { markDisconnected(); return; }
+    // These bounded Qt presentation values own their text independently of
+    // the Native row. A retained view cannot hold the Native cleanup lease.
+    // Unavailable optional node-state statistics are not a disconnection.
+    m_cache = value;
+    if (m_connection.session.isEmpty()) m_connection.session = record->connection.session;
+    Q_UNUSED(available);
+    Q_EMIT dataChanged();
+}
+PeerListModel* PeerDetailsModel::source() const { return m_model; }
+bool PeerDetailsModel::connected() const { return !m_disconnected && m_model && m_model->readingAvailable(); }
+bool PeerDetailsModel::canDisconnect() const { const auto* port = m_model ? m_model->commands() : nullptr; return connected() && port && port->canStart(); }
+bool PeerDetailsModel::canBan() const { return canDisconnect() && m_connection.ban_supported; }
+PeerCommandOperation* PeerDetailsModel::prepareDisconnect()
+{
+    auto* port = m_model ? m_model->commands() : nullptr;
+    return connected() && port ? port->prepare(m_connection, peercommands::Kind::Disconnect, 0) : nullptr;
+}
+PeerCommandOperation* PeerDetailsModel::prepareBan(PeerCommandOperation::BanDuration duration)
+{
+    auto* port = m_model ? m_model->commands() : nullptr;
+    return connected() && port ? port->prepare(m_connection, peercommands::Kind::Ban, static_cast<int64_t>(duration)) : nullptr;
+}
+void PeerDetailsModel::markDisconnected() {
+    if (m_disconnected) return;
     m_disconnected = true;
-    Q_EMIT disconnected();
+    const QPointer<PeerDetailsModel> guard{this};
+    Q_EMIT dataChanged();
+    if (guard) Q_EMIT disconnected();
 }

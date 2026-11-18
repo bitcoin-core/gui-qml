@@ -23,10 +23,15 @@ public:
 
     bool post(std::function<void()> task);
     void close();
+    // If Utility dispatch is unavailable, the callback runs inline.
     void whenDrained(std::function<void()> done);
 
 private:
     friend class Executor;
+    friend class ValueCleanupQueue;
+    bool reserveCleanup();
+    void cancelReservedCleanup();
+    bool postReservedCleanup(std::function<void()> cleanup);
     struct State;
     explicit SerialQueue(std::shared_ptr<State> state);
     std::shared_ptr<State> m_state;
@@ -59,6 +64,7 @@ private:
     struct State;
     std::unique_ptr<State> m_state;
 };
+
 } // namespace execution
 
 #endif // BITCOIN_QML_EXECUTOR_H

@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/walletbalancereader.h>
+#include <qml/executor.h>
+#include <qml/retainedvalue.h>
 
 #include <utility>
 
@@ -12,11 +14,19 @@ Reader::Drain::~Drain()
     if (notify) notify();
 }
 
-Reader::Reader(std::shared_ptr<execution::Scheduler> scheduler, Read read, Notify notify,
+Reader::Reader(Post post, Read read, Notify notify,
                std::shared_ptr<std::atomic_bool> closed, Notify drained)
-    : m_scheduler(std::move(scheduler)), m_read(std::move(read)), m_notify(std::move(notify)),
-      m_closed(std::move(closed)), m_key(m_scheduler->allocateKey()),
-      m_drain(std::make_shared<Drain>(std::move(drained)))
+    : m_post(std::move(post)), m_read(std::move(read)), m_notify(std::move(notify)),
+      m_closed(std::move(closed)),
+      m_drain(drained ? std::make_shared<Drain>(std::move(drained)) : nullptr)
+{
+}
+
+Reader::Reader(std::shared_ptr<execution::SerialQueue> core, std::shared_ptr<execution::SerialQueue> outcomes,
+               Read read, Notify notify, std::shared_ptr<std::atomic_bool> closed, Notify drained)
+    : Reader([core = std::move(core), delivery = std::make_shared<execution::ValueCleanupQueue>(std::move(outcomes))](std::shared_ptr<execution::Task> task) {
+        return delivery->postWithOutcome(*core, std::move(task));
+    }, std::move(read), std::move(notify), std::move(closed), std::move(drained))
 {
 }
 
@@ -38,7 +48,7 @@ execution::Rejection Reader::submitReserved(std::shared_ptr<Drain> drain)
 {
     const auto self = shared_from_this();
     const auto attempt = std::make_shared<Attempt>(Attempt{false, std::move(drain)});
-    const auto submitted = execution::Submit(*m_scheduler, [self, attempt] {
+    auto read = [self, attempt] {
         {
             std::lock_guard lock{self->m_mutex};
             attempt->started = true;
@@ -46,19 +56,22 @@ execution::Rejection Reader::submitReserved(std::shared_ptr<Drain> drain)
         }
         if (self->m_closed->load()) return Result{Status::Closed, {}};
         return self->m_read();
-    }, [self, attempt](Result result) {
+    };
+    auto complete = [self, attempt](Result result) {
         self->complete(attempt, std::move(result));
-    }, [self, attempt](std::exception_ptr) {
-        self->complete(attempt, {attempt->started ? Status::Failed : Status::Rejected, {}});
-    }, {execution::Lane::Core, m_key, execution::WorkClass::Observation});
-    if (!submitted) {
+    };
+    const auto rejection = m_post(execution::MakeTask(std::move(read), std::move(complete),
+        [self, attempt](std::exception_ptr) {
+            self->complete(attempt, {attempt->started ? Status::Failed : Status::Rejected, {}});
+        })).rejection;
+    if (rejection != execution::Rejection::None) {
         publish({Status::Rejected, {}});
         {
             std::lock_guard lock{m_mutex};
             m_active = false;
         }
     }
-    return submitted.rejection;
+    return rejection;
 }
 
 void Reader::complete(const std::shared_ptr<Attempt>& attempt, Result result)

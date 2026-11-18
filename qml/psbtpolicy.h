@@ -39,7 +39,9 @@ struct Decision { State state{State::Unknown}; QString explanation; };
 using Read = std::function<Facts(CTransactionRef, CAmount)>;
 // Composition retains both interfaces through the original scheduler drain.
 // The returned port performs read-only public interface calls on Native.
-Read ReadNode(interfaces::Node* node, interfaces::Chain* chain);
+// Raw PSBT broadcasts enforce broadcastTransaction's fee cap; wallet-built
+// transactions use the wallet's own configured fee limit instead.
+Read ReadNode(interfaces::Node* node, interfaces::Chain* chain, bool enforce_raw_fee_cap = true);
 Decision Evaluate(const Facts& facts);
 } // namespace psbtpolicy
 

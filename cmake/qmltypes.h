@@ -31,6 +31,11 @@
 #include <qml/models/requestdeletecontroller.h>
 #include <qml/models/requestviewcontroller.h>
 #include <qml/models/senddraftcontroller.h>
+#include <qml/models/walletpasswordcontroller.h>
+#include <qml/models/walletbackupcontroller.h>
+#include <qml/models/feebumpcontroller.h>
+#include <qml/models/peercommandcontroller.h>
+#include <qml/models/settingsnavigationcontroller.h>
 #include <qml/models/senddraftinterface.h>
 #include <qml/models/sendoperation.h>
 #include <qml/models/transactionreviewcontroller.h>
@@ -227,6 +232,19 @@ struct PeerCommandModelForeign {
     QML_NAMED_ELEMENT(PeerCommandModel)
     QML_UNCREATABLE("Application peer commands")
 };
+struct PeerCommandTargetForeign {
+    Q_GADGET
+    QML_FOREIGN(PeerCommandTarget)
+    QML_NAMED_ELEMENT(PeerCommandTarget)
+    QML_UNCREATABLE("A peer")
+};
+
+struct PeerCommandControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(PeerCommandController)
+    QML_NAMED_ELEMENT(PeerCommandController)
+};
+
 struct PeerCommandOperationForeign {
     Q_GADGET
     QML_FOREIGN(PeerCommandOperation)

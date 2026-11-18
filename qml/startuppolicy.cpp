@@ -61,14 +61,14 @@ ErrorPresentation PrepareError(const bilingual_str& message, DiagnosticOrigin or
         + (!details ? QStringLiteral(" ") + QObject::tr("[full error not available: too many messages]") : QString{});
     return {summary, std::move(details)};
 }
-ErrorDetails PrepareErrorDetails(const execution::SnapshotServices& services, const QString& summary,
+ErrorDetails PrepareErrorDetails(presentation::Post post, const QString& summary,
     std::shared_ptr<const startupdiagnostics::Collection> full_message,
-    StartupDiagnosticsModel* existing, const DiagnosticLoss& loss)
+    StartupDiagnosticsModel* existing, const DiagnosticLoss& loss, PresentationServices& diagnostics)
 {
     ErrorDetails result;
     result.model = existing;
     if (!existing) {
-        result.owned = std::make_unique<StartupDiagnosticsModel>(services);
+        result.owned = std::make_unique<StartupDiagnosticsModel>(std::move(post), diagnostics);
         result.model = result.owned.get();
         if (full_message) result.model->adopt(std::move(full_message));
         if (!result.model->project(false, summary, {}, {}, false)) {
@@ -88,9 +88,10 @@ bool DeliverError(bool canceled, bool quitting, const std::function<bool()>& pre
     return present();
 }
 UiPreferencesStore* InstallPreferences(QQmlApplicationEngine& engine,
-    const execution::SnapshotServices& services, UiPreferencesNamespace identity, PreferencesPhase phase)
+    execution::Executor& executor, execution::Lane lane, presentation::Post post,
+    UiPreferencesNamespace identity, PreferencesPhase phase)
 {
-    auto* store = new UiPreferencesStore{services, std::move(identity), &engine};
+    auto* store = new UiPreferencesStore{&executor, lane, std::move(post), std::move(identity), &engine};
     engine.rootContext()->setContextProperty("uiPreferencesStore", store);
     QEventLoop ready;
     QObject::connect(store, &UiPreferencesStore::stateChanged, &ready, &QEventLoop::quit);

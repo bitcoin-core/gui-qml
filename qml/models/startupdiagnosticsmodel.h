@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_MODELS_STARTUPDIAGNOSTICSMODEL_H
 #define BITCOIN_QML_MODELS_STARTUPDIAGNOSTICSMODEL_H
+#include <qml/guipresentation.h>
+#include <qml/presentationservices.h>
 #include <qml/snapshotquery.h>
 #include <QAbstractListModel>
 #include <QStringList>
@@ -15,8 +17,8 @@
 namespace startupdiagnostics {
 int FinalExitStatus(int original, bool diagnostic_loss);
 struct TextBudget { static constexpr uint64_t MAX_CHARS{4 * 1024 * 1024}; std::atomic<uint64_t> used{0}; };
-std::shared_ptr<const QString> RetainText(const std::shared_ptr<execution::Scheduler>& scheduler,
-    const std::shared_ptr<TextBudget>& budget, QString message);
+std::shared_ptr<const QString> RetainText(const std::shared_ptr<TextBudget>& budget, QString message,
+    const PresentationServices::RetireValue& retire);
 // App-owned immutable batches. Intake appends a single linked node; normalization,
 // deduplication, concatenation and destruction belong to the Native owner.
 struct Collection {
@@ -35,7 +37,7 @@ struct Collection {
     std::atomic<size_t> owned_chars{0}, owned_messages{0}, owned_batches{0};
     mutable std::atomic_bool sealed{false};
 };
-std::shared_ptr<Collection> Create(const std::shared_ptr<execution::Scheduler>& scheduler);
+std::shared_ptr<Collection> Create(const PresentationServices::RetireValue& retire);
 }
 
 class StartupDiagnosticsModel : public QAbstractListModel {
@@ -46,7 +48,7 @@ class StartupDiagnosticsModel : public QAbstractListModel {
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY changed)
     Q_PROPERTY(int count READ rowCount NOTIFY changed)
 public:
-    explicit StartupDiagnosticsModel(execution::SnapshotServices services, QObject* parent = nullptr);
+    StartupDiagnosticsModel(presentation::Post post, PresentationServices& diagnostics, QObject* parent = nullptr);
     ~StartupDiagnosticsModel() override;
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -60,7 +62,7 @@ public:
     bool adopt(std::shared_ptr<const startupdiagnostics::Collection> previous);
     // Seal the input before dispatch. No GUI callback scans or copies the list.
     bool project(bool success, QString failure = {}, QString warning_heading = {}, QString error_prefix = {}, bool normalize = true);
-    bool resetInput(std::shared_ptr<execution::Scheduler> original_diagnostic_scope = {});
+    bool resetInput();
     void retryPublication();
     void close();
 Q_SIGNALS:
@@ -74,8 +76,9 @@ private:
     void flushChanges();
     struct Prepared { QString summary, intake_error; QStringList rows; bool warnings{false}; };
     void publish();
-    execution::SnapshotServices m_services;
-    std::shared_ptr<execution::Scheduler> m_diagnostic_scope;
+    presentation::Post m_post;
+    execution::SnapshotQuery<Prepared>::Post m_observation_post;
+    PresentationServices::RetireValue m_retire_value;
     std::shared_ptr<startupdiagnostics::Collection> m_input, m_authoritative_input;
     std::shared_ptr<const Prepared> m_prepared;
     std::shared_ptr<execution::OwnedCommand<std::shared_ptr<Prepared>>> m_operation;

@@ -8,33 +8,38 @@
 #include <qml/execution.h>
 #include <qml/executor.h>
 
+#include <atomic>
 #include <deque>
 #include <functional>
+#include <mutex>
 #include <utility>
 
 class ManualStartupExecution
 {
     using Turn = std::function<void()>;
-    std::deque<Turn> m_effects, m_outcomes;
+    mutable std::mutex m_mutex;
+    std::deque<Turn> m_effects, m_outcomes, m_signer;
     size_t m_core_submissions{0};
-    execution::Executor m_executor{[this](execution::Lane lane, execution::UtilityWorker, Turn turn) {
+    execution::Executor m_executor{[this](execution::Lane lane, execution::UtilityWorker worker, Turn turn) {
+        std::lock_guard lock{m_mutex};
         if (lane == execution::Lane::Core) {
             ++m_core_submissions;
-            if (std::exchange(reject_core, false)) return false;
-        } else if (std::exchange(reject_utility, false)) {
+            if (reject_core.exchange(false)) return false;
+        } else if (reject_utility.exchange(false)) {
             return false;
         }
-        turns(lane).push_back(std::move(turn));
+        turns(lane, worker).push_back(std::move(turn));
         return true;
     }};
 
-    std::deque<Turn>& turns(execution::Lane lane)
+    std::deque<Turn>& turns(execution::Lane lane, execution::UtilityWorker worker)
     {
+        if (lane == execution::Lane::Utility && worker == execution::UtilityWorker::Signer) return m_signer;
         return lane == execution::Lane::Core ? m_effects : m_outcomes;
     }
 
 public:
-    bool reject_core{false}, reject_utility{false};
+    std::atomic_bool reject_core{false}, reject_utility{false};
     execution::SerialQueue core = m_executor.makeQueue(execution::Lane::Core);
     execution::SerialQueue outcomes = m_executor.makeQueue(execution::Lane::Utility);
 
@@ -42,24 +47,50 @@ public:
 
     execution::Executor& executor() { return m_executor; }
 
-    bool step(execution::Lane lane)
+    std::function<void()> take(execution::Lane lane, execution::UtilityWorker worker = execution::UtilityWorker::IO)
     {
-        auto& pending = turns(lane);
-        if (pending.empty()) return false;
+        std::lock_guard lock{m_mutex};
+        auto& pending = turns(lane, worker);
+        if (pending.empty()) return {};
         auto turn = std::move(pending.front());
         pending.pop_front();
+        return turn;
+    }
+    bool step(execution::Lane lane, execution::UtilityWorker worker = execution::UtilityWorker::IO)
+    {
+        auto turn = take(lane, worker);
+        if (!turn) return false;
         turn();
         return true;
     }
 
     void drain()
     {
-        while (step(execution::Lane::Core) || step(execution::Lane::Utility)) {}
+        while (step(execution::Lane::Core) || step(execution::Lane::Utility) || step(execution::Lane::Utility, execution::UtilityWorker::Signer)) {}
     }
 
-    size_t coreSubmissions() const { return m_core_submissions; }
+    size_t queuedCount() const
+    {
+        std::lock_guard lock{m_mutex};
+        return m_effects.size() + m_outcomes.size() + m_signer.size();
+    }
 
-    bool quiescent() const { return m_effects.empty() && m_outcomes.empty(); }
+    size_t coreSubmissions() const
+    {
+        std::lock_guard lock{m_mutex};
+        return m_core_submissions;
+    }
+
+    bool hasWork(execution::Lane lane) const
+    {
+        std::lock_guard lock{m_mutex};
+        return lane == execution::Lane::Core ? !m_effects.empty() : !m_outcomes.empty();
+    }
+    bool quiescent() const
+    {
+        std::lock_guard lock{m_mutex};
+        return m_effects.empty() && m_outcomes.empty() && m_signer.empty();
+    }
 };
 
 #endif // BITCOIN_QML_TEST_MOCKS_MANUALSTARTUPEXECUTION_H

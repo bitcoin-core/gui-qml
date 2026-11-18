@@ -25,7 +25,6 @@
 #include <noui.h>
 #include <qml/appmode.h>
 #include <qml/applicationmodels.h>
-#include <qml/backendexecutor.h>
 #include <qml/executor.h>
 #include <qml/components/ownedqrimage.h>
 #include <qml/buttonkeyactivation.h>
@@ -92,6 +91,7 @@
 #include <qml/models/uipreferences.h>
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peercommandmodel.h>
+#include <qml/models/peercommandcontroller.h>
 #include <qml/models/peercommandoperation.h>
 #include <qml/models/peerselectionmodel.h>
 #include <qml/models/peerlistsortproxy.h>
@@ -135,13 +135,16 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <atomic>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include <QApplication>
@@ -269,12 +272,30 @@ AppMode SetupAppMode(bool wallet_enabled)
 
 void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, UrlOpener& url_opener, BitcoinUriModel& bitcoin_uri_model);
 
+// Shows a startup error as an alert inside a window that is already open (the
+// onboarding window) and waits until it is dismissed or the window closes.
+bool StartupErrorInWindow(QQuickWindow& window, const QString& summary, QmlQuitHandler& quit_handler)
+{
+    QQuickItem* content{window.contentItem()};
+    const bool content_enabled{content->isEnabled()};
+    content->setEnabled(true);
+    QEventLoop dialog_loop;
+    QObject::connect(&window, SIGNAL(startupErrorAcknowledged()), &dialog_loop, SLOT(quit()));
+    QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
+    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
+    QMetaObject::invokeMethod(&window, "showStartupError", Q_ARG(QVariant, summary));
+    if (!quit_handler.isQuitRequested()) dialog_loop.exec();
+    content->setEnabled(content_enabled);
+    return false;
+}
+
 bool InitErrorMessageBox(
-    const QString& summary, const execution::SnapshotServices& services,
+    const QString& summary, presentation::Post post,
+    execution::Executor& executor, execution::Lane preferences_lane,
     std::shared_ptr<const startupdiagnostics::Collection> full_message,
     QmlQuitHandler& quit_handler,
     const std::function<void(QQmlApplicationEngine&)>& engine_created,
-    StartupDiagnosticsModel* existing_details = nullptr,
+    PresentationServices& diagnostics, StartupDiagnosticsModel* existing_details = nullptr,
     std::shared_ptr<std::atomic_bool> diagnostic_loss = {},bool wallet_enabled=false,
     PresentationServices* presentation_services = nullptr, const QString& automation_socket = {})
 {
@@ -290,8 +311,9 @@ bool InitErrorMessageBox(
     startup::ErrorDetails details_owner;
     const auto engine = CreateInitErrorEngine();
     engine_created(*engine);
-    startup::InstallPreferences(*engine, services, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::ErrorHandoff);
-    details_owner = startup::PrepareErrorDetails(services, summary, std::move(full_message), existing_details, diagnostic_loss);
+    startup::InstallPreferences(*engine, executor, preferences_lane, post,
+        UiPreferencesNamespace::Capture(), startup::PreferencesPhase::ErrorHandoff);
+    details_owner = startup::PrepareErrorDetails(std::move(post), summary, std::move(full_message), existing_details, diagnostic_loss, diagnostics);
     auto* details = details_owner.model;
     if (details_owner.replacement_message) engine->rootContext()->setContextProperty("message", *details_owner.replacement_message);
     if (engine->rootContext()->contextProperty("message").isNull()) engine->rootContext()->setContextProperty("message", summary);
@@ -442,6 +464,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
     qmlRegisterUncreatableType<PeerCommandModel>("org.bitcoincore.qt", 1, 0, "PeerCommandModel", "Application peer commands");
     qmlRegisterUncreatableType<PeerCommandOperation>("org.bitcoincore.qt", 1, 0, "PeerCommandOperation", "Captured peer command");
+    qmlRegisterUncreatableType<PeerCommandTarget>("org.bitcoincore.qt", 1, 0, "PeerCommandTarget", "A peer");
+    qmlRegisterType<PeerCommandController>("org.bitcoincore.qt", 1, 0, "PeerCommandController");
     qmlRegisterType<PeerSelectionModel>("org.bitcoincore.qt", 1, 0, "PeerSelectionModel");
     qRegisterMetaType<PeerCommandResult>();
     qmlRegisterUncreatableMetaObject(PeerCommandResult::staticMetaObject, "org.bitcoincore.qt", 1, 0, "PeerCommandResult", "Retained peer result");
@@ -623,32 +647,33 @@ struct PreInitOnboardingContext {
 };
 
 PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc, QmlQuitHandler& quit_handler,
-    const execution::SnapshotServices& services,
+    const presentation::Post& post, execution::Executor& executor,
+    execution::SerialQueue& core, execution::SerialQueue& outcomes,
     const std::function<void(QQmlApplicationEngine&)>& engine_created,
     const std::function<void(QQmlApplicationEngine&)>& window_created,const AutomationConfig& automation)
 {
-    const auto status = startup::Run(services, [argv, can_listen_ipc] { return QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc); });
+    const auto status = startup::Run(&core, &outcomes, [argv, can_listen_ipc] { return QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc); });
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
     if (!status.ok) {
         const auto error = status.error.toStdString();
-        startup::Run(services, [error] { return InitError(Untranslated(error)); });
+        startup::Run(&core, &outcomes, [error] { return InitError(Untranslated(error)); });
         return PreInitOnboardingStatus::FAILED;
     }
     if (!status.should_show_onboarding) {
-        startup::Run(services, [] { QmlDataDir::ApplyGuiDataDirSetting(gArgs); return true; });
+        startup::Run(&core, &outcomes, [] { QmlDataDir::ApplyGuiDataDirSetting(gArgs); return true; });
         return quit_handler.isQuitRequested() ? PreInitOnboardingStatus::CANCELED : PreInitOnboardingStatus::NOT_SHOWN;
     }
 
     ChainType onboarding_chain{ChainType::MAIN};
     try {
-        onboarding_chain=startup::Run(services, [] { SelectParams(gArgs.GetChainType()); return Params().GetChainType(); });
+        onboarding_chain=startup::Run(&core, &outcomes, [] { SelectParams(gArgs.GetChainType()); return Params().GetChainType(); });
     } catch (const std::exception& e) {
         const std::string error{e.what()};
-        startup::Run(services, [error] { return InitError(Untranslated(error)); });
+        startup::Run(&core, &outcomes, [error] { return InitError(Untranslated(error)); });
         return PreInitOnboardingStatus::FAILED;
     }
 
-    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc, nullptr, services.post);
+    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc, nullptr, post, &executor);
     context.onboarding_options_model->configureSettingsCommit(gArgs);
 
     context.network_style.reset(NetworkStyle::instantiate(onboarding_chain));
@@ -656,7 +681,8 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 
     context.engine = CreatePreInitEngine(context.network_style.data());
     engine_created(*context.engine);
-    context.preferences = startup::InstallPreferences(*context.engine, services, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
+    context.preferences = startup::InstallPreferences(*context.engine, executor, execution::Lane::Core,
+        post, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
     context.engine->rootContext()->setContextProperty("optionsModel", context.onboarding_options_model.get());
     context.engine->rootContext()->setContextProperty("onboardingOptionsModel", context.onboarding_options_model.get());
@@ -829,38 +855,73 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         });
         QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-        BackendExecutor startup_executor{execution::Options{}};
-        startup_executor.setObjectName(QStringLiteral("startup"));
-        const execution::SnapshotServices startup_services{startup_executor.scheduler(), presentation::QueuedPost()};
+        auto startup_core = executor.makeQueue(execution::Lane::Core);
+        auto startup_outcomes = executor.makeQueue(execution::Lane::Utility);
+        const auto run_startup = [&](auto work) {
+            return startup::Run(&startup_core, &startup_outcomes, std::move(work));
+        };
+        const auto startup_post = presentation::QueuedPost();
+        // A startup error can hold Core until the dialog closes.
+        const auto diagnostic_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices startup_diagnostics{{startup_post,
+            [diagnostic_retirement](auto work) { return diagnostic_retirement->post(std::move(work)); }, {},
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        const auto retire_diagnostic_value = startup_diagnostics.valueRetirement();
         // FileOpen can arrive in the very first startup::Run event loop.
         // Capture owned values now; factory/readiness follow actual Core init.
-        DesktopIntentModel desktop_intent_model{startup_services,false};
+        DesktopIntentModel desktop_intent_model{executor, startup_post, false};
         desktop_intent_model.installFileOpenHandler();
         std::shared_ptr<desktopintent::transport::Service> desktop_service;
         std::shared_ptr<startup::preparation::Coordinator> startup_preparation;
         std::shared_ptr<execution::OwnedCommand<StartupPreparationSummary>> preparation_summary;
         const auto retire_startup_runtime=[&](std::function<void()> done){
+            startup_diagnostics.close();
             desktop_intent_model.close();
-            if(desktop_service)desktop_service->close();
+            auto service = std::exchange(desktop_service, {});
+            if (service) service->close();
             if(startup_preparation)startup_preparation->close();
-            // The coordinator may already own Service's one stop callback.
-            // Drain observes physical retirement without registering another.
-            if(desktop_service&&!desktop_service->stop()&&!desktop_service->retired())*lifecycle_failed=true;
-            startup_preparation.reset();desktop_service.reset();preparation_summary.reset();
-            startup_executor.whenDrained(&app,std::move(done));
-            startup_executor.shutdown();
+            if (service) service->stop();
+            preparation_summary.reset();
+            auto finish = [&app, &startup_diagnostics, service = std::move(service), done = std::move(done)]() mutable {
+                QMetaObject::invokeMethod(&app, [&app, &startup_diagnostics, service = std::move(service), done = std::move(done)]() mutable {
+                    startup_diagnostics.whenRetired(&app, [&app, service = std::move(service), done = std::move(done)]() mutable {
+                        if (!service || service->retired()) {
+                            done();
+                            return;
+                        }
+                        const auto acknowledge = [app = &app, done] {
+                            QMetaObject::invokeMethod(app, done, Qt::QueuedConnection);
+                        };
+                        if (service->stop(acknowledge)) return;
+                        done();
+                    });
+                }, Qt::QueuedConnection);
+            };
+            auto drain = [&desktop_intent_model, finish = std::move(finish)]() mutable {
+                desktop_intent_model.whenDrained(std::move(finish));
+            };
+            if (startup_preparation) {
+                startup_preparation->whenDrained(std::move(drain));
+                startup_preparation.reset();
+            } else {
+                drain();
+            }
         };
         const auto retire_startup_before_exit=qScopeGuard([&]{
             QEventLoop retirement;bool drained{false};
             retire_startup_runtime([&]{drained=true;retirement.quit();});
             while(!drained)retirement.exec();
         });
-        startup::Run(startup_services,[]{noui_connect();SetupEnvironment();return true;});
-        auto startup_warnings = startupdiagnostics::Create(startup_services.scheduler);
+        run_startup([]{noui_connect();SetupEnvironment();return true;});
+        auto startup_warnings = startupdiagnostics::Create(retire_diagnostic_value);
         if (!startup_warnings) { qCritical("Startup diagnostic retention is unavailable"); return EXIT_FAILURE; }
         const auto startup_error_reported=std::make_shared<std::atomic_bool>(false);
         const auto wallet_presentation=std::make_shared<std::atomic_bool>(AppMode::walletCompiled());
         bool startup_canceled{false};
+        // Set while the onboarding window is open, so startup errors show inside it.
+        QPointer<QQuickWindow> startup_error_window;
+        // The automation socket, once known, for an error shown in its own window.
+        QString startup_error_automation_socket;
         btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
             [&](const bilingual_str& message, unsigned int style) {
                 const auto origin = QThread::currentThread() == app.thread()
@@ -870,13 +931,15 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 }
                 startup_error_reported->store(true);
                 const auto error = startup::PrepareError(message, origin, {
-                    [&] { return startupdiagnostics::Create(startup_services.scheduler); },
+                    [&] { return startupdiagnostics::Create(retire_diagnostic_value); },
                     [](const QString& text) { qCritical().noquote() << text; }}, diagnostic_loss);
                 bool result{false};
                 const auto handle_message = [&] {
                     result = startup::DeliverError(startup_canceled, quit_handler.isQuitRequested(), [&] {
-                        return InitErrorMessageBox(error.summary, startup_services, error.details, quit_handler,
-                            [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); }, nullptr, diagnostic_loss,wallet_presentation->load(),
+                        if (startup_error_window) return StartupErrorInWindow(*startup_error_window, error.summary, quit_handler);
+                        return InitErrorMessageBox(error.summary, startup_post,
+                            executor, execution::Lane::Utility, error.details, quit_handler,
+                            [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); }, startup_diagnostics, nullptr, diagnostic_loss, wallet_presentation->load(),
                             nullptr, startup_error_automation_socket);
                     });
                 };
@@ -896,7 +959,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         app.setOrganizationDomain(QAPP_ORG_DOMAIN);
         app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
-        auto command_line=startup::Run(startup_services, [native_interfaces, argc, argv] {
+        auto command_line=run_startup([native_interfaces, argc, argv] {
             StartupArguments captured;
             captured.parsed=desktopintent::ParseArguments(argc,argv,
                 QStringLiteral("arguments:")+QUuid::createUuid().toString(QUuid::WithoutBraces),QDir::currentPath());
@@ -914,7 +977,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             return captured;
         });
         if(!command_line.parsed.error.isEmpty()){
-            startup::Run(startup_services,[error=command_line.parsed.error]{return InitError(Untranslated(error.toStdString()));});
+            run_startup([error=command_line.parsed.error]{return InitError(Untranslated(error.toStdString()));});
             return EXIT_FAILURE;
         }
         auto& init = native_interfaces->init;
@@ -943,7 +1006,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         };
 
         // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-        const auto parse_result = startup::Run(startup_services, [&, can_listen_ipc] {
+        const auto parse_result = run_startup([&, can_listen_ipc] {
             SetupServerArgs(gArgs, can_listen_ipc);
             SetupQmlGuiArgs(gArgs);
             std::string error;
@@ -951,12 +1014,12 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             return std::pair{parsed, QString::fromStdString(error)};
         });
         if (!parse_result.first) {
-            startup::Run(startup_services, [error = parse_result.second] {
+            run_startup([error = parse_result.second] {
                 return InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error.toStdString())));
             });
             return EXIT_FAILURE;
         }
-        const auto bootstrap = startup::Run(startup_services, [] {
+        const auto bootstrap = run_startup([] {
             BootstrapPresentation captured;
             captured.wallet_enabled=WalletEnabledFromArgs();
             captured.automation=ReadAutomationConfig(false);
@@ -970,7 +1033,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         wallet_presentation->store(bootstrap.wallet_enabled);
         startup_error_automation_socket = bootstrap.automation.socket;
         if (!bootstrap.error.isEmpty()) {
-            startup::Run(startup_services, [&] { return InitError(Untranslated(bootstrap.error.toStdString())); });
+            run_startup([&] { return InitError(Untranslated(bootstrap.error.toStdString())); });
             return EXIT_FAILURE;
         }
 #ifdef ENABLE_TEST_AUTOMATION
@@ -991,13 +1054,13 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         BitcoinUriModel bitcoin_uri_model;
         RegisterQmlTypes(app_mode, build_info, clipboard, url_opener, bitcoin_uri_model);
 
-        const auto language=startup::Run(startup_services,[cli=bootstrap.language]{
+        const auto language=run_startup([cli=bootstrap.language]{
             const QString value=cli.isEmpty()?QSettings().value(SettingsKeys::LANGUAGE,
                 QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(gArgs.GetChainTypeString()))).toString():cli;
             return value.size()<=4096?std::pair{value,QString{}}:std::pair{QString{},QStringLiteral("The startup language setting exceeds its supported size.")};
         });
         if(!language.second.isEmpty()){
-            startup::Run(startup_services,[error=language.second]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
+            run_startup([error=language.second]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
         }
         if (quit_handler.isQuitRequested()) return EXIT_SUCCESS;
         install_language(language.first);
@@ -1006,24 +1069,24 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
         // Forward to an existing peer before a reset wizard, without binding
         // a Primary listener for a profile the user may still change.
-        const auto role_profile=startup::Run(startup_services,[&]{
+        const auto role_profile=run_startup([&]{
             return QmlOnboardingSettings::ResolveOnboardingStartupStatus(command_line_args,can_listen_ipc,nullptr,
                 QmlOnboardingSettings::StartupReadMode::ProfileOnly);
         });
         if(!role_profile.ok){
-            startup::Run(startup_services,[error=role_profile.error]{return InitError(Untranslated(error.toStdString()));});
+            run_startup([error=role_profile.error]{return InitError(Untranslated(error.toStdString()));});
             return EXIT_FAILURE;
         }
         if(quit_handler.isQuitRequested())return EXIT_SUCCESS;
-        desktop_service=desktopintent::transport::Service::Create(startup_services.scheduler,desktop_intent_model.owner());
+        desktop_service=desktopintent::transport::Service::Create(desktop_intent_model.owner());
         if(!desktop_service){
-            startup::Run(startup_services,[]{return InitError(Untranslated("The request could not start. Try again."));});
+            run_startup([]{return InitError(Untranslated("The request could not start. Try again."));});
             return EXIT_FAILURE;
         }
         if(role_profile.probe_eligible){
             QEventLoop probe_loop;const QPointer<QEventLoop> probe_observer{&probe_loop};
-            auto probe=std::make_shared<execution::OwnedCommand<StartupProbeSummary>>(startup_services.scheduler,
-                [post=presentation::ReliablePost(startup_services.post),probe_observer]{
+            auto probe=std::make_shared<execution::OwnedCommand<StartupProbeSummary>>(
+                [post=presentation::ReliablePost(startup_post),probe_observer]{
                     post([probe_observer]{if(probe_observer)probe_observer->quit();});
                 });
             probe->startWith([service=desktop_service,&role_profile,&command_line](auto done,auto){
@@ -1049,7 +1112,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             if(outcome.status!=desktopintent::transport::ProbeStatus::Missing){
                 desktop_service->close();desktop_intent_model.close();
 #ifdef ENABLE_TEST_AUTOMATION
-                if(!startup::Run(startup_services,[transfer=outcome.transfer]{
+                if(!run_startup([transfer=outcome.transfer]{
                     return !gArgs.IsArgSet("-test-automation")||PrintStartupTransfer(transfer);
                 }))*lifecycle_failed=true;
 #endif
@@ -1057,7 +1120,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 const QString error=outcome.request_dropped
                     ?QStringLiteral("The running application stopped before processing a desktop request. Check that application before trying again.")
                     :outcome.transfer.error.isEmpty()?QStringLiteral("The request may not have reached the running app. Check it before trying again."):outcome.transfer.error;
-                if(!quit_handler.isQuitRequested())startup::Run(startup_services,[error]{return InitError(Untranslated(error.toStdString()));});
+                if(!quit_handler.isQuitRequested())run_startup([error]{return InitError(Untranslated(error.toStdString()));});
                 return EXIT_FAILURE;
             }
             if(quit_handler.isQuitRequested())return EXIT_SUCCESS;
@@ -1065,7 +1128,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
         PreInitOnboardingContext pre_init_onboarding_context;
         const PreInitOnboardingStatus pre_init_onboarding_status{
-            RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, can_listen_ipc, quit_handler, startup_services,
+            RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, can_listen_ipc, quit_handler, startup_post, executor, startup_core, startup_outcomes,
                                 [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
                                 [this](QQmlApplicationEngine& engine) { onboardingCreated(engine); },bootstrap.automation)
         };
@@ -1144,17 +1207,20 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             auto profile=startup::ReadProfileIdentity(gArgs);
             return startup::preparation::Profile{std::move(profile.directory),std::move(profile.network)};
         };
-        preparation_ports.start_transport=[service=desktop_service,inputs=std::move(command_line.parsed.intents)](auto profile,auto done)mutable{
-            return service->start(std::move(profile.directory),std::move(profile.network),std::move(inputs),std::move(done));
+        preparation_ports.start_transport = [service = desktop_service,
+                                             inputs = std::move(command_line.parsed.intents)](auto profile, auto done) mutable {
+            return service->start(std::move(profile.directory), std::move(profile.network), std::move(inputs), std::move(done));
         };
         preparation_ports.prepare_native=prepare_node;
-        preparation_ports.retire_transport=[service=desktop_service](auto done){return service->stop(std::move(done));};
+        preparation_ports.retire_transport = [service = desktop_service](auto done) {
+            return service->stop(std::move(done));
+        };
         preparation_ports.transport_retired=[service=desktop_service]{return service->retired();};
-        startup_preparation=std::make_shared<startup::preparation::Coordinator>(startup_services,std::move(preparation_ports));
+        startup_preparation=std::make_shared<startup::preparation::Coordinator>(executor,std::move(preparation_ports));
         QEventLoop preparation_loop;
         const QPointer<QEventLoop> preparation_observer{&preparation_loop};
-        preparation_summary=std::make_shared<execution::OwnedCommand<StartupPreparationSummary>>(startup_services.scheduler,
-            [post=presentation::ReliablePost(startup_services.post),preparation_observer]{
+        preparation_summary=std::make_shared<execution::OwnedCommand<StartupPreparationSummary>>(
+            [post=presentation::ReliablePost(startup_post),preparation_observer]{
                 post([preparation_observer]{if(preparation_observer)preparation_observer->quit();});
             });
         const auto start_preparation=[weak_owner=std::weak_ptr{startup_preparation},weak_summary=std::weak_ptr{preparation_summary},startup_error_reported](startup::preparation::Context context,startup::preparation::CompleteResult complete){
@@ -1201,8 +1267,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 preparation_finished = true;
                 preparation_loop.quit();
             });
+            startup_error_window = context.window;
             context.onboarding_options_model->prepareNodeAsync(gArgs,{start_preparation,[owner=startup_preparation]{owner->close();}});
             while (!preparation_finished) preparation_loop.exec();
+            startup_error_window.clear();
             QObject::disconnect(visibility_connection);
             QObject::disconnect(preparation_connection);
         } else {
@@ -1215,25 +1283,26 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         const auto preparation=prepared?std::move(*prepared->value):std::move(*unstarted_preparation);
 #ifdef ENABLE_TEST_AUTOMATION
         if(preparation.transport){
-            if(!startup::Run(startup_services,[transfer=*preparation.transport]{
+            if(!run_startup([transfer=*preparation.transport]{
                 return !gArgs.IsArgSet("-test-automation")||PrintStartupTransfer(transfer);
             })) *lifecycle_failed=true;
         }
 #endif
         if(preparation.disposition==startup::preparation::Disposition::Forwarded){
             if(preparation.request_dropped){
-                startup::Run(startup_services,[]{return InitError(Untranslated("The running application stopped before processing a desktop request. Check that application before trying again."));});
+                run_startup([]{return InitError(Untranslated("The running application stopped before processing a desktop request. Check that application before trying again."));});
                 return EXIT_FAILURE;
             }
             return EXIT_SUCCESS;
         }
         if(preparation.disposition!=startup::preparation::Disposition::Ready){
-            if(preparation.cancelled&&(preparation.closing||startup_canceled||quit_handler.isQuitRequested()))return EXIT_SUCCESS;
-            if(!preparation.closing&&!preparation.error_reported&&!preparation.error.isEmpty())startup::Run(startup_services,[error=preparation.error]{return InitError(Untranslated(error.toStdString()));});
+            // Closing the onboarding window, including over a startup error, cancels startup.
+            if(startup_canceled||(preparation.cancelled&&(preparation.closing||quit_handler.isQuitRequested())))return EXIT_SUCCESS;
+            if(!preparation.closing&&!preparation.error_reported&&!preparation.error.isEmpty())run_startup([error=preparation.error]{return InitError(Untranslated(error.toStdString()));});
             return EXIT_FAILURE;
         }
         if(preparation.closing||startup_canceled||quit_handler.isQuitRequested())return EXIT_SUCCESS;
-        const auto runtime=startup::Run(startup_services,[]{
+        const auto runtime=run_startup([]{
             RuntimePresentation captured;
             captured.wallet_enabled=WalletEnabledFromArgs();
             captured.chain=QString::fromStdString(gArgs.GetChainTypeString());
@@ -1248,30 +1317,43 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         });
         wallet_presentation->store(runtime.wallet_enabled);
         if(!runtime.error.isEmpty()){
-            startup::Run(startup_services,[error=runtime.error]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
+            run_startup([error=runtime.error]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
         }
         gui_startup_message_handler.disconnect();
-        startup::Run(startup_services, [startup_warnings] { startup_warnings->seal(); return true; });
+        run_startup([startup_warnings] { startup_warnings->seal(); return true; });
+        startup_core.close();
+        startup_outcomes.close();
 
         const bool wallet_enabled = runtime.wallet_enabled;
         app_mode.setWalletEnabled(wallet_enabled);
         desktop_intent_model.setWalletEnabled(wallet_enabled);
 
         constexpr bool backend_ready{false};
-        NodeModel::Services node_services;
-        node_services.diagnostic_loss = diagnostic_loss;
-        NodeModel node_model{*node, backend_ready, std::move(node_services)};
         const auto presentation_post = presentation::QueuedPost();
+        const auto node_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        // Fatal errors from interrupt or shutdown still need Utility after
+        // startup services and ordinary node work have drained.
+        PresentationServices node_values{{presentation_post, [node_retirement](auto work) {
+            return node_retirement->post(std::move(work));
+        }, {}, std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        NodeModel::Services node_services;
+        node_services.post = presentation_post;
+        node_services.diagnostic_loss = diagnostic_loss;
+        node_services.observation_executor = &executor;
+        node_services.diagnostics = &node_values;
+        node_services.network_retirement = node_values.valueRetirement();
+        NodeModel node_model{*node, backend_ready, std::move(node_services)};
         // Background services for presentation objects that QML creates.
-        PresentationServices presentation_services{{node_model.queryScheduler(), presentation_post,
-            [&node_model](std::function<void()> work) { return node_model.retireValues(std::move(work)); }, {}}};
-        bitcoin_uri_model.setServices({node_model.queryScheduler(), presentation_post});
+        PresentationServices presentation_services{{presentation_post, node_model.valueRetirement(), {},
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        bitcoin_uri_model.setServices(presentation_post, wallet_enabled ? &executor : nullptr);
 #ifdef ENABLE_WALLET
         if(wallet_enabled)desktop_intent_model.setFactory(&bitcoin_uri_model);
 #endif
         node_model.addStartupWarnings(std::move(startup_warnings));
         auto block_clock_history{std::make_shared<BlockClockHistory>()};
-        QmlInitExecutor init_executor{*node, [history = block_clock_history, node = node.get(), chain = chain.get()] {
+        QmlInitExecutor init_executor{*node, std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Priority)),
+            [history = block_clock_history, node = node.get(), chain = chain.get()] {
             return SubscribeBlockClockHistory(*node, *chain, history);
         }, diagnostic_loss,[complete_setup=pre_init_onboarding_status==PreInitOnboardingStatus::COMPLETED,startup_failed,setup_record_failed](QmlInitExecutor::StartupOutcome outcome){
             if(outcome==QmlInitExecutor::StartupOutcome::Cancelled)return;
@@ -1310,15 +1392,33 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::finished, &app, [&] { shutdown_finished = true; });
         // Read the file the node actually writes, so -debuglogfile=<file> and
         // -nodebuglogfile are honoured rather than assuming <datadir>/debug.log.
-        DebugLogModel debug_log_model{runtime.log_file, runtime.log_enabled,
-            {node_model.queryScheduler(), presentation_post}};
+        DebugLogModel debug_log_model{runtime.log_file, runtime.log_enabled, executor, presentation_post};
 #ifdef ENABLE_WALLET
         std::unique_ptr<WalletQmlController> wallet_controller;
         if (wallet_enabled) {
+            WalletQmlController::Services wallet_services;
+            wallet_services.executor = &executor;
+            wallet_services.post = presentation_post;
+            const auto wallet_cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+            const auto native_cleanup = std::make_shared<execution::SerialQueue>(
+                executor.makeQueue(execution::Lane::Utility, execution::UtilityWorker::Cleanup));
+            wallet_services.make_wallet_services = [&executor, wallet_cleanup, native_cleanup](bool) {
+                WalletQmlModel::Services services;
+                services.core = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core));
+                services.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+                services.cleanup = wallet_cleanup;
+                services.native_cleanup = native_cleanup;
+                return services;
+            };
             wallet_controller = std::make_unique<WalletQmlController>(*node, walletopening::ChainPreferences(*chain),
-                walletopening::FeePolicy{[chain = chain.get()] { return chain->relayMinFee().GetFeePerK(); }});
-            wallet_controller->setPsbtPolicyRead(psbtpolicy::ReadNode(node.get(), chain.get()));
+                walletopening::FeePolicy{[chain = chain.get()] { return chain->relayMinFee().GetFeePerK(); }},
+                std::move(wallet_services));
+            bitcoin_uri_model.setExportCoordinator(wallet_controller->backupInstallCoordinator());
+            wallet_controller->setPsbtPolicyRead(
+                psbtpolicy::ReadNode(node.get(), chain.get(), /*enforce_raw_fee_cap=*/true),
+                psbtpolicy::ReadNode(node.get(), chain.get(), /*enforce_raw_fee_cap=*/false));
             wallet_controller->creation()->setSignerPorts(signerdiscovery::PublicPorts(*node, gArgs));
+            wallet_controller->creation()->setSignerExecutor(executor);
             QObject::connect(
                 &init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(),
                 [wallet_controller = wallet_controller.get(), &shutdown_requested](bool success, interfaces::BlockAndHeaderTipInfo, bool, bool backend_shutdown_requested) {
@@ -1338,6 +1438,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         shutdown_coordinator.addStopHook([&] { init_executor.close(); });
         shutdown_coordinator.addStopHook([&] { node_model.close(); });
         shutdown_coordinator.addStopHook([&] { bitcoin_uri_model.close(); });
+        if (wallet_enabled) {
+            shutdown_coordinator.addAfterInterruptTask([&](auto done) { bitcoin_uri_model.whenDrained(std::move(done)); });
+        }
         shutdown_coordinator.addBeforeInterruptTask(retire_startup_runtime);
         shutdown_coordinator.addStopHook([&] { presentation_services.close(); });
         shutdown_coordinator.addBeforeInterruptTask([&](std::function<void()> done) {
@@ -1362,17 +1465,18 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
         QObject::connect(&init_executor, &QmlInitExecutor::runawayException, &node_model, [&](const QString& message) {
             if (main_window) main_window->contentItem()->setEnabled(true);
-            node_model.handleLifecycleException(message, init_executor.fatalDiagnosticScheduler());
+            node_model.handleRunawayException(message);
             if (!main_window) {
-                InitErrorMessageBox(QObject::tr("A fatal node error occurred."), {node_model.queryScheduler(), presentation_post}, {}, quit_handler,
+                InitErrorMessageBox(QObject::tr("A fatal node error occurred."), presentation_post,
+                                    executor, execution::Lane::Core, {}, quit_handler,
                                     [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
-                                    static_cast<StartupDiagnosticsModel*>(node_model.startupDiagnostics()), diagnostic_loss,wallet_enabled,
+                                    node_values, static_cast<StartupDiagnosticsModel*>(node_model.startupDiagnostics()), diagnostic_loss, wallet_enabled,
                                     &presentation_services);
                 node_model.requestShutdown();
             }
         });
 
-        NetworkTrafficTower network_traffic_tower{*node, 1000, {node_model.queryScheduler(), presentation_post}};
+        NetworkTrafficTower network_traffic_tower{*node, executor, 1000, presentation_post};
         shutdown_coordinator.addStopHook([&] { network_traffic_tower.close(); });
         QObject::connect(&node_model, &NodeModel::chainStateReady,
                          &network_traffic_tower, &NetworkTrafficTower::startSampling);
@@ -1384,21 +1488,23 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 #endif
 
         ChainModel chain_model{runtime.chain};
-        BlockClockModel block_clock_model{block_clock_history,
-            execution::SnapshotServices{node_model.queryScheduler(), presentation_post}};
-        shutdown_coordinator.addStopHook([&] { block_clock_model.close(); });
+        BlockClockModel block_clock_model{block_clock_history, presentation_services};
         setupChainQSettings(&app, chain_model.networkName());
 
 
 
+        const auto desktop_preferences = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
         DesktopWindowBehaviorModel desktop_window_behavior_model{
 #ifdef Q_OS_ANDROID
             false,
 #else
             true,
 #endif
-            {node_model.queryScheduler(), presentation_post}};
+            presentation_post, {}, nullptr, desktop_preferences};
         shutdown_coordinator.addStopHook([&] { desktop_window_behavior_model.close(); });
+        shutdown_coordinator.addAfterInterruptTask([desktop_preferences](auto done) {
+            desktop_preferences->whenDrained(std::move(done));
+        });
         DesktopTrayIconController desktop_tray_icon_controller;
 
         qGuiApp->setQuitOnLastWindowClosed(false);
@@ -1408,7 +1514,29 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             node_model.requestShutdown();
         });
 
-        PeerListModel peer_model{*node, nullptr, backend_ready, {node_model.queryScheduler(), {}}};
+        const auto list_outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        const auto list_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices list_values{{presentation_post, [list_retirement](auto work) {
+            return list_retirement->post(std::move(work));
+        }, {}, list_outcomes}};
+        const NativeListModel::Queues list_queues{
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core)),
+            list_outcomes, list_values.valueRetirement(), {},
+        };
+        shutdown_coordinator.addAfterInterruptTask([list_queues, &list_values, &shutdown_coordinator, presentation_post](std::function<void()> done) {
+            const QPointer values{&list_values};
+            const QPointer receiver{&shutdown_coordinator};
+            list_queues.core->close();
+            list_queues.core->whenDrained([values, receiver, post = presentation_post, done = std::move(done)]() mutable {
+                post([values, receiver, done = std::move(done)]() mutable {
+                    if (!values || !receiver) return;
+                    values->close();
+                    values->whenRetired(receiver, std::move(done));
+                });
+            });
+        });
+        PeerListModel peer_model{*node, nullptr, backend_ready, presentation_post,
+                                [] { return NodeClock::now(); }, list_queues};
         peer_model.setCommands(node_model.peerCommands());
         shutdown_coordinator.addStopHook([&] { node_model.peerCommands()->close(); });
         shutdown_coordinator.addStopHook([&] { peer_model.close(); });
@@ -1418,7 +1546,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         shutdown_coordinator.addStopHook([&] { peer_model_sort_proxy.close(); });
         peer_model_sort_proxy.setSourceModel(&peer_model);
 
-        BanListModel ban_list_model{*node, nullptr, backend_ready, {node_model.queryScheduler(), {}}};
+        BanListModel ban_list_model{*node, nullptr, backend_ready, presentation_post, list_queues};
         shutdown_coordinator.addStopHook([&] { ban_list_model.close(); });
         QObject::connect(&node_model, &NodeModel::bannedListChanged,
                          &ban_list_model, &BanListModel::refresh);
@@ -1452,8 +1580,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         // The pre-init engine can have written the same persisted keys. Finish
         // those original writes before reading the final chain profile.
         pre_init_onboarding_context.finishPreferences();
-        auto* ui_preferences = startup::InstallPreferences(*engine,
-            {node_model.queryScheduler(), presentation_post}, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
+        // Shutdown drains settings and preferences before interrupting Core. A
+        // wallet load can hold Core until that interrupt, so they avoid it.
+        auto* ui_preferences = startup::InstallPreferences(*engine, executor, execution::Lane::Utility,
+            presentation_post, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
         shutdown_coordinator.addStopHook([ui_preferences] { ui_preferences->close(); });
         shutdown_coordinator.addBeforeInterruptTask([ui_preferences](std::function<void()> done) {
             ui_preferences->whenDrained(std::move(done));
@@ -1471,7 +1601,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
         engine->rootContext()->setContextProperty("desktopIntentModel", &desktop_intent_model);
 
-        RpcConsoleModel rpc_console_model{*node, {node_model.queryScheduler(), presentation_post}};
+        RpcConsoleModel rpc_console_model{*node, executor, presentation_post};
         shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
                                             [&] { rpc_console_model.beginShutdown(); });
         shutdown_coordinator.addStopHook([&] { rpc_console_model.close(); });
@@ -1482,10 +1612,12 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 #ifdef ENABLE_WALLET
         std::unique_ptr<WalletListModel> wallet_list_model;
         if (wallet_enabled) {
-            wallet_list_model = std::make_unique<WalletListModel>(*node,
-                execution::SnapshotServices{wallet_controller->backgroundScheduler(), presentation_post});
+            wallet_list_model = std::make_unique<WalletListModel>(*node, executor, presentation_post);
             wallet_list_model->setBackendAvailability(WalletListModel::BackendAvailability::Uninitialized);
             shutdown_coordinator.addStopHook([&] { wallet_list_model->close(); });
+            shutdown_coordinator.addAfterInterruptTask([&](std::function<void()> done) {
+                wallet_list_model->whenRetired(std::move(done));
+            });
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
                              wallet_list_model.get(), &WalletListModel::setWalletLoadState);
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
@@ -1530,7 +1662,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         }
 #endif
 
-        OptionsQmlModel options_model(*node, gArgs, {node_model.queryScheduler(), presentation_post}, &executor);
+        OptionsQmlModel options_model(*node, gArgs, presentation_post, &executor, &presentation_services,
+                                    execution::Lane::Priority);
         shutdown_coordinator.addStopHook([&] { options_model.close(); });
         shutdown_coordinator.addBeforeInterruptParticipant(&options_model, &OptionsQmlModel::shutdownFinished,
                                             [&] { options_model.beginShutdown(); });

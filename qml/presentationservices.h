@@ -14,6 +14,8 @@
 #include <functional>
 #include <memory>
 
+namespace execution { class SerialQueue; }
+
 /** Background services for presentation objects that QML creates, such as the
  * block clock dial and monospace output. The application owns one instance and
  * QML binds it as ApplicationModels.presentationServices.
@@ -29,13 +31,14 @@ class PresentationServices : public QObject
 
 public:
     struct Ports {
-        std::shared_ptr<execution::Scheduler> scheduler;
         // Runs a turn on the GUI thread.
         std::function<void(std::function<void()>)> post;
         // Enqueues value cleanup on another thread. False means not accepted.
         std::function<bool(std::function<void()>)> retire;
         // Optional manual turn for retrying retirement (tests).
         std::function<void(std::function<void()>)> retry;
+        // The app queues output processing here and closes it with these services.
+        std::shared_ptr<execution::SerialQueue> utility{};
     };
     /** Values waiting to be released on another thread. */
     class Retirement
@@ -47,9 +50,13 @@ public:
         virtual size_t pending() = 0;
     };
 
+    using RetireValue = std::function<void(std::shared_ptr<const void>)>;
+
     explicit PresentationServices(Ports ports, QObject* parent = nullptr);
 
     const Ports& ports() const { return m_ports; }
+    std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)> observationPost() const;
+    RetireValue valueRetirement() const;
     bool isClosed() const { return m_closed; }
     /** End all users' background work. Emits closed() once. */
     void close();
@@ -65,7 +72,9 @@ Q_SIGNALS:
     void closed();
 
 private:
+    struct RetiredValues;
     Ports m_ports;
+    std::shared_ptr<RetiredValues> m_values;
     bool m_closed{false};
     QList<std::shared_ptr<Retirement>> m_retirements;
 };

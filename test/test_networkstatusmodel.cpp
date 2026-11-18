@@ -72,4 +72,4 @@ BITCOINQML_REGISTER_QT_TEST(NetworkStatusModelTests)
 #else
 QTEST_MAIN(NetworkStatusModelTests)
 #endif
-#include "test_networkstatusmodel.moc"
+#include <test_networkstatusmodel.moc>

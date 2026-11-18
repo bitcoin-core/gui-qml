@@ -10,7 +10,7 @@
 #include <limits>
 
 namespace {
-using Scope = std::shared_ptr<execution::Scheduler>;
+using requestshare::Scope;
 bool Terminal(requestshare::Phase phase) { return phase >= requestshare::Phase::Completed; }
 bool Current(const requestshare::Source& source) { try { return source.current && source.current(); } catch (...) { return false; } }
 }
@@ -78,8 +78,8 @@ struct ShareOperationModel::Work : std::enable_shared_from_this<Work> {
         const auto result = cell;
         const auto effect = services.deliver;
         const auto action = kind;
-        const auto post = services.execution.post;
-        original.reset();
+        const auto post = services.post;
+        original = {};
         post([result, grant, action, payload = std::move(source.payload), image = std::move(image), effect] {
             { std::lock_guard lock{result->mutex}; if (result->result.present) return; }
             if (result->cancelled.load()) grant->revoke();
@@ -121,7 +121,7 @@ struct ShareOperationModel::Work : std::enable_shared_from_this<Work> {
             { std::lock_guard lock{self->cell->mutex}; self->cell->phase = requestshare::Phase::Preparing; }
             self->cell->notify();
             const auto payload = source.payload;
-            const auto submitted = execution::Submit(*scope,
+            const auto submitted = requestshare::Submit(scope,
                 [render = self->services.render, payload] { return render(payload); },
                 [self, scope, source = std::move(source)](QImage image) mutable {
                     if (image.isNull() || image.width() <= 1 || image.width() != image.height() || image.width() > 736) {
@@ -129,7 +129,7 @@ struct ShareOperationModel::Work : std::enable_shared_from_this<Work> {
                     }
                     self->prepared(std::move(source), std::move(image), std::move(scope));
                 }, [self](std::exception_ptr) { self->fail(requestshare::Error::QrEncoding); },
-                {execution::Lane::Domain});
+                execution::Lane::Domain);
             if (!submitted) self->fail(requestshare::Error::Rejected);
         });
         if (!submitted) fail(requestshare::Error::Rejected);
@@ -139,19 +139,19 @@ ShareOperationModel::ShareOperationModel(requestshare::Kind kind, int64_t reques
     std::shared_ptr<requestshare::View> view, std::optional<requestshare::Source> expected, QObject* parent)
     : QObject(parent), m_id(QUuid::createUuid().toString(QUuid::WithoutBraces)), m_cell(std::make_shared<Cell>())
 {
-    services.execution.post = presentation::ReliablePost(std::move(services.execution.post));
+    services.post = presentation::ReliablePost(std::move(services.post));
     m_cell->result.operationId = m_id;
     const QPointer<ShareOperationModel> observer{this};
-    m_cell->notify = [post = services.execution.post, observer] { post([observer] { if (observer) Q_EMIT observer->changed(); }); };
+    m_cell->notify = [post = services.post, observer] { post([observer] { if (observer) Q_EMIT observer->changed(); }); };
     const auto work = std::make_shared<Work>();
     work->kind = kind; work->id = request_id; work->services = std::move(services); work->view = std::move(view);
     work->token = work->view->token.load(); work->cell = m_cell;
     work->input_revision = work->view->input_epoch ? work->view->input_epoch->value.load() : 0;
     work->expected = std::move(expected);
-    const auto scope = work->services.execution.scheduler ? work->services.execution.scheduler->openActionScope() : nullptr;
+    const auto scope = requestshare::WorkScope(work->services, /*retain=*/true);
     if (!scope) { work->fail(requestshare::Error::Rejected); return; }
-    const auto submitted = execution::Submit(*scope, [] { return true; },
-        [work, scope](bool) { work->begin(scope); }, [work](std::exception_ptr) { work->fail(requestshare::Error::Rejected); }, {execution::Lane::Domain});
+    const auto submitted = requestshare::Submit(scope, [] { return true; },
+        [work, scope](bool) { work->begin(scope); }, [work](std::exception_ptr) { work->fail(requestshare::Error::Rejected); }, execution::Lane::Domain);
     if (!submitted) work->fail(requestshare::Error::Rejected);
 }
 ShareOperationModel::~ShareOperationModel() { cancel(); }
@@ -182,7 +182,7 @@ RequestSharingModel::RequestSharingModel(int64_t id, requestshare::Services serv
     : QObject(parent), m_request_id(id), m_services(std::move(services)), m_view(std::make_shared<requestshare::View>())
 {
     if (parent) m_gui_engine = qmlEngine(parent);
-    m_services.execution.post = presentation::ReliablePost(std::move(m_services.execution.post));
+    m_services.post = presentation::ReliablePost(std::move(m_services.post));
     m_view->input = std::move(input);
     m_view->input_epoch = std::move(input_epoch);
 }
@@ -224,30 +224,29 @@ void RequestSharingModel::refresh()
     ++m_refresh; m_refresh_pending = true;
     const auto token = m_view->token.load();
     const QPointer<RequestSharingModel> observer{this};
-    const auto post = m_services.execution.post;
+    const auto post = m_services.post;
     const auto finish = [observer, post, token](std::shared_ptr<const Cache> result) {
         post([observer, result = std::move(result), token] { if (observer) observer->publish(result, token); });
     };
     const auto read = m_services.read;
     const auto render = m_services.render;
-    const auto scheduler = m_services.execution.scheduler;
-    if (!read || !scheduler) {
+    const auto scope = requestshare::WorkScope(m_services, /*retain=*/false);
+    if (!read || !scope) {
         auto cache = std::make_shared<Cache>(); cache->source.error = requestshare::Error::Rejected; finish(cache); return;
     }
-    // An observation owns no original action rights. Its work and render
-    // complete on Domain; the GUI callback receives bounded values only.
-    const auto submitted = read(m_request_id, [finish, scheduler, render, id = m_request_id](requestshare::Source source) {
+    // The observation and render hold no lease while GUI delivery is pending.
+    const auto submitted = read(m_request_id, [finish, scope, render, id = m_request_id](requestshare::Source source) {
         auto cache = std::make_shared<Cache>(); cache->source = std::move(source);
         if (cache->source.error != requestshare::Error::None) { finish(cache); return; }
         if (!cache->source.opening || cache->source.request_id != id || cache->source.record_revision == 0) { cache->source.error = requestshare::Error::Changed; finish(cache); return; }
         if (cache->source.payload.isEmpty()) { cache->source.error = requestshare::Error::Missing; finish(cache); return; }
         if (cache->source.payload.size() > 16'384) { cache->source.error = requestshare::Error::Oversize; finish(cache); return; }
-        const auto submitted = execution::Submit(*scheduler, [render, payload = cache->source.payload] { return render ? render(payload) : QImage{}; },
+        const auto submitted = requestshare::Submit(scope, [render, payload = cache->source.payload] { return render ? render(payload) : QImage{}; },
             [cache, finish](QImage image) {
                 if (image.isNull() || image.width() <= 1 || image.width() != image.height() || image.width() > 736) cache->qr_error = requestshare::Error::QrEncoding;
                 else cache->image = std::move(image);
                 finish(cache);
-            }, [cache, finish](std::exception_ptr) { cache->qr_error = requestshare::Error::QrEncoding; finish(cache); }, {execution::Lane::Domain});
+            }, [cache, finish](std::exception_ptr) { cache->qr_error = requestshare::Error::QrEncoding; finish(cache); }, execution::Lane::Domain);
         if (!submitted) { cache->qr_error = requestshare::Error::Rejected; finish(cache); }
     });
     if (!submitted) { auto cache = std::make_shared<Cache>(); cache->source.error = requestshare::Error::Rejected; finish(cache); }

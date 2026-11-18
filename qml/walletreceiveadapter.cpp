@@ -2,8 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/walletreceiveadapter.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedsnapshot.h>
+#include <qml/retainedvalue.h>
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -29,14 +30,17 @@ requestedit::Source Source(walletrequests::Inspection value, uint64_t view)
 }
 }
 WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::Session>& opening,
-    const std::shared_ptr<walletrequests::Store>& store, execution::SnapshotServices execution,
+    const std::shared_ptr<walletrequests::Store>& store, presentation::Post post,
     std::shared_ptr<backup::InstallCoordinator> coordinator)
 {
     WalletReceiveModel::Ports ports;
-    execution.post = presentation::ReliablePost(std::move(execution.post));
+    post = presentation::ReliablePost(std::move(post));
     const auto weak_store = std::weak_ptr<walletrequests::Store>{store};
     const auto weak_opening = std::weak_ptr<walletopening::Session>{opening};
-    ports.editor.execution = execution;
+    ports.editor.post = post;
+    const auto utility = opening->utilityQueue();
+    ports.editor.postWork = [utility](auto work) { return utility->post(std::move(work)); };
+    ports.editor.value_cleanup = [opening](auto cleanup) { return opening->holdValues(std::move(cleanup)); };
     ports.editor.read = [weak_store](int64_t id, uint64_t view, auto done) {
         const auto writer = weak_store.lock();
         if (!writer) return execution::SubmitResult{{}, execution::Rejection::Closed};
@@ -46,7 +50,7 @@ WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::
         const auto writer = weak_store.lock(); const auto owner = weak_opening.lock();
         const auto original = owner ? owner->startAction() : nullptr;
         if (!writer || !original) return {};
-        return [writer, original](const requestedit::Intent& intent, auto done, const auto&) {
+        return [writer, original](const requestedit::Intent& intent, auto done) {
             walletrequests::Command command;
             command.kind = intent.erase ? walletrequests::Kind::Erase : intent.source.id > 0 ? walletrequests::Kind::Edit : walletrequests::Kind::Create;
             command.id = intent.source.id; command.revision = intent.source.revision; command.view = intent.source.view;
@@ -66,13 +70,13 @@ WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::
             return execution::SubmitResult{{}, submitted.rejection};
         };
     };
-    ports.reservation.execution = execution;
-    const auto submit = [weak_store, scheduler = execution.scheduler](walletrequests::Command command, auto done) {
+    ports.reservation.post = post;
+    const auto submit = [weak_store, weak_opening](walletrequests::Command command, auto done) {
         const auto writer = weak_store.lock();
-        if (!writer || !scheduler) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
-        // Reserve destruction before retaining a potentially large original
-        // result. GUI aliases own only its cleanup lease, never final storage.
-        auto retained = execution::RetainSnapshot<std::shared_ptr<walletrequests::Operation>>(scheduler,
+        const auto owner = weak_opening.lock();
+        if (!writer || !owner) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
+        // The opening retires the original result after the view releases it.
+        auto retained = walletopening::RetainValues<std::shared_ptr<walletrequests::Operation>>(owner,
             [] { return std::make_unique<std::shared_ptr<walletrequests::Operation>>(); });
         if (!retained) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
         const auto submitted = writer->submitResult(std::move(command), std::move(done));
@@ -81,12 +85,17 @@ WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::
             std::move(retained), submitted.rejection};
     };
     ports.reservation.submit = submit;
-    ports.reservation.authorize = [submit, scheduler = execution.scheduler](walletrequests::Command command, const QString& text, auto done) {
-        auto captured = secretinput::Capture(scheduler, text);
+    ports.reservation.authorize = [submit, weak_opening](walletrequests::Command command, const QString& text, auto done) {
+        auto captured = secretinput::Capture(weak_opening.lock(), text);
         command.captured_secret = std::move(captured.input); command.secret_capture_error = captured.error;
         return submit(std::move(command), std::move(done));
     };
-    ports.sharing.execution = execution;
+    ports.sharing.post = post;
+    ports.sharing.utility = utility;
+    ports.sharing.hold = [weak_opening]() -> std::shared_ptr<void> {
+        const auto owner = weak_opening.lock();
+        return owner && owner->available() ? owner->holdValues([] {}) : nullptr;
+    };
     ports.sharing.read = [weak_store, identity = opening->identity()](int64_t id, auto done) {
         const auto writer = weak_store.lock();
         if (!writer) return execution::SubmitResult{{}, execution::Rejection::Closed};

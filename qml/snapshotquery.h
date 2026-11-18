@@ -14,11 +14,6 @@
 #include <utility>
 
 namespace execution {
-struct SnapshotServices {
-    std::shared_ptr<Scheduler> scheduler;
-    std::function<void(std::function<void()>)> post;
-};
-
 /** Accepted effects own their outcome independently of GUI delivery. Dropping
  * the observer neither cancels the effect nor rewrites a completed mutation. */
 template <typename Value>
@@ -26,15 +21,8 @@ class OwnedCommand final : public std::enable_shared_from_this<OwnedCommand<Valu
 {
 public:
     struct Result { std::optional<Value> value; std::exception_ptr error; bool publication_failed{false}; };
-    using Effect = std::function<Value()>;
-    OwnedCommand(std::shared_ptr<Scheduler> scheduler, std::function<void()> notify)
-        : m_scheduler(std::move(scheduler)), m_notify(std::move(notify)) {}
-    SubmitResult start(Effect effect, TaskSpec spec = {})
-    {
-        return startWith([this, effect = std::move(effect), spec](auto done, auto failed) mutable {
-            return Submit(*m_scheduler, std::move(effect), std::move(done), std::move(failed), spec);
-        });
-    }
+    explicit OwnedCommand(std::function<void()> notify)
+        : m_notify(std::move(notify)) {}
     template <typename Starter>
     SubmitResult startWith(Starter starter)
     {
@@ -66,7 +54,6 @@ private:
             m_result->publication_failed = true;
         }
     }
-    const std::shared_ptr<Scheduler> m_scheduler;
     const std::function<void()> m_notify;
     mutable std::mutex m_mutex;
     bool m_started{false};
@@ -86,9 +73,9 @@ public:
         std::exception_ptr error;
     };
     using Read = std::function<Snapshot()>;
-    SnapshotQuery(std::shared_ptr<Scheduler> scheduler, Read read, std::function<void()> notify, Lane lane = Lane::Core)
-        : m_scheduler(std::move(scheduler)), m_key(m_scheduler->allocateKey()),
-          m_read(std::move(read)), m_notify(std::move(notify)), m_lane(lane) {}
+    using Post = std::function<SubmitResult(std::shared_ptr<Task>)>;
+    SnapshotQuery(Read read, std::function<void()> notify, Post post)
+        : m_post(std::move(post)), m_read(std::move(read)), m_notify(std::move(notify)) {}
 
     void request()
     {
@@ -99,18 +86,14 @@ public:
             m_running = true;
         }
         const auto self = this->shared_from_this();
-        const auto submitted = Submit(*m_scheduler, [self] {
+        const auto submitted = m_post(MakeTask([self] {
             {
                 std::lock_guard lock{self->m_mutex};
                 if (self->m_closed) throw NotStarted{NotStarted::Cause::Cancelled};
             }
             return std::make_shared<const Snapshot>(self->m_read());
         }, [self](std::shared_ptr<const Snapshot> snapshot) { self->complete({std::move(snapshot), {}}); },
-        [self](std::exception_ptr error) { self->complete({{}, error}); },
-        // Lifecycle polls use the separately bounded Control reservation.
-        // Observation is the ordinary-lane scheduling class, not an effect
-        // classification, and cannot be admitted into the Control budget.
-        {m_lane, m_key, m_lane == Lane::Control ? WorkClass::Action : WorkClass::Observation});
+        [self](std::exception_ptr error) { self->complete({{}, error}); }));
         // Requests coalesced during a rejected admission share that failure.
         // Retrying inline cannot restore transport capacity and could recurse
         // indefinitely while another caller keeps the observation dirty.
@@ -166,11 +149,9 @@ private:
         }
         return again;
     }
-    const std::shared_ptr<Scheduler> m_scheduler;
-    const ResourceKey m_key;
+    const Post m_post;
     const Read m_read;
     const std::function<void()> m_notify;
-    const Lane m_lane;
     std::mutex m_mutex;
     bool m_closed{false}, m_running{false}, m_dirty{false}, m_notice_pending{false};
     std::optional<Result> m_latest;

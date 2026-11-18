@@ -5,8 +5,6 @@
 #ifndef BITCOIN_QML_MODELS_FEEREADSERVICES_H
 #define BITCOIN_QML_MODELS_FEEREADSERVICES_H
 
-#include <qml/execution.h>
-
 #include <functional>
 #include <memory>
 
@@ -23,7 +21,6 @@ public:
 struct FeeReadInput;
 struct FeeReadResult;
 struct FeeReadServices {
-    std::shared_ptr<execution::Scheduler> scheduler;
     std::shared_ptr<FeeReadTimer> timer;
     std::function<FeeReadResult(const FeeReadInput&)> read;
     // Presentation transport: enqueue without invoking inline.

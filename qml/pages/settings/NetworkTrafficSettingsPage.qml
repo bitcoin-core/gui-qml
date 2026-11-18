@@ -17,7 +17,7 @@ SettingsPage {
     showBackButton: false
     maximumContentWidth: width
 
-    property int trafficGraphScale: 300
+    property alias trafficGraphScale: settings.trafficGraphScale
     property bool ownsNetworkTrafficActivity: false
     readonly property var scaleOptions: [
         { text: qsTr("5 min"), seconds: 300 },
@@ -35,7 +35,6 @@ SettingsPage {
 
     function selectScale(scale) {
         root.trafficGraphScale = scale
-        ApplicationModels.networkTrafficTower.updateFilterWindowSize(scale / 10)
     }
 
     function formatBytes(bytes) {
@@ -58,10 +57,8 @@ SettingsPage {
         }
     }
 
-    AppSettings {
-        id: settings
-        property alias trafficGraphScale: root.trafficGraphScale
-    }
+    AppPreferences { id: settings }
+    onTrafficGraphScaleChanged: ApplicationModels.networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
 
     PageHeading {
         objectName: "networkTrafficHeading"

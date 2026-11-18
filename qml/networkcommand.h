@@ -4,6 +4,7 @@
 #ifndef BITCOIN_QML_NETWORKCOMMAND_H
 #define BITCOIN_QML_NETWORKCOMMAND_H
 
+#include <qml/presentationservices.h>
 #include <qml/snapshotquery.h>
 
 #include <cstdint>
@@ -77,16 +78,17 @@ struct Ports {
     std::function<uint64_t()> generation;
 };
 
-/** Bounded asynchronous adapter using the existing Domain/Core/Cleanup lanes.
- * Public ingress and close belong to the single facade/composition thread.
- * Fresh intents obtain individual action scopes from ordinary root admission.
- * The lifetime scope admits only observation/continuation/retirement work.
- * Snapshot payloads and Native port captures physically retire on Cleanup.
+/** Bounded asynchronous adapter. The facade owns ingress and close, Core
+ * runs the effects, and Utility reduces outcomes and retires the ports.
  */
 class Service final
 {
 public:
-    Service(execution::SnapshotServices execution, Ports ports,
+    struct Queues {
+        std::shared_ptr<execution::SerialQueue> core, utility;
+        PresentationServices::RetireValue retire;
+    };
+    Service(Queues queues, Ports ports,
             std::function<void()> changed, std::function<void()> drained = {});
     ~Service();
     Service(const Service&) = delete;
@@ -96,13 +98,12 @@ public:
     bool setAvailable(bool available, uint64_t revision);
     Projection projection() const;
     // Observer retirement withdraws publication and fresh ingress, while the
-    // original admitted action scopes still own decisions/effects/outcomes.
+    // original accepted work still owns decisions, effects and outcomes.
     void retire();
     void close();
 private:
     struct Publication;
     struct State;
-    execution::SnapshotServices m_execution;
     std::shared_ptr<Publication> m_publication;
     std::shared_ptr<State> m_owner;
     std::weak_ptr<State> m_state;

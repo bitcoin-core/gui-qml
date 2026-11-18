@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <test/mocks/walletmodelservices.h>
 #include <test/mocks/sendtest.h>
 #include <test/mocks/approvaltest.h>
 #include <qml/models/receiverequestoperation.h>
@@ -12,6 +13,8 @@
 #include <qml/models/requestsharingmodel.h>
 #include <qml/walletrequestdata.h>
 #include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/manualwalletdrain.h>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <qml/models/transactionactivitymodel.h>
@@ -415,12 +418,13 @@ struct Fixture {
     {
         if (!wallet) return;
         QSignalSpy drained{wallet.get(), &WalletQmlModel::shutdownFinished};
+        const auto native_drained = WatchWalletNativeDrain(*wallet);
         wallet->beginShutdown();
         QVERIFY2(QTest::qWaitFor([&] {
             // Deliver the existing review registry's deferred QObject retirements,
             // just as the shared Wallet model harness does before waiting for drain.
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            return wallet->backendExecutor()->isDrained() && (wallet->shutdownComplete() || !drained.empty());
+            return *native_drained && (wallet->shutdownComplete() || !drained.empty());
         }, 10000), "Original Activity wallet did not physically drain");
     }
     Model* model() { auto* result = wallet->transactionActivityModel(); Wait(result); return result; }
@@ -467,18 +471,19 @@ struct ManualPollClock {
 
 struct ManualActivityFixture {
     ManualExecutionEnvironment& environment;
+    ManualStartupExecution worker;
     std::shared_ptr<ActivityWallet> state;
     std::unique_ptr<WalletQmlModel> wallet;
     std::unique_ptr<Model> activity;
-    std::shared_ptr<BackendExecutor> backend;
+    std::shared_ptr<const bool> native_drained;
     ManualPollClock poll_clock;
     std::function<void()> poll;
     ManualActivityFixture(ManualExecutionEnvironment& env, std::shared_ptr<ActivityWallet> original)
         : environment(env), state(std::move(original)) {
         const auto post = [&env](auto callback) { env.post(std::move(callback)); };
-        FeeReadServices fees; fees.scheduler = env.scheduler; fees.post = post; fees.timer = std::shared_ptr<FeeReadTimer>(&env, [](auto*) {});
-        wallet = std::make_unique<WalletQmlModel>(WalletQmlModel::SharedWallet{state, env.scheduler}, nullptr, std::move(fees), psbtfee::Services{}, backup::Services{});
-        backend = wallet->backendExecutor();
+        FeeReadServices fees; fees.post = post; fees.timer = std::shared_ptr<FeeReadTimer>(&env, [](auto*) {});
+        wallet = std::make_unique<WalletQmlModel>(WalletWithQueues(state, worker.executor()), nullptr, std::move(fees), psbtfee::Services{}, backup::Services{});
+        native_drained = WatchWalletNativeDrain(*wallet);
         if (!QTest::qWaitFor([&] { settle(); return wallet->capabilitiesKnown() && wallet->property("receiveRequestsLoaded").toBool() && !wallet->receiveRequestReconciliationPending(); }, 5000)) QTest::qFail("Manual activity opening did not settle", __FILE__, __LINE__);
         Model::Services services; services.post = post;
         services.schedule_poll = [this](auto delay, auto callback) {
@@ -489,11 +494,11 @@ struct ManualActivityFixture {
         activity = std::make_unique<Model>(wallet.get(), std::move(services));
     }
     void settle() {
-        for (int round = 0; round < 64; ++round) { environment.drain(); environment.publishAll(); QCoreApplication::processEvents(); if (environment.turnsIdle() && environment.publicationsIdle() && (!activity || !activity->loading())) return; }
+        for (int round = 0; round < 64; ++round) { worker.drain(); environment.publishAll(); QCoreApplication::processEvents(); if (worker.quiescent() && environment.publicationsIdle() && (!activity || !activity->loading())) return; }
     }
     ~ManualActivityFixture() {
         activity.reset(); wallet->beginShutdown();
-        if (!QTest::qWaitFor([&] { settle(); return backend->isDrained() && environment.turnsIdle() && environment.publicationsIdle(); }, 10000)) QTest::qFail("Manual activity did not drain", __FILE__, __LINE__);
+        if (!QTest::qWaitFor([&] { settle(); return *native_drained && worker.quiescent() && environment.publicationsIdle(); }, 10000)) QTest::qFail("Manual activity did not drain", __FILE__, __LINE__);
         wallet.reset(); settle();
     }
 };
@@ -587,7 +592,7 @@ void TransactionActivityModelTests::oneChangedStatusReusesLargeNativeRowsAndFilt
     ManualExecutionEnvironment env; auto original = std::make_shared<ActivityWallet>(); std::vector<interfaces::WalletTx> values;
     for (int i{0}; i < 512; ++i) { auto tx = MakeTx({{100'000 + i, false}}, {{50'000 + i, true}}, 1'789'200'000 + i); original->put(tx, 6); values.push_back(std::move(tx)); }
     ManualActivityFixture fixture{env, original}; fixture.settle(); auto* model = fixture.activity.get();
-    Proxy::Services services; services.execution = {env.scheduler, [&env](auto callback) { env.post(std::move(callback)); }}; services.automaticDateRefresh = false;
+    Proxy::Services services; services.post = [&env](auto callback) { env.post(std::move(callback)); }; services.automaticDateRefresh = false;
     Proxy proxy{services}; proxy.setSourceModel(model);
     QVERIFY(QTest::qWaitFor([&] { fixture.settle(); return !proxy.busy(); }, 5000)); QCOMPARE(proxy.rowCount(), 512);
     auto previous = model->preparedSnapshot(); QVERIFY(previous); const std::weak_ptr<const activityview::Snapshot> retired = previous->snapshot;
@@ -609,7 +614,7 @@ void TransactionActivityModelTests::fullHiddenSearchChangesInvalidateTheDeltaWit
     original->put(changed); original->put(kept);
     original->locked()->labels[Address(changed).toStdString()] = std::string(2048, 'x') + "oldTail";
     ManualActivityFixture fixture{env, original}; fixture.settle(); auto* model = fixture.activity.get();
-    Proxy::Services services; services.execution = {env.scheduler, [&env](auto callback) { env.post(std::move(callback)); }}; services.automaticDateRefresh = false;
+    Proxy::Services services; services.post = [&env](auto callback) { env.post(std::move(callback)); }; services.automaticDateRefresh = false;
     Proxy proxy{services}; proxy.setSourceModel(model); proxy.setSearchText("newTail");
     QVERIFY(QTest::qWaitFor([&] { fixture.settle(); return !proxy.busy(); }, 5000)); QCOMPARE(proxy.rowCount(), 0);
     QSignalSpy previews{model, &QAbstractItemModel::dataChanged}; const auto before = model->preparedSnapshot();
@@ -629,10 +634,10 @@ void TransactionActivityModelTests::manualProjectionWaitsForOutcomeAndGuiDeliver
     const auto tx = MakeTx({{50'000, false}}, {{49'000, true}}); original->put(tx);
     ManualActivityFixture fixture{env, original}; auto* model = fixture.activity.get();
     QCoreApplication::processEvents(); QVERIFY(model->loading()); QCOMPARE(model->rowCount(), 0);
-    env.drain(); QCOMPARE(model->rowCount(), 0); // Completed Domain/Core work has no GUI side effects.
+    fixture.worker.drain(); QCOMPARE(model->rowCount(), 0); // Completed Domain/Core work has no GUI side effects.
     env.publishAll(); QCoreApplication::processEvents(); QCOMPARE(model->transactionCount(), 1); QVERIFY(!model->loading());
     QVERIFY(fixture.poll); const auto stale_deadline = fixture.poll;
-    model->stop(); stale_deadline(); env.drain(); env.publishAll();
+    model->stop(); stale_deadline(); fixture.worker.drain(); env.publishAll();
     QCOMPARE(model->rowCount(), 0); QVERIFY(!model->loading());
 }
 
@@ -658,8 +663,8 @@ void TransactionActivityModelTests::manualProjectionOwnsTransactionKeysAcrossRef
     Q_EMIT fixture.wallet->transactionChanged(Id(second), CT_NEW);
     QCoreApplication::processEvents();
     QCOMPARE(original->locked()->snapshots, reads_before_notification);
-    QVERIFY(!env.turnsIdle());
-    env.drain();
+    QVERIFY(!fixture.worker.quiescent());
+    fixture.worker.drain();
     QCOMPARE(original->locked()->snapshots, reads_before_notification + 1);
     QCOMPARE(model->transactionCount(), 1);
     QCOMPARE(row.data(Model::IdRole).toString(), first_id);
@@ -699,7 +704,7 @@ void TransactionActivityModelTests::oldGuiWakeupCannotResurrectDeletedRows()
     ManualActivityFixture fixture{env, original}; fixture.settle();
     auto* model = fixture.activity.get();
     QPersistentModelIndex kept_row{Find(*model, Id(kept))}; QVERIFY(kept_row.isValid());
-    model->reload(); QCoreApplication::processEvents(); env.drain();
+    model->reload(); QCoreApplication::processEvents(); fixture.worker.drain();
     auto old_wakeup = env.takePublicationBack(); QVERIFY(old_wakeup);
     original->locked()->transactions.erase(deleted.tx->GetHash()); original->locked()->statuses.erase(deleted.tx->GetHash());
     original->put(added, 6);
@@ -772,7 +777,7 @@ void TransactionActivityModelTests::manualStatusSnapshotPublishesOnlyAtGuiBounda
     model->refreshStatuses();
     QCoreApplication::processEvents();
     QVERIFY(model->loading());
-    env.drain();
+    fixture.worker.drain();
     // Native and Domain work completed, but no GUI publication occurred.
     QCOMPARE(model->index(0).data(Model::DepthRole).toInt(), 2);
     QVERIFY(model->loading());
@@ -805,15 +810,11 @@ void TransactionActivityModelTests::pollTicksDoNotSupersedeHeldStatusRead()
     QVERIFY(fixture.poll_clock.due.has_value());
     QVERIFY(fixture.poll_clock.advance(std::chrono::milliseconds{1000}));
     QCoreApplication::processEvents();
-    auto planning_turn = env.takeTurnFront(); QVERIFY(planning_turn);
-    QCOMPARE(planning_turn->phase, execution::Phase::Queued);
-    QVERIFY(planning_turn->turn);
-    planning_turn->turn(); // Run Domain planning; the Core read is now the next held turn.
-    auto held_read = env.takeTurnFront(); QVERIFY(held_read);
-    QCOMPARE(held_read->phase, execution::Phase::Queued);
-    QVERIFY(held_read->turn);
+    QVERIFY(fixture.worker.step(execution::Lane::Utility));
+    auto held_read = fixture.worker.take(execution::Lane::Core);
+    QVERIFY(held_read);
     QSemaphore read_finished;
-    std::thread core_read{[turn = std::move(held_read->turn), &read_finished]() mutable {
+    std::thread core_read{[turn = std::move(held_read), &read_finished]() mutable {
         turn();
         read_finished.release();
     }};
@@ -885,7 +886,7 @@ void TransactionActivityModelTests::manualAcceptedRawCopyRetainsOriginalDocument
     const auto ticket = model->requestCopyRawTransaction(Id(tx)); QVERIFY(ticket);
     QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("before"));
     fixture.activity.reset(); original->locked()->transactions.clear();
-    env.drain(); QCoreApplication::processEvents(); env.publishAll();
+    fixture.worker.drain(); QCoreApplication::processEvents(); env.publishAll();
     QCOMPARE(QGuiApplication::clipboard()->text(), expected);
 }
 void TransactionActivityModelTests::entryDocumentRetainsCompleteLongTextAndAllRequestMetadata()
@@ -1927,14 +1928,19 @@ void TransactionActivityModelTests::malformedStoredRequestStillDrainsTheLivePare
     })());
     QCOMPARE(f.wallet->receiveRequests()->count(), 0);
     auto* activity = f.model(); QCOMPARE(activity->requestCount(), 0); QCOMPARE(activity->rowCount(), 0);
-    const auto scheduler = f.wallet->opening()->scheduler();
+    const auto opening = f.wallet->opening();
     QSignalSpy finished{f.wallet.get(), &WalletQmlModel::shutdownFinished};
+    const auto native_drained = WatchWalletNativeDrain(*f.wallet);
     f.wallet->beginShutdown();
     // Keep the parent facade alive: destruction must not be needed to release
     // malformed-load resources or complete the original Native retirement.
     QTRY_COMPARE(finished.count(), 1);
-    QTRY_VERIFY(f.wallet->backendExecutor()->isDrained());
-    QCOMPARE(scheduler->pending(), size_t{0});
+    QTRY_VERIFY(*native_drained);
+    auto drained = std::make_shared<std::atomic_int>(0);
+    for (const auto& queue : {opening->coreQueue(), opening->utilityQueue(), opening->cleanupQueue()}) {
+        queue->whenDrained([drained] { ++*drained; });
+    }
+    QTRY_COMPARE(drained->load(), 3);
     QVERIFY(f.native_lifetime.expired());
 }
 
@@ -2416,7 +2422,7 @@ void TransactionActivityModelTests::contendedStatusFallbackUpdatesWithoutAdvanci
     ManualActivityFixture f{env,native};f.settle();
     const QPersistentModelIndex row{Find(*f.activity,Id(tx))};QVERIFY(row.isValid());QCOMPARE(row.data(Model::DepthRole).toInt(),2);
     native->busy=true;f.activity->refreshStatuses();QCoreApplication::processEvents();
-    env.publishAll();env.drain();QCOMPARE(native->blocking_status_reads.load(),1);
+    env.publishAll();f.worker.drain();QCOMPARE(native->blocking_status_reads.load(),1);
     QCOMPARE(row.data(Model::DepthRole).toInt(),2); // Actual result remains held off GUI.
     env.publishAll();f.settle();
     QCOMPARE(row.data(Model::DepthRole).toInt(),6);QCOMPARE(row.data(Model::StatusRole).toInt(),int(Transaction::Confirmed));

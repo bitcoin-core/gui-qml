@@ -64,6 +64,11 @@ TestCase {
         id: blockClockModelMock
         property real currentTimeFraction: 0.25
         property var blockTimeFractions: []
+        readonly property var blockSnapshot: testSetup.blockClockSnapshot(blockTimeFractions)
+        property string historyError: ""
+        property bool historyPending: false
+        property int historyRefreshRequests: 0
+        function refreshHistory() { ++historyRefreshRequests }
     }
 
     Component {
@@ -109,6 +114,32 @@ TestCase {
         chainModelMock.networkName = "REGTEST"
         blockClockModelMock.currentTimeFraction = 0.25
         blockClockModelMock.blockTimeFractions = []
+        blockClockModelMock.historyError = ""
+        blockClockModelMock.historyPending = false
+        blockClockModelMock.historyRefreshRequests = 0
+    }
+
+    function test_history_failure_and_pending_are_explicit_and_retry_original_model() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.initialSyncComplete = true
+        const clock = createClock()
+        const status = findChild(clock, "blockClockRenderStatus")
+        const retry = findChild(clock, "blockClockRetryRendering")
+        verify(status !== null)
+        verify(retry !== null)
+        blockClockModelMock.historyError = "Original history projection failed"
+        tryCompare(status, "visible", true)
+        tryCompare(retry, "visible", true)
+        tryCompare(retry, "enabled", true)
+        retry.clicked()
+        compare(blockClockModelMock.historyRefreshRequests, 1)
+        blockClockModelMock.historyError = ""
+        blockClockModelMock.historyPending = true
+        tryCompare(status, "visible", true)
+        tryCompare(retry, "visible", false)
+        blockClockModelMock.historyPending = false
+        tryCompare(status, "visible", false)
     }
 
     function createClock(properties) {
@@ -116,6 +147,28 @@ TestCase {
         verify(clock !== null)
         wait(0)
         return clock
+    }
+
+    function test_unpolished_parent_geometry_data() {
+        return [
+            {tag: "negative-both", parentWidth: -100, parentHeight: -100},
+            {tag: "negative-width", parentWidth: -100, parentHeight: 600},
+            {tag: "negative-height", parentWidth: 600, parentHeight: -100},
+            {tag: "zero", parentWidth: 0, parentHeight: 0}
+        ]
+    }
+
+    function test_unpolished_parent_geometry(data) {
+        resetMocks()
+        const clock = createClock({parentWidth: data.parentWidth, parentHeight: data.parentHeight})
+        const dial = findChild(clock, "blockClockDial")
+        verify(dial !== null)
+        compare(dial.width, 0)
+        compare(dial.penWidth, 0)
+        clock.parentWidth = 600
+        clock.parentHeight = 600
+        verify(dial.width > 0)
+        verify(dial.penWidth > 0)
     }
 
     function createMiniBlockClock() {
@@ -583,12 +636,21 @@ TestCase {
         blockClockModelMock.currentTimeFraction = 0.75
         blockClockModelMock.blockTimeFractions = [0.1, 0.2, 0.4]
         compare(dial.currentTimeFraction, 0.75)
+        // Hidden presentation retains the original latest snapshot but defers
+        // Native raster work until activation. It must not claim readiness.
+        compare(dial.renderPending, true)
         compare(dial.blockTimeFractions.length, 3)
+        compare(dial.blockTimeFractions[0], 0.1)
+        compare(dial.blockTimeFractions[2], 0.4)
 
         clock.renderingActive = true
         compare(dial.renderingActive, true)
         compare(dial.currentTimeFraction, 0.75)
+        tryCompare(dial, "renderPending", false)
+        compare(dial.renderError, "")
         compare(dial.blockTimeFractions.length, 3)
+        compare(dial.blockTimeFractions[0], 0.1)
+        compare(dial.blockTimeFractions[2], 0.4)
 
         clock.visible = false
         compare(clock.presentationActive, false)

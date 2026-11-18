@@ -7,6 +7,7 @@
 #include <qml/bitcoinamount.h>
 #include <qml/models/texteditsessionmodel.h>
 #include <qml/models/receiptreconciliationmodel.h>
+#include <qml/retainedvalue.h>
 #include <qml/walletrequests.h>
 
 namespace requestedit {
@@ -105,12 +106,14 @@ public:
     Q_ENUM(Phase)
     enum MutationKind { Create, Update, Delete };
     Q_ENUM(MutationKind)
-    using Writer = std::function<execution::SubmitResult(const requestedit::Intent&, std::function<void(requestedit::Write)>, std::shared_ptr<execution::Scheduler>)>;
+    using Writer = std::function<execution::SubmitResult(const requestedit::Intent&, std::function<void(requestedit::Write)>)>;
     struct Ports {
-        execution::SnapshotServices execution;
+        presentation::Post post;
+        std::function<bool(std::function<void()>)> postWork;
         std::function<execution::SubmitResult(int64_t, uint64_t, std::function<void(requestedit::Source)>)> read;
         std::function<Writer()> admitWrite;
         std::function<execution::SubmitResult(const requestedit::Intent&, std::function<void(requestedit::Write)>)> query;
+        execution::ValueCleanup value_cleanup;
     };
     PaymentRequestEditorModel(int64_t request_id, uint64_t view, bool erase, Ports ports,
                               std::optional<requestedit::Editor::Values> initial = {}, QObject* parent = nullptr);
@@ -171,7 +174,7 @@ private:
     void answerClose(const QString& token, TextEditClosePrompt::Choice choice);
     bool reject(const QString& command, TextEditError error);
     const QString m_editor_id, m_entity_id;
-    execution::SnapshotServices m_execution;
+    presentation::Post m_post;
     TextEditInput m_label{this}, m_message{this}, m_note{this};
     BitcoinAmount m_amount{this};
     RequestReceiptModel m_receipts{this};

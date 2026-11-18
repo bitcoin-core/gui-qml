@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_BACKUPPOLICYOPERATION_H
 #define BITCOIN_QML_MODELS_BACKUPPOLICYOPERATION_H
 
-#include <qml/execution.h>
+#include <qml/retainedvalue.h>
 #include <qml/models/backuppolicy.h>
 #include <qml/models/backuppolicyio.h>
 #include <qml/models/filesaveoperation.h>
@@ -15,11 +15,13 @@
 #include <functional>
 #include <memory>
 
+namespace execution { class SerialQueue; }
+
 namespace backup {
 struct Services {
     using WriteFile = std::function<WriteResult(const Proposal&, bool)>;
     using Work = std::function<void(const WriteFile&)>;
-    std::shared_ptr<execution::Scheduler> scheduler;
+    execution::ValueCleanup value_cleanup;
     std::function<void(std::function<void()>)> post;
     std::function<std::string()> wallet_name;
     std::function<Proposal(const std::string&, const std::string&)> inspect;
@@ -30,15 +32,10 @@ struct Services {
     // The opening supplies its writer for the duration of an admitted action.
     // File-only callers use the writer already configured above.
     std::function<execution::SubmitResult(Work)> submit;
-    // Reserve and activate a Native terminal receipt before the operation
-    // starts. This receipt retires an unanswered overwrite prompt even when
-    // ordinary Core queue admission is full.
-    std::function<execution::SubmitResult(std::function<void()>)> reserve_prompt_retirement;
-    std::function<bool(execution::TaskId)> activate_prompt_retirement;
     std::function<bool()> available;
-    // Releases request-owned reservations when an unstarted continuation is
-    // abandoned before any file effect is admitted.
+    // Releases the request when abandoned before any file effect is admitted.
     std::function<void()> abandon;
+    std::shared_ptr<execution::SerialQueue> utility{};
 };
 struct OperationState;
 

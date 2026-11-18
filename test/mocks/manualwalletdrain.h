@@ -5,7 +5,6 @@
 #ifndef BITCOIN_QML_TEST_MOCKS_MANUALWALLETDRAIN_H
 #define BITCOIN_QML_TEST_MOCKS_MANUALWALLETDRAIN_H
 
-#include <qml/backendexecutor.h>
 #include <qml/models/walletqmlmodel.h>
 #include <test/mocks/manualexecutionenvironment.h>
 
@@ -17,13 +16,23 @@
 #include <memory>
 #include <vector>
 
+// Like the registry, keep the completion receiver alive even if the wallet
+// model is destroyed while its accepted work is finishing.
+inline std::shared_ptr<const bool> WatchWalletNativeDrain(WalletQmlModel& wallet)
+{
+    auto drained = std::make_shared<bool>(false);
+    wallet.whenNativeDrained(*QCoreApplication::instance(), [drained] { *drained = true; });
+    return drained;
+}
+
 /** A manual transport must outlive every original model and deferred alias.
  * Install immediately after construction so assertion failures also retire the
  * original graph. This owns no domain behavior and never fabricates a drain. */
+template <typename Execution>
 class ManualWalletDrain
 {
 public:
-    ManualWalletDrain(ManualRoutedExecution& execution, WalletQmlModel* model)
+    ManualWalletDrain(Execution& execution, WalletQmlModel* model)
         : m_execution(execution)
     {
         add(model);
@@ -31,7 +40,14 @@ public:
     void add(WalletQmlModel* model)
     {
         m_models.emplace_back(model);
-        m_backends.push_back(model->backendExecutor());
+        m_native_drains.push_back(WatchWalletNativeDrain(*model));
+    }
+    bool nativeDrained() const
+    {
+        for (const auto& drained : m_native_drains) {
+            if (!*drained) return false;
+        }
+        return true;
     }
     bool finish(bool detach_observers = false)
     {
@@ -51,10 +67,7 @@ public:
             for (const auto& model : m_models) {
                 if (model && !model->shutdownComplete()) return false;
             }
-            for (const auto& backend : m_backends) {
-                if (!backend->isDrained()) return false;
-            }
-            return m_execution.quiescent();
+            return nativeDrained() && m_execution.quiescent();
         }, 3000);
     }
     ~ManualWalletDrain()
@@ -62,9 +75,9 @@ public:
         if (!finish(true)) QTest::qFail("Original manual wallet graph did not physically drain", __FILE__, __LINE__);
     }
 private:
-    ManualRoutedExecution& m_execution;
+    Execution& m_execution;
     std::vector<QPointer<WalletQmlModel>> m_models;
-    std::vector<std::shared_ptr<BackendExecutor>> m_backends;
+    std::vector<std::shared_ptr<const bool>> m_native_drains;
 };
 
 #endif // BITCOIN_QML_TEST_MOCKS_MANUALWALLETDRAIN_H

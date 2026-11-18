@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_WALLETCATALOG_H
 #define BITCOIN_QML_WALLETCATALOG_H
 
-#include <qml/execution.h>
+#include <qml/executor.h>
 
 #include <QString>
 
@@ -15,6 +15,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace execution { class ValueCleanupQueue; }
 
 namespace walletcatalog {
 enum class LoadState { Closed, Open, Loading, LoadError };
@@ -65,7 +67,7 @@ struct Update {
 
 /** Catalog discovery and ordered registry observations have separate producers.
  * Only directory intents are replaceable. Core reads and snapshot construction
- * run off GUI; Domain owns completion and the single publication mailbox.
+ * run off GUI; Utility owns completion and the single publication mailbox.
  * Notify merely posts a presentation wakeup and never dereferences a QObject.
  */
 class Reader final : public std::enable_shared_from_this<Reader>
@@ -74,29 +76,33 @@ public:
     using Directory = std::vector<std::pair<std::string, std::string>>;
     using Read = std::function<Directory()>;
     using Notify = std::function<void()>;
-    Reader(std::shared_ptr<execution::Scheduler> scheduler, Read read, Notify notify);
+    Reader(execution::Executor& executor, Read read, Notify notify);
+    ~Reader();
     void request(Input input);
     Observation observation() const;
     Update take();
     void published(std::shared_ptr<const Snapshot> snapshot);
     void close();
+    void whenRetired(Notify done);
 
 private:
     struct Data;
     struct Control;
     struct Attempt;
-    void submit(std::shared_ptr<Data> data);
+    void submit();
     void rejected(const std::shared_ptr<Attempt>& attempt);
-    std::shared_ptr<const Snapshot> read(const std::shared_ptr<Data>& data, const std::shared_ptr<Attempt>& attempt);
-    void complete(const std::shared_ptr<Data>& data, const std::shared_ptr<Attempt>& attempt,
-                  std::shared_ptr<const Snapshot> snapshot, bool failed);
+    std::shared_ptr<const Snapshot> read(const std::shared_ptr<Attempt>& attempt);
+    void complete(const std::shared_ptr<Attempt>& attempt, std::shared_ptr<const Snapshot> snapshot, bool failed);
     void notify();
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
-    const execution::ResourceKey m_key;
+    void retire();
+    execution::SerialQueue m_core;
+    const std::shared_ptr<execution::SerialQueue> m_utility;
+    const std::shared_ptr<execution::ValueCleanupQueue> m_outcomes;
+    std::function<void(std::shared_ptr<Reader>)> m_post_retirement;
     const Read m_read;
     const Notify m_notify;
-    const std::shared_ptr<Control> m_control;
-    std::shared_ptr<Data> m_data;
+    const std::unique_ptr<Control> m_control;
+    std::unique_ptr<Data> m_data;
 };
 } // namespace walletcatalog
 

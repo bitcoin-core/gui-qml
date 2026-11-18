@@ -4,6 +4,7 @@
 
 #ifndef BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 #define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#include <qml/presentationservices.h>
 #include <qml/models/settingseditorsource.h>
 #include <qml/preferenceswatch.h>
 #include <limits>
@@ -20,7 +21,6 @@
 #include <policy/policy.h>
 #include <validation.h>
 
-#include <qml/backendexecutor.h>
 #include <qml/ownedwork.h>
 #include <qml/models/settingseditormodel.h>
 #include <qml/core_settings.h>
@@ -43,6 +43,8 @@
 namespace interfaces {
 class Node;
 }
+
+namespace execution { class ValueCleanupQueue; }
 
 class SignerDiscoveryModel;
 class OptionsQmlModel;
@@ -143,7 +145,8 @@ class OptionsQmlModel : public SettingsEditorSource
 
 public:
     explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs,
-                             execution::SnapshotServices services = {}, execution::Executor* executor = nullptr);
+                             presentation::Post post = {}, execution::Executor* executor = nullptr, PresentationServices* presentation = nullptr,
+                             execution::Lane lane = execution::Lane::Core);
 
     Q_INVOKABLE void refreshDisplaySettings();
     ~OptionsQmlModel() override;
@@ -306,6 +309,7 @@ private:
     quint64 m_next_links{0};
     void refreshLinks(OptionsTransactionLinks* links);
     void removeLinks(quint64 id);
+    void whenLinksDrained(std::function<void()> done);
     bool attachLinks(OptionsTransactionLinks& view);
     struct DirtySnapshot {
         bool connection{false};
@@ -321,9 +325,14 @@ private:
     ArgsManager& m_args;
     CoreSettingsModel m_core_settings;
     QList<QPointer<SettingsEditorModel>> m_editors;
-    std::unique_ptr<BackendExecutor> m_executor;
-    execution::SnapshotServices m_services;
-    execution::Executor* const m_application_executor;
+    std::shared_ptr<execution::Executor> m_owned_executor;
+    presentation::Post m_post;
+    execution::Executor* const m_executor;
+    const execution::Lane m_lane;
+    std::shared_ptr<execution::SerialQueue> m_link_queue;
+    std::shared_ptr<execution::ValueCleanupQueue> m_link_cleanup;
+    std::function<execution::SubmitResult(std::shared_ptr<execution::Task>)> m_link_post;
+    PresentationServices::RetireValue m_retire_link_value;
     std::unique_ptr<execution::OwnedWork> m_work;
     struct Snapshot;
     static Snapshot readSnapshot(interfaces::Node& node, ArgsManager& args);
@@ -346,6 +355,7 @@ private:
     preferences::Watch m_preference_watch{[this] { refreshDisplaySettings(); }};
     void finishPreferenceRefresh();
     bool m_shutdown_started{false};
+    bool m_join_pending{false};
     bool m_validation_pending{false};
     bool m_signer_validation_pending{false};
     bool m_signer_validation_in_flight{false};

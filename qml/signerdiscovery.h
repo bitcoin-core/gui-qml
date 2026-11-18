@@ -65,7 +65,9 @@ struct Publication {
  * Every decision/shape check runs on Domain; GUI only takes publications. */
 class Reader final : public std::enable_shared_from_this<Reader> {
 public:
-    Reader(std::shared_ptr<execution::Scheduler> scheduler, std::function<Result()> read, std::function<void()> notify, std::function<void()> drained = {});
+    using Submit = std::function<execution::SubmitResult(std::shared_ptr<execution::Task>, execution::Lane)>;
+    Reader(Submit submit, std::function<Result()> read, std::function<void()> notify,
+        std::function<void()> drained = {});
     execution::SubmitResult request(quint64 revision);
     void expire(quint64 revision);
     void close();
@@ -76,10 +78,9 @@ private:
     void complete(quint64 revision, Result result);
     void publish(Publication value);
     void rejected();
-    const std::shared_ptr<execution::Scheduler> m_scheduler;
+    const Submit m_submit;
     const std::function<Result()> m_read;
     const std::function<void()> m_notify;
-    const execution::ResourceKey m_key;
     struct Drain { std::function<void()> notify; ~Drain(); };
     std::shared_ptr<Drain> m_drain;
     std::atomic_bool m_active_flag{false};

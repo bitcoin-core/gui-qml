@@ -5,6 +5,7 @@
 #include <interfaces/handler.h>
 #include <net_processing.h>
 #include <node/interface_ui.h>
+#include <qml/asyncjoin.h>
 #include <qml/execution.h>
 #include <qml/executor.h>
 #include <qml/initexecutor.h>
@@ -66,7 +67,7 @@ void DrainRetiredExecutors()
 {
     QEventLoop loop;
     bool drained{false};
-    BackendExecutor::shutdownAll(&loop, [&] { drained = true; loop.quit(); });
+    WaitForThreadJoins(&loop, [&] { drained = true; loop.quit(); });
     while (!drained) loop.exec();
 }
 
@@ -85,6 +86,12 @@ Q_SIGNALS:
 class QmlInitExecutorApiTests : public QObject
 {
     Q_OBJECT
+    execution::Executor m_executor{execution::Executor::Config{}};
+
+    std::shared_ptr<execution::SerialQueue> makePriorityQueue()
+    {
+        return std::make_shared<execution::SerialQueue>(m_executor.makeQueue(execution::Lane::Priority));
+    }
 
 private Q_SLOTS:
     void stopAdmissionFencesQueuedReadyPresentation_data(){
@@ -95,7 +102,7 @@ private Q_SLOTS:
         node.app_init_main_fn=[](interfaces::BlockAndHeaderTipInfo*){return true;};
         node.is_initial_block_download_fn=[]{return false;};node.shutdown_requested_fn=[]{return false;};node.start_shutdown_fn=[]{};
         const auto drain=qScopeGuard([]{DrainRetiredExecutors();});
-        QmlInitExecutor executor{node,{},{},[&](auto){native_receipt.release();}};
+        QmlInitExecutor executor{node, makePriorityQueue(),{},{},[&](auto){native_receipt.release();}};
         bool requested{false};int late_ready{0};
         const auto disconnect=qScopeGuard([&]{QObject::disconnect(&executor,nullptr,this,nullptr);});
         QSignalSpy submitted{&executor,&QmlInitExecutor::acceptingRequestsChanged};
@@ -113,13 +120,57 @@ private Q_SLOTS:
         QCOMPARE(node.calls.appInitMain.load(),1);QTRY_COMPARE(node.calls.startShutdown.load(),1);
         QVERIFY(!executor.acceptingRequests());QCOMPARE(submitted.count(),1);
     }
+
+    void settingsDrainCanRunWhileInitializationWaitsForInterrupt()
+    {
+        PassiveStartupNode node;
+        QSemaphore init_entered, interrupt, write_entered, write_release;
+        std::atomic_bool persisted{false}, interrupt_saw_write{false};
+        node.is_initial_block_download_fn = [] { return false; };
+        node.shutdown_requested_fn = [] { return false; };
+        node.app_init_main_fn = [&](interfaces::BlockAndHeaderTipInfo*) {
+            init_entered.release();
+            interrupt.acquire();
+            return false;
+        };
+        node.start_shutdown_fn = [&] {
+            interrupt_saw_write = persisted.load();
+            interrupt.release();
+        };
+        node.app_shutdown_fn = [] {};
+        const auto drain = qScopeGuard([] { DrainRetiredExecutors(); });
+        QmlInitExecutor executor{node, makePriorityQueue()};
+        auto core = m_executor.makeQueue(execution::Lane::Core);
+        const auto unblock = qScopeGuard([&] { write_release.release(); interrupt.release(); });
+        QmlShutdownCoordinator coordinator{executor};
+        coordinator.addBeforeInterruptTask([&](auto done) {
+            core.close();
+            core.whenDrained(std::move(done));
+        });
+        QSignalSpy finished{&coordinator, &QmlShutdownCoordinator::finished};
+        executor.initialize();
+        QVERIFY(init_entered.tryAcquire(1, SIGNAL_TIMEOUT));
+        QVERIFY(core.post([&] {
+            write_entered.release();
+            write_release.acquire();
+            persisted = true;
+        }));
+        QVERIFY(write_entered.tryAcquire(1, SIGNAL_TIMEOUT));
+        coordinator.requestShutdown();
+        QCOMPARE(node.calls.startShutdown.load(), 0);
+        QCOMPARE(finished.count(), 0);
+        write_release.release();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, SIGNAL_TIMEOUT);
+        QVERIFY(interrupt_saw_write.load());
+        QCOMPARE(node.calls.appShutdown.load(), 1);
+    }
     void admissionNotificationMayRetireTheObserver_data(){
         QTest::addColumn<bool>("shutdown");QTest::newRow("interrupt")<<false;QTest::newRow("shutdown")<<true;
     }
     void admissionNotificationMayRetireTheObserver(){
         QFETCH(bool,shutdown);PassiveStartupNode node;
         const auto drain=qScopeGuard([]{DrainRetiredExecutors();});
-        auto executor=std::make_unique<QmlInitExecutor>(node);int notices{0};bool closed{false};
+        auto executor=std::make_unique<QmlInitExecutor>(node, makePriorityQueue());int notices{0};bool closed{false};
         connect(executor.get(),&QmlInitExecutor::acceptingRequestsChanged,this,[&]{
             ++notices;closed=!executor->acceptingRequests();executor.reset();
         });
@@ -136,7 +187,7 @@ private Q_SLOTS:
         node.app_init_main_fn=[](interfaces::BlockAndHeaderTipInfo*){return true;};
         node.is_initial_block_download_fn=[]{return false;};node.shutdown_requested_fn=[]{return false;};
         node.start_shutdown_fn=[]{};node.app_shutdown_fn=[]{};
-        const auto drain=qScopeGuard([]{DrainRetiredExecutors();});QmlInitExecutor executor{node};
+        const auto drain=qScopeGuard([]{DrainRetiredExecutors();});QmlInitExecutor executor{node, makePriorityQueue()};
         QSignalSpy initialized{&executor,&QmlInitExecutor::initializeResult},finished{&executor,&QmlInitExecutor::shutdownResult},fatal{&executor,&QmlInitExecutor::runawayException};
         int terminal_observations{0};
         const auto disconnect=qScopeGuard([&]{QObject::disconnect(&executor,nullptr,this,nullptr);});
@@ -170,7 +221,7 @@ private Q_SLOTS:
         node.exit_status=[&]{++reads;read_after_shutdown=shutdown_done.load();if(QThread::currentThread()==gui)native_only=false;return status;};
         node.ExpectExactly(node.calls.appShutdown,1);[[maybe_unused]] const auto verify=node.VerifyOnExit();
         const auto drain_retired=qScopeGuard([]{DrainRetiredExecutors();});
-        auto executor=std::make_unique<QmlInitExecutor>(node,QmlInitExecutor::SubscriptionFactory{},std::shared_ptr<std::atomic_bool>{},QmlInitExecutor::StartupOutcomePort{},[&](int value){
+        auto executor=std::make_unique<QmlInitExecutor>(node, makePriorityQueue(),QmlInitExecutor::SubscriptionFactory{},std::shared_ptr<std::atomic_bool>{},QmlInitExecutor::StartupOutcomePort{},[&](int value){
             if(QThread::currentThread()==gui)native_only=false;
             recorded=value;captured.release();
         });
@@ -189,7 +240,7 @@ private Q_SLOTS:
         node.is_initial_block_download_fn=[]{return false;};node.shutdown_requested_fn=[]{return false;};node.start_shutdown_fn=[]{};node.app_shutdown_fn=[]{};
         const auto loss=std::make_shared<std::atomic_bool>(false);
         const auto drain_retired=qScopeGuard([]{DrainRetiredExecutors();});
-        QmlInitExecutor executor{node,{},loss,{},[](int){throw std::runtime_error("receipt observer failed");}};
+        QmlInitExecutor executor{node, makePriorityQueue(),{},loss,{},[](int){throw std::runtime_error("receipt observer failed");}};
         QSignalSpy initialized{&executor,&QmlInitExecutor::initializeResult},shutdown{&executor,&QmlInitExecutor::shutdownResult};
         executor.initialize();QTRY_COMPARE(initialized.count(),1);executor.shutdown();QTRY_COMPARE(shutdown.count(),1);
         QVERIFY(loss->load());QCOMPARE(node.calls.appShutdown.load(),1);
@@ -201,7 +252,7 @@ private Q_SLOTS:
         node.app_init_main_fn=[&](interfaces::BlockAndHeaderTipInfo*){if(scenario==3)message(Untranslated("Original startup failure"),CClientUIInterface::ICON_ERROR);if(scenario==4)throw std::runtime_error("Original native startup exception");return scenario==0;};
         node.is_initial_block_download_fn=[] {return false;};node.shutdown_requested_fn=[scenario]{return scenario==2||scenario==3;};
         const auto drain_retired=qScopeGuard([]{DrainRetiredExecutors();});
-        QmlInitExecutor executor{node,{}, {},[&](QmlInitExecutor::StartupOutcome value){gui_record=QThread::currentThread()==QCoreApplication::instance()->thread();recorded=int(value);}};
+        QmlInitExecutor executor{node, makePriorityQueue(),{}, {},[&](QmlInitExecutor::StartupOutcome value){gui_record=QThread::currentThread()==QCoreApplication::instance()->thread();recorded=int(value);}};
         QSignalSpy initialized{&executor,&QmlInitExecutor::initializeResult},fatal{&executor,&QmlInitExecutor::runawayException};
         executor.initialize();QTRY_VERIFY(recorded.load()!=-1);
         const auto expected=scenario==0?QmlInitExecutor::StartupOutcome::Ready:scenario==2?QmlInitExecutor::StartupOutcome::Cancelled:scenario==4?QmlInitExecutor::StartupOutcome::Uncertain:QmlInitExecutor::StartupOutcome::Failed;
@@ -239,7 +290,7 @@ private Q_SLOTS:
         node.start_shutdown_fn = [trace, phase] { if (phase == 1) throw Tracked{trace}; };
         node.app_shutdown_fn = [trace, phase] { if (phase == 2) throw Tracked{trace}; };
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node}; QSignalSpy fatal{&executor, &QmlInitExecutor::runawayException};
+        QmlInitExecutor executor{node, makePriorityQueue()}; QSignalSpy fatal{&executor, &QmlInitExecutor::runawayException};
         QSignalSpy initialized{&executor, &QmlInitExecutor::initializeResult};
         if (phase == 1) executor.interrupt();
         else {
@@ -302,7 +353,7 @@ void QmlInitExecutorApiTests::initializeEmitsResultAndRunsOffMainThread()
 
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
 
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
 
@@ -338,7 +389,7 @@ void QmlInitExecutorApiTests::initializeEmitsUnsuccessfulResult()
     node.app_init_main_fn = [](interfaces::BlockAndHeaderTipInfo*) { return false; };
     node.ExpectNoCalls(node.calls.isInitialBlockDownload);
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
     executor.initialize();
@@ -367,7 +418,7 @@ void QmlInitExecutorApiTests::fatalInitializationRejectsPendingAndLaterShutdown(
     };
     node.ExpectNoCalls(node.calls.appShutdown);
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     const auto release_workers = qScopeGuard([&] { release_init.release(); release_interrupt.release(); });
     QmlShutdownCoordinator coordinator{executor};
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
@@ -382,9 +433,9 @@ void QmlInitExecutorApiTests::fatalInitializationRejectsPendingAndLaterShutdown(
     release_interrupt.release();
     QTRY_VERIFY_WITH_TIMEOUT(interrupted.load(), SIGNAL_TIMEOUT);
     DrainRetiredExecutors();
-    // With no diagnostic owner, the receipt must not leave an idle action
-    // capability on the live executor and prevent physical worker drain.
-    QVERIFY(!executor.fatalDiagnosticScheduler());
+    // The original text is still available after the workers have drained.
+    QCOMPARE(runaway_spy.count(), 1);
+    QVERIFY(runaway_spy.front().front().toString().contains(QStringLiteral("init failed during shutdown")));
     executor.shutdown();
     DrainRetiredExecutors();
     QCOMPARE(interrupt_spy.count(), 0);
@@ -423,7 +474,7 @@ void QmlInitExecutorApiTests::queuedShutdownAfterInitialization()
     node.app_shutdown_fn = [] {};
     node.ExpectExactly(node.calls.appShutdown, fatal ? 0 : 1);
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     const auto unblock = qScopeGuard([&] { release.release(); });
     QmlShutdownCoordinator coordinator{executor};
     QSignalSpy initialized{&executor, &QmlInitExecutor::initializeResult};
@@ -467,7 +518,7 @@ void QmlInitExecutorApiTests::initializeReportsShutdownRequest()
     };
     node.shutdown_requested_fn = [&] { return shutdown_requested.load(); };
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     executor.initialize();
 
@@ -493,7 +544,7 @@ void QmlInitExecutorApiTests::initializeEmitsRunawayExceptionOnFailure()
 
     node.ExpectNoCalls(node.calls.shutdownRequested);
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
 
@@ -523,7 +574,7 @@ void QmlInitExecutorApiTests::shutdownEmitsResultAndRunsOffMainThread()
     node.app_shutdown_fn = [&] { shutdown_thread = QThread::currentThread(); };
 
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy shutdown_spy(&executor, &QmlInitExecutor::shutdownResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
@@ -554,7 +605,7 @@ void QmlInitExecutorApiTests::shutdownEmitsRunawayExceptionOnFailure()
     node.app_shutdown_fn = [] { throw std::runtime_error{"shutdown failed"}; };
 
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy shutdown_spy(&executor, &QmlInitExecutor::shutdownResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
@@ -596,7 +647,7 @@ void QmlInitExecutorApiTests::interruptionBypassesBlockedInitialization()
     QVERIFY(priority->post([&] { priority_thread = QThread::currentThread(); }));
     QTRY_VERIFY_WITH_TIMEOUT(priority_thread.load(), SIGNAL_TIMEOUT);
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node, {}, {}, {}, {}, {}, priority};
+    QmlInitExecutor executor{node, priority};
     const auto unblock = qScopeGuard([&] { release.release(); });
     QSignalSpy initialized{&executor, &QmlInitExecutor::initializeResult};
     QSignalSpy interrupted{&executor, &QmlInitExecutor::interruptResult};
@@ -622,7 +673,7 @@ void QmlInitExecutorApiTests::asynchronousRetirementPrecedesInterrupt()
     node.start_shutdown_fn = [] {};
     node.app_shutdown_fn = [] {};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QmlShutdownCoordinator coordinator{executor};
     bool fenced{false}, began{false};
     std::function<void()> acknowledge;
@@ -661,17 +712,20 @@ void QmlInitExecutorApiTests::shutdownWaitsForInterruptionAndEveryParticipant()
     };
     node.app_shutdown_fn = [] {};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     const auto unblock = qScopeGuard([&] { release_hook.release(); });
-    BackendExecutor deferred_worker;
+    auto deferred_worker = m_executor.makeQueue(execution::Lane::Utility);
+    const auto deferred_drained = std::make_shared<std::atomic_bool>(false);
     const auto worker_entered = std::make_shared<QSemaphore>();
     const auto release_worker = std::make_shared<QSemaphore>();
     const auto unblock_worker = qScopeGuard([release_worker] { release_worker->release(); });
-    QVERIFY(deferred_worker.submit(this, [worker_entered, release_worker] {
+    QVERIFY(deferred_worker.post([worker_entered, release_worker] {
         worker_entered->release();
         release_worker->acquire();
-    }, [] {}));
+    }));
     QVERIFY(worker_entered->tryAcquire(1, SIGNAL_TIMEOUT));
+    deferred_worker.close();
+    deferred_worker.whenDrained([deferred_drained] { deferred_drained->store(true); });
     QmlShutdownCoordinator coordinator{executor};
     ShutdownParticipant first, second;
     coordinator.addParticipant(&first, &ShutdownParticipant::drained, [&] { first.started = true; });
@@ -697,10 +751,12 @@ void QmlInitExecutorApiTests::shutdownWaitsForInterruptionAndEveryParticipant()
     // The application can now destroy its views. Its final worker join
     // follows that destruction, so this worker can still be active here.
     QTRY_COMPARE_WITH_TIMEOUT(coordinator_finished.count(), 1, SIGNAL_TIMEOUT);
-    QVERIFY(!deferred_worker.isDrained());
+    QVERIFY(!deferred_drained->load());
     QCOMPARE(node.calls.startShutdown.load(), 1);
     QCOMPARE(node.calls.appShutdown.load(), 1);
     QCOMPARE(executor.phase(),nodelifecycle::Phase::Stopped);QVERIFY(!executor.acceptingRequests());
+    release_worker->release();
+    QTRY_VERIFY_WITH_TIMEOUT(deferred_drained->load(), SIGNAL_TIMEOUT);
 }
 
 void QmlInitExecutorApiTests::portMappingDrainsBeforeSingleInterruption()
@@ -711,7 +767,7 @@ void QmlInitExecutorApiTests::portMappingDrainsBeforeSingleInterruption()
     node.start_shutdown_fn = [] {};
     node.app_shutdown_fn = [] {};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node};
+    QmlInitExecutor executor{node, makePriorityQueue()};
     QmlShutdownCoordinator coordinator{executor};
     ShutdownParticipant settings;
     int fences{0};
@@ -755,7 +811,7 @@ void QmlInitExecutorApiTests::destructorCleansUpOnWorker()
     std::atomic_int cleanup_count{0};
     {
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node, [&] {
+        QmlInitExecutor executor{node, makePriorityQueue(), [&] {
             registration_thread = QThread::currentThread();
             return interfaces::MakeCleanupHandler([&] {
                 cleanup_thread = QThread::currentThread();
@@ -794,7 +850,7 @@ void QmlInitExecutorApiTests::initializeRegistersBeforeResultOnWorker()
 
     {
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node, [&] {
+        QmlInitExecutor executor{node, makePriorityQueue(), [&] {
             registered_after_initialization = initialized.load();
             registration_thread = QThread::currentThread();
             ++registration_count;
@@ -829,7 +885,7 @@ void QmlInitExecutorApiTests::unsuccessfulInitializationDoesNotRegister()
     node.ExpectNoCalls(node.calls.isInitialBlockDownload);
     std::atomic_int registration_count{0};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node, [&] {
+    QmlInitExecutor executor{node, makePriorityQueue(), [&] {
         ++registration_count;
         return std::unique_ptr<interfaces::Handler>{};
     }};
@@ -858,7 +914,7 @@ void QmlInitExecutorApiTests::cancelledInitializationDoesNotRegister()
     node.shutdown_requested_fn = [&] { return shutdown_requested.load(); };
     std::atomic_int registration_count{0};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node, [&] {
+    QmlInitExecutor executor{node, makePriorityQueue(), [&] {
         ++registration_count;
         return std::unique_ptr<interfaces::Handler>{};
     }};
@@ -885,7 +941,7 @@ void QmlInitExecutorApiTests::registrationFailureCleansUpOnWorker()
 
     {
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node, [&]() -> std::unique_ptr<interfaces::Handler> {
+        QmlInitExecutor executor{node, makePriorityQueue(), [&]() -> std::unique_ptr<interfaces::Handler> {
             registration_thread = QThread::currentThread();
             auto registration = interfaces::MakeCleanupHandler([&] {
                 cleanup_thread = QThread::currentThread();
@@ -928,7 +984,7 @@ void QmlInitExecutorApiTests::subscriptionRetirementDoesNotBlockGuiOrInterruptio
     const auto gui_thread = QThread::currentThread();
     node.app_shutdown_fn = [&] { shutdown_after_retirement = retired.load(); };
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-    QmlInitExecutor executor{node, [&] {
+    QmlInitExecutor executor{node, makePriorityQueue(), [&] {
         return interfaces::MakeCleanupHandler([&] {
             retired_off_gui = QThread::currentThread() != gui_thread;
             entered.release();
@@ -982,7 +1038,7 @@ void QmlInitExecutorApiTests::subscriptionCleanupPrecedesShutdown()
 
     {
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node, [&] {
+        QmlInitExecutor executor{node, makePriorityQueue(), [&] {
             registration_thread = QThread::currentThread();
             return interfaces::MakeCleanupHandler([&] {
                 cleanup_thread = QThread::currentThread();
@@ -1031,7 +1087,7 @@ void QmlInitExecutorApiTests::subscriptionCleanupPrecedesShutdownFailure()
 
     {
         const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
-        QmlInitExecutor executor{node, [&] {
+        QmlInitExecutor executor{node, makePriorityQueue(), [&] {
             return interfaces::MakeCleanupHandler([&] {
                 cleanup_ran_off_main_thread = QThread::currentThread() != QCoreApplication::instance()->thread();
                 ++cleanup_count;

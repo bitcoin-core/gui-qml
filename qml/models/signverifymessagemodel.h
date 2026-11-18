@@ -10,6 +10,7 @@
 #include <qml/models/texteditsessionmodel.h>
 #include <qml/walletopening.h>
 #include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <QObject>
 #include <QString>
 
@@ -55,7 +56,8 @@ public:
     Q_ENUM(VerificationState)
     using SecurityStateChangedFn = std::function<void()>;
     explicit SignVerifyMessageModel(QObject* parent = nullptr);
-    void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post,
+                    std::shared_ptr<execution::SerialQueue> outcomes = {});
     void close();
     void retryPublications();
     void setSecurityStateChangedFn(SecurityStateChangedFn fn);
@@ -139,8 +141,9 @@ private:
     void retireSigningPrompt();
 
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
+    presentation::Post m_post;
     std::shared_ptr<AddressInput> m_address_input;
+    execution::SnapshotQuery<AddressChecks>::Post m_post_observation;
     std::shared_ptr<execution::SnapshotQuery<AddressChecks>> m_address_query;
     std::shared_ptr<execution::OwnedCommand<walletmessage::SignResult>> m_sign_operation;
     std::shared_ptr<execution::OwnedCommand<walletmessage::VerifyResult>> m_verify_operation;

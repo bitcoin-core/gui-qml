@@ -6,52 +6,78 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <utility>
 namespace paymentimport {
 namespace {
 struct ReviewCall {
-    std::shared_ptr<execution::Scheduler> scope;
-    execution::TaskId cleanup;
     Child child;
     std::mutex mutex;
     std::optional<ChildReply> result;
+    bool acknowledging{false};
     std::shared_ptr<std::atomic_bool> presentation_allowed{std::make_shared<std::atomic_bool>(true)};
 };
 struct Reviews { std::mutex mutex; std::map<CommandKey, std::shared_ptr<ReviewCall>> calls; };
+
+void ForgetReview(Reviews& routes, CommandKey key, const std::shared_ptr<ReviewCall>& call)
+{
+    std::lock_guard lock{routes.mutex};
+    const auto found = routes.calls.find(key);
+    if (found != routes.calls.end() && found->second == call) routes.calls.erase(found);
+}
+
+execution::SubmitResult PostReply(const ReviewServices& services, std::shared_ptr<execution::Task> task)
+{
+    // Each admitted call keeps its original outcome queue alive through the
+    // receipt, even after the target has closed admission.
+    return services.retire([task = std::move(task)] {
+        task->execute();
+        task->deliver();
+    });
+}
 }
 std::shared_ptr<const TargetPort> WithReviewFactory(std::shared_ptr<const TargetPort> payment, ReviewServices services)
 {
-    if (!payment || !services.scheduler || !services.current || !services.prepare) return {};
-    const auto routes = execution::RetainValues<Reviews>(services.scheduler, [] { return std::make_unique<Reviews>(); });
+    if (!payment || !services.current || !services.prepare || !services.observe || !services.retire || !services.hold) return {};
+    const auto routes = execution::RetainValues<Reviews>(services.hold, [] { return std::make_unique<Reviews>(); });
     if (!routes) return {};
     auto port = std::make_shared<TargetPort>(*payment);
     port->observe = [payment, services](auto source, auto done, auto failed) {
         if (!source || source->kind != Kind::Psbt) return payment->observe(std::move(source), std::move(done), std::move(failed));
-        return execution::Submit(*services.scheduler, [payment, services] {
+        auto task = execution::MakeTask([payment, services] {
             const bool current = services.current();
             return Target{payment->opening, payment->draft, services.view, payment->recipient, current, current, false};
-        }, std::move(done), std::move(failed), {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+        }, std::move(done), std::move(failed));
+        return services.observe(std::move(task));
     };
-    const auto query = [routes](CommandKey key, Child child, TargetPort::Completed done, TargetPort::Failed failed) {
+    const auto query = [routes, services](CommandKey key, Child child, TargetPort::Completed done, TargetPort::Failed failed) {
         std::shared_ptr<ReviewCall> call;
         { std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key); if (found != routes->calls.end()) call = found->second; }
         if (!call || call->child != child) return execution::SubmitResult{{}, execution::Rejection::Invalid};
-        return execution::Submit(*call->scope, [call, child] {
+        return PostReply(services, execution::MakeTask([call, child] {
             std::lock_guard lock{call->mutex};
             return call->result.value_or(ChildReply{Receipt{child, Outcome::Unknown, 0, child.target.revision}, {}, {}, {}});
-        }, std::move(done), std::move(failed), {execution::Lane::Domain});
+        }, std::move(done), std::move(failed)));
     };
     port->query = [payment, query](auto key, auto child, auto done, auto failed) {
         return child.kind == ChildKind::Apply ? payment->query(key, child, std::move(done), std::move(failed))
             : query(key, child, std::move(done), std::move(failed));
     };
-    port->acknowledge = [payment, routes](auto key, auto child) {
+    port->acknowledge = [payment, routes, retire = services.retire](auto key, auto child) {
         if (child.kind == ChildKind::Apply) return payment->acknowledge(key, child);
         std::shared_ptr<ReviewCall> call;
         { std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key); if (found != routes->calls.end()) call = found->second; }
         if (!call || call->child != child) return execution::SubmitResult{{}, execution::Rejection::Invalid};
-        { std::lock_guard lock{call->mutex}; if (!call->result) return execution::SubmitResult{{}, execution::Rejection::Invalid}; }
-        return call->scope->activateCleanup(call->cleanup) ? execution::SubmitResult{call->cleanup, execution::Rejection::None}
-            : execution::SubmitResult{{}, execution::Rejection::Closed};
+        {
+            std::lock_guard lock{call->mutex};
+            if (!call->result) return execution::SubmitResult{{}, execution::Rejection::Invalid};
+            if (std::exchange(call->acknowledging, true)) return execution::SubmitResult{{}, execution::Rejection::Closed};
+        }
+        const auto submitted = retire([routes, key, call] { ForgetReview(*routes, key, call); });
+        if (!submitted) {
+            std::lock_guard lock{call->mutex};
+            call->acknowledging = false;
+        }
+        return submitted;
     };
     port->retire = [payment, routes](auto key, auto child) {
         if (child.kind == ChildKind::Apply) { if (payment->retire) payment->retire(key, child); return; }
@@ -66,22 +92,18 @@ std::shared_ptr<const TargetPort> WithReviewFactory(std::shared_ptr<const Target
         bool duplicate;
         { std::lock_guard lock{routes->mutex}; duplicate = routes->calls.contains(key); }
         if (duplicate) return query(key, child, std::move(done), std::move(failed));
-        auto call = execution::RetainValues<ReviewCall>(services.scheduler, [] { return std::make_unique<ReviewCall>(); });
-        auto output = execution::RetainValues<psbtwork::ImportResult>(services.scheduler, [] { return std::make_unique<psbtwork::ImportResult>(); });
+        const auto make_call = [] { return std::make_unique<ReviewCall>(); };
+        const auto make_output = [] { return std::make_unique<psbtwork::ImportResult>(); };
+        auto call = execution::RetainValues<ReviewCall>(services.hold, make_call);
+        auto output = execution::RetainValues<psbtwork::ImportResult>(services.hold, make_output);
         if (!call || !output) return execution::SubmitResult{{}, execution::Rejection::Closed};
         if (source->presentation_allowed) call->presentation_allowed = source->presentation_allowed;
-        call->scope = services.scheduler->openActionScope(); call->child = child;
-        if (!call->scope) return execution::SubmitResult{{}, execution::Rejection::Closed};
-        const auto cleanup = execution::Submit(*call->scope, [] {}, [routes, key, weak = std::weak_ptr<ReviewCall>{call}] {
-            std::lock_guard lock{routes->mutex}; const auto found = routes->calls.find(key);
-            if (found != routes->calls.end() && found->second == weak.lock()) routes->calls.erase(found);
-        }, {}, {execution::Lane::Cleanup}, true);
-        if (!cleanup) return execution::SubmitResult{{}, cleanup.rejection};
-        call->cleanup = cleanup.id;
+        call->child = child;
+        const auto discard = [&] { ForgetReview(*routes, key, call); };
         bool inserted{false};
         try { std::lock_guard lock{routes->mutex}; inserted = routes->calls.emplace(key, call).second; }
-        catch (...) { call->scope->activateCleanup(call->cleanup); throw; }
-        if (!inserted) { call->scope->activateCleanup(call->cleanup); return execution::SubmitResult{{}, execution::Rejection::Capacity}; }
+        catch (...) { discard(); throw; }
+        if (!inserted) { discard(); return execution::SubmitResult{{}, execution::Rejection::Capacity}; }
         const auto completed = [call, output, services, key, child, done](psbtwork::ImportResult result) {
             const bool current = services.current() && child.target.revision == services.view;
             ChildReply reply;
@@ -105,14 +127,15 @@ std::shared_ptr<const TargetPort> WithReviewFactory(std::shared_ptr<const Target
         };
         if (!services.current() || child.target.opening != payment->opening || child.target.draft != payment->draft ||
             child.target.recipient != payment->recipient || child.target.revision != services.view) {
-            const auto submitted = execution::Submit(*call->scope, [] { return psbtwork::ImportResult{}; }, completed, rejected, {execution::Lane::Domain});
-            if (!submitted) call->scope->activateCleanup(call->cleanup);
+            const auto submitted = PostReply(services,
+                execution::MakeTask([] { return psbtwork::ImportResult{}; }, completed, rejected));
+            if (!submitted) discard();
             return submitted;
         }
         execution::SubmitResult submitted;
         try { submitted = services.prepare(std::move(source), completed, rejected); }
         catch (...) { rejected(std::current_exception()); return execution::SubmitResult{{}, execution::Rejection::None}; }
-        if (!submitted) { call->scope->activateCleanup(call->cleanup); }
+        if (!submitted) discard();
         return submitted;
     };
     return port;

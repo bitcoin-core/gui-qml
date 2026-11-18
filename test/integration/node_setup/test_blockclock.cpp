@@ -5,10 +5,13 @@
 #include <test/integration/runner/test_cases.h>
 #include <test/integration/fixture/test_util.h>
 #include <qml/models/blockclockmodel.h>
+#include <qml/models/networkstatusmodel.h>
 
 #include <QDateTime>
+#include <QPointer>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QVariant>
 
 #include <algorithm>
 #include <cmath>
@@ -26,6 +29,17 @@ private Q_SLOTS:
     {
         auto* clock = qmltest::Find(m_app, "blockClock");
         QVERIFY(clock);
+        // Exercise Core network actions independently of the host's network
+        // reachability. A network-isolated runner correctly reports offline.
+        NetworkStatusModel reachability{false};
+        reachability.setReachability(QNetworkInformation::Reachability::Online);
+        const auto original_reachability = clock->property("networkStatusModelRef");
+        const QPointer<QObject> original_clock{clock};
+        const auto restore_reachability = qScopeGuard([&] {
+            if (original_clock) original_clock->setProperty("networkStatusModelRef", original_reachability);
+        });
+        QVERIFY(clock->setProperty("networkStatusModelRef", QVariant::fromValue(static_cast<QObject*>(&reachability))));
+        QTRY_VERIFY(m_app.nodeModel().networkActionReady());
         QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("CONNECTING"));
         QCOMPARE(clock->property("header").toString(), QStringLiteral("Connecting"));
         QCOMPARE(clock->property("subText").toString(), QStringLiteral("Please wait"));

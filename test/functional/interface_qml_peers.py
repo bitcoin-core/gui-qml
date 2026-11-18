@@ -19,6 +19,7 @@ import base64
 import http.client
 import json
 import os
+from pathlib import Path
 import signal
 import socket
 import subprocess
@@ -139,6 +140,7 @@ class PeerQmlTestHarness:
         self.peer_process = None
         self.peer2_process = None
         self.driver = None
+        self.gui_process_sequence = 0
 
         self.gui_datadir = self._setup_gui_datadir()
         self.peer_datadir = self._setup_peer_datadir()
@@ -246,10 +248,21 @@ class PeerQmlTestHarness:
         if process.poll() is None:
             process.send_signal(signal.SIGTERM)
         try:
-            _, stderr = process.communicate(timeout=10)
+            stdout, stderr = process.communicate(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
-            _, stderr = process.communicate(timeout=5)
+            stdout, stderr = process.communicate(timeout=5)
+        self.gui_process_sequence += 1
+        if os.getenv("QML_TEST_ARTIFACTS"):
+            output = Path(os.environ["QML_TEST_ARTIFACTS"]) / Path(self.tmpdir).name / "processes"
+            output.mkdir(parents=True, exist_ok=True)
+            phase = f"gui-{self.gui_process_sequence}"
+            (output / f"{phase}.stdout").write_bytes(stdout)
+            (output / f"{phase}.stderr").write_bytes(stderr)
+            (output / f"{phase}.json").write_text(json.dumps({
+                "pid": process.pid, "command": process.args,
+                "exit": process.returncode, "socket_path": self.socket_path,
+            }, indent=2) + "\n", encoding="utf-8")
         check_gui_exit(process.returncode, stderr.decode("utf-8", errors="replace"), socket_path=self.socket_path)
 
     # ── RPC helpers ───────────────────────────────────────────────────────────
@@ -296,18 +309,10 @@ class PeerQmlTestHarness:
         return self._rpc_call_to_port(_rpc_port(peer_idx), method, params)
 
     def wait_for_peer(self, timeout=30):
-        """Poll getpeerinfo until at least one peer is connected."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                peers = self.rpc_call("getpeerinfo")
-                if peers:
-                    print(f"  Peer connected: id={peers[0]['id']} addr={peers[0]['addr']}")
-                    return peers[0]["id"]
-            except Exception:
-                pass
-            time.sleep(0.5)
-        raise RuntimeError(f"No peer connected after {timeout}s")
+        """Wait for the peer process's connection, excluding the readiness probe."""
+        peer = self.gui_peer_for_process(1, timeout=timeout)
+        print(f"  Peer connected: id={peer['id']} addr={peer['addr']}")
+        return peer["id"]
 
     def wait_for_no_peers(self, timeout=PEER_ACTION_TIMEOUT_SECS):
         """Poll getpeerinfo until no peers remain."""
@@ -511,6 +516,47 @@ def _open_peer_details(gui, node_id: int) -> None:
 
 # ── Individual test cases ─────────────────────────────────────────────────────
 
+def test_displayed_peer_id_search(gui, harness, node_id):
+    """Search the displayed identity with real key events and completed projections."""
+    original_ids = {peer["id"] for peer in harness.rpc_call("getpeerinfo")}
+    assert node_id in original_ids
+
+    def search(text, expected_count):
+        gui.set_text("peerSearchField", "")
+        gui.type_text("peerSearchField", text)
+        gui.wait_for_property("peerSearchField", "text", text)
+        gui.wait_for_property("peerListView", "model.searchText", text)
+        # A visible delegate alone could still belong to the previous query.
+        # Wait for this query's Domain projection before inspecting its rows.
+        gui.wait_for_property("peerListView", "model.projectionPending", False)
+        gui.wait_for_property("peerListView", "model.count", expected_count)
+
+    search(str(node_id), 1)
+    gui.wait_for_property(f"peerListItem_{node_id}", "visible", True)
+    search("r39-no-connected-peer-matches", 0)
+    search(f"#{node_id}", 1)
+    gui.wait_for_property(f"peerListItem_{node_id}", "visible", True)
+    assert {peer["id"] for peer in harness.rpc_call("getpeerinfo")} == original_ids, \
+        "Searching must not disconnect or replace a Core connection"
+    gui.set_text("peerSearchField", "")
+    gui.wait_for_property("peerListView", "model.searchText", "")
+    gui.wait_for_property("peerListView", "model.projectionPending", False)
+
+
+def run_displayed_peer_id_search():
+    harness = PeerQmlTestHarness()
+    try:
+        harness.start()
+        node_id = harness.wait_for_peer()
+        gui = harness.driver
+        navigate_to_peers(gui)
+        gui.wait_for_property(f"peerListItem_{node_id}", "visible", True,
+                              timeout_ms=PEER_LIST_ITEM_VISIBLE_TIMEOUT_MS)
+        test_displayed_peer_id_search(gui, harness, node_id)
+    finally:
+        harness.stop()
+
+
 def test_disconnect_peer(gui, harness, node_id):
     print("\n── test_disconnect_peer ──────────────────────────────────────────")
 
@@ -588,6 +634,8 @@ def test_unban_peer(gui, harness):
     gui.wait_for_property("bannedPeersPopup", "opened", True, timeout_ms=8000)
     print("  Opened Banned Peers popup")
 
+    # The ban list is populated after the popup opens; wait for its first row.
+    gui.wait_for_object("unbanButton_0", timeout_ms=PEER_ACTION_TIMEOUT_SECS * 1000)
     gui.click("unbanButton_0")
     harness.wait_for_no_banned()
 
@@ -847,5 +895,6 @@ def run_tests():
 
 if __name__ == "__main__":
     raise SystemExit(run_scenarios('Multi-node peer management and ban persistence', [
+        scenario("displayed-peer-id-search", 3, run_displayed_peer_id_search),
         scenario("peer-management-and-restart", 3, run_tests),
     ]))

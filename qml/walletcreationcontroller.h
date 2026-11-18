@@ -44,8 +44,8 @@ public:
         std::shared_ptr<WalletRegistry> registry;
         std::shared_ptr<walletcreation::Admission> admission;
         std::shared_ptr<std::atomic_bool> names_ready, shutdown_gate;
-        std::shared_ptr<execution::Scheduler> scheduler;
         presentation::Post post;
+        WalletProvisioningCheck::Queues catalog_queues{};
         //! The wallet list admits a new operation now.
         std::function<bool()> accepting;
         //! A wallet load or creation is in progress.
@@ -90,7 +90,7 @@ public:
     void supersede() { m_operation.clear(); }
     WalletOperationModel::Services operationServices();
 
-    void setSignerServices(execution::SnapshotServices services);
+    void setSignerExecutor(execution::Executor& executor, presentation::Post post = {});
     void setSignerPorts(signerdiscovery::Ports ports);
     void close();
     //! Signer discovery finished its background work.
@@ -120,7 +120,8 @@ private:
     bool m_busy{false};
     QPointer<WalletOperationModel> m_operation;
     SignerDiscoveryModel* m_signers{nullptr};
-    execution::SnapshotServices m_signer_services;
+    presentation::Post m_signer_post;
+    execution::Executor* m_signer_executor{nullptr};
     signerdiscovery::Ports m_signer_ports;
 };
 

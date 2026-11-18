@@ -15,8 +15,16 @@ Page {
 
     property bool showHeader: true
     property bool showBackButton: true
-    property int selectedNodeId: -1
-    property PeerDetailsModel selectedDetails
+    readonly property alias selection: peerSelection
+    readonly property alias selectedDetails: peerSelection.selectedDetails
+
+    PeerSelectionModel {
+        id: peerSelection
+        objectName: "peerSelection"
+        source: ApplicationModels.peerListModelProxy
+        autoSelectFirst: !splitView.isCompact
+        onChanged: if (selectedDetails === null && splitView.isCompact) splitView.showPrimary()
+    }
 
     background: Rectangle { color: Theme.color.background }
 
@@ -29,29 +37,7 @@ Page {
     }
 
     function selectPeer(peerDetails) {
-        if (!peerDetails) return
-        selectedDetails = peerDetails
-        selectedNodeId = peerDetails.nodeId
-        splitView.showDetail()
-    }
-
-    function reconcileSelection() {
-        if (selectedNodeId >= 0 && ApplicationModels.peerListModelProxy.indexOfNodeId(selectedNodeId) >= 0) return
-
-        selectedNodeId = -1
-        selectedDetails = null
-        if (!splitView.isCompact && ApplicationModels.peerListModelProxy.count > 0) {
-            selectPeer(ApplicationModels.peerListModelProxy.peerDetailsAt(0))
-        } else if (splitView.isCompact) {
-            splitView.showPrimary()
-        }
-    }
-
-    Component.onCompleted: Qt.callLater(root.reconcileSelection)
-
-    Connections {
-        target: ApplicationModels.peerListModelProxy
-        function onCountChanged() { Qt.callLater(root.reconcileSelection) }
+        if (peerSelection.select(peerDetails)) splitView.showDetail()
     }
 
     NavigationSplitView {
@@ -65,16 +51,12 @@ Page {
         detailMinimumWidth: 280
         separatorColor: Theme.color.surfaceDivider
 
-        onIsCompactChanged: {
-            if (!isCompact) Qt.callLater(root.reconcileSelection)
-        }
-
         primaryComponent: Component {
             Peers {
                 compact: splitView.isCompact
                 showHeader: false
                 popupParent: root
-                selectedNodeId: root.selectedNodeId
+                selectedConnectionId: peerSelection.connectionId
                 onPeerSelected: (peerDetails) => root.selectPeer(peerDetails)
             }
         }
@@ -88,14 +70,6 @@ Page {
                     popupParent: root
                     details: root.selectedDetails
                     onBack: splitView.showPrimary()
-                    onPeerDisconnected: (nodeId) => {
-                        if (nodeId === root.selectedNodeId) {
-                            root.selectedNodeId = -1
-                            root.selectedDetails = null
-                            if (splitView.isCompact) splitView.showPrimary()
-                            Qt.callLater(root.reconcileSelection)
-                        }
-                    }
                 }
                 CoreText {
                     objectName: "noPeerDetailsLabel"

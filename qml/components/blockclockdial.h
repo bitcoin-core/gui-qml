@@ -5,7 +5,13 @@
 #ifndef BITCOIN_QML_COMPONENTS_BLOCKCLOCKDIAL_H
 #define BITCOIN_QML_COMPONENTS_BLOCKCLOCKDIAL_H
 
+#include <qml/blockclockprojection.h>
+#include <qml/guipresentation.h>
+#include <qml/presentationservices.h>
+#include <QPointer>
 #include <QQuickPaintedItem>
+#include <QVariant>
+#include <QImage>
 #include <QConicalGradient>
 #include <QMetaObject>
 #include <QPainter>
@@ -29,6 +35,10 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(qreal currentTimeFraction READ currentTimeFraction WRITE setCurrentTimeFraction)
     /** Sorted block positions through the same period, each in [0, 1]. */
     Q_PROPERTY(QList<qreal> blockTimeFractions READ blockTimeFractions WRITE setBlockTimeFractions)
+    Q_PROPERTY(QVariant blockSnapshot READ blockSnapshot WRITE setBlockSnapshot)
+    Q_PROPERTY(bool renderPending READ renderPending NOTIFY renderStateChanged)
+    Q_PROPERTY(QString renderError READ renderError NOTIFY renderStateChanged)
+    Q_PROPERTY(bool renderAvailable READ renderAvailable NOTIFY renderStateChanged)
     /** Progress of the synchronization phase currently presented by the dial. */
     Q_PROPERTY(double syncProgress READ syncProgress WRITE setSyncProgress)
     Q_PROPERTY(bool connected READ connected WRITE setConnected)
@@ -45,14 +55,27 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
     Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors )
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
+    Q_PROPERTY(PresentationServices* services READ services WRITE setServices NOTIFY servicesChanged)
 
 public:
     explicit BlockClockDial(QQuickItem * parent = nullptr);
+    BlockClockDial(PresentationServices* services, QQuickItem* parent = nullptr);
     ~BlockClockDial() override;
+    PresentationServices* services() const { return m_presentation; }
+    /** Background rendering uses the first services assigned; the dial closes
+     * when they close. Without services it reports rendering as unavailable. */
+    void setServices(PresentationServices* services);
+    void close();
+    Q_INVOKABLE void retryRendering();
     void paint(QPainter * painter) override;
 
     qreal currentTimeFraction() const { return m_current_time_fraction; }
-    QList<qreal> blockTimeFractions() const { return m_block_time_fractions; }
+    QList<qreal> blockTimeFractions() const;
+    QVariant blockSnapshot() const { return QVariant::fromValue(blockclock::WeakSnapshot{m_source}); }
+    bool renderPending() const { return m_render_pending; }
+    QString renderError() const { return m_render_error; }
+    QSize renderedPixelSize() const;
+    bool renderAvailable() const;
     double syncProgress() const { return m_sync_progress; };
     bool connected() const { return m_is_connected; };
     bool synced() const { return m_is_synced; };
@@ -72,6 +95,7 @@ public:
 public Q_SLOTS:
     void setCurrentTimeFraction(qreal fraction);
     void setBlockTimeFractions(QList<qreal> fractions);
+    void setBlockSnapshot(const QVariant& snapshot);
     void setSyncProgress(double progress);
     void setConnected(bool connected);
     void setSynced(bool synced);
@@ -91,20 +115,20 @@ public Q_SLOTS:
 Q_SIGNALS:
     void scaleChanged();
     void renderingActiveChanged();
+    void renderStateChanged();
+    void servicesChanged();
 
 protected:
     void componentComplete() override;
 
 private:
-    /** Drawable interval and confirmation depths around its ending block cluster. */
-    struct BlockSegment
-    {
-        qreal start_fraction;
-        qreal end_fraction;
-        qsizetype start_confirmations;
-        qsizetype end_confirmations;
-    };
-
+    struct Native;
+    struct Input;
+    struct Frame;
+    void initializeNative();
+    void requestFrame();
+    void publishFrame();
+    void notifyRenderState();
     void paintConnectingAnimation(QPainter * painter);
     void paintProgress(QPainter * painter);
     void paintCurrentTimeArc(QPainter* painter);
@@ -116,7 +140,7 @@ private:
     double degreesPerPixel();
     qreal degreesForArcPixels(qreal pixels, const QRectF& bounds) const;
     qreal blockSegmentGapPixels() const;
-    QList<BlockSegment> coalescedBlockSegments(const QRectF& bounds) const;
+
     void setupConnectingGradient(const QPen & pen);
     void setupSyncedGradient(const QRectF& bounds);
     void invalidateSyncedGradient();
@@ -129,7 +153,18 @@ private:
     void connectWindowVisibility();
 
     qreal m_current_time_fraction{0.0};
-    QList<qreal> m_block_time_fractions;
+    QPointer<PresentationServices> m_presentation;
+    presentation::Post m_post;
+    execution::SnapshotQuery<std::shared_ptr<const Frame>>::Post m_observation_post;
+    PresentationServices::RetireValue m_retire_value;
+    std::shared_ptr<Native> m_native;
+    std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const Frame>>> m_query;
+    std::shared_ptr<const Input> m_input;
+    std::shared_ptr<const Frame> m_frame;
+    blockclock::Snapshot m_source;
+    quint64 m_render_revision{0}, m_content_epoch{0}, m_displayed_revision{0};
+    bool m_source_normalized{true}, m_closed{false}, m_render_pending{false}, m_pending_notice{false}, m_capture_rejected{false};
+    QString m_render_error;
     double m_sync_progress{0.0};
     bool m_is_connected{false};
     bool m_is_synced{false};

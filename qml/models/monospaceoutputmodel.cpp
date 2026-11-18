@@ -4,6 +4,7 @@
 
 #include <qml/models/monospaceoutputmodel.h>
 #include <qml/guipresentation.h>
+#include <qml/executor.h>
 
 #include <QTextCursor>
 #include <QTextDocument>
@@ -26,6 +27,17 @@ constexpr int OUTPUT_ROWS{50'000};
 constexpr int ROW_CHARS{1024};
 constexpr int SEARCH_ROWS{64};
 constexpr int SEARCH_MATCHES{10'000};
+
+template <typename Work, typename Done, typename Failed>
+bool SubmitOutput(const PresentationServices::Ports& ports, Work work, Done done, Failed failed)
+{
+    if (!ports.utility) return false;
+    auto packet = execution::MakeTask(std::move(work), std::move(done), std::move(failed));
+    return ports.utility->post([packet = std::move(packet)] {
+        packet->execute();
+        packet->deliver();
+    });
+}
 
 QString FragmentHtml(QTextDocument& document, int start, int end)
 {
@@ -305,7 +317,7 @@ void MonospaceOutputModel::startCapture()
 {
     if (!m_active || m_closed) return;
     if (m_mailbox->pending() > 8 || m_waiting_retirement) { m_waiting_retirement = true; retryCleanup(); return; }
-    if (!m_services.scheduler || !m_services.retire) { m_error = tr("Output is temporarily unavailable."); m_busy = false; Q_EMIT changed(); return; }
+    if (!m_services.utility || !m_services.retire) { m_error = tr("Output is temporarily unavailable."); m_busy = false; Q_EMIT changed(); return; }
     if (m_projection) { m_projection->cancelled = true; retire(std::exchange(m_projection, {})); }
     auto projection = std::make_shared<Projection>();
     projection->generation = ++m_generation; projection->source_revision = m_source_revision; projection->rich = m_rich;
@@ -342,7 +354,7 @@ void MonospaceOutputModel::captureNext(const std::shared_ptr<Projection>& projec
     const bool final = projection->next_row < projection->first_row || !m_source;
     const auto mailbox = m_mailbox;
     const QPointer<MonospaceOutputModel> observer{this};
-    const auto accepted = execution::Submit(*m_services.scheduler, [projection, input = std::move(input), final] {
+    const auto accepted = SubmitOutput(m_services, [projection, input = std::move(input), final] {
         if (projection->cancelled) return false;
         for (const auto& source : input) {
             std::optional<QTextDocument> document; // Only rich text needs a document.
@@ -380,8 +392,7 @@ void MonospaceOutputModel::captureNext(const std::shared_ptr<Projection>& projec
             };
             post(next);
         }
-    }, [mailbox, projection](std::exception_ptr) { mailbox->publish({projection->generation, {}, false, tr("Output could not be prepared.")}); },
-    {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    }, [mailbox, projection](std::exception_ptr) { mailbox->publish({projection->generation, {}, false, tr("Output could not be prepared.")}); });
     if (!accepted) { m_busy = false; m_error = tr("Output could not be shown."); Q_EMIT changed(); }
 }
 
@@ -473,9 +484,8 @@ void MonospaceOutputModel::search(bool reset)
 void MonospaceOutputModel::stepSearch(const std::shared_ptr<Search>& work)
 {
     const auto mailbox = m_mailbox;
-    const auto scheduler = m_services.scheduler;
     const QPointer<MonospaceOutputModel> observer{this};
-    const auto accepted = execution::Submit(*scheduler, [work] {
+    const auto accepted = SubmitOutput(m_services, [work] {
         for (int n = 0; !work->cancelled && n < SEARCH_ROWS && work->row < work->rows->size(); ++n, ++work->row) {
             const auto& text = work->rows->at(work->row).plain;
             int start{0};
@@ -496,17 +506,16 @@ void MonospaceOutputModel::stepSearch(const std::shared_ptr<Search>& work)
             };
             post(next);
         }
-    }, [mailbox, work](std::exception_ptr) { mailbox->publishSearch({work->revision, std::make_shared<const Matches>(), true, work->reset}); },
-    {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    }, [mailbox, work](std::exception_ptr) { mailbox->publishSearch({work->revision, std::make_shared<const Matches>(), true, work->reset}); });
     if (!accepted) { m_search_busy = false; m_search_limited = true; Q_EMIT searchChanged(); }
 }
 
 void MonospaceOutputModel::copyAll()
 {
-    if (m_closed || !m_active || !m_rows || !m_services.scheduler) { Q_EMIT copyFinished(false); return; }
+    if (m_closed || !m_active || !m_rows) { Q_EMIT copyFinished(false); return; }
     const auto mailbox = m_mailbox;
     const auto generation = m_generation;
-    const auto submitted = execution::Submit(*m_services.scheduler, [rows = m_rows] {
+    const auto submitted = SubmitOutput(m_services, [rows = m_rows] {
         QString text;
         for (int row = 0; row < rows->size(); ++row) {
             const auto& value = rows->at(row);
@@ -515,8 +524,7 @@ void MonospaceOutputModel::copyAll()
         }
         return std::make_shared<const QString>(std::move(text));
     }, [mailbox, generation](std::shared_ptr<const QString> text) { mailbox->publishCopy({generation, std::move(text)}); },
-    [mailbox, generation](std::exception_ptr) { mailbox->publishCopy({generation, {}}); },
-    {execution::Lane::Domain, {}, execution::WorkClass::Action});
+    [mailbox, generation](std::exception_ptr) { mailbox->publishCopy({generation, {}}); });
     if (!submitted) Q_EMIT copyFinished(false);
 }
 

@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/walletprovisioningcheck.h>
+#include <qml/executor.h>
 #include <qml/walletcreation.h>
 #include <qml/guipresentation.h>
 #include <interfaces/node.h>
@@ -12,12 +13,15 @@
 #include <QUrl>
 #include <stdexcept>
 #include <utility>
-WalletProvisioningCheck::WalletProvisioningCheck(interfaces::Node& node, execution::SnapshotServices services, QObject* parent, std::shared_ptr<std::atomic_bool> names_ready, std::shared_ptr<WalletNameRegistry> registry, std::shared_ptr<std::atomic_bool> shutdown_gate, bool strict_name)
-    : QObject(parent), m_node(node), m_names_ready(std::move(names_ready)), m_registry(std::move(registry)), m_services(std::move(services)), m_closed(std::move(shutdown_gate)), m_strict_name(strict_name)
+WalletProvisioningCheck::WalletProvisioningCheck(interfaces::Node& node, presentation::Post post, QObject* parent,
+    std::shared_ptr<std::atomic_bool> names_ready, std::shared_ptr<WalletNameRegistry> registry,
+    std::shared_ptr<std::atomic_bool> shutdown_gate, bool strict_name, Queues queues)
+    : QObject(parent), m_node(node), m_names_ready(std::move(names_ready)), m_registry(std::move(registry)),
+      m_post(std::move(post)), m_queues(std::move(queues)), m_closed(std::move(shutdown_gate)), m_strict_name(strict_name)
 {
-    Q_ASSERT(m_services.scheduler);
+    Q_ASSERT(m_queues.core && m_queues.outcomes);
     m_bridge = presentation::MakeGuiObject();
-    if (!m_services.post) m_services.post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
+    if (!m_post) m_post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
     refresh();
 }
 WalletProvisioningCheck::~WalletProvisioningCheck() { close(); }
@@ -32,7 +36,7 @@ void WalletProvisioningCheck::refresh()
     { std::lock_guard lock{m_input->mutex}; m_input->name = m_name; m_input->xpub = m_xpub; m_input->path = m_path; m_input->revision = m_revision; }
     if (!m_query) {
         const QPointer<WalletProvisioningCheck> guard{this};
-        m_query = std::make_shared<execution::SnapshotQuery<Result>>(m_services.scheduler, [input = m_input, node = &m_node, ready = m_names_ready, registry = m_registry, gate = m_closed.shared(), strict = m_strict_name] {
+        m_query = std::make_shared<execution::SnapshotQuery<Result>>([input = m_input, node = &m_node, ready = m_names_ready, registry = m_registry, gate = m_closed.shared(), strict = m_strict_name] {
             if (gate && gate->load()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
             QString name, xpub, path; Result result;
             { std::lock_guard lock{input->mutex}; name = input->name; xpub = input->xpub; path = input->path; result.revision = input->revision; }
@@ -45,9 +49,18 @@ void WalletProvisioningCheck::refresh()
             result.normalized_path = path.isEmpty() ? QString{} : QFileInfo(url.isLocalFile() ? url.toLocalFile() : path).absoluteFilePath();
             result.path_exists = !result.normalized_path.isEmpty() && QFileInfo::exists(result.normalized_path);
             return result;
-        }, [guard, post = m_services.post] { post([guard] { if (guard) guard->publish(); }); });
+        }, [guard, post = m_post] { post([guard] { if (guard) guard->publish(); }); },
+            queryPost());
     }
     m_query->request(); Q_EMIT changed();
+}
+
+execution::SnapshotQuery<WalletProvisioningCheck::Result>::Post WalletProvisioningCheck::queryPost() const
+{
+    auto delivery = std::make_shared<execution::ValueCleanupQueue>(m_queues.outcomes);
+    return [core = m_queues.core, delivery = std::move(delivery)](std::shared_ptr<execution::Task> task) {
+        return delivery->postWithOutcome(*core, std::move(task));
+    };
 }
 void WalletProvisioningCheck::publish()
 {

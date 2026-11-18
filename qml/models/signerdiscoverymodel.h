@@ -8,7 +8,7 @@
 #include <QAbstractListModel>
 #include <QPointer>
 #include <chrono>
-class BackendExecutor;
+namespace execution { class Executor; }
 struct SignerDiscoveryError {
     Q_GADGET
     Q_PROPERTY(Code code MEMBER code)
@@ -48,14 +48,15 @@ public:
     enum Role { SignerIdRole = Qt::UserRole + 1, NameRole, FingerprintRole, AvailableRole };
     Q_ENUM(Role)
     struct Services {
-        execution::SnapshotServices discovery;
-        execution::SnapshotServices configuration;
+        std::function<void(std::function<void()>)> discovery_post;
+        std::function<void(std::function<void()>)> configuration_post;
         signerdiscovery::Ports ports;
         // Deadline transport only; the callback enqueues a Domain decision.
         std::function<void(std::chrono::milliseconds, std::function<void()>)> arm;
         std::function<void()> stop;
         // Physical retirement is independent of held/lost view publication.
         std::function<void(std::function<void()>)> retire;
+        execution::Executor* executor{nullptr};
     };
     explicit SignerDiscoveryModel(Services services, QObject* parent = nullptr);
     ~SignerDiscoveryModel() override;
@@ -104,7 +105,7 @@ private:
     void finishDrain();
     void scheduleRefresh();
     Services m_services;
-    std::shared_ptr<BackendExecutor> m_executor, m_config_executor;
+    signerdiscovery::Reader::Submit m_configuration_submit;
     std::shared_ptr<QObject> m_bridge;
     std::shared_ptr<signerdiscovery::Reader> m_reader;
     std::shared_ptr<signerdiscovery::Reader> m_configuration_reader;

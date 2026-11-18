@@ -3,9 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/transactionattempt.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/walletprepare.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 
 #include <QSemaphore>
 #include <QThread>
@@ -145,8 +145,9 @@ private Q_SLOTS:
 
     void ownerRunsAdmissionAndOutcomeOnlyOnControlledDomainTurns()
     {
-        ManualRoutedExecution transport;
-        transactionattempt::Owner owner{transport.scheduler};
+        ManualStartupExecution transport;
+        auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
+        transactionattempt::Owner owner{utility};
         const auto opening = NewOpening();
         transactionattempt::StartInput input;
         input.id = 1;
@@ -163,9 +164,8 @@ private Q_SLOTS:
         });
         QVERIFY(admitted);
         QVERIFY(!began);
-        QVERIFY(transport.step(execution::Lane::Domain)); // Admission decision.
-        QVERIFY(!began); // Outcome publication is a separate Domain turn.
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(!transport.step(execution::Lane::Core));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(began);
         QCOMPARE(begin_result.snapshot.id, std::uint64_t{1});
         QVERIFY(begin_result.snapshot.phase == transactionattempt::Phase::Preparing);
@@ -177,9 +177,8 @@ private Q_SLOTS:
         QVERIFY(owner.resolve(ticket, input.facts, walletprepare::Error::None, candidate, 5,
             [&](auto result) { resolved = true; resolution = std::move(result); }));
         QVERIFY(!resolved);
-        QVERIFY(transport.step(execution::Lane::Domain));
         QVERIFY(!resolved);
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(resolved);
         QVERIFY(resolution.transition == transactionattempt::Transition::Accepted);
         QVERIFY(resolution.snapshot.phase == transactionattempt::Phase::Reviewing);
@@ -187,15 +186,74 @@ private Q_SLOTS:
         QVERIFY(resolution.snapshot.candidate_current);
         QCOMPARE(resolution.snapshot.current_review, transactionattempt::ReviewId{5});
         QVERIFY(owner.close());
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.quiescent());
+    }
+
+    void ownerDrainsAcceptedPreparationOnUtilityWithSchedulerClosed()
+    {
+        using execution::Lane;
+        using transactionattempt::Phase;
+        std::vector<Phase> phases;
+        bool candidate_retired{false};
+        transactionattempt::Ticket ticket;
+        ManualStartupExecution worker;
+        const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        transactionattempt::Owner owner{utility};
+
+        transactionattempt::StartInput input;
+        input.id = 1;
+        input.facts = {NewOpening(), 3, true};
+        input.draft = NewReadyDraft();
+        input.draft_current = true;
+        const auto record = [&](transactionattempt::Result result) {
+            QCOMPARE(result.transition, transactionattempt::Transition::Accepted);
+            phases.push_back(result.snapshot.phase);
+        };
+        QVERIFY(owner.begin(input, [&](auto result) {
+            ticket = result.snapshot.ticket;
+            record(std::move(result));
+        }));
+        QVERIFY(phases.empty());
+        QVERIFY(!worker.step(Lane::Core));
+        QVERIFY(worker.step(Lane::Utility));
+        QCOMPARE(phases, std::vector<Phase>{Phase::Preparing});
+        QCOMPARE(ticket.session, input.facts.session);
+
+        auto candidate = std::shared_ptr<const walletreview::Snapshot>{new walletreview::Snapshot{},
+            [&](const walletreview::Snapshot* value) {
+                candidate_retired = true;
+                delete value;
+            }};
+        const auto original = candidate.get();
+        QVERIFY(owner.resolve(ticket, input.facts, walletprepare::Error::None, std::move(candidate), 4,
+            [&](auto result) {
+                QCOMPARE(result.snapshot.candidate.get(), original);
+                QCOMPARE(result.snapshot.current_review, transactionattempt::ReviewId{4});
+                QVERIFY(result.snapshot.candidate_current);
+                record(std::move(result));
+            }));
+        QVERIFY(owner.intentChanged(1, [&](auto result) {
+            QVERIFY(!result.snapshot.candidate_current);
+            record(std::move(result));
+        }));
+        QVERIFY(owner.close(record));
+        utility->close();
+        QVERIFY(!owner.begin(input, record));
+        QVERIFY(!candidate_retired);
+        QVERIFY(!worker.step(Lane::Core));
+        worker.drain();
+        const std::vector<Phase> expected{Phase::Preparing, Phase::Reviewing, Phase::NeedsRevalidation, Phase::Closed};
+        QCOMPARE(phases, expected);
+        QVERIFY(candidate_retired);
+        QVERIFY(worker.quiescent());
     }
 
     void ownerRejectsHeldResultAfterIntentRevisionAdvances()
     {
-        ManualRoutedExecution transport;
-        transactionattempt::Owner owner{transport.scheduler};
+        ManualStartupExecution transport;
+        auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
+        transactionattempt::Owner owner{utility};
         const auto opening = NewOpening();
         transactionattempt::StartInput input;
         input.id = 1;
@@ -204,16 +262,14 @@ private Q_SLOTS:
         input.draft_current = true;
         transactionattempt::Result begin_result;
         QVERIFY(owner.begin(input, [&](auto result) { begin_result = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
 
         bool invalidated{false};
         QVERIFY(owner.intentChanged(1, [&](auto result) {
             invalidated = result.snapshot.intent_revision == 1;
         }));
         QVERIFY(!invalidated);
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(invalidated);
 
         auto stale_candidate = std::make_shared<const walletreview::Snapshot>();
@@ -221,8 +277,7 @@ private Q_SLOTS:
         bool resolved{false};
         QVERIFY(owner.resolve(begin_result.snapshot.ticket, input.facts, walletprepare::Error::None,
             stale_candidate, 8, [&](auto result) { resolved = true; held_result = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(resolved);
         QVERIFY(held_result.transition == transactionattempt::Transition::Stale);
         QVERIFY(held_result.snapshot.phase == transactionattempt::Phase::NeedsRevalidation);
@@ -240,8 +295,9 @@ private Q_SLOTS:
     void rejectedRequestCannotReplaceTheOriginalAttemptMetadata()
     {
         QFETCH(bool, ordinary);
-        ManualRoutedExecution transport;
-        transactionattempt::Owner owner{transport.scheduler};
+        ManualStartupExecution transport;
+        auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
+        transactionattempt::Owner owner{utility};
         const auto opening = NewOpening();
         const QString original{64, QLatin1Char{'a'}};
         transactionattempt::ReplacementStart input{7, 3, {opening, 0, true}, original};
@@ -266,17 +322,17 @@ private Q_SLOTS:
     }
     void replacementOwnerRetainsOriginalAndApprovedCandidateAcrossTransitions()
     {
-        ManualRoutedExecution transport;
-        transactionattempt::Owner owner{transport.scheduler};
+        ManualStartupExecution transport;
+        auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
+        transactionattempt::Owner owner{utility};
         const auto opening = NewOpening();
         const QString original_txid{QString(64, QLatin1Char{'a'})};
         transactionattempt::ReplacementStart input{1, 1, {opening, 0, true}, original_txid};
         transactionattempt::Result begun_result;
         bool did_begin{false};
         QVERIFY(owner.beginReplacement(input, [&](auto result) { did_begin = true; begun_result = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
         QVERIFY(!did_begin);
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(did_begin);
         QVERIFY(begun_result.snapshot.kind == transactionattempt::Kind::Replacement);
         QCOMPARE(begun_result.snapshot.original_txid, original_txid);
@@ -287,8 +343,7 @@ private Q_SLOTS:
         bool installed_value{false};
         QVERIFY(owner.install(begun_result.snapshot.ticket, input.facts, candidate, 9,
             [&](auto result) { installed_value = true; installed = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(installed_value);
         QVERIFY(installed.snapshot.phase == transactionattempt::Phase::Reviewing);
         QVERIFY(installed.snapshot.candidate == candidate);
@@ -300,8 +355,7 @@ private Q_SLOTS:
         QVERIFY(owner.advance(installed.snapshot.ticket, reviewed, transactionattempt::Phase::Reviewing,
             transactionattempt::Phase::Submitting,
             [&](auto result) { submitting_value = true; submitting = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(submitting_value);
         QVERIFY(submitting.snapshot.phase == transactionattempt::Phase::Submitting);
         QCOMPARE(submitting.snapshot.original_txid, original_txid);
@@ -312,31 +366,30 @@ private Q_SLOTS:
         QVERIFY(owner.advance(submitting.snapshot.ticket, {opening, 9, false}, transactionattempt::Phase::Submitting,
             transactionattempt::Phase::NeedsRevalidation,
             [&](auto result) { stale_value = true; stale = std::move(result); }));
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(stale_value);
         QVERIFY(stale.snapshot.phase == transactionattempt::Phase::NeedsRevalidation);
         QCOMPARE(stale.snapshot.original_txid, original_txid);
         QVERIFY(!stale.snapshot.candidate);
         QVERIFY(!stale.snapshot.candidate_current);
         QVERIFY(owner.close());
-        QVERIFY(transport.step(execution::Lane::Domain));
-        QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(transport.quiescent());
     }
 
-    void ownerTransitionsAndOutcomeRunOffGuiOnProductionDomainLane()
+    void ownerTransitionsAndOutcomeRunOffGuiOnProductionUtilityQueue()
     {
-        BackendExecutor executor{execution::Options{}};
-        transactionattempt::Owner owner{executor.scheduler()};
+        const auto gui_thread = QThread::currentThread();
+        std::atomic<QThread*> owner_thread{nullptr};
+        QSemaphore completed, drained;
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        transactionattempt::Owner owner{utility};
         transactionattempt::StartInput input;
         input.id = 1;
         input.facts = {NewOpening(), 2, true};
         input.draft = NewReadyDraft();
         input.draft_current = true;
-        const auto gui_thread = QThread::currentThread();
-        std::atomic<QThread*> owner_thread{nullptr};
-        QSemaphore completed;
         QVERIFY(owner.begin(std::move(input), [&](auto result) {
             owner_thread = QThread::currentThread();
             if (result.snapshot.phase == transactionattempt::Phase::Preparing) completed.release();
@@ -344,9 +397,10 @@ private Q_SLOTS:
         QVERIFY(completed.tryAcquire(1, 5'000));
         QVERIFY(owner_thread.load());
         QVERIFY(owner_thread.load() != gui_thread);
-        executor.shutdown();
-        QTRY_VERIFY_WITH_TIMEOUT(executor.isDrained(), 5'000);
-        QCOMPARE(executor.scheduler()->pending(), size_t{0});
+        utility->close();
+        utility->whenDrained([&] { drained.release(); });
+        QVERIFY(drained.tryAcquire(1, 5'000));
+        executor.stopAndJoin();
     }
 };
 

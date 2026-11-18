@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/walletoperationmodel.h>
 #include <qml/models/walletqmlmodel.h>
-#include <qml/retainedsnapshot.h>
 #include <QScopeGuard>
 #include <QQmlEngine>
 #include <utility>
@@ -40,7 +39,7 @@ WalletOperationModel* WalletOperationModel::OpenNotice(Services services, quint6
     model->m_frame.outcome_known = true; model->m_frame.result.result_id = QString::number(id) + QStringLiteral(":opened");
     model->m_frame.result.wallet_id = model->m_frame.target_id; model->m_frame.result.effect = WalletOperationResult::WalletOpened;
     model->m_frame.result.warnings = {warnings.left(1024)}; model->m_frame.result.warnings_truncated = warnings.size() > 1024;
-    model->m_owner = execution::RetainSnapshot<OpenNoticeOwner>(model->m_services.native.execution.scheduler,
+    model->m_owner = model->m_services.native.retain<OpenNoticeOwner>(
         [frame = model->m_frame, warnings = std::move(warnings), lifetime = std::move(lifetime)]() mutable { return std::make_unique<OpenNoticeOwner>(std::move(frame), std::move(warnings), std::move(lifetime)); });
     if (model->m_owner) model->m_warnings.bind(model->m_owner);
     else {
@@ -114,7 +113,7 @@ WalletOperationModel::WalletOperationModel(Services services, walletrestoration:
     if (needs_admission) m_ticket = m_services.publisher ? m_services.publisher->reserveCreation(operationId()) : nullptr;
     if ((needs_admission && !m_ticket) || (needs_parent && !parent)) { rejected({QStringLiteral("PublicationUnavailable"), tr("The wallet action could not start. Nothing was changed."), {}, {}}); return; }
     const QPointer<WalletOperationModel> guard{this};
-    m_owner = walletrestoration::Owner::Make(m_services.native, std::move(request), [guard, post = m_services.native.execution.post] { post([guard] { if (guard) guard->publish(); }); },
+    m_owner = walletrestoration::Owner::Make(m_services.native, std::move(request), [guard, post = m_services.native.gui_post] { post([guard] { if (guard) guard->publish(); }); },
         m_ticket ? m_ticket->backend_release : nullptr, m_ticket ? m_ticket->observation : nullptr);
     if (!m_owner) { rejected({QStringLiteral("TransportRejected"), tr("The wallet action could not start. Nothing was changed."), {}, {}}); return; }
     if (parent) { setParent(parent); QQmlEngine::setObjectOwnership(this, QQmlEngine::CppOwnership); }
@@ -164,7 +163,7 @@ WalletOperationModel::WalletOperationModel(Services services, walletcreation::Re
     }
     const QPointer<WalletOperationModel> guard{this};
     m_owner = walletcreation::Owner::Make(m_services.native, std::move(native_request),
-        [guard, post = m_services.native.execution.post] { post([guard] { if (guard) guard->publish(); }); }, m_ticket->backend_release, m_ticket->observation);
+        [guard, post = m_services.native.gui_post] { post([guard] { if (guard) guard->publish(); }); }, m_ticket->backend_release, m_ticket->observation);
     if (!m_owner) {
         m_accepted = false; m_services.native.admission->presentationConsumed(m_request.id);
         m_frame.phase = walletcreation::Phase::Rejected;
@@ -322,8 +321,7 @@ WalletCreationReceipt WalletOperationModel::reconcile()
         if (new_ticket && ticket) { ticket->backend_release->release(); services.publisher->finishCreation(ticket); }
         return {command, false, {QStringLiteral("Closed"), tr("The operation view closed."), {}, {}}};
     }
-    const auto admitted = execution::Submit(*services.native.execution.scheduler, [owner, ticket] { owner->reconcileWithPorts(ticket->backend_release, ticket->observation); }, [] {}, {},
-        {execution::Lane::Domain, services.native.execution.scheduler->allocateKey()});
+    const auto admitted = services.native.post(execution::Lane::Utility, [owner, ticket] { owner->reconcileWithPorts(ticket->backend_release, ticket->observation); });
     if (!admitted) {
         m_command_pending = false; m_finished = previous_finished; m_ticket = previous_ticket;
         services.native.admission->presentationConsumed(id);
@@ -355,7 +353,7 @@ WalletCreationReceipt WalletOperationModel::answerPrompt(const QString& prompt_i
     const auto closed = [&] { return WalletCreationReceipt{command, false, {QStringLiteral("Closed"), tr("The window closed before the answer was sent."), {}, {}}}; };
     secretinput::Captured captured;
     if (passphrase) {
-        auto input = secretinput::Capture(services.native.execution.scheduler, secret);
+        auto input = services.native.capture(secret);
         if (!guard || m_closed) { services.native.admission->presentationConsumed(id); return closed(); }
         if (!input) { services.native.admission->presentationConsumed(id); return reject("answer", tr("The password could not be used. Nothing was changed.")); }
         captured = std::move(input.input);
@@ -370,7 +368,9 @@ WalletCreationReceipt WalletOperationModel::answerPrompt(const QString& prompt_i
     m_ticket = ticket; m_publication_in_flight = false; m_command_pending = true;
     Q_EMIT activated(this);
     if (!guard || m_closed) { ticket->backend_release->release(); services.native.admission->presentationConsumed(id); services.publisher->finishCreation(ticket); return closed(); }
-    const auto admitted = execution::Submit(*services.native.execution.scheduler, [owner, command, prompt_id, ticket, captured = std::move(captured)]() mutable { owner->answer(command, prompt_id, ticket->backend_release, ticket->observation, std::move(captured)); }, [] {}, {}, {execution::Lane::Domain, services.native.execution.scheduler->allocateKey()});
+    const auto admitted = services.native.post(execution::Lane::Utility, [owner, command, prompt_id, ticket, captured = std::move(captured)]() mutable {
+        owner->answer(command, prompt_id, ticket->backend_release, ticket->observation, std::move(captured));
+    });
     if (!admitted) {
         services.native.admission->presentationConsumed(id); ticket->backend_release->release();
         if (guard && !m_closed) { m_ticket.reset(); m_command_pending = false; }

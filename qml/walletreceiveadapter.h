@@ -5,8 +5,9 @@
 #define BITCOIN_QML_WALLETRECEIVEADAPTER_H
 #include <qml/models/walletreceivemodel.h>
 #include <qml/models/backuppolicyio.h>
+#include <qml/guipresentation.h>
 
 WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::Session>& opening,
-    const std::shared_ptr<walletrequests::Store>& store, execution::SnapshotServices execution,
+    const std::shared_ptr<walletrequests::Store>& store, presentation::Post post,
     std::shared_ptr<backup::InstallCoordinator> coordinator);
 #endif // BITCOIN_QML_WALLETRECEIVEADAPTER_H

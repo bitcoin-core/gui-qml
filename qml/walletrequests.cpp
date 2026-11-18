@@ -378,7 +378,7 @@ void Store::planMutation(Queued queued)
 execution::SubmitResult Store::inspect(int64_t id, uint64_t view, std::function<void(Inspection)> done)
 {
     const auto self = shared_from_this();
-    return execution::Submit(*m_opening->scheduler(), [self, id, view] {
+    return m_opening->postDomain([self, id, view] {
         Inspection result;
         result.closed = self->m_closed.load(); result.loaded = self->m_loaded;
         result.error = self->m_uncertain.load() ? Error::Uncertain : self->m_preparation_error != Error::None ? self->m_preparation_error :
@@ -409,8 +409,7 @@ execution::SubmitResult Store::inspect(int64_t id, uint64_t view, std::function<
         else if (result.address && result.address->address == address && result.address->label.size() <= 16'384)
             result.current_label = result.address->label;
         return result;
-    }, done, [done](std::exception_ptr) { Inspection failure; failure.error = Error::Rejected; done(std::move(failure)); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    }, done, [done](std::exception_ptr) { Inspection failure; failure.error = Error::Rejected; done(std::move(failure)); });
 }
 
 void Store::loaded(std::vector<std::string> blobs, std::vector<interfaces::WalletAddress> addresses,

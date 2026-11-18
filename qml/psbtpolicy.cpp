@@ -25,15 +25,16 @@
 namespace {
 QString Tr(const char* text) { return QCoreApplication::translate("PsbtQmlModel", text); }
 
-void ReadAdmission(interfaces::Node& node, const CTransaction& transaction, psbtpolicy::Facts& facts)
+void ReadAdmission(interfaces::Node& node, const CTransaction& transaction, psbtpolicy::Facts& facts, bool enforce_raw_fee_cap)
 {
     try {
         UniValue raw_transactions{UniValue::VARR};
         raw_transactions.push_back(EncodeHexTx(transaction));
         UniValue parameters{UniValue::VARR};
         parameters.push_back(std::move(raw_transactions));
-        // The same fee-rate cap that submission passes to broadcastTransaction.
-        parameters.push_back(ValueFromAmount(psbtpolicy::MAX_FEE_RATE.GetFeePerK()));
+        // Raw PSBT broadcasts pass MAX_FEE_RATE to broadcastTransaction; wallet
+        // sends and fee bumps already checked the wallet's own -maxtxfee limit.
+        parameters.push_back(enforce_raw_fee_cap ? ValueFromAmount(psbtpolicy::MAX_FEE_RATE.GetFeePerK()) : UniValue{0});
         const UniValue response = node.executeRpc("testmempoolaccept", parameters, "");
         if (!response.isArray() || response.size() != 1) return;
         const UniValue& result = response[0];
@@ -99,12 +100,12 @@ void ClearAdmissionFacts(psbtpolicy::Facts& facts)
 }
 } // namespace
 
-psbtpolicy::Read psbtpolicy::ReadNode(interfaces::Node* node, interfaces::Chain* chain)
+psbtpolicy::Read psbtpolicy::ReadNode(interfaces::Node* node, interfaces::Chain* chain, bool enforce_raw_fee_cap)
 {
-    return [node, chain](CTransactionRef transaction, CAmount fee) {
+    return [node, chain, enforce_raw_fee_cap](CTransactionRef transaction, CAmount fee) {
         Facts facts;
         if (!node || !transaction) return facts;
-        facts.within_fee_cap = !MoneyRange(fee) || fee <= MaxFee();
+        facts.within_fee_cap = !enforce_raw_fee_cap || !MoneyRange(fee) || fee <= MaxFee();
         if (chain && MoneyRange(fee)) {
             try {
                 const auto tip = node->getBestBlockHash();
@@ -142,7 +143,7 @@ psbtpolicy::Read psbtpolicy::ReadNode(interfaces::Node* node, interfaces::Chain*
             if (facts.observed && facts.tip != QString::fromStdString(admission_tip.ToString())) {
                 ClearChainFacts(facts);
             }
-            ReadAdmission(*node, *transaction, facts);
+            ReadAdmission(*node, *transaction, facts, enforce_raw_fee_cap);
             // Drop both observations if the active tip changed while the RPC ran.
             if (node->getBestBlockHash() != admission_tip) {
                 ClearChainFacts(facts);
@@ -162,7 +163,10 @@ psbtpolicy::Decision psbtpolicy::Evaluate(const Facts& facts)
         if (facts.immature_inputs) return {State::Blocked, Tr("An input spends an immature coinbase output. Refresh the review after more blocks.")};
         if (!facts.final) return {State::Blocked, Tr("The transaction lock time is not final at the observed chain tip.")};
         if (!facts.sufficient_fee) return {State::Blocked, Tr("The fee is below the node's current advertised minimum.")};
-        if (!facts.chain_limits) return {State::Blocked, facts.chain_error.isEmpty() ? Tr("The transaction exceeds the node's current mempool chain limits.") : facts.chain_error};
+        // checkChainLimits does not account for conflicting transactions a
+        // replacement would evict; when testmempoolaccept already allowed this
+        // exact transaction, do not override it with the non-RBF chain check.
+        if (!facts.chain_limits && facts.admission != Admission::Allowed) return {State::Blocked, facts.chain_error.isEmpty() ? Tr("The transaction exceeds the node's current mempool chain limits.") : facts.chain_error};
     }
     if (!facts.within_fee_cap) return {State::Blocked, Tr("The fee is above the node's maximum of %1 for one transaction.").arg(QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, MaxFee()) + QStringLiteral(" BTC"))};
     if (facts.admission == Admission::Rejected) {

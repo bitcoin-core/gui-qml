@@ -3,13 +3,20 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <test/integration/runner/test_cases.h>
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <test/integration/fixture/test_util.h>
+#ifdef ENABLE_WALLET
+#include <test/integration/fixture/test_wallet.h>
+#endif
 
 #include <QMetaEnum>
 #include <QQmlComponent>
 #include <QPointer>
 #include <QSignalSpy>
+#include <QScopeGuard>
 
+#include <memory>
 #include <utility>
 
 class NavigationIntegrationTests : public QObject
@@ -121,8 +128,27 @@ private Q_SLOTS:
         QPointer<QObject> clock{qmltest::Find(m_app, "blockClock")};
         QVERIFY(clock);
         QSignalSpy warnings{&m_app.engine(), &QQmlEngine::warnings};
+        std::unique_ptr<QSignalSpy> settings_requested;
+        if (!m_app.window()->property("desktopWalletMode").toBool()) {
+            auto* runner = qmltest::Find(m_app, "nodeRunner");
+            QVERIFY(runner);
+            settings_requested = std::make_unique<QSignalSpy>(runner, SIGNAL(settingsClicked()));
+            QVERIFY(settings_requested->isValid());
+        }
         QVERIFY(qmltest::OpenSettings(m_app));
-        QTRY_VERIFY(qmltest::Find(m_app, "settingsView"));
+        if (settings_requested) QTRY_COMPARE(settings_requested->count(), 1);
+        const auto route_state = [&] {
+            auto* stack = qmltest::Find(m_app, "mainPageStack");
+            auto* item = stack ? stack->property("currentItem").value<QObject*>() : nullptr;
+            auto* shell = m_app.window()->property("nodeShell").value<QObject*>();
+            return QStringLiteral("nodeShell=%1 currentItem=%2 navigation=%3 pending=%4 instantiated=%5")
+                .arg(shell ? QString::fromLatin1(shell->metaObject()->className()) : QStringLiteral("null"),
+                     item ? QString::fromLatin1(item->metaObject()->className()) : QStringLiteral("null"),
+                     m_app.window()->property("menuNavigationEnabled").toString(),
+                     shell ? shell->property("settingsPresentationPending").toString() : QStringLiteral("unavailable"),
+                     shell ? shell->property("settingsInstantiated").toString() : QStringLiteral("unavailable"));
+        };
+        QTRY_VERIFY2(qmltest::Find(m_app, "settingsView"), qPrintable(route_state()));
         auto* settings = qmltest::Find(m_app, "settingsView");
         QTRY_VERIFY(settings->property("visible").toBool());
         QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
@@ -166,6 +192,81 @@ private Q_SLOTS:
         QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
         QCOMPARE(qmltest::Find(m_app, "blockClock"), clock.data());
         QCOMPARE(warnings.count(), 0);
+    }
+
+    // #1118: with a wallet loaded and the Add wallet wizard opened from the
+    // wallet badge on Activity, the native Backup Wallet… and Import PSBT…
+    // commands must not run on the page hidden behind the wizard.
+    void nativeWalletCommandsCannotRunBehindTheAddWalletWizard()
+    {
+#ifndef ENABLE_WALLET
+        QSKIP("Wallet commands need a wallet-enabled build.");
+#else
+        if (!m_app.window()->property("desktopWalletMode").toBool()) QSKIP("Wallet commands need the wallet-enabled configuration.");
+        auto* actions = qmltest::Find(m_app, "desktopMenuActions"); QVERIFY(actions);
+        auto* backup = actions->property("backupWallet").value<QObject*>(); auto* psbt = actions->property("loadPsbt").value<QObject*>(); QVERIFY(backup && psbt);
+        QVERIFY(qmltest::CreateWallet(m_app, "wizard-menu"));
+        QTRY_VERIFY(backup->property("enabled").toBool() && psbt->property("enabled").toBool());
+        QVERIFY(QMetaObject::invokeMethod(actions->property("activityView").value<QObject*>(), "trigger"));
+        auto* activity = qmltest::Find(m_app, "activityTabButton"); auto* send = qmltest::Find(m_app, "sendTabButton"); auto* settings_tab = qmltest::Find(m_app, "desktopWalletSettingsTabButton");
+        QVERIFY(activity && send && settings_tab); QTRY_VERIFY(activity->property("checked").toBool());
+        QVERIFY(qmltest::Click(m_app, "walletBadge")); QVERIFY(qmltest::Click(m_app, "walletSelectAddWalletButton"));
+        QPointer<QObject> modal{qmltest::WaitForVisible(m_app, "walletCreationModal")}; QVERIFY(modal);
+        const auto close_modal = qScopeGuard([&] {
+            if (modal) QMetaObject::invokeMethod(modal, "close");
+            QVERIFY(QTest::qWaitFor([&] { return !modal || !modal->property("visible").toBool(); }));
+        });
+        QPointer<QObject> type{qmltest::WaitForVisible(m_app, "walletTypeRegular")}; QVERIFY(type);
+        QVERIFY(!backup->property("enabled").toBool()); QVERIFY(!psbt->property("enabled").toBool());
+        // Deliver the MenuCommands the native File menu triggers directly.
+        for (auto* command : {backup, psbt}) {
+            QVERIFY(QMetaObject::invokeMethod(command, "trigger"));
+            QTest::qWait(200);
+            QVERIFY(activity->property("checked").toBool()); QVERIFY(!send->property("checked").toBool()); QVERIFY(!settings_tab->property("checked").toBool());
+            QVERIFY(modal->property("visible").toBool()); QVERIFY(type && type->property("visible").toBool());
+        }
+#endif
+    }
+
+    void nativeFileRouteCannotNavigateBehindTheOwnedWalletModal()
+    {
+        auto* actions = qmltest::Find(m_app, "desktopMenuActions");
+        QVERIFY(actions);
+        auto* create = actions->property("createWallet").value<QObject*>();
+        auto* settings = actions->property("settings").value<QObject*>();
+        QVERIFY(create && settings);
+        if (!m_app.window()->property("desktopWalletMode").toBool()) {
+            // The wallet-disabled configuration exposes no Add-Wallet route.
+            QVERIFY(!create->property("visible").toBool());
+            return;
+        }
+        QVERIFY(create->property("enabled").toBool());
+        QVERIFY(QMetaObject::invokeMethod(create, "trigger"));
+        QPointer<QObject> modal{qmltest::WaitForVisible(m_app, "walletCreationModal")};
+        QVERIFY(modal);
+        const auto close_modal = qScopeGuard([&] {
+            if (modal) QMetaObject::invokeMethod(modal, "close");
+            QVERIFY(QTest::qWaitFor([&] { return !modal || !modal->property("visible").toBool(); }));
+        });
+        QVERIFY(qmltest::Click(m_app, "walletTypeRegular"));
+        auto* form = qmltest::WaitForVisible(m_app, "createWalletFormPage");
+        QVERIFY(form);
+        QVERIFY(qmltest::SetText(m_app, "createWalletNameInput", QStringLiteral("Original modal draft")));
+        QPointer<QObject> name{qmltest::Find(m_app, "createWalletNameInput")};
+        QVERIFY(name);
+        auto* node_tab = qmltest::Find(m_app, "blockClockTabButton");
+        auto* settings_tab = qmltest::Find(m_app, "desktopWalletSettingsTabButton");
+        QVERIFY(node_tab && settings_tab);
+        QVERIFY(node_tab->property("checked").toBool());
+        // Deliver the actual MenuCommand used by the native File menu. This
+        // bypasses popup pointer interception, as the native menu does.
+        QVERIFY(QMetaObject::invokeMethod(settings, "trigger"));
+        QVERIFY(node_tab->property("checked").toBool());
+        QVERIFY(!settings_tab->property("checked").toBool());
+        QVERIFY(modal->property("visible").toBool());
+        QCOMPARE(qmltest::Find(m_app, "createWalletFormPage"), form);
+        QCOMPARE(name->property("text").toString(), QStringLiteral("Original modal draft"));
+        QVERIFY(!settings->property("enabled").toBool());
     }
 };
 

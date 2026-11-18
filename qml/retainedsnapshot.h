@@ -3,27 +3,26 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_RETAINEDSNAPSHOT_H
 #define BITCOIN_QML_RETAINEDSNAPSHOT_H
-#include <qml/execution.h>
+#include <qml/retainedvalue.h>
+#include <functional>
 #include <memory>
 #include <utility>
 namespace execution {
-// The scheduler retains the allocation, while GUI aliases retain only its
-// cleanup lease. Admission precedes constructing/capturing structural values.
+// Ordinary snapshot ownership. Transfer the last value reference to the
+// existing presentation cleanup when a facade or queued result drops it.
 template <typename T, typename Factory>
-std::shared_ptr<T> RetainSnapshot(const std::shared_ptr<Scheduler>& scheduler, Factory&& factory)
+std::shared_ptr<T> RetainSnapshot(const std::function<void(std::shared_ptr<const void>)>& retire, Factory&& factory)
 {
-    struct Storage { std::unique_ptr<T> value; };
-    const auto storage = std::make_shared<Storage>();
-    const auto key = scheduler->allocateKey();
-    const auto reserved = Submit(*scheduler, [storage] { storage->value.reset(); }, [] {}, {},
-        {Lane::Cleanup, key, WorkClass::Action}, true);
-    if (!reserved) return {};
-    auto held = scheduler->borrow(key);
-    scheduler->activateCleanup(reserved.id);
-    if (!held) return {};
-    const auto lease = std::make_shared<ResourceLease>(std::move(*held.lease));
-    storage->value = std::forward<Factory>(factory)();
-    return std::shared_ptr<T>{lease, storage->value.get()};
+    if (!retire) return {};
+    using Retire = std::function<void(std::shared_ptr<const void>)>;
+    struct Storage {
+        Storage(std::shared_ptr<T> value, Retire retire) : value(std::move(value)), retire(std::move(retire)) {}
+        ~Storage() { retire(std::move(value)); }
+        std::shared_ptr<T> value;
+        Retire retire;
+    };
+    auto storage = std::make_shared<Storage>(std::forward<Factory>(factory)(), retire);
+    return {storage, storage->value.get()};
 }
 } // namespace execution
 #endif // BITCOIN_QML_RETAINEDSNAPSHOT_H

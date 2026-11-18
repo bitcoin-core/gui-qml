@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/initexecutor.h>
+#include <qml/asyncjoin.h>
 #include <qml/guipresentation.h>
 #ifdef ENABLE_TEST_AUTOMATION
 #include <common/args.h>
@@ -11,8 +12,10 @@
 #include <util/exception.h>
 #include <util/threadnames.h>
 #include <QPointer>
-#include <QScopeGuard>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 
@@ -24,9 +27,49 @@ struct NativeLifecycle {
     QmlInitExecutor::ShutdownOutcomePort shutdown_outcome;
     std::shared_ptr<std::atomic_bool> loss;
     std::atomic_bool initialization_threw{false};
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::deque<std::shared_ptr<execution::Task>> tasks;
+    bool closed{false};
     void record(QmlInitExecutor::StartupOutcome value)noexcept{try{if(outcome)outcome(value);}catch(...){if(loss)*loss=true;}}
     void recordExit(int status)noexcept{try{if(shutdown_outcome)shutdown_outcome(status);}catch(...){if(loss)*loss=true;}}
     void retireSubscription(){subscription.reset();pending_subscription_factory={};}
+
+    bool post(std::shared_ptr<execution::Task> task)
+    {
+        {
+            std::lock_guard lock{mutex};
+            if (closed) return false;
+            tasks.push_back(std::move(task));
+        }
+        ready.notify_one();
+        return true;
+    }
+    void close()
+    {
+        {
+            std::lock_guard lock{mutex};
+            closed = true;
+        }
+        ready.notify_one();
+    }
+    void run()
+    {
+        util::ThreadRename("qml-init");
+        for (;;) {
+            std::shared_ptr<execution::Task> task;
+            {
+                std::unique_lock lock{mutex};
+                ready.wait(lock, [&] { return closed || !tasks.empty(); });
+                if (tasks.empty()) break;
+                task = std::move(tasks.front());
+                tasks.pop_front();
+            }
+            task->execute();
+            task->deliver();
+        }
+        retireSubscription();
+    }
 };
 QString PrepareRunawayException(std::exception_ptr error,const std::shared_ptr<std::atomic_bool>& loss) noexcept
 {
@@ -45,21 +88,19 @@ QString PrepareRunawayException(std::exception_ptr error,const std::shared_ptr<s
     return message;
 }
 }
-QmlInitExecutor::QmlInitExecutor(interfaces::Node& node,SubscriptionFactory subscribe,std::shared_ptr<std::atomic_bool> diagnostic_loss,
-    StartupOutcomePort outcome,ShutdownOutcomePort shutdown_outcome,std::shared_ptr<std::atomic_bool> lifecycle_failed,
-    std::shared_ptr<execution::SerialQueue> priority)
-    :m_diagnostic_loss(std::move(diagnostic_loss)),m_lifecycle_failed(lifecycle_failed?std::move(lifecycle_failed):std::make_shared<std::atomic_bool>(false)),
-      m_executor(execution::Options{},nullptr,BackendExecutor::CleanupAffinity::Core,std::move(priority))
+QmlInitExecutor::QmlInitExecutor(interfaces::Node& node, std::shared_ptr<execution::SerialQueue> priority,
+    SubscriptionFactory subscribe, std::shared_ptr<std::atomic_bool> diagnostic_loss,
+    StartupOutcomePort outcome, ShutdownOutcomePort shutdown_outcome, std::shared_ptr<std::atomic_bool> lifecycle_failed)
+    :m_diagnostic_loss(std::move(diagnostic_loss)),m_lifecycle_failed(lifecycle_failed?std::move(lifecycle_failed):std::make_shared<std::atomic_bool>(false))
 {
-    m_executor.setObjectName(QStringLiteral("node-lifecycle"));
-    connect(&m_executor,&BackendExecutor::drained,this,&QmlInitExecutor::finishShutdown);
+    if (!priority) throw std::invalid_argument{"Missing node lifecycle priority queue"};
     auto native=std::make_shared<NativeLifecycle>();
     native->pending_subscription_factory=std::move(subscribe);native->outcome=std::move(outcome);
     native->shutdown_outcome=std::move(shutdown_outcome);native->loss=m_diagnostic_loss;
     nodelifecycle::Effects effects;
     effects.initialize=[node=&node,native](const std::atomic_bool& stopping){
         try{
-            util::ThreadRename("qml-init");nodelifecycle::NativeInitialization result;
+            nodelifecycle::NativeInitialization result;
             if(stopping.load()){result.cancelled=true;native->record(StartupOutcome::Cancelled);return result;}
             const auto error_seen=std::make_shared<std::atomic_bool>(false);
             auto error_handler=node->handleMessageBox([error_seen](const bilingual_str&,unsigned int style){if(style&CClientUIInterface::ICON_ERROR)*error_seen=true;});
@@ -94,8 +135,16 @@ QmlInitExecutor::QmlInitExecutor(interfaces::Node& node,SubscriptionFactory subs
         const int status=node->getExitStatus();native->recordExit(status);return status;
     };
     effects.describe=[loss=m_diagnostic_loss](std::exception_ptr error){return PrepareRunawayException(error,loss);};
+    effects.retire = [native] { native->close(); };
     const QPointer<QmlInitExecutor> observer{this};const auto post=presentation::ReliablePost(presentation::QueuedPost());
-    m_driver=std::make_unique<nodelifecycle::Driver>(execution::SnapshotServices{m_executor.scheduler(),post},std::move(effects),
+    m_driver=std::make_unique<nodelifecycle::Driver>(
+        [native](auto task) { return native->post(std::move(task)); },
+        [priority = std::move(priority)](auto task) {
+            return priority->post([task = std::move(task)] {
+                task->execute();
+                task->deliver();
+            });
+        }, std::move(effects),
         [observer,post,receipt=m_lifecycle_failed,closed=m_closed](nodelifecycle::Projection value){
             // This process receipt survives a missing GUI observer and performs
             // no Core/settings work. Native settings receipts remain separate.
@@ -112,8 +161,14 @@ QmlInitExecutor::QmlInitExecutor(interfaces::Node& node,SubscriptionFactory subs
             }
             post([observer,value=std::move(value)]()mutable{if(observer)observer->publish(std::move(value));});
         });
+    m_thread = std::thread([native] { native->run(); });
 }
-QmlInitExecutor::~QmlInitExecutor(){m_closed->store(true);m_driver.reset();m_executor.shutdown();}
+QmlInitExecutor::~QmlInitExecutor()
+{
+    m_closed->store(true);
+    m_driver.reset();
+    joinWorker();
+}
 void QmlInitExecutor::close(){m_closed->store(true);publishAcceptingRequests();}
 void QmlInitExecutor::initialize(){if(m_initialize_requested||!acceptingRequests())return;m_initialize_requested=true;if(!m_driver||!m_driver->initialize())diagnosticTransportFailed();}
 void QmlInitExecutor::interrupt()
@@ -142,9 +197,10 @@ void QmlInitExecutor::publish(nodelifecycle::Projection value)
 {
     if(m_runaway_exception)return;
     if(value.event==nodelifecycle::Event::Shutdown){
-        // Domain has authorized this terminal projection. Physical worker drain
-        // is the existing infrastructure/native-handoff barrier before delivery.
-        m_app_shutdown_complete=true;m_driver.reset();m_executor.shutdown();finishShutdown();return;
+        m_app_shutdown_complete = true;
+        m_driver.reset();
+        joinWorker();
+        return;
     }
     const QPointer<QmlInitExecutor> observer{this};
     // A queued Ready frame cannot cross an already admitted GUI stop intent.
@@ -163,8 +219,7 @@ void QmlInitExecutor::publish(nodelifecycle::Projection value)
         }break;
     case nodelifecycle::Event::Interrupted:Q_EMIT interruptResult();break;
     case nodelifecycle::Event::Fatal:
-        m_fatal_diagnostic_scheduler=std::move(value.diagnostic_scope);
-        m_driver.reset();m_executor.shutdown();
+        m_driver.reset();
         handleRunawayException(value.diagnostic?*value.diagnostic:tr("A node startup message could not be shown."));break;
     case nodelifecycle::Event::State:
     case nodelifecycle::Event::Shutdown:break;
@@ -173,22 +228,27 @@ void QmlInitExecutor::publish(nodelifecycle::Projection value)
 void QmlInitExecutor::handleRunawayException(const QString& message)
 {
     const QPointer<QmlInitExecutor> observer{this};
-    const auto release=qScopeGuard([observer]{if(observer)observer->m_fatal_diagnostic_scheduler.reset();});
     if(m_runaway_exception)return;
     m_runaway_exception=true;m_closed->store(true);
     if(m_phase!=nodelifecycle::Phase::Fatal){m_phase=nodelifecycle::Phase::Fatal;Q_EMIT phaseChanged();if(!observer)return;}
     publishAcceptingRequests();if(!observer)return;
     Q_EMIT runawayException(message);
 }
-void QmlInitExecutor::diagnosticTransportFailed(std::shared_ptr<execution::Scheduler> original_diagnostic_scope)
+void QmlInitExecutor::diagnosticTransportFailed()
 {
-    m_lifecycle_failed->store(true);m_fatal_diagnostic_scheduler=std::move(original_diagnostic_scope);
-    m_driver.reset();m_executor.shutdown();
+    m_lifecycle_failed->store(true);
+    m_driver.reset();
     handleRunawayException(tr("The node action could not start."));
+}
+void QmlInitExecutor::joinWorker()
+{
+    if (!m_thread.joinable()) return;
+    auto thread = std::make_shared<std::thread>(std::move(m_thread));
+    JoinThreadAsync([thread] { thread->join(); }, this, [this] { finishShutdown(); });
 }
 void QmlInitExecutor::finishShutdown()
 {
-    if(m_runaway_exception||!m_app_shutdown_complete||m_shutdown_result_emitted||!m_executor.isDrained())return;
+    if(m_runaway_exception||!m_app_shutdown_complete||m_shutdown_result_emitted)return;
     m_shutdown_result_emitted=true;const QPointer<QmlInitExecutor> observer{this};
     m_closed->store(true);
     m_phase=nodelifecycle::Phase::Stopped;Q_EMIT phaseChanged();if(!observer)return;

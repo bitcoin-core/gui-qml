@@ -2,12 +2,17 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <node/interface_ui.h>
+#include <qml/asyncjoin.h>
 #include <qml/models/options_model.h>
+#include <qml/initexecutor.h>
+#include <qml/shutdowncoordinator.h>
 #include <qml/models/nodemodel.h>
 #include <qml/models/settings_keys.h>
 #include <test/mocks/mocknode.h>
 #include <test/mocks/drainexecutors.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <chainparams.h>
 #include <init.h>
 #include <util/translation.h>
@@ -26,6 +31,7 @@
 
 #include <atomic>
 #include <stdexcept>
+#include <thread>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
 const TranslateFn G_TRANSLATION_FUN{nullptr};
@@ -37,10 +43,10 @@ struct ScopedSemaphoreRelease {
     ~ScopedSemaphoreRelease() { semaphore.release(); }
 };
 
-bool SettleManualOptions(ManualRoutedExecution& transport,std::deque<std::function<void()>>& gui)
+bool SettleManualOptions(ManualStartupExecution& transport,std::deque<std::function<void()>>& gui)
 {
-    for(int turn=0;turn<1024;++turn){if(!transport.queuedIdle()){if(!transport.stepNext())return false;continue;}
-        if(!gui.empty()){auto publication=std::move(gui.front());gui.pop_front();publication();continue;}return true;}return false;
+    for(int turn=0;turn<1024;++turn){transport.drain();
+        if(!gui.empty()){auto publication=std::move(gui.front());gui.pop_front();publication();continue;}return transport.quiescent();}return false;
 }
 
 struct Fixture {
@@ -143,6 +149,54 @@ private Q_SLOTS:
         QCOMPARE(calls.load(), loaded_calls);
     }
 
+    void shutdownDismissesCoreQuestionBeforeDrainingAcceptedSettingsWrite()
+    {
+        Fixture fixture;
+        execution::Executor executor{execution::Executor::Config{}};
+        interfaces::Node::QuestionFn question;
+        fixture.node.handle_question_fn = [&](interfaces::Node::QuestionFn callback) {
+            question = std::move(callback);
+            return interfaces::MakeCleanupHandler([] {});
+        };
+        NodeModel::Services services{};
+        services.observation_executor = &executor;
+        NodeModel node{fixture.node, true, std::move(services)};
+        OptionsQmlModel settings{fixture.node, fixture.args, {}, &executor};
+        QTRY_VERIFY(settings.settingsReady() && node.notificationsReady());
+        QVERIFY(question);
+        const int amount = settings.maxMempoolSizeMB() + 10;
+        std::atomic_bool interrupt_saw_write{}, dismissed{};
+        fixture.node.start_shutdown_fn = [&] {
+            interrupt_saw_write = SettingTo<int64_t>(
+                fixture.args.GetPersistentSetting("maxmempool")).value_or(0) == amount;
+        };
+        auto priority = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Priority));
+        QmlInitExecutor lifecycle{fixture.node, priority};
+        ShutdownCoordinator coordinator{lifecycle};
+        coordinator.addStopHook([&] { node.close(); });
+        coordinator.addStopHook([&] { settings.close(); });
+        coordinator.addBeforeInterruptParticipant(&settings, &OptionsQmlModel::shutdownFinished,
+                                                  [&] { settings.beginShutdown(); });
+        coordinator.addParticipant(&node, &NodeModel::workDrained, [&] { node.beginShutdown(); });
+        QSignalSpy finished{&coordinator, &ShutdownCoordinator::finished};
+        auto core = executor.makeQueue(execution::Lane::Core);
+        QSemaphore returned;
+        QVERIFY(core.post([&] {
+            dismissed = !question(Untranslated("Continue?"), "Continue?", CClientUIInterface::BTN_OK);
+            returned.release();
+        }));
+        const auto unblock = qScopeGuard([&] { node.close(); returned.acquire(); });
+        QTRY_VERIFY(node.runtimeDialogVisible());
+        settings.setMaxMempoolSizeMB(amount);
+        QVERIFY(settings.settingsPending());
+        QVERIFY(fixture.args.GetPersistentSetting("maxmempool").isNull());
+        coordinator.requestShutdown();
+        QTRY_COMPARE(finished.count(), 1);
+        QVERIFY(dismissed.load());
+        QVERIFY(interrupt_saw_write.load());
+        QVERIFY(!node.runtimeDialogVisible());
+    }
+
     void failedWriteRestoresCacheAndPersistentState()
     {
         Fixture fixture;
@@ -168,11 +222,11 @@ private Q_SLOTS:
 
     void observationRetainsTheOriginalFailedSettingsOperation()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> gui;
         Fixture fixture;
         OptionsQmlModel model{fixture.node, fixture.args,
-            {transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}};
+            [&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()};
         const auto cleanup = qScopeGuard([&] { model.close(); SettleManualOptions(transport, gui); });
         QVERIFY(SettleManualOptions(transport, gui));
         QVERIFY(model.settingsReady());
@@ -215,13 +269,13 @@ private Q_SLOTS:
     void observationFailureKeepsUserOutcomeAndPublishesItsOwnReadError()
     {
         QFETCH(bool, reject_transport);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> gui;
         Fixture fixture;
         const auto reads = std::make_shared<std::atomic<int>>(0);
         const auto throw_read = std::make_shared<std::atomic_bool>(!reject_transport);
         OptionsQmlModel model{fixture.node, fixture.args,
-            {transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}};
+            [&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()};
         const auto cleanup = qScopeGuard([&] { model.close(); SettleManualOptions(transport, gui); });
         QVERIFY(SettleManualOptions(transport, gui));
         QVERIFY(model.settingsReady());
@@ -237,7 +291,7 @@ private Q_SLOTS:
             if (throw_read->load()) throw std::runtime_error("Observed settings read failed");
             return fixture.args.GetPersistentSetting(name);
         };
-        if (reject_transport) transport.rejectLane(execution::Lane::Core);
+        if (reject_transport) transport.reject_core = true;
         QSignalSpy operations{&model, &OptionsQmlModel::settingsOperationChanged};
         QSignalSpy errors{&model, &OptionsQmlModel::settingsErrorChanged};
         model.refreshDisplaySettings();
@@ -281,11 +335,11 @@ private Q_SLOTS:
     void successorIntentOwnsItsErrorWhileEarlierPublicationIsHeld()
     {
         QFETCH(int, earlier);
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> gui;
         Fixture fixture;
         OptionsQmlModel model{fixture.node, fixture.args,
-            {transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}};
+            [&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()};
         const auto cleanup = qScopeGuard([&] { model.close(); SettleManualOptions(transport, gui); });
         QVERIFY(SettleManualOptions(transport, gui));
         QVERIFY(model.settingsReady());
@@ -297,7 +351,7 @@ private Q_SLOTS:
         if (earlier == 1) fixture.node.get_persistent_setting_fn = [](const std::string&) -> common::SettingsValue {
             throw std::runtime_error("Old observation failure must not replace its successor");
         };
-        if (earlier == 2) transport.rejectLane(execution::Lane::Core);
+        if (earlier == 2) transport.reject_core = true;
         if (earlier == 3) {
             model.setExternalSignerPath(QStringLiteral("older-user-operation-also-fails-before-save"));
         } else {
@@ -305,7 +359,7 @@ private Q_SLOTS:
         }
         if (earlier != 2) {
             QVERIFY(transport.step(execution::Lane::Core));
-            QVERIFY(transport.step(execution::Lane::Domain));
+            QVERIFY(transport.step(execution::Lane::Utility));
         }
         QVERIFY(!gui.empty());
         QVERIFY(model.settingsPending());
@@ -340,7 +394,7 @@ private Q_SLOTS:
 
     void recoveryNotificationCannotApplyAnOldSnapshotToItsReentrantSuccessor()
     {
-        ManualRoutedExecution transport;
+        ManualStartupExecution transport;
         std::deque<std::function<void()>> gui;
         Fixture fixture;
         const auto throw_read = std::make_shared<std::atomic_bool>(false);
@@ -352,7 +406,7 @@ private Q_SLOTS:
             return fixture.args.GetPersistentSetting(name);
         };
         OptionsQmlModel model{fixture.node, fixture.args,
-            {transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}};
+            [&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()};
         const auto cleanup = qScopeGuard([&] { model.close(); SettleManualOptions(transport, gui); });
         QVERIFY(SettleManualOptions(transport, gui));
         QVERIFY(model.settingsReady());
@@ -461,10 +515,35 @@ private Q_SLOTS:
         timer.start(0);
         QTRY_VERIFY(heartbeats > 2);
         QCOMPARE(drained.size(), 0);
+        bool joined{false};
+        QObject receiver;
+        WaitForThreadJoins(&receiver, [&] { joined = true; });
+        QCoreApplication::sendPostedEvents(&receiver, QEvent::MetaCall);
+        const bool joined_while_mapping = joined;
         gate.release();
         QTRY_COMPARE(drained.size(), 1);
+        QTRY_VERIFY(joined);
+        QVERIFY(!joined_while_mapping);
         QCOMPARE(calls.load(), 1);
         QVERIFY(!gui_call.load());
+    }
+
+    void editorRetirementCanDestroyStandaloneOptions()
+    {
+        Fixture fixture;
+        auto model = std::make_unique<OptionsQmlModel>(fixture.node, fixture.args);
+        QTRY_VERIFY(model->settingsReady());
+        const QPointer<SettingsEditorModel> editor{model->createSettingsEditor()};
+        QVERIFY(editor);
+        connect(editor, &SettingsEditorModel::changed, this, [&] { model.reset(); });
+
+        model->beginShutdown();
+        QVERIFY(!model);
+        QVERIFY(!editor);
+        bool joined{false};
+        QObject receiver;
+        WaitForThreadJoins(&receiver, [&] { joined = true; });
+        QTRY_VERIFY(joined);
     }
 
     void queuedTogglesKeepLastRequestedValue()
@@ -493,9 +572,9 @@ private Q_SLOTS:
 
     void manualReadWriteOutcomeAndQuietDrain()
     {
-        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+        ManualStartupExecution transport;std::deque<std::function<void()>> gui;
         Fixture fixture;
-        OptionsQmlModel model{fixture.node,fixture.args,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+        OptionsQmlModel model{fixture.node,fixture.args,[&](auto turn){gui.push_back(std::move(turn));}, &transport.executor()};
         auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
         QVERIFY(!model.settingsReady());QCOMPARE(fixture.node.calls.getPersistentSetting.load(),0);
         QVERIFY(transport.step(execution::Lane::Core));QVERIFY(!model.settingsReady());
@@ -515,23 +594,23 @@ private Q_SLOTS:
     }
     void manualAdmissionFailureAndSignerRevision()
     {
-        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+        ManualStartupExecution transport;std::deque<std::function<void()>> gui;
         Fixture fixture;
-        OptionsQmlModel model{fixture.node,fixture.args,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+        OptionsQmlModel model{fixture.node,fixture.args,[&](auto turn){gui.push_back(std::move(turn));}, &transport.executor()};
         auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
         QVERIFY(SettleManualOptions(transport,gui));QVERIFY(model.settingsReady());
-        transport.rejectLane(execution::Lane::Core);model.setMaxMempoolSizeMB(model.maxMempoolSizeMB()+10);
+        transport.reject_core = true;model.setMaxMempoolSizeMB(model.maxMempoolSizeMB()+10);
         QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsFailed);QVERIFY(publish());
         QVERIFY(SettleManualOptions(transport,gui));QVERIFY(!model.settingsPending());QVERIFY(!model.settingsError().isEmpty());
         model.requestExternalSignerPathValidation("/missing/original");
-        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));
         model.requestExternalSignerPathValidation(QCoreApplication::applicationFilePath());QVERIFY(publish());QVERIFY(model.signerPathValidationPending());
         QVERIFY(!transport.step(execution::Lane::Core)); // Follow-up cannot recurse in the old outcome callback.
         QVERIFY(publish());
-        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(publish());
+        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(publish());
         QVERIFY(!model.signerPathValidationPending());QVERIFY(model.signerPathError().isEmpty());
         model.requestExternalSignerPathValidation("/missing/quiet-original");
-        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Utility));
         model.requestExternalSignerPathValidation(QCoreApplication::applicationFilePath());QVERIFY(publish());
         QVERIFY(!transport.step(execution::Lane::Core));
         model.close();
@@ -542,66 +621,177 @@ private Q_SLOTS:
 
     void manualTransactionLinksRetainExactTxidAndRetireOnSourceClose()
     {
-        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
-        QSettings settings;settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS,"https://example.test/tx/%s|file://host/%s");settings.sync();
-        OptionsQmlModel model{fixture.node,fixture.args,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
-        auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
+        using execution::Lane;
+        std::deque<std::function<void()>> gui;
+        Fixture fixture;
+        QSettings settings;
+        settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, "https://example.test/tx/%s|file://host/%s");
+        settings.sync();
+
+        ManualStartupExecution worker;
+        const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        const auto retirement = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
+        const auto post = [&](auto turn) { gui.push_back(std::move(turn)); };
+        PresentationServices presentation{{post, [retirement](auto release) { return retirement->post(std::move(release)); }, {}, utility}};
+        OptionsQmlModel model{fixture.node, fixture.args, post, &worker.executor(), &presentation};
+        const auto publish = [&] {
+            if (gui.empty()) return false;
+            auto turn = std::move(gui.front());
+            gui.pop_front();
+            turn();
+            return true;
+        };
+        for (int turn{0}; turn < 32 && (!worker.quiescent() || !gui.empty()); ++turn) {
+            worker.drain();
+            while (publish()) {}
+        }
+        QVERIFY(model.settingsReady());
+        QVERIFY(worker.quiescent());
+        QCOMPARE(presentation.pendingRetirements(), size_t{0});
+        const auto core_submissions = worker.coreSubmissions();
+
+        std::unique_ptr<OptionsTransactionLinks> links{model.createTransactionLinks()};
+        QVERIFY(links);
+        QVERIFY(utility->post([] {}));
+        links->setTxid("old");
+        QVERIFY(links->pending());
+        QCOMPARE(links->rowCount(), 0);
+        QVERIFY(worker.step(Lane::Utility));
+        QVERIFY(gui.empty()); // The preceding presentation task had its own turn.
+        QVERIFY(worker.step(Lane::Utility));
+        QVERIFY(!gui.empty());
+        links->setTxid("new");
+        QVERIFY(publish());
+        QVERIFY(links->pending());
+        QCOMPARE(links->rowCount(), 0);
+        worker.drain();
+        QVERIFY(publish());
+        QVERIFY(!links->pending());
+        QCOMPARE(links->rowCount(), 1);
+        QCOMPARE(links->data(links->index(0), OptionsTransactionLinks::UrlRole).toString(), QStringLiteral("https://example.test/tx/new"));
+
+        links->setTxid("closed");
+        QSignalSpy changed{links.get(), &OptionsTransactionLinks::resultChanged};
+        presentation.close();
+        model.close();
+        bool drained{false};
+        QObject receiver;
+        presentation.whenRetired(&receiver, [&] { drained = true; });
+        worker.drain();
+        QTRY_VERIFY(drained);
+        QCOMPARE(presentation.pendingRetirements(), size_t{0});
+        QVERIFY(!gui.empty());
+        while (publish()) {}
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(links->rowCount(), 0);
+        QCOMPARE(worker.coreSubmissions(), core_submissions);
+        QVERIFY(worker.quiescent());
+    }
+
+
+    // #1136: a links view that is already open follows the setting. The view is
+    // rebuilt from the new value, so an old host cannot stay offered.
+    void manualTransactionLinksFollowTheSettingWhileAViewIsOpen()
+    {
+        ManualStartupExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
+        QSettings settings;settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS,"https://one.example/tx/%s");settings.sync();
+        OptionsQmlModel model{fixture.node,fixture.args,[&](auto turn){gui.push_back(std::move(turn));}, &transport.executor()};
         QVERIFY(SettleManualOptions(transport,gui));QVERIFY(model.settingsReady());
         std::unique_ptr<OptionsTransactionLinks> links{model.createTransactionLinks()};QVERIFY(links);
-        links->setTxid("old");QVERIFY(links->pending());QVERIFY(links->rowCount()==0);
-        QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));
-        links->setTxid("new");QVERIFY(publish());QVERIFY(links->pending());QVERIFY(links->rowCount()==0);
-        QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(publish());
-        QVERIFY(!links->pending());QCOMPARE(links->rowCount(),1);
-        QCOMPARE(links->data(links->index(0),OptionsTransactionLinks::UrlRole).toString(),QStringLiteral("https://example.test/tx/new"));
-        links->setTxid("closed");QSignalSpy changed{links.get(),&OptionsTransactionLinks::resultChanged};model.close();
-        transport.drain();while(publish()){}QCOMPARE(changed.size(),0);QVERIFY(links->rowCount()==0);QVERIFY(transport.quiescent());
+        const auto settle=[&]{QVERIFY(SettleManualOptions(transport,gui));};
+        const auto url=[&](int row){return links->data(links->index(row),OptionsTransactionLinks::UrlRole).toString();};
+        links->setTxid("tx");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://one.example/tx/tx"));
+
+        model.setThirdPartyTransactionUrls("https://two.example/tx/%s");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://two.example/tx/tx"));
+
+        model.setThirdPartyTransactionUrls("");settle();
+        QCOMPARE(links->rowCount(),0);
+
+        model.setThirdPartyTransactionUrls("https://three.example/tx/%s");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://three.example/tx/tx"));
+        model.close();transport.drain();while(!gui.empty()){auto turn=std::move(gui.front());gui.pop_front();turn();}
+        QVERIFY(transport.quiescent());
     }
 
     void manualTransactionLinkPresentationUsesBoundedTurns()
     {
-        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
+        ManualStartupExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
         QStringList templates;for(int row=0;row<96;++row)templates<<QStringLiteral("https://example.test/%1/%s").arg(row);
         QSettings settings;settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS,templates.join('|'));settings.sync();
-        OptionsQmlModel model{fixture.node,fixture.args,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+        OptionsQmlModel model{fixture.node,fixture.args,[&](auto turn){gui.push_back(std::move(turn));}, &transport.executor()};
         auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
         QVERIFY(SettleManualOptions(transport,gui));QVERIFY(model.settingsReady());
         std::unique_ptr<OptionsTransactionLinks> links{model.createTransactionLinks()};QVERIFY(links);links->setTxid("exact");
-        QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));
+        QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(publish());QCOMPARE(links->rowCount(),32);QVERIFY(links->pending());
         QVERIFY(publish());QCOMPARE(links->rowCount(),64);QVERIFY(links->pending());
         QVERIFY(publish());QCOMPARE(links->rowCount(),96);QVERIFY(!links->pending());
         QCOMPARE(links->data(links->index(95),OptionsTransactionLinks::UrlRole).toString(),QStringLiteral("https://example.test/95/exact"));
-        links->setTxid("later");QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));
+        links->setTxid("later");QVERIFY(transport.step(execution::Lane::Utility));
         QVERIFY(publish());QCOMPARE(links->rowCount(),64);QSignalSpy changed{links.get(),&QAbstractItemModel::rowsRemoved};model.close();
         while(publish()){}QCOMPARE(changed.size(),0);transport.drain();QVERIFY(transport.quiescent());
     }
 
     void trackedOptionsIntentSurvivesCloseBeforeNativeAdmission()
     {
-        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
-        const auto post=[&](std::function<void()> turn){gui.push_back(std::move(turn));};
-        NodeModel::Services services;services.execution={transport.scheduler,post};
-        services.schedule=[](auto,auto,auto){};services.cancel=[](auto){};
-        NodeModel original_node{fixture.node,false,std::move(services)};
-        const auto retire=qScopeGuard([&]{original_node.beginShutdown();SettleManualOptions(transport,gui);});
-        OptionsQmlModel model{fixture.node,fixture.args,{original_node.queryScheduler(),post}};
-        QVERIFY(SettleManualOptions(transport,gui));QVERIFY(model.settingsReady());QVERIFY(!model.settingsPending());
-        struct Mapping{bool requested;int calls{0};};const auto mapping=std::make_shared<Mapping>(Mapping{!model.natpmp()});
-        fixture.node.map_port_fn=[mapping](bool value){QCOMPARE(value,mapping->requested);++mapping->calls;};
-        model.setNatpmp(mapping->requested);const auto ticket=model.settingsOperationId();QVERIFY(ticket);
-        QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsPending);
-        QVERIFY(transport.step(execution::Lane::Domain)); // Original decision has not yet delivered its Native effect request.
-        QCOMPARE(mapping->calls,0);QSignalSpy drained{&model,&OptionsQmlModel::shutdownFinished};
-        QSignalSpy values{&model,&OptionsQmlModel::natpmpChanged};
-        original_node.close();model.close();model.beginShutdown();QCOMPARE(drained.size(),0);
-        QVERIFY(transport.step(execution::Lane::Domain));QCOMPARE(mapping->calls,0);
-        QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(mapping->calls,1);
-        QCOMPARE(SettingToBool(fixture.args.GetPersistentSetting("natpmp")).value_or(!mapping->requested),mapping->requested);
-        QCOMPARE(model.settingsOperationId(),ticket);QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsApplied);
-        QVERIFY(SettleManualOptions(transport,gui));QCOMPARE(drained.size(),1);QCOMPARE(values.size(),0);QCOMPARE(mapping->calls,1);
-        original_node.beginShutdown();QVERIFY(SettleManualOptions(transport,gui));
-        transport.drain();
+        using execution::Lane;
+        Fixture fixture;
+        QSemaphore dispatch_entered, allow_dispatch;
+        std::atomic_bool hold_core{false};
+        ManualNodeObservations env{[&](Lane lane) {
+            if (lane != Lane::Core || !hold_core.exchange(false)) return;
+            dispatch_entered.release();
+            allow_dispatch.acquire();
+        }};
+        NodeModel original_node{fixture.node, false, env.services()};
+        OptionsQmlModel model{fixture.node, fixture.args, env.post(), &env.executor()};
+        bool requested{false}, planned{false};
+        int mapping_calls{0};
+        std::thread planner;
+        const auto retire = qScopeGuard([&] {
+            allow_dispatch.release();
+            if (planner.joinable()) planner.join();
+            model.beginShutdown();
+            original_node.beginShutdown();
+            QVERIFY(DrainManualNodeTurns(env));
+            QVERIFY(original_node.isDrained());
+        });
+        QVERIFY(DrainManualNodeTurns(env));
+        QVERIFY(model.settingsReady());
+        QVERIFY(!model.settingsPending());
+
+        requested = !model.natpmp();
+        fixture.node.map_port_fn = [&](bool value) { QCOMPARE(value, requested); ++mapping_calls; };
+        hold_core = true;
+        model.setNatpmp(requested);
+        const auto ticket = model.settingsOperationId();
+        QVERIFY(ticket);
+        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsPending);
+        planner = std::thread([&] { planned = env.step(Lane::Utility); });
+        QVERIFY(dispatch_entered.tryAcquire(1, 5000));
+        QCOMPARE(mapping_calls, 0);
+        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
+        QSignalSpy values{&model, &OptionsQmlModel::natpmpChanged};
+        original_node.close();
+        model.close();
+        model.beginShutdown();
+        QCOMPARE(drained.size(), 0);
+
+        allow_dispatch.release();
+        planner.join();
+        QVERIFY(planned);
+        QCOMPARE(mapping_calls, 0);
+        QVERIFY(env.step(Lane::Core));
+        QCOMPARE(mapping_calls, 1);
+        QCOMPARE(SettingToBool(fixture.args.GetPersistentSetting("natpmp")).value_or(!requested), requested);
+        QCOMPARE(model.settingsOperationId(), ticket);
+        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsApplied);
+        QVERIFY(DrainManualNodeTurns(env));
+        QCOMPARE(drained.size(), 1);
+        QCOMPARE(values.size(), 0);
+        QCOMPARE(mapping_calls, 1);
     }
 
     void legacyLanguageMatchesStartupFallback_data()

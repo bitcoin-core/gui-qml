@@ -8,6 +8,7 @@
 #include <qml/bitcoinamount.h>
 #include <qml/models/bitcoinaddress.h>
 #include <qml/snapshotquery.h>
+#include <qml/guipresentation.h>
 #include <qml/walletopening.h>
 #include <qml/senddraft.h>
 
@@ -54,7 +55,7 @@ public:
     using Snapshot = senddraft::Recipient;
     explicit SendRecipient(WalletQmlModel* wallet, QObject* parent = nullptr);
     ~SendRecipient() override;
-    void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
+    void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     void close();
     /** The owning list sets this flag while it imports a payment request, from
      * its background import work. User input is ignored while it is set. */
@@ -129,7 +130,6 @@ private:
     AmountMode m_amount_mode{AmountMode::Fixed};
     QString m_budget_error;
     std::shared_ptr<walletopening::Session> m_opening;
-    execution::SnapshotServices m_services;
     std::shared_ptr<Input> m_input;
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const Snapshot>>> m_query;
     std::shared_ptr<const Snapshot> m_validated;

@@ -8,7 +8,7 @@
 #include <QUuid>
 
 namespace {
-using Scope = std::shared_ptr<execution::Scheduler>;
+using requestshare::Scope;
 RequestImageExportError::Code FileError(backup::Error error)
 {
     switch (error) {
@@ -78,7 +78,7 @@ struct RequestImageExportOperation::Work : std::enable_shared_from_this<Work> {
     {
         if (!scope) { finish(RequestImageExportError::Rejected); return false; }
         const auto self = shared_from_this();
-        const auto submitted = execution::Submit(*scope, std::move(effect),
+        const auto submitted = requestshare::Submit(scope, std::move(effect),
             [self, scope, done = std::move(done)](auto result) mutable { done(std::move(result), std::move(scope)); },
             [self, scope, mutation](std::exception_ptr failure) {
                 // A thrown native writer can have installed a file. Only an
@@ -87,7 +87,7 @@ struct RequestImageExportOperation::Work : std::enable_shared_from_this<Work> {
                 catch (const execution::NotStarted&) { self->finish(RequestImageExportError::Rejected); return; }
                 catch (...) { }
                 self->finish(mutation ? RequestImageExportError::Unknown : RequestImageExportError::Rejected, requestshare::Error::None, false, mutation);
-            }, {lane});
+            }, lane);
         if (!submitted) { finish(RequestImageExportError::Rejected); return false; }
         return true;
     }
@@ -131,7 +131,7 @@ struct RequestImageExportOperation::Work : std::enable_shared_from_this<Work> {
                     }
                     self->image = std::move(image);
                     // No effect/capability waits for a chooser or GUI turn.
-                    original.reset();
+                    original = {};
                     { std::lock_guard lock{self->cell->mutex}; self->cell->phase = Choosing; self->cell->pending = false; }
                     self->notice();
                 });
@@ -156,7 +156,7 @@ struct RequestImageExportOperation::Work : std::enable_shared_from_this<Work> {
                     self->cell->result.finalPath = QString::fromUtf8(proposal.path.data(), static_cast<qsizetype>(proposal.path.size()));
                 }
                 if (self->policy.phase == backup::Phase::AwaitingConfirmation) {
-                    original.reset();
+                    original = {};
                     { std::lock_guard lock{self->cell->mutex}; self->cell->phase = Confirming; self->cell->pending = false; }
                     self->notice();
                 } else self->write(std::move(original));
@@ -198,9 +198,9 @@ RequestImageExportOperation::RequestImageExportOperation(int64_t id, requestshar
     m_work->expected = std::move(expected);
     m_cell->result.operationId = m_id;
     const QPointer<RequestImageExportOperation> observer{this};
-    const auto post = presentation::ReliablePost(m_work->services.execution.post);
+    const auto post = presentation::ReliablePost(m_work->services.post);
     m_cell->notify = [observer, post] { post([observer] { if (observer) Q_EMIT observer->changed(); }); };
-    auto scope = m_work->services.execution.scheduler ? m_work->services.execution.scheduler->openActionScope() : nullptr;
+    auto scope = requestshare::WorkScope(m_work->services, /*retain=*/true);
     const auto work = m_work;
     if (scope) work->step(scope, execution::Lane::Domain, [] { return true; }, [work](bool, Scope original) { work->begin(std::move(original)); });
     else work->finish(RequestImageExportError::Rejected);
@@ -241,7 +241,7 @@ bool RequestImageExportOperation::choose(const QUrl& destination)
         if (m_cell->phase != Choosing || m_cell->pending) return false;
         m_cell->pending = true; m_cell->phase = Inspecting;
     }
-    auto scope = m_work->services.execution.scheduler ? m_work->services.execution.scheduler->openActionScope() : nullptr;
+    auto scope = requestshare::WorkScope(m_work->services, /*retain=*/true);
     const auto work = m_work;
     const bool admitted = work->step(scope, execution::Lane::Domain, [destination] { return destination; },
         [work](QUrl target, Scope original) { work->inspect(std::move(target), std::move(original)); });
@@ -254,7 +254,7 @@ bool RequestImageExportOperation::confirm()
         if (m_cell->phase != Confirming || m_cell->pending) return false;
         m_cell->pending = true; m_cell->phase = Writing;
     }
-    auto scope = m_work->services.execution.scheduler ? m_work->services.execution.scheduler->openActionScope() : nullptr;
+    auto scope = requestshare::WorkScope(m_work->services, /*retain=*/true);
     const auto work = m_work;
     const bool admitted = work->step(scope, execution::Lane::Domain, [] { return true; },
         [work](bool, Scope original) {

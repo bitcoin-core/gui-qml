@@ -20,7 +20,6 @@
 #include <qml/executor.h>
 #include <test/mocks/mocknode.h>
 #include <test/mocks/drainexecutors.h>
-#include <test/mocks/manualexecutionenvironment.h>
 #include <test/mocks/manualstartupexecution.h>
 #include <chainparams.h>
 #include <qml/core_settings.h>
@@ -94,106 +93,6 @@ bool ApplyOnboardingModelRequest(const OnboardingOptionsModel& model,ArgsManager
     const auto request=model.applyRequest();
     return QmlOnboardingSettings::ApplyToArgs(args,request.data_dir,request.touched_settings,request.values,error);
 }
-
-struct ManualSnapshotGraph {
-    ManualRoutedExecution transport;
-    struct Publication {
-        std::function<void()> callback;
-        std::optional<execution::TaskId> origin;
-        void operator()() { callback(); }
-    };
-    std::deque<Publication> posts;
-    std::optional<execution::TaskId> executing;
-
-    bool finish(execution::TaskId id)
-    {
-        executing = id;
-        const bool completed = transport.finishWork(id);
-        executing.reset();
-        return completed;
-    }
-
-    std::optional<Publication> takeTaskPost(execution::TaskId id)
-    {
-        const auto found = std::find_if(posts.begin(), posts.end(), [id](const auto& post) { return post.origin == id; });
-        if (found == posts.end()) return {};
-        auto publication = std::move(*found);
-        posts.erase(found);
-        return publication;
-    }
-
-    execution::SnapshotServices services()
-    {
-        return {transport.scheduler, [this](auto callback) { posts.push_back({std::move(callback), executing}); }};
-    }
-
-    bool deliverOnePost()
-    {
-        if (posts.empty()) return false;
-        auto callback = std::move(posts.front());
-        posts.pop_front();
-        callback();
-        return true;
-    }
-
-    bool step(execution::Lane lane)
-    {
-        const auto id = transport.dispatchNext(lane);
-        return id && finish(*id);
-    }
-
-    // Follow the exact admitted task rather than counting unrelated Domain
-    // cleanup receipts produced by retained snapshots in the same schedule.
-    std::optional<execution::TaskId> finishQueuedWork(execution::Lane lane)
-    {
-        std::optional<execution::TaskId> target;
-        transport.queuedCountIf([&](const auto& turn) {
-            if (!target && turn.lane == lane && turn.phase == execution::Phase::Queued) target = turn.id;
-            return false;
-        });
-        if (!target) return {};
-        for (size_t turn = 0; turn < 1024; ++turn) {
-            const auto next = transport.dispatchNext(lane);
-            if (!next || !finish(*next)) return {};
-            if (*next == *target) return target;
-        }
-        return {};
-    }
-
-    bool deliverTaskOutcome(execution::TaskId target)
-    {
-        for (size_t turn = 0; turn < 1024; ++turn) {
-            const auto next = transport.dispatchNext(execution::Lane::Domain);
-            if (!next || !finish(*next)) return false;
-            if (*next == target) return true;
-        }
-        return false;
-    }
-
-    size_t queued(execution::Lane lane) const
-    {
-        return transport.queuedCountIf([lane](const auto& turn) { return turn.lane == lane; });
-    }
-
-    // Drain work and GUI publications while the model still owns its cleanup
-    // leases. Full quiescence is checked only after the model is destroyed.
-    bool drainLive(ManualStartupExecution* shared = nullptr)
-    {
-        for (size_t turn = 0; turn < 1024; ++turn) {
-            if (deliverOnePost()) continue;
-            if (const auto lane = transport.nextLane()) {
-                if (!transport.step(*lane)) return false;
-                continue;
-            }
-            if (shared && !shared->quiescent()) {
-                shared->drain();
-                continue;
-            }
-            return posts.empty() && transport.transportIdle();
-        }
-        return false;
-    }
-};
 
 struct OnboardingStorageWork {
     ManualStartupExecution worker;
@@ -863,12 +762,12 @@ void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    ManualSnapshotGraph graph;
-    ManualStartupExecution shared;
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
     {
-        OptionsQmlModel model{node, args, graph.services(), &shared.executor()};
-        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(&shared); });
-        QVERIFY(graph.drainLive(&shared));
+        OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
         QVERIFY(model.settingsReady());
         QVERIFY(!model.settingsPending());
         QVERIFY(model.dbcacheSizeMiB() != 701);
@@ -895,17 +794,17 @@ void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
         QCOMPARE(drained.size(), 0);
 
         QVERIFY(shared.step(execution::Lane::Utility));
-        QVERIFY(graph.drainLive());
+        while (graph.publish()) {}
         QCOMPARE(drained.size(), 0); // Physical queue drain still has to run.
-        QVERIFY(graph.drainLive(&shared));
+        QVERIFY(graph.settle());
         QCOMPARE(drained.size(), 1);
         QCOMPARE(published.size(), 0);
         QCOMPARE(model.dbcacheSizeMiB(), 701);
         model.beginShutdown();
         QCOMPARE(drained.size(), 1);
     }
-    QVERIFY(graph.drainLive(&shared));
-    QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
 }
 
 void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
@@ -915,12 +814,12 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    ManualSnapshotGraph graph;
-    ManualStartupExecution shared;
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
     {
-        OptionsQmlModel model{node, args, graph.services(), &shared.executor()};
-        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(&shared); });
-        QVERIFY(graph.drainLive(&shared));
+        OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
         QVERIFY(model.settingsReady());
         QVERIFY(!model.settingsPending());
         const bool original = model.natpmp();
@@ -937,7 +836,7 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
         // The original Utility decision can still queue the persistence
         // effect after GUI admission closes.
         while (shared.step(execution::Lane::Utility)) {}
-        QVERIFY(graph.drainLive());
+        while (graph.publish()) {}
         QVERIFY(args.GetPersistentSetting("natpmp").isNull());
         QCOMPARE(drained.size(), 0);
         QVERIFY(shared.step(execution::Lane::Core));
@@ -946,18 +845,18 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
         QCOMPARE(persisted.isTrue(), !original);
         QCOMPARE(node.calls.mapPort.load(), 1);
         QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsApplied);
-        QVERIFY(graph.drainLive());
+        while (graph.publish()) {}
         QCOMPARE(drained.size(), 0);
 
-        QVERIFY(graph.drainLive(&shared));
+        QVERIFY(graph.settle());
         QCOMPARE(drained.size(), 1);
         QCOMPARE(published.size(), 0);
         QCOMPARE(model.natpmp(), original);
         model.beginShutdown();
         QCOMPARE(drained.size(), 1);
     }
-    QVERIFY(graph.drainLive(&shared));
-    QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
 }
 
 void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
@@ -1204,7 +1103,8 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
 
 void OptionsModelTests::signerValidationKeepsLatestManualIntent()
 {
-    ManualSnapshotGraph graph; ManualStartupExecution shared;
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
     MockNode node;
     const auto drain_node_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager model_args;
@@ -1214,11 +1114,11 @@ void OptionsModelTests::signerValidationKeepsLatestManualIntent()
 
     QTemporaryDir missing_paths;
     {
-        OptionsQmlModel model(node, model_args, graph.services(), &shared.executor());
-        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(&shared); });
-        QVERIFY(graph.drainLive(&shared));
-        QVERIFY(graph.transport.transportIdle());
-        QVERIFY(graph.transport.scheduler->pending() > 0);
+        OptionsQmlModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
         QVERIFY(model.settingsReady());
         QVERIFY(!model.settingsPending());
         QVERIFY(!model.signerPathValidationPending());
@@ -1249,12 +1149,12 @@ void OptionsModelTests::signerValidationKeepsLatestManualIntent()
         QVERIFY(shared.step(execution::Lane::Utility));
         QVERIFY(model.signerPathValidationPending());
         QCOMPARE(graph.posts.size(), size_t{1});
-        QVERIFY(graph.deliverOnePost());
+        QVERIFY(graph.publish());
         QVERIFY(model.signerPathValidationPending());
         QVERIFY(model.signerPathError().isEmpty());
         QCOMPARE(graph.posts.size(), size_t{1});
 
-        QVERIFY(graph.deliverOnePost());
+        QVERIFY(graph.publish());
         QVERIFY(model.signerPathValidationPending());
         QCOMPARE(shared.coreSubmissions(), core_submissions + 2);
         QVERIFY(shared.step(execution::Lane::Core));
@@ -1263,26 +1163,28 @@ void OptionsModelTests::signerValidationKeepsLatestManualIntent()
         QVERIFY(shared.step(execution::Lane::Utility));
         QVERIFY(model.signerPathValidationPending());
         QCOMPARE(graph.posts.size(), size_t{1});
-        QVERIFY(graph.deliverOnePost());
+        QVERIFY(graph.publish());
 
         QVERIFY(!model.signerPathValidationPending());
         QCOMPARE(model.signerPathError(), QStringLiteral("The configured signer path does not exist."));
         QCOMPARE(model.externalSignerPathValidationError(first_path), QString{});
         QCOMPARE(model.externalSignerPathValidationError(latest_path), QStringLiteral("The configured signer path does not exist."));
         QCOMPARE(validation_changed.size(), 3);
-        QVERIFY(graph.drainLive(&shared));
-        QVERIFY(graph.transport.transportIdle());
-        QVERIFY(graph.transport.scheduler->pending() > 0);
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QCOMPARE(drained.size(), 0);
         model.beginShutdown();
-        QVERIFY(graph.drainLive(&shared));
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
     }
-    QVERIFY(graph.drainLive(&shared));
-    QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
 }
 
 void OptionsModelTests::signerValidationReportsManualTransportRefusal()
 {
-    ManualSnapshotGraph graph; ManualStartupExecution shared;
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
     MockNode node;
     const auto drain_node_owner = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager model_args;
@@ -1291,11 +1193,11 @@ void OptionsModelTests::signerValidationReportsManualTransportRefusal()
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
 
     {
-        OptionsQmlModel model(node, model_args, graph.services(), &shared.executor());
-        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(&shared); });
-        QVERIFY(graph.drainLive(&shared));
-        QVERIFY(graph.transport.transportIdle());
-        QVERIFY(graph.transport.scheduler->pending() > 0);
+        OptionsQmlModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
         QVERIFY(model.settingsReady());
         QVERIFY(!model.settingsPending());
 
@@ -1308,18 +1210,19 @@ void OptionsModelTests::signerValidationReportsManualTransportRefusal()
         QVERIFY(shared.quiescent());
         QCOMPARE(graph.posts.size(), size_t{1});
 
-        QVERIFY(graph.deliverOnePost());
+        QVERIFY(graph.publish());
         QVERIFY(!model.signerPathValidationPending());
         QCOMPARE(model.signerPathError(), QStringLiteral("Unable to validate the signer path."));
         QCOMPARE(validation_changed.size(), 2);
-        QVERIFY(graph.drainLive(&shared));
-        QVERIFY(graph.transport.transportIdle());
-        QVERIFY(graph.transport.scheduler->pending() > 0);
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QCOMPARE(drained.size(), 0);
         model.beginShutdown();
-        QVERIFY(graph.drainLive(&shared));
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
     }
-    QVERIFY(graph.drainLive(&shared));
-    QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
 }
 
 void OptionsModelTests::signerValidationRunsOnCoreWorker()
@@ -3260,22 +3163,23 @@ void OptionsModelTests::moneyFontChoicePersists()
 
 void OptionsModelTests::rejectedDisplayRefreshDoesNotReenterItsFailure()
 {
-    SavedGuiDataDirSettings saved;MockNode node;ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);ManualSnapshotGraph graph; ManualStartupExecution shared;
-    {OptionsQmlModel model{node,args,graph.services(),&shared.executor()};bool delivering{false},reentered{false};int notices{0};
-     const auto finish=qScopeGuard([&]{disconnect(&model,nullptr,this,nullptr);model.beginShutdown();graph.drainLive(&shared);});
-     QVERIFY(graph.drainLive(&shared));shared.reject_core = true;
+    SavedGuiDataDirSettings saved;MockNode node;ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    {OptionsQmlModel model{node,args,[&](auto turn) { graph.posts.push_back(std::move(turn)); },&shared.executor()};bool delivering{false},reentered{false};int notices{0};
+     const auto finish=qScopeGuard([&]{disconnect(&model,nullptr,this,nullptr);model.beginShutdown();graph.settle();});
+     QVERIFY(graph.settle());shared.reject_core = true;
      QVERIFY(model.settingsReady());
      QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsApplied);
      const auto original=model.settingsOperationId();
      QSignalSpy operations{&model,&OptionsQmlModel::settingsOperationChanged};
      connect(&model,&OptionsQmlModel::settingsErrorChanged,this,[&]{reentered|=delivering;delivering=true;if(++notices<=2)model.refreshDisplaySettings();delivering=false;});
-     model.refreshDisplaySettings();QVERIFY(graph.drainLive(&shared));QVERIFY(!reentered);QCOMPARE(notices,1);QCOMPARE(model.settingsOperationId(),original);QVERIFY(!model.settingsPending());QVERIFY(!model.settingsError().isEmpty());
+     model.refreshDisplaySettings();QVERIFY(graph.settle());QVERIFY(!reentered);QCOMPARE(notices,1);QCOMPARE(model.settingsOperationId(),original);QVERIFY(!model.settingsPending());QVERIFY(!model.settingsError().isEmpty());
      // A refused observation reports its diagnostic without inventing a user
      // operation or replacing the original accepted operation's receipt.
      QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsApplied);
      QCOMPARE(operations.count(),0);
     }
-    QVERIFY(graph.drainLive(&shared));QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle());QVERIFY(graph.worker.quiescent());
 }
 
 void OptionsModelTests::databaseCacheMatchesCoreDefaultAndRange()
@@ -3312,17 +3216,17 @@ void OptionsModelTests::unavailableLanguageDoesNotPersist()
     settings.setValue(SettingsKeys::LANGUAGE, QString{}); settings.sync();
     MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    ManualSnapshotGraph graph;
-    { OptionsQmlModel model{node, args, graph.services()};
-      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(); });
-      QVERIFY(graph.drainLive()); QCOMPARE(model.language(), QString{});
-      model.setLanguage(literal); QVERIFY(graph.drainLive());
+    OnboardingStorageWork graph;
+    { OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
+      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+      QVERIFY(graph.settle()); QCOMPARE(model.language(), QString{});
+      model.setLanguage(literal); QVERIFY(graph.settle());
       QCOMPARE(model.language(), QString{});
       QVERIFY(!model.settingsError().isEmpty());
       QVERIFY(args.GetPersistentSetting("lang").isNull());
       settings.sync(); QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(), QString{});
     }
-    QVERIFY(graph.drainLive()); QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle()); QVERIFY(graph.worker.quiescent());
 }
 void OptionsModelTests::displayReadbackRepairsInvalidStoredUnit_data()
 {
@@ -3385,24 +3289,25 @@ void OptionsModelTests::manualDisplayRefreshWaitsForPendingWrite()
     SavedGuiDataDirSettings saved; QSettings settings;
     settings.setValue(SettingsKeys::DISPLAY_UNIT, 0); settings.sync();
     MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
-    PrepareRuntimePersistence(node, args, directory); ManualSnapshotGraph graph; ManualStartupExecution shared;
-    { OptionsQmlModel model{node, args, graph.services(), &shared.executor()};
-      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.drainLive(&shared); });
-      QVERIFY(graph.drainLive(&shared)); model.setDisplayUnit(3);
+    PrepareRuntimePersistence(node, args, directory); OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    { OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+      QVERIFY(graph.settle()); model.setDisplayUnit(3);
       // Finish background work, retain its GUI outcome, then change the store.
       shared.drain(); QVERIFY(model.settingsPending());
       settings.setValue(SettingsKeys::DISPLAY_UNIT, 1); settings.sync();
       QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
       QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
       QCOMPARE(model.displayUnit(), 3); QVERIFY(model.settingsPending());
-      QVERIFY(graph.drainLive(&shared)); QCOMPARE(model.displayUnit(), 1); QVERIFY(!model.settingsPending());
+      QVERIFY(graph.settle()); QCOMPARE(model.displayUnit(), 1); QVERIFY(!model.settingsPending());
       settings.sync(); QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), 1);
-      model.beginShutdown(); QVERIFY(graph.drainLive(&shared));
+      model.beginShutdown(); QVERIFY(graph.settle());
       const auto pending = shared.coreSubmissions();
       QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
       QCOMPARE(shared.coreSubmissions(), pending);
     }
-    QVERIFY(graph.drainLive(&shared)); QVERIFY(graph.transport.quiescent());
+    QVERIFY(graph.settle()); QVERIFY(graph.worker.quiescent());
 }
 void OptionsModelTests::externalDisplayWriterIsObservedWithoutUserEdit()
 {

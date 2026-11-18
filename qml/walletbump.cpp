@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/walletbump.h>
-#include <qml/walletopening.h>
 #include <qml/walletsend.h>
 #include <qml/models/signertransaction.h>
 #include <wallet/coincontrol.h>
@@ -87,7 +86,7 @@ void Observe(interfaces::Wallet& wallet, Commit& result, bool exact_witness = fa
 } // namespace
 
 Preparation Prepare(interfaces::Wallet& wallet, const QString& txid, unsigned int target,
-                    const std::shared_ptr<walletopening::Session>& opening)
+                    std::shared_ptr<Prepared> review)
 {
     Preparation result;
     try {
@@ -96,17 +95,7 @@ Preparation Prepare(interfaces::Wallet& wallet, const QString& txid, unsigned in
         if (target < 1 || target > 1008) { result.error = Error::Invalid; return result; }
         const auto original = Txid::FromUint256(*parsed);
         if (!wallet.transactionCanBeBumped(original)) { result.error = Error::Ineligible; return result; }
-        // A transaction review is backend data, potentially much larger than
-        // its GUI fee strings. Reserve cleanup before constructing it so the
-        // last facade/command release never tears transaction vectors down on GUI.
-        struct ReviewStorage { std::unique_ptr<Prepared> value; };
-        const auto review_storage = std::make_shared<ReviewStorage>();
-        auto cleanup_borrower = opening->holdValues([review_storage] { review_storage->value.reset(); });
-        if (!cleanup_borrower) { result.error = Error::Uncertain; return result; }
-        const auto review_lifetime = std::make_shared<execution::ResourceLease>(std::move(*cleanup_borrower.lease));
-        review_storage->value = std::make_unique<Prepared>();
-        // The review alias pins the borrower until reserved cleanup can run.
-        auto review = std::shared_ptr<Prepared>{review_lifetime, review_storage->value.get()};
+        if (!review) { result.error = Error::Uncertain; return result; }
         review->original = original;
         review->target_blocks = target;
         const auto original_transaction = wallet.getTx(original);

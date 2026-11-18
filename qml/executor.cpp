@@ -7,6 +7,8 @@
 #include <qml/execution.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cassert>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -139,6 +141,25 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
             }
             // Destroy captures before the next idle check, outside the mutex.
             task();
+            task = {};
+            {
+                std::lock_guard lock{mutex};
+                if (tasks.empty()) continue;
+            }
+            // An inline dispatcher resumes this loop without growing the stack.
+            static thread_local State* posting{};
+            auto* previous = std::exchange(posting, this);
+            bool accepted{};
+            try {
+                accepted = dispatch(lane, utility, [self = shared_from_this()] {
+                    if (posting == self.get()) posting = nullptr;
+                    else self->run();
+                });
+            } catch (...) {
+                // Already admitted work still needs to run on rejection.
+            }
+            const bool ran_inline = !std::exchange(posting, previous);
+            if (accepted && !ran_inline) return;
         }
     }
 
@@ -162,11 +183,11 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
     std::vector<Callback> takeListeners()
     {
         std::vector<Callback> ready;
-        if (closed && !active && retiring == 0) ready.swap(listeners);
+        if (closed && !active && retiring == 0 && reservations == 0) ready.swap(listeners);
         return ready;
     }
 
-    bool post(Callback task)
+    bool post(Callback task, bool reserved = false)
     {
         if (!task) return false;
         const char attempt{};
@@ -174,8 +195,9 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
             std::unique_lock lock{mutex};
             // Do not accept a second task until dispatch accepts the first.
             // run() releases the wait before invoking work for inline dispatch.
-            changed.wait(lock, [this] { return closed || !admission; });
-            if (closed) return false;
+            changed.wait(lock, [this, reserved] { return (!reserved && closed) || !admission; });
+            if (closed && !reserved) return false;
+            if (reserved) --reservations;
             tasks.push_back(std::move(task));
             if (active) return true;
             active = true;
@@ -236,7 +258,7 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
         if (!done) return;
         {
             std::lock_guard lock{mutex};
-            if (!closed || active || retiring != 0) {
+            if (!closed || active || retiring != 0 || reservations != 0) {
                 listeners.push_back(std::move(done));
                 return;
             }
@@ -247,7 +269,7 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
     void waitIdle()
     {
         std::unique_lock lock{mutex};
-        changed.wait(lock, [this] { return !active && retiring == 0; });
+        changed.wait(lock, [this] { return !active && retiring == 0 && reservations == 0; });
     }
 
     const Executor::Dispatch dispatch;
@@ -261,6 +283,7 @@ struct SerialQueue::State : std::enable_shared_from_this<SerialQueue::State> {
     bool active{false};
     const char* admission{nullptr};
     unsigned retiring{0};
+    size_t reservations{0};
 };
 
 SerialQueue::SerialQueue(std::shared_ptr<State> state) : m_state(std::move(state)) {}
@@ -268,6 +291,35 @@ bool SerialQueue::post(Callback task)
 {
     const auto state = m_state;
     return state && state->post(std::move(task));
+}
+
+bool SerialQueue::reserveCleanup()
+{
+    const auto state = m_state;
+    if (!state) return false;
+    std::lock_guard lock{state->mutex};
+    if (state->closed) return false;
+    ++state->reservations;
+    return true;
+}
+
+void SerialQueue::cancelReservedCleanup()
+{
+    const auto state = m_state;
+    std::vector<Callback> ready;
+    {
+        std::lock_guard lock{state->mutex};
+        assert(state->reservations > 0);
+        --state->reservations;
+        ready = state->takeListeners();
+    }
+    state->changed.notify_all();
+    state->notify(std::move(ready));
+}
+
+bool SerialQueue::postReservedCleanup(Callback cleanup)
+{
+    return m_state->post(std::move(cleanup), true);
 }
 
 void SerialQueue::close()
@@ -297,7 +349,26 @@ Executor::Executor(Config) : m_state(std::make_unique<State>())
 
 Executor::Executor(Dispatch dispatch) : m_state(std::make_unique<State>())
 {
-    m_state->dispatch = std::move(dispatch);
+    m_state->dispatch = [dispatch = std::move(dispatch)](Lane lane, UtilityWorker worker, Callback task) {
+        struct Turn {
+            std::atomic_flag claimed{};
+            Callback task;
+        };
+        auto turn = std::make_shared<Turn>();
+        turn->task = std::move(task);
+        try {
+            if (dispatch(lane, worker, [turn] {
+                if (turn->claimed.test_and_set()) return;
+                auto run = std::move(turn->task);
+                run();
+            })) return true;
+        } catch (...) {}
+        // A dispatcher may retain its callback before rejecting, or may
+        // have already executed it inline. Only its first claim owns work.
+        if (turn->claimed.test_and_set()) return true;
+        turn->task = {};
+        return false;
+    };
 }
 
 Executor::~Executor() { stopAndJoin(); }
@@ -326,9 +397,11 @@ void Executor::stopAndJoin()
     for (const auto& entry : queues) {
         if (const auto queue = entry.lock()) queue->close();
     }
+    if (!m_state->workers) return;
     for (const auto& entry : queues) {
         if (const auto queue = entry.lock()) queue->waitIdle();
     }
     if (m_state->workers) m_state->workers->stopAndJoin();
 }
+
 } // namespace execution

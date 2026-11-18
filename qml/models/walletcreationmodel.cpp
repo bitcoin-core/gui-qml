@@ -29,8 +29,9 @@ void WalletCreationModel::setServices(Services services)
 {
     if (m_check || m_closed || !services.operation.native.node) return;
     m_services = std::move(services);
-    m_check = std::make_unique<WalletProvisioningCheck>(*m_services.operation.native.node, m_services.operation.native.execution, this,
-        m_services.operation.native.initialized, m_services.operation.native.open_names, m_services.operation.native.shutdown, true);
+    m_check = std::make_unique<WalletProvisioningCheck>(*m_services.operation.native.node, m_services.operation.native.gui_post, this,
+        m_services.operation.native.initialized, m_services.operation.native.open_names, m_services.operation.native.shutdown, true,
+        WalletProvisioningCheck::Queues{m_services.operation.native.core, m_services.operation.native.outcomes});
     connect(m_check.get(), &WalletProvisioningCheck::changed, this, &WalletCreationModel::validationChanged);
     const QPointer<WalletCreationModel> guard{this};
     edited(); if (guard) Q_EMIT changed();
@@ -39,7 +40,8 @@ WalletCreationModel::~WalletCreationModel() { discard(); }
 WalletCreationModel::FactoryPhase WalletCreationModel::factoryPhase() const
 {
     if (m_closed) return FactoryCancelled;
-    if (!m_services.operation.native.node || !m_services.operation.native.execution.scheduler) return FactoryRejected;
+    const auto& native = m_services.operation.native;
+    if (!native.node || !native.value_cleanup || !native.core || !native.outcomes) return FactoryRejected;
     return m_factory_phase;
 }
 WalletOperationError WalletCreationModel::factoryError() const
@@ -95,8 +97,8 @@ WalletOperationModel* WalletCreationModel::create(const QString& passphrase, con
     request.signer = m_services.signer ? m_services.signer() : walletcreation::SignerSnapshot{};
     if (m_name.transportRejected() || m_key.transportRejected() || request.submitted_name.size() > 32768 || request.extended_public_key.size() > 4096 || request.signer_id.size() > 4096) request.transport_error = {QStringLiteral("TransportBudget"), tr("This wallet input is too long. No wallet was created."), {}, {}};
     if (m_kind == Software && m_encrypt && request.transport_error.empty()) {
-        auto captured_passphrase = secretinput::Capture(m_services.operation.native.execution.scheduler, passphrase);
-        auto captured_confirmation = secretinput::Capture(m_services.operation.native.execution.scheduler, confirmation);
+        auto captured_passphrase = m_services.operation.native.capture(passphrase);
+        auto captured_confirmation = m_services.operation.native.capture(confirmation);
         if (!captured_passphrase || !captured_confirmation) {
             request.transport_error = {QStringLiteral("InputUnavailable"), tr("The password could not be used. No wallet was created."), QStringLiteral("credentials"), {}};
         } else {

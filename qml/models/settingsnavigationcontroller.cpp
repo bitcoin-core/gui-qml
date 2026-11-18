@@ -75,7 +75,16 @@ void SettingsNavigationController::open()
 
 void SettingsNavigationController::editorClosed()
 {
-    if (!m_pending) return;
+    if (!m_pending) {
+        // The owner closed the editor and deletes it next. Let it go while its
+        // entries still exist, so the rows showing them are removed first.
+        disconnect(m_editor, nullptr, this, nullptr);
+        m_editor = nullptr;
+        const QPointer<SettingsNavigationController> guard{this};
+        Q_EMIT editorChanged();
+        if (guard) Q_EMIT stateChanged();
+        return;
+    }
     m_pending = false;
     const auto section = m_section;
     const bool done = m_done;

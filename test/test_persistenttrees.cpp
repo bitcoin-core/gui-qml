@@ -1,15 +1,18 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+#include <qml/asyncjoin.h>
 #include <qml/indexedsequence.h>
 #include <qml/models/activitysnapshot.h>
 #include <qml/nativelistmodel.h>
-#include <qml/retainedsnapshot.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/retainedvalue.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/nativelistqueues.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QScopeGuard>
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
@@ -22,22 +25,23 @@
 namespace {
 class ManualList final : public NativeListModel {
 public:
-    ManualList(execution::SnapshotServices services, std::vector<NativeRowHandle>& rows, int& reads)
-        : NativeListModel(std::move(services)) { setRead([&rows, &reads] { ++reads; return rows; }); }
+    ManualList(presentation::Post post, Queues queues, std::vector<NativeRowHandle>& rows, int& reads)
+        : NativeListModel(std::move(post), nullptr, std::move(queues)) { setRead([&rows, &reads] { ++reads; return rows; }); }
     void refresh() { refreshNative(); }
     std::function<void()> updated;
 protected:
     void rowUpdated(const QString&, const NativeRowHandle&) override { if (updated) updated(); }
 };
 struct NativeFixture {
-    ManualRoutedExecution env;
+    ManualStartupExecution env;
+    NativeListModel::Queues queues{NativeListQueues(env.executor())};
     std::deque<std::function<void()>> gui;
     std::vector<NativeRowHandle> rows;
     int reads{0};
-    ManualList model{{env.scheduler, [this](auto turn) { gui.push_back(std::move(turn)); }}, rows, reads};
+    ManualList model{[this](auto turn) { gui.push_back(std::move(turn)); }, queues, rows, reads};
     NativeFixture() { rows.reserve(65); }
     NativeRowHandle row(int id, int value) {
-        return execution::RetainSnapshot<NativeListRow>(env.scheduler, [=] {
+        return execution::RetainValues<NativeListRow>(queues.hold, [=] {
             auto result = std::make_unique<NativeListRow>();
             result->key = QString::number(1000 + id); result->values.insert(Qt::DisplayRole, value); return result;
         });
@@ -59,6 +63,48 @@ struct NativeFixture {
 class PersistentTreeTests : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void nativeStandaloneJoinWaitsForRetainedVersion()
+    {
+        struct Cleanup {
+            std::atomic_bool retired{false}, off_gui{false};
+        };
+        const auto cleanup = std::make_shared<Cleanup>();
+        auto row = std::make_shared<NativeListRow>();
+        row->key = QStringLiteral("original");
+        row->values.insert(Qt::DisplayRole, 42);
+        row->payload = std::shared_ptr<int>{new int{0}, [cleanup, gui = QThread::currentThread()](int* value) {
+            delete value;
+            cleanup->off_gui = QThread::currentThread() != gui;
+            cleanup->retired = true;
+        }};
+        std::vector<NativeRowHandle> rows{std::move(row)};
+        int reads{0};
+        auto model = std::make_unique<ManualList>(presentation::Post{}, NativeListModel::Queues{}, rows, reads);
+        model->refresh();
+        QTRY_COMPARE(model->rowCount(), 1);
+        auto held = model->completedSnapshot();
+        QVERIFY(held);
+        QCOMPARE(reads, 1);
+        rows.clear();
+        model.reset();
+
+        bool joined{false};
+        QObject receiver;
+        WaitForThreadJoins(&receiver, [&] { joined = true; });
+        QCoreApplication::sendPostedEvents(&receiver, QEvent::MetaCall);
+        QVERIFY(!joined);
+        QVERIFY(!cleanup->retired);
+        {
+            const auto retained = NativeListModel::Rows(held);
+            QCOMPARE(retained.size(), size_t{1});
+            QCOMPARE(retained.front()->values.value(Qt::DisplayRole).toInt(), 42);
+        }
+        held.reset();
+        QTRY_VERIFY(joined);
+        QVERIFY(cleanup->retired);
+        QVERIFY(cleanup->off_gui);
+    }
+
     void malformedPublicActivitySnapshotRejectsMissingRank() {
         using namespace activityview;
         const SharedRow row = std::make_shared<const Row>(Row{{Qt::DisplayRole, 42}});

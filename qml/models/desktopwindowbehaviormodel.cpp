@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/desktopwindowbehaviormodel.h>
-#include <qml/backendexecutor.h>
-#include <qml/guipresentation.h>
+#include <qml/asyncjoin.h>
+#include <qml/executor.h>
 #include <qml/settingsnamespace.h>
 
 #include <QPointer>
@@ -27,16 +27,15 @@ DesktopWindowBehaviorModel::DesktopWindowBehaviorModel(QObject* parent)
     : DesktopWindowBehaviorModel(DesktopPlatform(), {}, {}, parent) {}
 DesktopWindowBehaviorModel::DesktopWindowBehaviorModel(bool desktop_platform, QObject* parent)
     : DesktopWindowBehaviorModel(desktop_platform, {}, {}, parent) {}
-DesktopWindowBehaviorModel::DesktopWindowBehaviorModel(bool desktop_platform, execution::SnapshotServices services, Store store, QObject* parent)
-    : QObject(parent), m_services(std::move(services)), m_store(std::move(store)), m_desktop_platform(desktop_platform)
+DesktopWindowBehaviorModel::DesktopWindowBehaviorModel(bool desktop_platform, presentation::Post post, Store store, QObject* parent,
+                                                       std::shared_ptr<execution::SerialQueue> utility)
+    : QObject(parent), m_post(post ? std::move(post) : presentation::QueuedPost()), m_store(std::move(store)),
+      m_utility(std::move(utility)), m_desktop_platform(desktop_platform)
 {
-    if (!m_services.scheduler) {
-        m_executor = std::make_unique<BackendExecutor>(execution::Options{});
-        m_executor->setObjectName(QStringLiteral("desktop-preferences"));
-        m_services.scheduler = m_executor->scheduler();
+    if (!m_utility) {
+        m_owned_executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
+        m_utility = std::make_shared<execution::SerialQueue>(m_owned_executor->makeQueue(execution::Lane::Utility));
     }
-    if (!m_services.post) m_services.post = presentation::QueuedPost();
-    m_key = m_services.scheduler->allocateKey();
     const bool public_store = !m_store.read && !m_store.write && !m_store.write_fields;
     const auto identity=UiPreferencesNamespace::Capture();
     const auto open=[identity]{return OpenPreferences(identity);};
@@ -103,7 +102,12 @@ void DesktopWindowBehaviorModel::close()
     if (std::exchange(m_stopping, true)) return;
     m_watch.stop();
     // Accepted writes own their captured values and finish independently.
-    if (m_executor) m_executor->shutdown();
+    m_utility->close();
+    if (m_owned_executor) {
+        auto join = JoinThreadAfterDrain([executor = std::move(m_owned_executor)] { executor->stopAndJoin(); },
+            QCoreApplication::instance(), [] {});
+        m_utility->whenDrained(std::move(join));
+    }
 }
 bool DesktopWindowBehaviorModel::submit(Values values, bool load, unsigned fields)
 {
@@ -115,18 +119,26 @@ bool DesktopWindowBehaviorModel::submit(Values values, bool load, unsigned field
         Q_EMIT settingsStateChanged(); return false;
     }
     const QPointer<DesktopWindowBehaviorModel> observer{this};
-    auto operation = std::make_shared<execution::OwnedCommand<Result>>(m_services.scheduler,
-        [post = m_services.post, observer, id, load] {
+    auto operation = std::make_shared<execution::OwnedCommand<Result>>(
+        [post = m_post, observer, id, load] {
             post([observer, id, load] { if (observer && !observer->m_stopping) observer->publish(id, load); });
         });
-    const auto admitted = operation->start([store = m_store, values, load, fields] {
+    auto work = [store = m_store, values, load, fields] {
         const auto watch = store.watch_paths();
         Values actual;
         if (load) actual = store.read();
         else if (store.write_fields) actual = store.write_fields(values, fields);
         else { store.write(values); actual = values; }
         return Result{actual, watch};
-    }, {execution::Lane::Core, m_key, execution::WorkClass::Action});
+    };
+    const auto admitted = operation->startWith([&](auto done, auto failed) {
+        auto packet = execution::MakeTask(std::move(work), std::move(done), std::move(failed));
+        const bool accepted = m_utility->post([packet = std::move(packet)] {
+            packet->execute();
+            packet->deliver();
+        });
+        return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+    });
     if (!admitted) {
         m_error = tr("Desktop preferences could not be saved. Try again.");
         Q_EMIT settingsStateChanged();

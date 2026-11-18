@@ -5,6 +5,7 @@
 #define BITCOIN_QML_MODELS_ACTIVITYEXPORTDATA_H
 
 #include <qml/models/backuppolicy.h>
+#include <qml/retainedvalue.h>
 #include <QString>
 
 #include <functional>
@@ -33,6 +34,8 @@ struct Files {
     std::function<backup::WriteResult(const backup::Proposal&, bool, const Producer&)> install;
     std::function<bool()> available;
     std::function<void(const Receipt&)> outcome{};
+    std::shared_ptr<execution::SerialQueue> utility{};
+    execution::ValueCleanup value_cleanup{};
 };
 //! Local CSV destinations, inspected and installed through the staged write policy.
 Files LocalFiles(std::shared_ptr<backup::InstallCoordinator> coordinator);

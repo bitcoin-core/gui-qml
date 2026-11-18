@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <QtTest/QtTest>
 #include <test/mocks/mockwallet.h>
-#include <test/mocks/manualexecutionenvironment.h>
-#include <test/mocks/admissionhookscheduler.h>
+#include <test/mocks/manualstartupexecution.h>
+#include <test/mocks/walletsession.h>
 #include <test/qt_test_registry.h>
 #include <qml/models/walletqmlmodel.h>
 #include <key_io.h>
@@ -71,24 +71,41 @@ public:
     }
 };
 struct ManualCoins {
-    ManualRoutedExecution commands, retirement;
+    ManualStartupExecution commands, retirement;
     std::shared_ptr<CoinWallet> wallet{std::make_shared<CoinWallet>()};
     std::shared_ptr<walletopening::Session> opening;
     std::deque<std::function<void()>> publications;
     std::unique_ptr<CoinsListModel> model;
     explicit ManualCoins(int count = 1, bool initialize = true) {
         for (int i = 0; i < count; ++i) wallet->add(i, 1000 + i, 1700000000 + i, 1 + i % 2, "coin " + util::ToString(i));
-        opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
+        opening = std::make_shared<walletopening::Session>(
+            std::make_shared<std::atomic_bool>(false), [] {}, walletopening::Session::Preferences{},
+            std::chrono::steady_clock::now, nullptr, walletopening::NativeEvents{},
+            WalletSessionQueues(commands.executor(), retirement.executor()));
         opening->start(wallet); commands.drain(); opening->take();
         model = std::make_unique<CoinsListModel>();
-        model->setOpening(opening, {commands.scheduler, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }});
+        model->setOpening(opening, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); });
         if (initialize) finish();
     }
     ~ManualCoins() {
         if (model) model->close();
         commands.drain(); model.reset(); commands.drain();
-        opening->retire(); commands.drain(); retirement.drain();
+        stopAndDrain();
+        opening.reset();
+        commands.drain();
+        retirement.drain();
+    }
+    void stopAndDrain() {
+        auto stopped = std::make_shared<bool>(false);
+        opening->stop(false, [stopped] { *stopped = true; });
+        // Releasing the last value on retirement can start the Core drain.
+        do {
+            commands.drain();
+            retirement.drain();
+        } while (!commands.quiescent() || !retirement.quiescent());
+        QVERIFY(*stopped);
+        QVERIFY(commands.quiescent());
+        QVERIFY(retirement.quiescent());
     }
     bool publishOne() {
         if (publications.empty()) return false;
@@ -96,7 +113,7 @@ struct ManualCoins {
     }
     void finish() {
         do { commands.drain(); while (publishOne()) {} }
-        while (!commands.queuedIdle() || !commands.activeIdle());
+        while (!commands.quiescent());
     }
 };
 
@@ -284,7 +301,7 @@ private Q_SLOTS:
         QCOMPARE(fixture.wallet->read_calls.load(), reads + 1);
         const auto domain_and_gui = [&] {
             for (int turn{0}; turn < 128; ++turn) {
-                bool progressed = fixture.commands.step(execution::Lane::Domain);
+                bool progressed = fixture.commands.step(execution::Lane::Utility);
                 while (fixture.publishOne()) progressed = true;
                 if (!progressed) return true;
             }
@@ -295,7 +312,8 @@ private Q_SLOTS:
         QVERIFY(coins.manualInputSelection());
         QVERIFY(!coins.selectionPending());
         QCOMPARE(coins.selectionRevision(), original_revision + 1);
-        QVERIFY(fixture.commands.queuedCountIf([](const auto& turn) { return turn.lane == execution::Lane::Core; }) == 1);
+        QVERIFY(fixture.commands.hasWork(execution::Lane::Core));
+        QCOMPARE(fixture.commands.queuedCount(), size_t{1});
         QCOMPARE(fixture.wallet->read_calls.load(), reads + 1);
 
         const COutPoint original{Txid{}, 0};
@@ -311,7 +329,8 @@ private Q_SLOTS:
         QCOMPARE(coins.totalSelectedSatoshi(), qint64{1000});
         QVERIFY(!coins.selectionReconciliationRequired());
         QCOMPARE(fixture.wallet->read_calls.load(), reads + 1);
-        QVERIFY(fixture.commands.queuedCountIf([](const auto& turn) { return turn.lane == execution::Lane::Core; }) == 1);
+        QVERIFY(fixture.commands.hasWork(execution::Lane::Core));
+        QCOMPARE(fixture.commands.queuedCount(), size_t{1});
         QVERIFY(fixture.wallet->lockCalls().empty());
     }
 
@@ -339,57 +358,64 @@ private Q_SLOTS:
         QCOMPARE(fixture.model->selectedCoinsCount(), 1);
     }
 
-    void cleanupAdmissionKeepsOriginalCoinOwner_data() {
-        QTest::addColumn<int>("reservation"); QTest::addColumn<int>("outcome");
-        for (int reservation : {1, 2, 3}) for (int outcome : {0, 1, 2})
-            QTest::newRow(qPrintable(QString::number(reservation) + QLatin1Char('-') + QString::number(outcome))) << reservation << outcome;
+    void cleanupAdmissionKeepsOriginalCoinOwner_data()
+    {
+        QTest::addColumn<bool>("read_completed");
+        QTest::addColumn<bool>("destroy");
+        QTest::newRow("close-before-read") << false << false;
+        QTest::newRow("destroy-before-read") << false << true;
+        QTest::newRow("close-after-read") << true << false;
+        QTest::newRow("destroy-after-read") << true << true;
     }
-    void cleanupAdmissionKeepsOriginalCoinOwner() {
-        QFETCH(int, reservation); QFETCH(int, outcome);
-        ManualRoutedExecution commands, retirement;
-        auto scheduler = std::make_shared<AdmissionHookScheduler>(commands.scheduler);
-        auto wallet = std::make_shared<CoinWallet>(); wallet->add(0, 7000, 1700000000, 1, "original coin");
-        auto opening = std::make_shared<walletopening::Session>(scheduler, retirement.scheduler,
-            std::make_shared<std::atomic_bool>(false), [] {});
-        opening->start(wallet); commands.drain(); opening->take();
-        std::deque<std::function<void()>> old_posts, current_posts;
-        size_t old_posted{0}, current_posted{0};
-        auto model = std::make_unique<CoinsListModel>();
-        const auto settle = [&] {
-            for (int turn{0}; turn < 512 && (turn == 0 || !commands.queuedIdle() || !retirement.queuedIdle() || !old_posts.empty() || !current_posts.empty()); ++turn) {
-                commands.drain(); retirement.drain();
-                for (auto* queue : {&old_posts, &current_posts}) while (!queue->empty()) {
-                    auto work = std::move(queue->front()); queue->pop_front(); work();
-                }
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            }
-        };
-        const auto cleanup = qScopeGuard([&] {
-            scheduler->disarm(); if (model) model->close(); model.reset(); settle();
-            opening->retire(); settle();
-        });
-        auto trigger = scheduler->armCleanup(reservation, [&] {
-            if (outcome == 0) model->close();
-            else if (outcome == 1) model.reset();
-            else model->setOpening(opening, {scheduler, [&](auto work) { ++current_posted; current_posts.push_back(std::move(work)); }});
-        });
-        model->setOpening(opening, {scheduler, [&](auto work) { ++old_posted; old_posts.push_back(std::move(work)); }});
-        QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
-        settle();
-        QCOMPARE(old_posted, size_t{0}); QVERIFY(wallet->lockCalls().empty());
-        if (outcome == 2) {
-            QVERIFY(model); QCOMPARE(model->rowCount(), 1); QCOMPARE(model->totalSatoshi(), qint64{7000});
-            QCOMPARE(model->data(model->index(0), CoinsListModel::LabelRole).toString(), QStringLiteral("original coin"));
-            QVERIFY(current_posted > 0); QCOMPARE(wallet->read_calls.load(), size_t{1});
-        } else {
-            QCOMPARE(wallet->read_calls.load(), size_t{0});
-            if (outcome == 0) { QVERIFY(model); QCOMPARE(model->rowCount(), 0); }
-            else QVERIFY(!model);
-        }
-        scheduler->disarm(); if (model) model->close(); model.reset(); settle(); opening->retire(); settle();
-        QCOMPARE(commands.scheduler->pending(), size_t{0}); QCOMPARE(retirement.scheduler->pending(), size_t{0});
+
+    void cleanupAdmissionKeepsOriginalCoinOwner()
+    {
+        QFETCH(bool, read_completed);
+        QFETCH(bool, destroy);
+        ManualCoins fixture{1, false};
+        QSignalSpy inserted{fixture.model.get(), &QAbstractItemModel::rowsInserted};
+        if (read_completed) fixture.commands.drain();
+        QCOMPARE(fixture.wallet->read_calls.load(), size_t(read_completed));
+        if (destroy) fixture.model.reset();
+        else fixture.model->close();
+        fixture.finish();
+        QCOMPARE(fixture.wallet->read_calls.load(), size_t(read_completed));
+        QCOMPARE(inserted.count(), 0);
+        QVERIFY(fixture.wallet->lockCalls().empty());
+        if (fixture.model) QCOMPARE(fixture.model->rowCount(), 0);
+        fixture.model.reset();
+        fixture.stopAndDrain();
     }
+
+    void stoppingSessionRejectsCoinSetup()
+    {
+        ManualCoins fixture{1, false};
+        fixture.model.reset();
+        fixture.stopAndDrain();
+        CoinsListModel model;
+        QSignalSpy errors{&model, &CoinsListModel::readErrorChanged};
+        model.setOpening(fixture.opening, {});
+        QCOMPARE(errors.count(), 1);
+        QVERIFY(!model.readError().isEmpty());
+        QCOMPARE(model.rowCount(), 0);
+        QCOMPARE(fixture.wallet->read_calls.load(), size_t{0});
+    }
+
+    void secondSetupKeepsOriginalCoinPublication()
+    {
+        ManualCoins fixture{1, false};
+        int replacement_posts{0};
+        fixture.model->setOpening(fixture.opening, [&](auto) { ++replacement_posts; });
+        fixture.finish();
+        QCOMPARE(replacement_posts, 0);
+        QCOMPARE(fixture.wallet->read_calls.load(), size_t{1});
+        QCOMPARE(fixture.model->rowCount(), 1);
+        QCOMPARE(fixture.model->totalSatoshi(), qint64{1000});
+        QCOMPARE(fixture.model->index(0).data(CoinsListModel::LabelRole).toString(), QStringLiteral("coin 0"));
+        fixture.model.reset();
+        fixture.stopAndDrain();
+    }
+
     void quietCloseDuringQtRows_data() {
         QTest::addColumn<int>("mutation"); QTest::addColumn<bool>("about");
         for (int mutation{0}; mutation < 3; ++mutation)
@@ -410,8 +436,7 @@ private Q_SLOTS:
             connect(model, &QAbstractItemModel::rowsMoved, this, [&] { at_end = model->rowCount(); }); model->setSortDescending(false);
         }
         f.finish(); QVERIFY(closed); QCOMPARE(at_end, mutation == 0 ? 1 : mutation == 1 ? 2 : 3); QCOMPARE(model->rowCount(), 0);
-        f.opening->retire(); f.commands.scheduler->close(); f.commands.drain(); f.retirement.drain();
-        QCOMPARE(f.commands.scheduler->pending(), size_t{0});
+        f.stopAndDrain();
     }
     void quietCloseReleasesIdleSnapshotsBeforeFacadeDestruction() {
         ManualCoins fixture{129};
@@ -420,12 +445,10 @@ private Q_SLOTS:
         fixture.model->close();
         QCOMPARE(fixture.model->rowCount(), 0);
         QVERIFY(!fixture.model->selectionSnapshot());
-        fixture.opening->retire(); fixture.commands.scheduler->close();
-        fixture.commands.drain(); fixture.retirement.drain();
+        fixture.stopAndDrain();
         // Keeping the closed facade alive must not keep its Native value
         // ownership reservations alive or block the executor's final drain.
         QVERIFY(fixture.model);
-        QCOMPARE(fixture.commands.scheduler->pending(), size_t{0});
     }
     void manualNativeDomainAndBoundedGuiPublication() {
         ManualCoins fixture{257, false};
@@ -547,7 +570,7 @@ private Q_SLOTS:
         QVERIFY(coins.lockMarkedCoins(true));
         const auto operation = coins.lockOperation(); QVERIFY(operation);
         for (int turn{0}; fixture.commands.coreSubmissions() == calls && turn < 16; ++turn)
-            QVERIFY(fixture.commands.step(execution::Lane::Domain));
+            QVERIFY(fixture.commands.step(execution::Lane::Utility));
         QVERIFY(fixture.commands.coreSubmissions() > calls);
         if (effect_completed) QVERIFY(fixture.commands.step(execution::Lane::Core));
         // These are the production picker close semantics. Closing is not
@@ -624,7 +647,7 @@ private Q_SLOTS:
     }
     void rejectedProjectionPreservesTheLastCompleteInventory() {
         ManualCoins fixture{9}; auto& coins = *fixture.model;
-        fixture.commands.rejectLane(execution::Lane::Domain);
+        fixture.commands.reject_utility = true;
         coins.setSearchText("no match"); while (fixture.publishOne()) {}
         QCOMPARE(coins.coinCount(), 9); QCOMPARE(coins.rowCount(), 9); QVERIFY(!coins.readError().isEmpty());
         coins.setSearchText("coin"); fixture.finish();
@@ -643,6 +666,83 @@ private Q_SLOTS:
         QVERIFY(coins.requestReplaceSelection({})); fixture.finish();
         QVERIFY(coins.selectionSnapshot()->empty()); QCOMPARE(coins.selectedCoinsCount(), 0);
         QCOMPARE(original->size(), size_t{1});
+    }
+    void selectionAndMarksUseSessionQueueWithSchedulerClosed()
+    {
+        using execution::Lane;
+        ManualStartupExecution worker;
+        const auto opening = MakeWalletSession(worker.executor(), [] {});
+        std::deque<std::function<void()>> publications;
+        const auto publish = [&] {
+            while (!publications.empty()) {
+                auto turn = std::move(publications.front());
+                publications.pop_front();
+                turn();
+            }
+        };
+        const auto wallet = std::make_shared<CoinWallet>();
+        const COutPoint first{Txid{}, 0}, second{Txid{}, 1};
+        wallet->add(first.n, 1000, 1700000000, 1, "first");
+        wallet->add(second.n, 2000, 1700000001, 2, "second");
+        auto model = std::make_unique<CoinsListModel>();
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            model.reset();
+            opening->stop(false, [&] { stopped = true; });
+            worker.drain();
+            publish();
+            worker.drain();
+            QVERIFY(stopped);
+        });
+        QVERIFY(opening->start(wallet));
+        worker.drain();
+        model->setOpening(opening, [&](auto turn) { publications.push_back(std::move(turn)); });
+        worker.drain();
+        publish();
+        QCOMPARE(model->rowCount(), 2);
+        const QString first_id = QString::fromStdString(first.hash.GetHex()) + ":0";
+        const QString second_id = QString::fromStdString(second.hash.GetHex()) + ":1";
+
+        const auto submissions = worker.coreSubmissions();
+        QVERIFY(model->requestSelectionDelta(second, true));
+        QVERIFY(model->selectionPending());
+        worker.drain();
+        QCOMPARE(worker.coreSubmissions(), submissions);
+        QVERIFY(model->selectionSnapshot()->empty());
+        publish();
+        QCOMPARE(*model->selectionSnapshot(), CoinsListModel::Selection{second});
+
+        // A marked lock consumes the earlier mark, and the later mark stays.
+        QVERIFY(model->toggleMarkById(first_id));
+        QVERIFY(model->lockMarkedCoins(true));
+        QVERIFY(model->toggleMarkById(second_id));
+        QVERIFY(model->marksPending());
+        QVERIFY(wallet->lockCalls().empty());
+        worker.drain();
+        QCOMPARE(wallet->lockCalls(), (std::vector<bool>{true}));
+        QVERIFY(wallet->isLockedCoin(first));
+        QVERIFY(!wallet->isLockedCoin(second));
+        QCOMPARE(model->markedCount(), 0);
+        publish();
+        QVERIFY(!model->lockPending());
+        QVERIFY(model->lockError().isEmpty());
+        QCOMPARE(model->markedCount(), 1);
+        QCOMPARE(*model->selectionSnapshot(), CoinsListModel::Selection{second});
+        for (int row = 0; row < model->rowCount(); ++row) {
+            const auto index = model->index(row);
+            QCOMPARE(index.data(CoinsListModel::MarkedRole).toBool(), index.data(CoinsListModel::CoinIdRole).toString() == second_id);
+        }
+
+        QVERIFY(model->requestSelectionDelta(second, false));
+        const auto selection = model->selectionOperation();
+        QVERIFY(selection);
+        model.reset();
+        opening->close();
+        worker.drain();
+        const auto result = selection->result();
+        QVERIFY(result && result->value);
+        QVERIFY(!result->value->failed);
+        QVERIFY(result->value->selection->empty());
     }
     void markedBatchRetainsFilteredOutIdentitiesAndClearsOnAdmission() {
         ManualCoins fixture{3}; auto& coins = *fixture.model;
@@ -768,12 +868,9 @@ private Q_SLOTS:
         // persistent completion may keep its own result/selection lease alive.
         QVERIFY(!completed.expired());
         coins->close();fixture.model.reset();
-        fixture.opening->retire();fixture.commands.scheduler->close();
-        fixture.finish();fixture.retirement.drain();fixture.commands.drain();
+        fixture.stopAndDrain();
         QVERIFY(completed.expired());
         QCOMPARE(fixture.wallet->lockCalls(),std::vector<bool>{true});
-        QCOMPARE(fixture.commands.scheduler->pending(),size_t{0});
-        QCOMPARE(fixture.retirement.scheduler->pending(),size_t{0});
     }
     void admittedLockBatchDrainsInBoundedChunksAfterObserverClose() {
         ManualCoins fixture{97}; auto& coins = *fixture.model;
@@ -781,7 +878,7 @@ private Q_SLOTS:
         QVERIFY(coins.setCoinsLocked(ids, true));
         const auto owner = coins.lockOperation(); QVERIFY(owner);
         QCOMPARE(fixture.wallet->lockCalls().size(), size_t{0});
-        QVERIFY(fixture.commands.step(execution::Lane::Domain));
+        QVERIFY(fixture.commands.step(execution::Lane::Utility));
         QVERIFY(fixture.commands.step(execution::Lane::Core));
         QCOMPARE(fixture.wallet->lockCalls().size(), size_t{32});
         fixture.model->close(); fixture.model.reset(); fixture.opening->close();
@@ -794,8 +891,11 @@ private Q_SLOTS:
     void rejectedContinuationRetainsActualPartialLockOutcome() {
         ManualCoins fixture{97}; auto& coins = *fixture.model;
         QStringList ids; for (int i = 0; i < coins.rowCount(); ++i) ids.push_back(coins.data(coins.index(i), CoinsListModel::CoinIdRole).toString());
-        fixture.commands.rejectCoreNumber(fixture.commands.coreSubmissions() + 2);
         QVERIFY(coins.setCoinsLocked(ids, true)); const auto owner = coins.lockOperation();
+        while (fixture.commands.step(execution::Lane::Utility)) {}
+        QVERIFY(fixture.commands.step(execution::Lane::Core));
+        QCOMPARE(fixture.wallet->lockCalls().size(), size_t{32});
+        fixture.commands.reject_core = true;
         fixture.finish();
         QVERIFY(owner->result()); QVERIFY(owner->result()->value);
         QCOMPARE(owner->result()->value->changed, size_t{32}); QVERIFY(owner->result()->value->failed); QVERIFY(!owner->result()->value->uncertain);

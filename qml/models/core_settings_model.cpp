@@ -9,7 +9,6 @@
 #include <qml/guiconstants.h>
 #include <common/settings.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedsnapshot.h>
 #include <QQmlEngine>
 #include <QPointer>
 #include <map>
@@ -156,8 +155,8 @@ struct CoreSettingsModel::State {
     QmlCoreSettings::Session& nativeSession(){if(!session)session.emplace(std::move(initial_values),std::move(initial_statuses));return *session;}
 };
 namespace {
-std::unique_ptr<CoreSettingsProjection> Project(const QmlCoreSettings::Session& session,QmlCoreSettings::Change change,quint64 revision,bool stale=false){
-    auto result=std::make_unique<CoreSettingsProjection>();result->values=session.values();result->touched=session.touchedSettings();
+std::shared_ptr<CoreSettingsProjection> Project(const QmlCoreSettings::Session& session,QmlCoreSettings::Change change,quint64 revision,bool stale=false){
+    auto result=std::make_shared<CoreSettingsProjection>();result->values=session.values();result->touched=session.touchedSettings();
     result->statuses=session.statuses();result->change=std::move(change);result->values_changed=QmlCoreSettings::ValuesChanged(result->change);
     result->statuses_changed=QmlCoreSettings::StatusesChanged(result->change);
     const auto& value=result->change;
@@ -192,13 +191,6 @@ void CopySettingGroup(QmlCoreSettings::Values& target,const QmlCoreSettings::Val
     else if(key==QStringLiteral("proxy")){target.proxy_enabled=source.proxy_enabled;target.proxy_address=source.proxy_address;}
     else if(key==QStringLiteral("onion")){target.tor_enabled=source.tor_enabled;target.tor_address=source.tor_address;}
 }
-template <typename T, typename Factory>
-std::shared_ptr<T> SettingsSnapshot(const std::shared_ptr<execution::Scheduler>& scheduler, Factory factory)
-{
-    if (scheduler) return execution::RetainSnapshot<T>(scheduler, std::move(factory));
-    return std::shared_ptr<T>{factory()};
-}
-
 QmlCoreSettings::Change Observe(QmlCoreSettings::Session& session){
     QmlCoreSettings::Change change;change.before=change.after=session.values();change.before_statuses=change.after_statuses=session.statuses();change.accepted=true;return change;
 }
@@ -207,23 +199,23 @@ CoreSettingsModel::CoreSettingsModel(QObject* parent):QObject(parent){}
 CoreSettingsModel::CoreSettingsModel(QmlCoreSettings::Values values,QmlCoreSettings::StatusProjection statuses,QObject* parent)
     :QObject(parent),m_initial_values(std::move(values)),m_initial_statuses(std::move(statuses.values)){}
 CoreSettingsModel::~CoreSettingsModel() { close(); }
-void CoreSettingsModel::configureServices(execution::SnapshotServices services, execution::Executor* executor){
+void CoreSettingsModel::configureServices(presentation::Post post, execution::Executor* executor, execution::Lane lane){
     if(m_work||m_stopping)return;
-    initializeServices(std::move(services), executor);
+    initializeServices(std::move(post), executor, lane);
     if(!m_native)return;
     mutate(ChangeOrigin::Preview,Observe,{},{},{});
 }
-void CoreSettingsModel::initializeServices(execution::SnapshotServices services, execution::Executor* executor){
+void CoreSettingsModel::initializeServices(presentation::Post post, execution::Executor* executor, execution::Lane lane){
     if(m_work||m_stopping)return;
-    m_services=std::move(services);
-    if (!executor && !m_services.scheduler) {
+    if (!executor) {
         m_owned_executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
         executor = m_owned_executor.get();
     }
-    m_services.post=presentation::ReliablePost(std::move(m_services.post));
-    m_work=std::make_unique<execution::OwnedWork>(m_services, executor);
-    m_native=SettingsSnapshot<State>(executor ? nullptr : m_services.scheduler,[&]{auto state=std::make_unique<State>();state->initial_values=m_initial_values;state->initial_statuses=m_initial_statuses;return state;});
-    if(!m_native){m_error=tr("Settings preview is unavailable.");m_operation_state=Failed;return;}
+    m_post=presentation::ReliablePost(std::move(post));
+    m_work=std::make_unique<execution::OwnedWork>(*executor, m_post, lane);
+    m_native = std::make_shared<State>();
+    m_native->initial_values = m_initial_values;
+    m_native->initial_statuses = m_initial_statuses;
 }
 void CoreSettingsModel::setEffect(Effect effect, std::function<EffectContext()> capture,
                                   std::function<void(EffectContext, const EffectResult&)> publish,
@@ -288,22 +280,16 @@ quint64 CoreSettingsModel::mutate(ChangeOrigin origin,Mutation mutation,Completi
     if(m_stopping||(origin==ChangeOrigin::User&&!m_admission_ready))return 0;
     if(!m_work)initializeServices({});
     if(!m_native)return 0;
-    auto queue_post = m_work->queuePost();
-    const auto scheduler = queue_post ? nullptr : m_services.scheduler;
-    if (scheduler) {
-        queue_post = [scheduler](auto lane, auto task) {
-            return bool(scheduler->submit(std::move(task), {lane, {}, execution::WorkClass::Action}));
-        };
-    }
+    const auto queue_post = m_work->queuePost();
     const auto id=++m_next;const auto user_revision=origin==ChangeOrigin::User?++m_next_user_ordinal:m_user_revision;
     ++m_pending;m_operation_state=Pending;const bool had_error=!m_error.isEmpty();m_error.clear();const QPointer<CoreSettingsModel> observer{this};
     const auto context=origin==ChangeOrigin::User&&m_capture_effect?m_capture_effect():EffectContext{};
     const auto effect_control=std::make_shared<std::atomic<bool>>(false);const auto abort=m_abort_effect;
     const bool admitted=m_work->submitAsync<std::shared_ptr<const CoreSettingsProjection>>(
-        [state=m_native,scheduler,queue_post,mutation=std::move(mutation),fence=m_context,expected_user,expected_context,
-         origin,user_revision,effect=m_effect,context,observer,post=m_services.post,abort,effect_control](auto finish,auto failed){
+        [state=m_native,queue_post,mutation=std::move(mutation),fence=m_context,expected_user,expected_context,
+         origin,user_revision,effect=m_effect,context,observer,post=m_post,abort,effect_control](auto finish,auto failed){
             const auto failure=[abort,context,failed](std::exception_ptr error){if(abort)abort(context);failed(error);};
-            const bool admitted=queue_post(execution::Lane::Domain, execution::MakeTask([state,scheduler,mutation,fence,expected_user,expected_context,origin,user_revision,plans_effect=bool(effect)]{
+            const bool admitted=queue_post(execution::Lane::Domain, execution::MakeTask([state,mutation,fence,expected_user,expected_context,origin,user_revision,plans_effect=bool(effect)]{
                 const bool superseded=origin==ChangeOrigin::User&&user_revision<state->consumed_user_revision;
                 if(origin==ChangeOrigin::User)state->consumed_user_revision=std::max(state->consumed_user_revision,user_revision);
                 const bool stale=superseded||(expected_context&&fence->load()!=*expected_context)
@@ -315,7 +301,7 @@ quint64 CoreSettingsModel::mutate(ChangeOrigin origin,Mutation mutation,Completi
                     for(const auto& key:keys)if(state->pending_keys[key])change.force_write=true;
                 }
                 const bool writes=plans_effect&&origin==ChangeOrigin::User&&change.accepted&&(QmlCoreSettings::ValuesChanged(change)||change.force_write);
-                auto projection=SettingsSnapshot<CoreSettingsProjection>(scheduler,[&]{return Project(candidate,std::move(change),state->consumed_user_revision,stale);});
+                auto projection=Project(candidate,std::move(change),state->consumed_user_revision,stale);
                 if(!projection)throw std::runtime_error("Settings projection capacity unavailable");
                 // Committing a candidate and registering its planned effect is one
                 // Domain decision. Outcome delivery and Core admission may be held.
@@ -324,11 +310,11 @@ quint64 CoreSettingsModel::mutate(ChangeOrigin origin,Mutation mutation,Completi
                     if(plans_effect&&origin==ChangeOrigin::User)++state->effects;
                     if(writes){projection->planned_keys=keys;for(const auto& key:keys)++state->pending_keys[key];}}
                 return projection;
-            },[state,scheduler,queue_post,origin,user_revision,effect,context,finish,failed=failure,observer,post,abort,effect_control](std::shared_ptr<CoreSettingsProjection> projection){
+            },[state,queue_post,origin,user_revision,effect,context,finish,failed=failure,observer,post,abort,effect_control](std::shared_ptr<CoreSettingsProjection> projection){
                 if(!effect||origin!=ChangeOrigin::User||projection->stale){if(projection->stale&&origin==ChangeOrigin::User&&abort)abort(context);finish(projection);return;}
                 const auto& effect_done=effect_control;
                 const auto effect_failed=[state,failed,effect_done,projection](std::exception_ptr error){if(effect_done->exchange(true))return;--state->effects;for(const auto& key:projection->planned_keys)--state->pending_keys[key];state->uncertain=true;failed(error);};
-                try {effect(projection->change,context,queue_post,[state,scheduler,user_revision,projection,finish,failed,effect_done](EffectResult result){
+                try {effect(projection->change,context,queue_post,[state,user_revision,projection,finish,failed,effect_done](EffectResult result){
                     if(effect_done->exchange(true))return;
                     --state->effects;for(const auto& key:projection->planned_keys)--state->pending_keys[key];
                     try {
@@ -338,10 +324,10 @@ quint64 CoreSettingsModel::mutate(ChangeOrigin origin,Mutation mutation,Completi
                             for(const auto& name:QmlCoreSettings::OnboardingCoreSettingNames())if(state->requested[name]<=user_revision)CopySettingGroup(merged,*result.values,name);
                             auto refreshed=QmlCoreSettings::Session{merged,result.statuses};refreshed.preservePruneInput(state->nativeSession());state->nativeSession()=std::move(refreshed);state->uncertain=false;
                             change.after=merged;change.after_statuses=result.statuses;
-                            auto completed=SettingsSnapshot<CoreSettingsProjection>(scheduler,[&]{return Project(state->nativeSession(),change,state->consumed_user_revision);});
+                            auto completed=Project(state->nativeSession(),change,state->consumed_user_revision);
                             if(!completed)throw std::runtime_error("Settings effect outcome capacity unavailable");
                             completed->effect=std::move(result);finish(completed);
-                        } else {auto completed=SettingsSnapshot<CoreSettingsProjection>(scheduler,[&]{return std::make_unique<CoreSettingsProjection>(*projection);});
+                        } else {auto completed=std::make_shared<CoreSettingsProjection>(*projection);
                             if(!completed)throw std::runtime_error("Settings outcome capacity unavailable");
                             completed->effect=std::move(result);finish(completed);}
                     }catch(...){failed(std::current_exception());}
@@ -505,13 +491,13 @@ void CoreProxyDraft::startReset(){
     const auto revision=m_revision;const QPointer<CoreProxyDraft> observer{this};const QPointer<CoreSettingsModel> source=m_source;
     m_source->m_work->submit([state=m_source->m_native]{auto values=state->nativeSession().values();if(values.proxy_address.isEmpty())values.proxy_address=state->nativeSession().defaultProxyAddress();if(values.tor_address.isEmpty())values.tor_address=state->nativeSession().defaultProxyAddress();return values;},
         [observer,source,revision](const QmlCoreSettings::Values& values){if(!observer||!source||!source->presentationOpen())return;
-            observer->m_reset_inflight=false;if(observer->m_revision!=revision){if(observer->m_reset_pending)source->m_services.post([observer]{if(observer)observer->startReset();});return;}
+            observer->m_reset_inflight=false;if(observer->m_revision!=revision){if(observer->m_reset_pending)source->m_post([observer]{if(observer)observer->startReset();});return;}
             observer->m_reset_pending=false;observer->m_ready=true;
             observer->m_proxy_enabled=values.proxy_enabled;observer->m_proxy_address=values.proxy_address;observer->m_tor_enabled=values.tor_enabled;observer->m_tor_address=values.tor_address;
             observer->evaluate();},[observer,source,revision](std::exception_ptr){if(!observer||!source||!source->presentationOpen())return;
-            observer->m_reset_inflight=false;if(observer->m_revision!=revision){if(observer->m_reset_pending)source->m_services.post([observer]{if(observer)observer->startReset();});return;}
+            observer->m_reset_inflight=false;if(observer->m_revision!=revision){if(observer->m_reset_pending)source->m_post([observer]{if(observer)observer->startReset();});return;}
             observer->m_reset_pending=false;observer->m_pending=false;observer->m_ready=false;observer->m_error=tr("The proxy draft could not be opened.");Q_EMIT observer->changed();},
-        {execution::Lane::Domain,{},execution::WorkClass::Observation});
+        execution::Lane::Domain);
 }
 void CoreProxyDraft::setProxyEnabled(bool value){if(!m_ready)return;if(m_proxy_enabled==value)return;m_proxy_enabled=value;evaluate();}
 void CoreProxyDraft::setProxyAddress(const QString& value){if(!m_ready)return;if(value.size()<=32768&&m_proxy_address==value)return;m_proxy_address=value;evaluate();}
@@ -530,12 +516,12 @@ void CoreProxyDraft::startEvaluation(){
     const auto revision=m_revision;const QPointer<CoreProxyDraft> observer{this};const QPointer<CoreSettingsModel> source=m_source;
     m_source->m_work->submit([state=m_source->m_native,enabled=m_proxy_enabled,address=m_proxy_address,tor=m_tor_enabled,onion=m_tor_address]{return EvaluateProxyDraft(state->nativeSession(),enabled,address,tor,onion);},
         [observer,source,revision](const ProxyDraftProjection& result){if(!observer||!source||!source->presentationOpen())return;
-            observer->m_validation_inflight=false;if(observer->m_revision!=revision){source->m_services.post([observer]{if(observer)observer->startEvaluation();});return;}
+            observer->m_validation_inflight=false;if(observer->m_revision!=revision){source->m_post([observer]{if(observer)observer->startEvaluation();});return;}
             observer->m_pending=false;observer->m_proxy_error=result.proxy_error;observer->m_tor_error=result.tor_error;observer->m_valid=result.valid;observer->m_dirty=result.dirty;Q_EMIT observer->changed();},
         [observer,source,revision](std::exception_ptr){if(!observer||!source||!source->presentationOpen())return;
-            observer->m_validation_inflight=false;if(observer->m_revision!=revision){source->m_services.post([observer]{if(observer)observer->startEvaluation();});return;}
+            observer->m_validation_inflight=false;if(observer->m_revision!=revision){source->m_post([observer]{if(observer)observer->startEvaluation();});return;}
             observer->m_pending=false;observer->m_valid=false;observer->m_error=tr("The proxy draft could not be checked.");Q_EMIT observer->changed();},
-        {execution::Lane::Domain,{},execution::WorkClass::Observation});
+        execution::Lane::Domain);
 }
 bool CoreProxyDraft::requestApply(){
     if(!m_source||!m_source->presentationOpen()||!canApply())return false;

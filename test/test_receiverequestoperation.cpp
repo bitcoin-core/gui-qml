@@ -8,7 +8,9 @@
 #include <qml/models/walletqmlmodel.h>
 #include <qml/models/walletreceivemodel.h>
 #include <qml/walletsettings.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/walletmodelservices.h>
+#include <test/mocks/manualnodeobservations.h>
+#include <test/mocks/manualwalletdrain.h>
 #include <test/mocks/mockwallet.h>
 #include <test/qt_test_registry.h>
 
@@ -76,10 +78,11 @@ struct Wallet : StubWallet {
     }
 };
 struct Fixture {
-    ManualRoutedExecution env;
+    QJsonArray trace;
+    ManualNodeObservations env{[this](execution::Lane lane) { trace.append(int(lane)); }};
     std::shared_ptr<Wallet> wallet{std::make_shared<Wallet>()};
     std::unique_ptr<WalletQmlModel> model{new WalletQmlModel{
-        WalletQmlModel::SharedWallet{wallet, env.scheduler, "request-consumer"}, nullptr,
+        WalletWithQueues(wallet, env.executor(), {}, "request-consumer"), nullptr,
         FeeReadServices{}, psbtfee::Services{}, backup::Services{}}};
     Fixture()
     {
@@ -95,7 +98,7 @@ struct Fixture {
         for (int round{0}; round < 128; ++round) {
             env.drain();
             QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-            if (env.queuedIdle() && env.activeIdle()) return;
+            if (env.turnsIdle()) return;
         }
         QFAIL("Receive projection did not settle within128 controlled publication turns");
     }
@@ -116,16 +119,15 @@ struct Fixture {
     }
     ~Fixture()
     {
+        const auto native_drained = WatchWalletNativeDrain(*model);
         model->beginShutdown();
-        const bool drained = QTest::qWaitFor([&] { settle(); return model->backendExecutor()->isDrained(); }, 3000);
+        const bool drained = QTest::qWaitFor([&] { settle(); return *native_drained; }, 3000);
         QVERIFY(drained);
         settle();
-        QCOMPARE(env.scheduler->pending(), size_t{0});
+        QVERIFY(env.turnsIdle());
         const auto directory = qEnvironmentVariable("BITCOIN_QML_MANUAL_TRACE_DIR");
         if (!directory.isEmpty()) {
             QDir{}.mkpath(directory);
-            QJsonArray trace;
-            for (const auto& event : env.traceSnapshot()) trace.append(QString::fromStdString(event));
             QFile file{directory + QLatin1Char('/') + QString::fromLatin1(QTest::currentTestFunction()) + QStringLiteral(".json")};
             QVERIFY(file.open(QIODevice::WriteOnly));
             const auto bytes = QJsonDocument{QJsonObject{{"commands", trace}, {"loads", wallet->loads},
@@ -204,7 +206,7 @@ private Q_SLOTS:
         draft->publicLabel()->edit("another"); f.settle();
         draft->save();
         QVERIFY(draft->busy()); QCOMPARE(f.wallet->writes, 0); QVERIFY(draft->requestId().isEmpty());
-        while (f.env.step(execution::Lane::Domain)) {}
+        while (f.env.step(execution::Lane::Utility)) {}
         QCOMPARE(f.wallet->writes, 0);
         f.env.drain();
         QCOMPARE(f.wallet->writes, 1);
@@ -268,7 +270,7 @@ private Q_SLOTS:
         auto* receive = f.model->receive();
         QVERIFY(receive->useAddress(address));
         QCOMPARE(f.wallet->address_reads, 0); QCOMPARE(f.wallet->generated, 0);
-        while (f.env.step(execution::Lane::Domain)) {}
+        while (f.env.step(execution::Lane::Utility)) {}
         QCOMPARE(f.wallet->address_reads, 0);
         f.settle();
         QVERIFY(f.wallet->address_reads > 0); QCOMPARE(f.wallet->generated, 0);

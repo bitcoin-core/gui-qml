@@ -7,6 +7,7 @@
 #include <qml/guipresentation.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
+#include <qml/retainedvalue.h>
 #include <qml/walletopening.h>
 
 #include <QClipboard>
@@ -87,26 +88,31 @@ struct ActivityFilterProxyModel::Mailbox {
 };
 struct ActivityFilterProxyModel::Job {
     std::shared_ptr<Owner> owner;
-    std::shared_ptr<execution::ResourceLease> lease;
-    std::shared_ptr<execution::Scheduler> scheduler;
+    std::shared_ptr<void> lease;
+    std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<Mailbox> mailbox;
     std::shared_ptr<std::atomic_bool> cancelled{std::make_shared<std::atomic_bool>(false)};
     quint64 generation{0}, settings{0};
     ~Job() { owner.reset(); lease.reset(); }
+
+    execution::SubmitResult post(std::function<void()> work, std::function<void(std::exception_ptr)> failed)
+    {
+        return opening->postDomain(std::move(work), [] {}, std::move(failed));
+    }
 };
 
 ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent) : ActivityFilterProxyModel(Services{}, parent) {}
 ActivityFilterProxyModel::ActivityFilterProxyModel(Services services, QObject* parent)
     : QAbstractProxyModel(parent), m_services(std::move(services)), m_mailbox(std::make_shared<Mailbox>())
 {
-    if (!m_services.execution.post) m_services.execution.post = presentation::QueuedPost();
+    if (!m_services.post) m_services.post = presentation::QueuedPost();
     if (!m_services.today) m_services.today = [] { return QDate::currentDate(); };
     if (!m_services.write) m_services.write = WriteCsv;
     m_date_observed = m_services.today();
     if (!m_services.locale) m_services.locale = [] { return QLocale{}; };
     if (!m_services.timezone) m_services.timezone = QTimeZone::systemTimeZone;
     const QPointer<ActivityFilterProxyModel> observer{this};
-    m_mailbox->notify = [post = m_services.execution.post, observer] { post([observer] { if (observer) observer->receive(); }); };
+    m_mailbox->notify = [post = m_services.post, observer] { post([observer] { if (observer) observer->receive(); }); };
     m_start_timer.setSingleShot(true); m_apply_timer.setSingleShot(true);
     connect(&m_start_timer, &QTimer::timeout, this, &ActivityFilterProxyModel::start);
     connect(&m_apply_timer, &QTimer::timeout, this, &ActivityFilterProxyModel::apply);
@@ -229,7 +235,6 @@ void ActivityFilterProxyModel::sourceChanged()
     auto next = provider ? provider->preparedSnapshot() : nullptr;
     const bool same = next && m_input && next->snapshot == m_input->snapshot;
     m_input = std::move(next); // Also refresh the cleanup lease when the immutable value was reused.
-    if (provider) { m_execution = m_services.execution; if (!m_execution.scheduler) m_execution.scheduler = provider->activityServices().scheduler; }
     if (!same || m_settings_generation != m_applied_settings) reload();
     Q_EMIT stateChanged();
 }
@@ -239,28 +244,29 @@ void ActivityFilterProxyModel::reload()
     ++m_generation; m_scheduled = true;
     if (!m_job) m_start_timer.start(0);
     const QPointer<ActivityFilterProxyModel> observer{this};
-    m_services.execution.post([observer] { if (observer && !observer->m_closed) Q_EMIT observer->stateChanged(); });
+    m_services.post([observer] { if (observer && !observer->m_closed) Q_EMIT observer->stateChanged(); });
 }
 void ActivityFilterProxyModel::start()
 {
     if (m_closed || m_job || !m_scheduled) return;
     m_scheduled = false;
-    if (!m_input || !m_execution.scheduler) { Q_EMIT stateChanged(); return; }
-    auto owner = std::make_shared<Owner>();
     auto* provider = qobject_cast<activityview::Source*>(sourceModel());
     const auto opening = provider ? provider->opening() : nullptr;
-    auto held = opening ? opening->holdValues([owner] { owner->clear(); }) : activityview::HoldValues(m_execution.scheduler, [owner] { owner->clear(); });
+    if (!m_input || !opening) { Q_EMIT stateChanged(); return; }
+    auto owner = std::make_shared<Owner>();
+    const auto cleanup = [owner] { owner->clear(); };
+    auto held = opening->holdValues(cleanup);
     if (!held) { m_error = tr("Activity could not be filtered. Try again."); Q_EMIT stateChanged(); return; }
-    auto job = std::make_shared<Job>(); job->owner = owner; job->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease));
-    job->scheduler = m_execution.scheduler; job->mailbox = m_mailbox; job->generation = m_generation; job->settings = m_settings_generation;
+    auto job = std::make_shared<Job>(); job->owner = owner; job->lease = std::move(held);
+    job->opening = opening;
+    job->mailbox = m_mailbox; job->generation = m_generation; job->settings = m_settings_generation;
     owner->input = m_input; owner->previous = m_current; owner->previous_input = m_applied_input;
     owner->parameters = {m_search_text, m_date_filter, m_type_filters, m_display_unit, m_min_amount, m_max_amount, m_services.today(), m_range_start, m_range_end, m_group_by, {}, {}};
     // Locale/timezone lookup and address normalization are Domain work.
     const auto locale = m_services.locale; const auto timezone = m_services.timezone;
     m_job = job;
-    const auto admitted = execution::Submit(*job->scheduler, [job, locale, timezone] { job->owner->parameters.locale = locale(); job->owner->parameters.timezone = timezone(); step(job); }, [] {},
-        [job](std::exception_ptr) { job->owner->error = tr("Activity filtering failed."); job->mailbox->publish(job); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    const auto admitted = job->post([job, locale, timezone] { job->owner->parameters.locale = locale(); job->owner->parameters.timezone = timezone(); step(job); },
+        [job](std::exception_ptr) { job->owner->error = tr("Activity filtering failed."); job->mailbox->publish(job); });
     if (!admitted) { owner->error = tr("Activity could not be filtered. Try again."); m_mailbox->publish(job); }
 }
 void ActivityFilterProxyModel::patchRow(Owner& owner, const QString& id, activityview::SharedRow row)
@@ -404,9 +410,8 @@ void ActivityFilterProxyModel::step(const std::shared_ptr<Job>& job)
         }
     }
     owner.work.largestTurn = std::max(owner.work.largestTurn, used);
-    const auto admitted = execution::Submit(*job->scheduler, [job] { step(job); }, [] {},
-        [job](std::exception_ptr) { job->owner->error = tr("Activity filtering could not continue."); job->mailbox->publish(job); },
-        {execution::Lane::Domain, {}, execution::WorkClass::Observation});
+    const auto admitted = job->post([job] { step(job); },
+        [job](std::exception_ptr) { job->owner->error = tr("Activity filtering could not continue."); job->mailbox->publish(job); });
     if (!admitted) { owner.error = tr("Activity filtering could not continue."); job->mailbox->publish(job); }
 }
 void ActivityFilterProxyModel::receive()
@@ -453,12 +458,7 @@ void ActivityFilterProxyModel::apply()
     // the fallback; no last large vector is cleared on GUI. Retain the job's
     // cleanup lease until this task finishes: a source switch may drop the
     // committed GUI hold while transient disposal is still queued or running.
-    if (auto* provider = qobject_cast<activityview::Source*>(sourceModel()); provider && provider->opening()) {
-        provider->opening()->retireValues([job] { job->owner->patches.clear(); });
-    } else {
-        execution::Submit(*job->scheduler, [job] { job->owner->patches.clear(); }, [] {}, {},
-            {execution::Lane::Domain, {}, execution::WorkClass::Observation});
-    }
+    job->opening->retireValues([job] { job->owner->patches.clear(); });
     Q_EMIT countChanged(); if (!observer || m_closed) return;
     if (maximum_changed) Q_EMIT availableMaxAmountChanged();
     if (!observer || m_closed) return;
@@ -691,8 +691,9 @@ bool ActivityFilterProxyModel::beginExport()
     if (m_export_result_shown) { m_export_result_shown = false; Q_EMIT exportChanged(); }
     refreshDate();
     auto* provider = qobject_cast<activityview::Source*>(sourceModel());
-    if (m_closed || exportBusy() || busy() || m_source_deferred || !sourceModel() || !m_current || !m_execution.scheduler ||
-        (provider && provider->opening() && !provider->opening()->available()) || m_chooser_sequence == std::numeric_limits<quint64>::max()) {
+    const auto opening = provider ? provider->opening() : nullptr;
+    if (m_closed || exportBusy() || busy() || m_source_deferred || !sourceModel() || !m_current || !opening ||
+        !opening->available() || m_chooser_sequence == std::numeric_limits<quint64>::max()) {
         m_export_rejected = true; m_export_error = tr("Activity is not ready to export yet."); Q_EMIT exportChanged(); return false;
     }
     m_chooser_snapshot = m_current; m_chooser_source = sourceModel(); m_chooser_unit = m_display_unit;
@@ -752,20 +753,19 @@ QString ActivityFilterProxyModel::exportResultText() const
 }
 quint64 ActivityFilterProxyModel::startExport(const QString& path, std::shared_ptr<const activityview::Hold> snapshot, int unit, bool captured)
 {
-    if (m_closed || exportBusy() || (!captured && busy()) || !snapshot || !m_execution.scheduler || path.isEmpty() || path.size() > 4096 || m_export_ticket == std::numeric_limits<quint64>::max()) {
+    if (m_closed || exportBusy() || (!captured && busy()) || !snapshot || path.isEmpty() || path.size() > 4096 || m_export_ticket == std::numeric_limits<quint64>::max()) {
         m_export_rejected = true; m_export_error = tr("Activity is not ready to export yet."); Q_EMIT exportChanged(); return 0;
     }
     auto* provider = qobject_cast<activityview::Source*>(sourceModel());
     if (provider && provider->opening() && !provider->opening()->available()) { m_export_rejected = true; m_export_error = tr("The wallet is closing."); Q_EMIT exportChanged(); return 0; }
-    const auto files = provider ? provider->activityFiles() : activityexport::Files{};
-    if (!files.inspect || !files.install) { m_export_rejected = true; m_export_error = tr("Activity is not ready to export yet."); Q_EMIT exportChanged(); return 0; }
+    auto files = provider ? provider->activityFiles() : activityexport::Files{};
+    if (!files.utility || !files.value_cleanup || !files.inspect || !files.install) { m_export_rejected = true; m_export_error = tr("Activity is not ready to export yet."); Q_EMIT exportChanged(); return 0; }
     const auto ticket = ++m_export_ticket; m_export_rejected = false;
     const QPointer<ActivityFilterProxyModel> observer{this};
     if (m_export_operation) m_export_operation->deleteLater();
-    // Reserving Native ownership may reenter close through an injected
-    // scheduler. Attach the child only after the observer survives it.
+    // Reserving snapshot cleanup can close the proxy before the child is attached.
     auto* operation = new ActivityExportOperation({path, snapshot, unit}, files,
-        {m_execution.scheduler, m_services.execution.post}, m_services.write);
+        m_services.post, m_services.write);
     if (!observer || observer->m_closed) { delete operation; return 0; }
     operation->setParent(this);
     m_export_operation = operation; m_export_error.clear(); m_exported_path.clear();
@@ -802,16 +802,17 @@ void ActivityFilterProxyModel::closeRowMenu()
 }
 bool ActivityFilterProxyModel::copyRowMenuRawTransaction()
 {
-    if (m_closed || !m_context || m_context_txid.size() != 64 || !m_context->snapshot->raw || !m_execution.scheduler) return false;
+    if (m_closed || !m_context || m_context_txid.size() != 64 || !m_context->snapshot->raw) return false;
     auto* provider = qobject_cast<activityview::Source*>(sourceModel());
-    if (provider && provider->opening() && !provider->opening()->available()) return false;
-    struct Copy { std::shared_ptr<const activityview::Hold> snapshot; std::shared_ptr<const QString> text; void clear() { snapshot.reset(); text.reset(); } };
-    struct Lifetime { std::shared_ptr<Copy> value; std::shared_ptr<execution::ResourceLease> lease; ~Lifetime() { value.reset(); lease.reset(); } };
-    auto value = std::make_shared<Copy>();
     const auto opening = provider ? provider->opening() : nullptr;
-    auto held = opening ? opening->holdValues([value] { value->clear(); }) : activityview::HoldValues(m_execution.scheduler, [value] { value->clear(); });
+    if (!opening || !opening->available()) return false;
+    struct Copy { std::shared_ptr<const activityview::Hold> snapshot; std::shared_ptr<const QString> text; void clear() { snapshot.reset(); text.reset(); } };
+    struct Lifetime { std::shared_ptr<Copy> value; std::shared_ptr<void> lease; ~Lifetime() { value.reset(); lease.reset(); } };
+    auto value = std::make_shared<Copy>();
+    const auto cleanup = [value] { value->clear(); };
+    auto held = opening->holdValues(cleanup);
     if (!held) return false;
-    auto lifetime = std::make_shared<Lifetime>(); lifetime->value = value; lifetime->lease = std::make_shared<execution::ResourceLease>(std::move(*held.lease));
+    auto lifetime = std::make_shared<Lifetime>(); lifetime->value = value; lifetime->lease = std::move(held);
     value->snapshot = m_context;
     const auto txid = m_context_txid;
     const QPointer<ActivityFilterProxyModel> observer{this};
@@ -823,7 +824,8 @@ bool ActivityFilterProxyModel::copyRowMenuRawTransaction()
             if (observer && !observer->m_closed) Q_EMIT observer->copyFinished(copied, copied ? QString{} : tr("The raw transaction could not be copied."));
         }, Qt::QueuedConnection);
     };
-    const auto admitted = execution::Submit(*m_execution.scheduler, [lifetime, txid] { return std::make_shared<const QString>(lifetime->value->snapshot->snapshot->raw(txid)); }, complete,
-        [complete](std::exception_ptr) { complete({}); }, {execution::Lane::Domain, {}, execution::WorkClass::Action});
+    const auto work = [lifetime, txid] { return std::make_shared<const QString>(lifetime->value->snapshot->snapshot->raw(txid)); };
+    const auto failed = [complete](std::exception_ptr) { complete({}); };
+    const auto admitted = opening->postDomain(work, complete, failed, execution::WorkClass::Action);
     return bool(admitted);
 }

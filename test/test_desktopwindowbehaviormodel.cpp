@@ -2,13 +2,17 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <qml/asyncjoin.h>
+#include <qml/models/desktopwindowbehaviormodel.h>
+#include <test/mocks/manualstartupexecution.h>
+
+#include <QScopeGuard>
+#include <QSemaphore>
+#include <QTemporaryDir>
 #include <QtTest/QtTest>
 
-#include <qml/models/desktopwindowbehaviormodel.h>
-#include <qml/backendexecutor.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <atomic>
 #include <stdexcept>
-#include <QScopeGuard>
 
 namespace {
 struct ManualGuiDispatcher {
@@ -47,6 +51,7 @@ private Q_SLOTS:
     // QSettings persistence
     void loadSettings_clampsMinimizeToTrayWhenTrayHidden();
     void settings_persistAcrossInstances();
+    void standalonePreferencesJoinAfterAcceptedWrite();
     void manualRetryQueriesWithoutReplayingAWrite_data();
     void manualRetryQueriesWithoutReplayingAWrite();
     void externalWriterRefreshesExistingModel();
@@ -88,7 +93,8 @@ void DesktopWindowBehaviorModelTests::init()
 void DesktopWindowBehaviorModelTests::cleanup()
 {
     bool drained{false};
-    BackendExecutor::shutdownAll(this, [&] { drained = true; });
+    QObject receiver;
+    WaitForThreadJoins(&receiver, [&] { drained = true; });
     QTRY_VERIFY(drained);
     clearTestSettings();
 }
@@ -274,41 +280,86 @@ void DesktopWindowBehaviorModelTests::settings_persistAcrossInstances()
     }
 }
 
+void DesktopWindowBehaviorModelTests::standalonePreferencesJoinAfterAcceptedWrite()
+{
+    using Model = DesktopWindowBehaviorModel;
+    struct Write {
+        std::atomic_bool entered{false};
+        QSemaphore release;
+        std::atomic_int completed{0};
+    };
+    const auto write = std::make_shared<Write>();
+    auto model = std::make_unique<Model>(true, presentation::Post{}, Model::Store{
+        [] { return Model::Values{}; }, [write](auto values) {
+            write->entered = true;
+            write->release.acquire();
+            if (values.minimize_close) ++write->completed;
+        }});
+    auto unblock = qScopeGuard([&] { write->release.release(); });
+    QTRY_VERIFY(model->settingsReady());
+    model->setMinimizeOnClose(true);
+    QTRY_VERIFY(write->entered.load());
+    model.reset();
+
+    const auto joined = std::make_shared<bool>(false);
+    WaitForThreadJoins(this, [joined] { *joined = true; });
+    QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
+    QVERIFY(!*joined);
+    QCOMPARE(write->completed.load(), 0);
+
+    write->release.release();
+    unblock.dismiss();
+    QTRY_VERIFY(*joined);
+    QCOMPARE(write->completed.load(), 1);
+}
+
 void DesktopWindowBehaviorModelTests::manualPreferencesOwnOutcomesAfterClose()
 {
     using Model = DesktopWindowBehaviorModel;
-    ManualRoutedExecution env;
     ManualGuiDispatcher gui;
     Model::Values persisted{true, true, false};
     int reads{0}, writes{0};
-    auto model = std::make_unique<Model>(true, execution::SnapshotServices{env.scheduler, [&](auto work) { gui.post(std::move(work)); }},
-        Model::Store{[&] { ++reads; return persisted; }, [&](auto values) { ++writes; persisted = values; }});
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    auto model = std::make_unique<Model>(true, [&](auto work) { gui.post(std::move(work)); },
+        Model::Store{[&] { ++reads; return persisted; }, [&](auto values) { ++writes; persisted = values; }}, nullptr, utility);
     QVERIFY(!model->settingsReady()); QCOMPARE(reads, 0);
     model->setShowTrayIcon(false); // No write may overwrite the unknown profile.
-    env.drain(); QCOMPARE(reads, 1); QCOMPARE(writes, 0);
+    worker.drain(); QCOMPARE(reads, 1); QCOMPARE(writes, 0);
     QVERIFY(!model->settingsReady());
     gui.drain(); QVERIFY(model->settingsReady()); QVERIFY(model->minimizeToTray());
     model->setShowTrayIcon(false);
     QVERIFY(!model->showTrayIcon()); QVERIFY(!model->minimizeToTray());
     QCOMPARE(writes, 0); QVERIFY(model->persistencePending());
+    bool drained{false};
+    const auto finish = qScopeGuard([&] { worker.drain(); });
     model->close(); model.reset();
-    env.scheduler->close();
-    env.drain(); QCOMPARE(writes, 1);
+    utility->whenDrained([&] { drained = true; });
+    QVERIFY(!utility->post([] {}));
+    QVERIFY(!drained);
+    QCOMPARE(writes, 0);
+    worker.drain(); QCOMPARE(writes, 1);
+    QVERIFY(drained);
     QVERIFY(!persisted.show_tray); QVERIFY(!persisted.minimize_tray);
-    gui.drain(); QVERIFY(env.quiescent());
+    QVERIFY(!gui.pending.empty());
+    gui.drain();
+    QCOMPARE(worker.coreSubmissions(), size_t{0});
+    QVERIFY(worker.quiescent());
 }
 
 void DesktopWindowBehaviorModelTests::manualPreferencesRejectAndRetryLoad()
 {
     using Model = DesktopWindowBehaviorModel;
-    ManualRoutedExecution env; ManualGuiDispatcher gui;
-    env.rejectLane(execution::Lane::Core);
+    ManualGuiDispatcher gui;
     int reads{0};
-    Model model{true, {env.scheduler, [&](auto work) { gui.post(std::move(work)); }},
-        {[&] { ++reads; return Model::Values{false, false, true}; }, [](auto) {}}};
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    worker.reject_utility = true;
+    Model model{true, [&](auto work) { gui.post(std::move(work)); },
+        {[&] { ++reads; return Model::Values{false, false, true}; }, [](auto) {}}, nullptr, utility};
     QCOMPARE(reads, 0); QVERIFY(!model.settingsReady());
     QVERIFY(!model.persistencePending()); QVERIFY(!model.persistenceError().isEmpty());
-    model.retryPersistence(); env.drain();
+    model.retryPersistence(); worker.drain();
     QVERIFY(!model.settingsReady()); gui.drain();
     QCOMPARE(reads, 1); QVERIFY(model.settingsReady());
     QVERIFY(!model.showTrayIcon()); QVERIFY(model.minimizeOnClose());
@@ -318,26 +369,30 @@ void DesktopWindowBehaviorModelTests::manualPreferencesRejectAndRetryLoad()
 void DesktopWindowBehaviorModelTests::manualLostPublicationRecoversActualLoadAndWriteWithoutReplay()
 {
     using Model = DesktopWindowBehaviorModel;
-    ManualRoutedExecution env; int reads{0}, writes{0};
+    int reads{0}, writes{0};
     Model::Values persisted{true, false, false};
-    Model model{true, {env.scheduler, [](auto) { throw std::runtime_error("post failed"); }},
-        Model::Store{[&] { ++reads; return persisted; }, [&](auto value) { ++writes; persisted = value; }}};
-    env.drain(); QVERIFY(!model.settingsReady()); QVERIFY(model.persistencePending()); QCOMPARE(reads, 1);
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    Model model{true, [](auto) { throw std::runtime_error("post failed"); },
+        Model::Store{[&] { ++reads; return persisted; }, [&](auto value) { ++writes; persisted = value; }}, nullptr, utility};
+    worker.drain(); QVERIFY(!model.settingsReady()); QVERIFY(model.persistencePending()); QCOMPARE(reads, 1);
     model.retryPersistence(); QVERIFY(model.settingsReady()); QVERIFY(!model.persistencePending()); QCOMPARE(reads, 1); QCOMPARE(writes, 0);
-    model.setMinimizeOnClose(true); env.drain(); QCOMPARE(writes, 1); QVERIFY(model.persistencePending());
+    model.setMinimizeOnClose(true); worker.drain(); QCOMPARE(writes, 1); QVERIFY(model.persistencePending());
     model.retryPersistence(); QVERIFY(!model.persistencePending()); QCOMPARE(writes, 1); QVERIFY(model.minimizeOnClose());
-    model.close(); env.drain();
+    model.close(); worker.drain();
 }
 
 void DesktopWindowBehaviorModelTests::manualPreferencesReportWriteFailure()
 {
     using Model = DesktopWindowBehaviorModel;
-    ManualRoutedExecution env; ManualGuiDispatcher gui;
+    ManualGuiDispatcher gui;
     int writes{0};
-    Model model{true, {env.scheduler, [&](auto work) { gui.post(std::move(work)); }},
-        {[] { return Model::Values{}; }, [&](auto) { ++writes; throw std::runtime_error{"disk full"}; }}};
-    env.drain(); gui.drain(); QVERIFY(model.settingsReady());
-    model.setMinimizeOnClose(true); env.drain();
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    Model model{true, [&](auto work) { gui.post(std::move(work)); },
+        {[] { return Model::Values{}; }, [&](auto) { ++writes; throw std::runtime_error{"disk full"}; }}, nullptr, utility};
+    worker.drain(); gui.drain(); QVERIFY(model.settingsReady());
+    model.setMinimizeOnClose(true); worker.drain();
     QVERIFY(model.persistencePending()); QVERIFY(model.persistenceError().isEmpty());
     gui.drain(); QCOMPARE(writes, 1); QVERIFY(!model.persistencePending());
     QVERIFY(!model.persistenceError().isEmpty()); QVERIFY(model.minimizeOnClose());
@@ -351,50 +406,74 @@ void DesktopWindowBehaviorModelTests::manualRetryQueriesWithoutReplayingAWrite_d
 }
 void DesktopWindowBehaviorModelTests::manualRetryQueriesWithoutReplayingAWrite()
 {
-    QFETCH(bool,saved);using Model=DesktopWindowBehaviorModel;ManualRoutedExecution env;ManualGuiDispatcher gui;int reads{0},writes{0};Model::Values persisted;
-    Model model{true,{env.scheduler,[&](auto turn){gui.post(std::move(turn));}},
-        {[&]{++reads;return persisted;},[&](auto value){++writes;if(saved)persisted=value;throw std::runtime_error("write completion unavailable");}}};
-    env.drain();gui.drain();model.setMinimizeOnClose(true);env.drain();gui.drain();
+    QFETCH(bool, saved);
+    using Model = DesktopWindowBehaviorModel;
+    ManualGuiDispatcher gui;
+    int reads{0}, writes{0};
+    Model::Values persisted;
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    Model model{true, [&](auto turn) { gui.post(std::move(turn)); },
+        {[&] { ++reads; return persisted; }, [&](auto value) {
+            ++writes;
+            if (saved) persisted = value;
+            throw std::runtime_error("write completion unavailable");
+        }}, nullptr, utility};
+    worker.drain();gui.drain();model.setMinimizeOnClose(true);worker.drain();gui.drain();
     QCOMPARE(writes,1);QVERIFY(!model.persistenceError().isEmpty());
-    model.retryPersistence();env.drain();gui.drain();
+    model.retryPersistence();worker.drain();gui.drain();
     QCOMPARE(writes,1);QCOMPARE(reads,2);QCOMPARE(model.minimizeOnClose(),saved);QVERIFY(!model.persistencePending());
-    model.close();env.drain();gui.drain();
+    model.close();worker.drain();gui.drain();
 }
 
 void DesktopWindowBehaviorModelTests::externalWriterRefreshesExistingModel()
 {
+    // The model observes external writers through a file watch. With the
+    // native macOS format the plist is written by cfprefsd some seconds
+    // after sync(), so the wait measured the daemon, not the model. An INI
+    // file is written by QSettings itself and the watch fires on sync().
+    QTemporaryDir settings_dir; QVERIFY(settings_dir.isValid());
+    const auto previous_format = QSettings::defaultFormat();
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    const auto restore_format = qScopeGuard([previous_format] { QSettings::setDefaultFormat(previous_format); });
     DesktopWindowBehaviorModel model{true};QTRY_VERIFY(model.settingsReady());QTRY_VERIFY(!model.persistencePending());
     QSignalSpy changes{&model,&DesktopWindowBehaviorModel::settingsStateChanged};
     {QSettings external;external.setValue("fHideTrayIcon",true);external.setValue("fMinimizeOnClose",true);external.sync();}
-    // An external write reaches the model through file change notification,
-    // which can take several seconds on macOS.
-    QTRY_VERIFY_WITH_TIMEOUT(!model.showTrayIcon(),30'000);QTRY_VERIFY(model.minimizeOnClose());QTRY_VERIFY(!model.persistencePending());QVERIFY(!changes.empty());
+    QTRY_VERIFY(!model.showTrayIcon());QTRY_VERIFY(model.minimizeOnClose());QTRY_VERIFY(!model.persistencePending());QVERIFY(!changes.empty());
     {QSettings external;external.remove("fHideTrayIcon");external.remove("fMinimizeOnClose");external.sync();}
-    QTRY_VERIFY_WITH_TIMEOUT(model.showTrayIcon(),30'000);QTRY_VERIFY(!model.minimizeOnClose());
+    QTRY_VERIFY(model.showTrayIcon());QTRY_VERIFY(!model.minimizeOnClose());
 }
 void DesktopWindowBehaviorModelTests::manualRefreshWaitsForWriteAndCoalesces()
 {
-    using Model=DesktopWindowBehaviorModel;ManualRoutedExecution env;ManualGuiDispatcher gui;int reads{0},writes{0};Model::Values persisted;
-    Model model{true,{env.scheduler,[&](auto turn){gui.post(std::move(turn));}},
-        {[&]{++reads;return persisted;},[&](auto value){++writes;persisted=value;}}};
-    env.drain();gui.drain();QVERIFY(model.settingsReady());QCOMPARE(reads,1);
-    model.setMinimizeOnClose(true);env.drain();QCOMPARE(writes,1);QVERIFY(model.persistencePending());
+    using Model = DesktopWindowBehaviorModel;
+    ManualGuiDispatcher gui;
+    int reads{0}, writes{0};
+    Model::Values persisted;
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    Model model{true, [&](auto turn) { gui.post(std::move(turn)); },
+        {[&] { ++reads; return persisted; }, [&](auto value) { ++writes; persisted = value; }}, nullptr, utility};
+    worker.drain();gui.drain();QVERIFY(model.settingsReady());QCOMPARE(reads,1);
+    model.setMinimizeOnClose(true);worker.drain();QCOMPARE(writes,1);QVERIFY(model.persistencePending());
     persisted.show_tray=false;model.refreshSettings();model.refreshSettings();QCOMPARE(reads,1);
-    gui.drain();env.drain();gui.drain();QCOMPARE(reads,2);QCOMPARE(writes,1);QVERIFY(!model.showTrayIcon());QVERIFY(model.minimizeOnClose());QVERIFY(!model.persistencePending());
-    model.close();model.refreshSettings();env.drain();gui.drain();QCOMPARE(reads,2);
+    gui.drain();worker.drain();gui.drain();QCOMPARE(reads,2);QCOMPARE(writes,1);QVERIFY(!model.showTrayIcon());QVERIFY(model.minimizeOnClose());QVERIFY(!model.persistencePending());
+    model.close();model.refreshSettings();worker.drain();gui.drain();QCOMPARE(reads,2);
 }
 void DesktopWindowBehaviorModelTests::nativeWritePreservesUnrelatedExternalPreference()
 {
-    ManualRoutedExecution env;ManualGuiDispatcher gui;
-    DesktopWindowBehaviorModel model{true,{env.scheduler,[&](auto turn){gui.post(std::move(turn));}}};
-    env.drain();gui.drain();QVERIFY(!model.minimizeOnClose());
+    ManualGuiDispatcher gui;
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    DesktopWindowBehaviorModel model{true, [&](auto turn) { gui.post(std::move(turn)); }, {}, nullptr, utility};
+    worker.drain();gui.drain();QVERIFY(!model.minimizeOnClose());
     // The external write happens after the GUI snapshot and before the app's
     // independent tray intent. This is a real QSettings stale-base schedule.
     {QSettings external;external.setValue("fMinimizeOnClose",true);external.sync();}
-    model.setShowTrayIcon(false);env.drain();gui.drain();
+    model.setShowTrayIcon(false);worker.drain();gui.drain();
     QSettings actual;actual.sync();QVERIFY(actual.value("fMinimizeOnClose").toBool());QVERIFY(actual.value("fHideTrayIcon").toBool());
     QVERIFY(model.minimizeOnClose());QVERIFY(!model.showTrayIcon());
-    model.close();env.drain();gui.drain();
+    model.close();worker.drain();gui.drain();
 }
 
 void DesktopWindowBehaviorModelTests::heldNativeWorkKeepsOriginalPreferenceNamespace()
@@ -407,13 +486,15 @@ void DesktopWindowBehaviorModelTests::heldNativeWorkKeepsOriginalPreferenceNames
     QSettings second;second.clear();second.setValue("fMinimizeOnClose",false);second.sync();
     const auto cleanup_stores=qScopeGuard([&]{first.clear();first.sync();second.clear();second.sync();});
     QCoreApplication::setApplicationName(QStringLiteral("R35DesktopOriginal"));
-    ManualRoutedExecution transport;ManualGuiDispatcher gui;
-    DesktopWindowBehaviorModel model{true,{transport.scheduler,[&](auto turn){gui.post(std::move(turn));}},{}};
+    ManualGuiDispatcher gui;
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    DesktopWindowBehaviorModel model{true, [&](auto turn) { gui.post(std::move(turn)); }, {}, nullptr, utility};
     QCoreApplication::setApplicationName(QStringLiteral("R35DesktopSuccessor"));
-    transport.drain();gui.drain();QVERIFY(model.settingsReady());QVERIFY(!model.showTrayIcon());
-    model.setMinimizeOnClose(true);transport.drain();gui.drain();QVERIFY(model.minimizeOnClose());
+    worker.drain();gui.drain();QVERIFY(model.settingsReady());QVERIFY(!model.showTrayIcon());
+    model.setMinimizeOnClose(true);worker.drain();gui.drain();QVERIFY(model.minimizeOnClose());
     first.sync();second.sync();QVERIFY(first.value("fMinimizeOnClose").toBool());QVERIFY(!second.value("fMinimizeOnClose").toBool());
-    model.close();transport.drain();gui.drain();QVERIFY(transport.quiescent());
+    model.close();worker.drain();gui.drain();QVERIFY(worker.quiescent());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

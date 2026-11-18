@@ -5,9 +5,11 @@
 #define BITCOIN_QML_STARTUPEFFECTS_H
 
 #include <qml/snapshotquery.h>
+#include <qml/asyncjoin.h>
 #include <qml/guipresentation.h>
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <QCoreApplication>
+#include <QEvent>
 #include <QEventLoop>
 #include <QPointer>
 #include <exception>
@@ -17,28 +19,37 @@
 namespace startup {
 /** Drive the pre-main-window startup phase while Native owns blocking work.
  * The GUI continues to process window, dialog and quit events. An accepted
- * operation must reach its Domain outcome before borrowed startup arguments
+ * operation must reach its Utility outcome before borrowed startup arguments
  * can leave scope, including when a quit arrives during the phase.
  * This phase runner is never used by model getters, actions or destructors.
  */
 template <typename Work>
-auto Run(const execution::SnapshotServices& services, Work work)
+auto Run(execution::SerialQueue* core, execution::SerialQueue* outcomes, Work work, presentation::Post post = {})
 {
     using Value = std::invoke_result_t<Work>;
-    if (!services.scheduler) throw std::invalid_argument{"Startup execution services are unavailable"};
+    if (!core || !outcomes) throw std::invalid_argument{"Startup execution services are unavailable"};
     QEventLoop phase;
     const QPointer<QEventLoop> observer{&phase};
-    auto operation = std::make_shared<execution::OwnedCommand<Value>>(services.scheduler,
-        [post = services.post, fallback = presentation::QueuedPost(), observer] {
+    auto operation = std::make_shared<execution::OwnedCommand<Value>>(
+        [post = std::move(post), fallback = presentation::QueuedPost(), observer] {
             const auto wake = [observer] { if (observer) observer->quit(); };
             // Enqueue ports must either retain the turn or throw; silent drops
             // violate the port contract. A throwing primary cannot strand this
-            // borrowed startup phase after its actual Domain outcome exists.
+            // borrowed startup phase after its actual outcome exists.
             try { if (post) post(wake); else fallback(wake); }
             catch (...) { fallback(wake); }
         });
-    const auto admitted = operation->start(std::move(work),
-        {execution::Lane::Core, services.scheduler->allocateKey(), execution::WorkClass::Action});
+    const auto admitted = operation->startWith([core, outcomes, work = std::move(work)](auto done, auto failed) mutable {
+        auto packet = execution::MakeTask(std::move(work), std::move(done), std::move(failed));
+        const bool accepted = core->post([outcomes, packet = std::move(packet)]() mutable {
+            packet->execute();
+            auto deliver = [packet = std::move(packet)] { packet->deliver(); };
+            // Even if Utility refuses the handoff, the accepted result must
+            // release the startup phase waiting for it on Qt.
+            if (!outcomes->post(deliver)) deliver();
+        });
+        return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+    });
     if (!admitted) throw std::runtime_error{"Startup work could not be queued"};
     auto result = operation->result();
     while (!result) { phase.exec(); result = operation->result(); }
@@ -47,22 +58,20 @@ auto Run(const execution::SnapshotServices& services, Work work)
     return std::move(*result->value);
 }
 /** Application lifecycle only: interfaces outlive every producer and join. */
-inline void DrainWorkers()
-{
-    QEventLoop loop; bool drained{false};
-    BackendExecutor::shutdownAll(&loop, [&] { drained = true; loop.quit(); });
-    while (!drained) loop.exec();
-    presentation::FlushRetirements();
-}
 template <typename Retire, typename StopWorkers>
 void DrainThenRetire(Retire retire, StopWorkers stop_workers)
 {
-    DrainWorkers();
+    // Final view destruction can enqueue cleanup on a queue that is still open.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QEventLoop loop;
+    bool finished{false};
+    WaitForThreadJoins(&loop, [&] { finished = true; loop.quit(); });
+    while (!finished) loop.exec();
+    presentation::FlushRetirements();
 
     // The main engine and its models are gone. Keep Qt receiving events
     // during both joins, including thread-local cleanup on either worker.
-    QEventLoop loop;
-    bool finished{false};
+    finished = false;
     std::exception_ptr failure;
     std::thread joiner{[stop_workers = std::move(stop_workers), retire = std::move(retire), &loop, &finished, &failure]() mutable {
         try {

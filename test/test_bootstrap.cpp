@@ -2,13 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/backendexecutor.h>
 #include <qml/quithandler.h>
 #include <qml/startupdialog.h>
 #include <qml/startupeffects.h>
 #include <qml/executor.h>
 #include <qml/guipresentation.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/manualstartupexecution.h>
 
 #include <QApplication>
 #include <QEventLoop>
@@ -66,14 +65,12 @@ void BootstrapBeforeExecTests::dismissedStartupDialogAllowsFinalDrain()
     });
     ExecStartupDialog(engine, window, quit_handler);
     std::atomic_bool work_finished{false};
-    BackendExecutor executor;
-    executor.submit(this, [&] { work_finished = true; }, [] {});
-    QEventLoop drain;
-    bool drained{false};
-    BackendExecutor::shutdownAll(&drain, [&] { drained = true; drain.quit(); });
-    while (!drained) drain.exec();
+    execution::Executor executor{execution::Executor::Config{}};
+    auto queue = executor.makeQueue(execution::Lane::Core);
+    QVERIFY(queue.post([&] { work_finished = true; }));
+    startup::DrainThenRetire([] {}, [&] { executor.stopAndJoin(); });
     QVERIFY(work_finished.load());
-    QVERIFY(executor.isDrained());
+    QVERIFY(!queue.post([] {}));
 }
 
 void BootstrapBeforeExecTests::repeatedNativeQuitAllowsOnboardingExitAndFinalDrain()
@@ -87,36 +84,34 @@ void BootstrapBeforeExecTests::repeatedNativeQuitAllowsOnboardingExitAndFinalDra
 
     QSemaphore release;
     std::atomic_bool work_finished{false};
-    BackendExecutor executor;
-    executor.submit(this, [&] { release.acquire(); work_finished = true; }, [] {});
+    execution::Executor executor{execution::Executor::Config{}};
+    auto queue = executor.makeQueue(execution::Lane::Core);
+    QVERIFY(queue.post([&] { release.acquire(); work_finished = true; }));
     QTimer::singleShot(0, this, [&] {
         SendApplicationQuitEvent();
         QTimer::singleShot(0, this, [&] { release.release(); });
     });
-    QEventLoop drain;
-    bool drained{false};
-    BackendExecutor::shutdownAll(&drain, [&] { drained = true; drain.quit(); });
-    while (!drained) drain.exec();
-    QVERIFY(executor.isDrained());
+    startup::DrainThenRetire([] {}, [&] { executor.stopAndJoin(); });
+    QVERIFY(!queue.post([] {}));
     QVERIFY(work_finished.load());
     QCOMPARE(requested.size(), 2);
 }
 
 void BootstrapBeforeExecTests::startupPhaseUsesActualDomainOutcome()
 {
-    ManualRoutedExecution env;
+    ManualStartupExecution env;
     std::deque<std::function<void()>> publications;
     bool native_finished{false}, saw_unconsumed{false};
     QTimer driver;
     connect(&driver, &QTimer::timeout, this, [&] {
         if (env.step(execution::Lane::Core)) { saw_unconsumed = native_finished && publications.empty(); return; }
-        if (env.step(execution::Lane::Domain)) return;
+        if (env.step(execution::Lane::Utility)) return;
         if (!publications.empty()) { auto work = std::move(publications.front()); publications.pop_front(); work(); }
     });
     driver.start(0);
-    const auto value = startup::Run({env.scheduler, [&](auto work) { publications.push_back(std::move(work)); }}, [&] {
+    const auto value = startup::Run(&env.core, &env.outcomes, [&] {
         native_finished = true; return 42;
-    });
+    }, [&](auto work) { publications.push_back(std::move(work)); });
     driver.stop();
     QCOMPARE(value, 42); QVERIFY(saw_unconsumed); QVERIFY(env.quiescent());
     // A result observed before its queued wakeup still leaves a safe weak turn.
@@ -125,18 +120,17 @@ void BootstrapBeforeExecTests::startupPhaseUsesActualDomainOutcome()
 
 void BootstrapBeforeExecTests::startupPhaseReportsAdmissionAndNativeFailures()
 {
-    ManualRoutedExecution env;
-    execution::SnapshotServices services{env.scheduler, presentation::QueuedPost()};
-    env.rejectLane(execution::Lane::Core);
+    ManualStartupExecution env;
+    env.reject_core = true;
     bool called{false}, rejected{false};
-    try { startup::Run(services, [&] { called = true; return false; }); }
+    try { startup::Run(&env.core, &env.outcomes, [&] { called = true; return false; }); }
     catch (const std::runtime_error&) { rejected = true; }
     QVERIFY(rejected); QVERIFY(!called); QVERIFY(env.quiescent());
     QTimer driver;
     connect(&driver, &QTimer::timeout, this, [&] { env.drain(); });
     driver.start(0);
     QString failure;
-    try { startup::Run(services, []() -> bool { throw std::runtime_error{"native startup failed"}; }); }
+    try { startup::Run(&env.core, &env.outcomes, []() -> bool { throw std::runtime_error{"native startup failed"}; }); }
     catch (const std::runtime_error& error) { failure = QString::fromUtf8(error.what()); }
     driver.stop();
     QCOMPARE(failure, QStringLiteral("native startup failed")); QVERIFY(env.quiescent());
@@ -144,7 +138,9 @@ void BootstrapBeforeExecTests::startupPhaseReportsAdmissionAndNativeFailures()
 
 void BootstrapBeforeExecTests::startupPhaseKeepsGuiResponsiveOnRealWorker()
 {
-    BackendExecutor executor{execution::Options{}};
+    execution::Executor executor{execution::Executor::Config{}};
+    auto core = executor.makeQueue(execution::Lane::Core);
+    auto outcomes = executor.makeQueue(execution::Lane::Utility);
     QSemaphore release;
     std::atomic_bool entered{false}, off_gui{false};
     auto* gui_thread = QThread::currentThread();
@@ -152,15 +148,17 @@ void BootstrapBeforeExecTests::startupPhaseKeepsGuiResponsiveOnRealWorker()
     QTimer heartbeat;
     connect(&heartbeat, &QTimer::timeout, this, [&] { if (entered) { ++heartbeats; release.release(); } });
     heartbeat.start(1);
-    const auto value = startup::Run({executor.scheduler(), presentation::QueuedPost()}, [&] {
+    const auto value = startup::Run(&core, &outcomes, [&] {
         off_gui = QThread::currentThread() != gui_thread;
         entered = true; release.acquire(); return 7;
     });
     heartbeat.stop();
     QCOMPARE(value, 7); QVERIFY(off_gui.load()); QVERIFY(heartbeats > 0);
-    bool drained{false};
-    executor.whenDrained(this, [&] { drained = true; }); executor.shutdown();
-    QTRY_VERIFY(drained);
+    core.close();
+    const auto drained = std::make_shared<std::atomic_bool>(false);
+    core.whenDrained([drained] { *drained = true; });
+    QTRY_VERIFY(drained->load());
+    executor.stopAndJoin();
 }
 
 void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiResponsiveUntilFinalJoin()
@@ -182,16 +180,18 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
     std::atomic_bool actor_entered{false}, actor_finished{false}, cleanup_entered{false};
     std::atomic_bool thread_exit_entered{false}, actors_joined{false};
     std::atomic_bool worker_exit_entered{false}, worker_exit_released{false};
+    std::atomic_bool view_cleanup_finished{false};
     execution::Executor executor{execution::Executor::Config{}};
     auto queue = executor.makeQueue(execution::Lane::Core);
-    BackendExecutor factory{execution::Options{}}, actor{execution::Options{}};
-    startup::Run({factory.scheduler(), presentation::QueuedPost()}, [&] {
+    auto outcomes = executor.makeQueue(execution::Lane::Utility);
+    auto actor = executor.makeQueue(execution::Lane::Utility);
+    startup::Run(&queue, &outcomes, [&] {
         holder->init = std::make_unique<Token>("init", &order, &threads, nullptr, nullptr);
         holder->node = std::make_unique<Token>("node", &order, &threads, nullptr, nullptr);
         holder->chain = std::make_unique<Token>("chain", &order, &threads, &cleanup_release, &cleanup_entered);
         return true;
     });
-    actor.submit(this, [&] { actor_entered = true; actor_release.acquire(); actor_finished = true; }, [] {});
+    QVERIFY(actor.post([&] { actor_entered = true; actor_release.acquire(); actor_finished = true; }));
     bool released_actor{false}, released_cleanup{false}, released_thread_exit{false}, ordered{true};
     bool released_worker_exit{false};
     int cleanup_heartbeats{0};
@@ -209,6 +209,12 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
         thread_local WorkerExit exit{worker_exit_entered, worker_exit_released, worker_exit_release}; // NOLINT(bitcoin-nontrivial-threadlocal): Tests thread exit.
         actors_joined = true;
     }));
+    auto* view = new QObject;
+    bool view_cleanup_admitted{false};
+    connect(view, &QObject::destroyed, this, [&] {
+        view_cleanup_admitted = actor.post([&] { view_cleanup_finished = true; });
+    });
+    view->deleteLater();
     QTimer heartbeat;
     connect(&heartbeat, &QTimer::timeout, this, [&] {
         if (actor_entered && !released_actor) { released_actor = true; actor_release.release(); }
@@ -217,7 +223,7 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
             worker_exit_release.release();
         }
         if (cleanup_entered && !released_cleanup && ++cleanup_heartbeats >= 2) {
-            ordered = actor_finished && actor.isDrained() && factory.isDrained() &&
+            ordered = actor_finished && view_cleanup_finished &&
                 actors_joined && worker_exit_released && !queue.post([] {});
             released_cleanup = true; cleanup_release.release();
         }
@@ -240,6 +246,8 @@ void BootstrapBeforeExecTests::nativeInterfacesRetireAfterActorsAndKeepGuiRespon
     }, [&] { executor.stopAndJoin(); });
     heartbeat.stop();
     QVERIFY2(worker_exit_released, "Qt stopped processing events while joining the application executor");
+    QVERIFY2(view_cleanup_admitted, "The actor closed before the pending view deletion could post its cleanup");
+    QVERIFY(view_cleanup_finished.load());
     QVERIFY(ordered); QVERIFY(released_actor); QVERIFY(released_cleanup); QVERIFY(released_thread_exit); QVERIFY(cleanup_heartbeats >= 2);
     QCOMPARE(order, QStringList({"chain", "node", "init"}));
     QCOMPARE(threads.size(), size_t{3}); for (auto* thread : threads) QVERIFY(thread != QThread::currentThread());

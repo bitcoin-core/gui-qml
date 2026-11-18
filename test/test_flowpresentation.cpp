@@ -4,7 +4,8 @@
 #include <qml/flowpresentation.h>
 #include <qml/executor.h>
 #include <qml/snapshotquery.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/retainedvalue.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <consensus/amount.h>
 #include <QScopeGuard>
@@ -124,12 +125,19 @@ private Q_SLOTS:
         QCOMPARE(source.value("outputs").toList()[0].toMap().value("dataText").toString().size(), qsizetype{100000});
     }
     void manualDispatchOutcomeAndGuiPublicationRemainSeparate() {
-        ManualRoutedExecution commands; std::deque<std::function<void()>> turns;
-        auto operation = std::make_shared<execution::OwnedCommand<QVariantMap>>(commands.scheduler, [&] { turns.emplace_back([] {}); });
+        ManualStartupExecution commands;
+        auto queue = std::make_shared<execution::SerialQueue>(commands.executor().makeQueue(execution::Lane::Utility));
+        auto outcomes = std::make_shared<execution::ValueCleanupQueue>(queue);
+        std::deque<std::function<void()>> turns;
+        auto operation = std::make_shared<execution::OwnedCommand<QVariantMap>>([&] { turns.emplace_back([] {}); });
         const auto source = Flow(1001);
-        QVERIFY(operation->start([source] { return PrepareTransactionFlowPresentation(source); }, {execution::Lane::Domain, {}, execution::WorkClass::Observation}));
-        QVERIFY(!operation->result()); QVERIFY(commands.step(execution::Lane::Domain)); QVERIFY(!operation->result());
-        QVERIFY(commands.step(execution::Lane::Domain)); QVERIFY(operation->result()); QCOMPARE(turns.size(), size_t{1});
+        QVERIFY(operation->startWith([&](auto done, auto failed) {
+            auto task = execution::MakeTask([source] { return PrepareTransactionFlowPresentation(source); },
+                std::move(done), std::move(failed));
+            return outcomes->postWithOutcome(commands.outcomes, std::move(task));
+        }));
+        QVERIFY(!operation->result()); QVERIFY(commands.step(execution::Lane::Utility)); QVERIFY(!operation->result());
+        QVERIFY(commands.step(execution::Lane::Utility)); QVERIFY(operation->result()); QCOMPARE(turns.size(), size_t{1});
         QCOMPARE(operation->result()->value->value("outputCount").toInt(), 1001); commands.drain();
     }
     void realPreparationUsesTheInjectedDomainLane() {
@@ -137,7 +145,7 @@ private Q_SLOTS:
         auto utility = executor.makeQueue(execution::Lane::Utility);
         std::atomic<QThread*> prepared_on{nullptr};
         const auto cleanup = qScopeGuard([&] { executor.stopAndJoin(); });
-        auto operation = std::make_shared<execution::OwnedCommand<QVariantMap>>(nullptr, [] {});
+        auto operation = std::make_shared<execution::OwnedCommand<QVariantMap>>([] {});
         QVERIFY(operation->startWith([&](auto done, auto failed) {
             auto task = execution::MakeTask([&] {
                 prepared_on = QThread::currentThread();

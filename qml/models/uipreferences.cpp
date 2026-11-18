@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/uipreferences.h>
-#include <qml/guipresentation.h>
+#include <qml/execution.h>
 #include <qml/windowgeometry.h>
 #include <QGuiApplication>
 #include <QScreen>
@@ -89,14 +89,15 @@ UiPreferencesNamespace UiPreferencesNamespace::Capture(){
 }
 struct UiPreferencesStore::Native {UiPreferencesNamespace id;UiPreferencesValues values;quint64 revision{0};};
 struct UiPreferencesStore::Result {UiPreferencesValues values;preferences::WatchPaths watch;QString error;quint64 revision{0};bool loaded{false};};
-UiPreferencesStore::UiPreferencesStore(execution::SnapshotServices services,UiPreferencesNamespace id,QObject* parent)
-    :QObject(parent),m_services(std::move(services)){
-    m_services.post=presentation::ReliablePost(std::move(m_services.post));
-    if(!m_services.scheduler)throw std::invalid_argument("UI preferences require the shared application scheduler");
-    m_key=m_services.scheduler->allocateKey();
-    m_work=std::make_unique<execution::OwnedWork>(m_services);
-    m_native=execution::RetainSnapshot<Native>(m_services.scheduler,[&]{auto state=std::make_unique<Native>();state->id=std::move(id);return state;});
-    if(!m_native)m_error=tr("Preferences storage is unavailable.");
+UiPreferencesStore::UiPreferencesStore(execution::Executor* executor, execution::Lane lane,
+                                       presentation::Post post, UiPreferencesNamespace id, QObject* parent)
+    : QObject(parent),
+      m_effects(executor ? executor->makeQueue(lane)
+                         : throw std::invalid_argument("UI preferences require the shared application executor")),
+      m_outcomes(std::make_shared<execution::SerialQueue>(executor->makeQueue(execution::Lane::Utility))),
+      m_post(presentation::ReliablePost(std::move(post))),
+      m_native(std::make_shared<Native>(Native{std::move(id), {}, 0}))
+{
 }
 UiPreferencesStore::~UiPreferencesStore(){close();}
 const UiPreferencesValues& UiPreferencesStore::values()const{return m_result?m_result->values:m_defaults;}
@@ -106,57 +107,149 @@ void UiPreferencesStore::refresh(){if(m_closed)return;m_refresh_requested=true;f
 // Failed admission/read waits for a fresh observation or explicit retry; only
 // successful asynchronous publication resumes retained refresh demand.
 void UiPreferencesStore::finishRefresh(){if(m_closed||m_pending||m_loading||!m_refresh_requested)return;m_refresh_requested=false;load();}
-void UiPreferencesStore::load(){
-    if(!m_native||m_loading)return;
-    m_loading=true;const QPointer<UiPreferencesStore> loading_observer{this};
-    const auto loading=qScopeGuard([loading_observer]{if(loading_observer)loading_observer->m_loading=false;});
-    const auto action=m_services.scheduler->openActionScope();if(!action){m_error=tr("Preferences could not be read.");notifyViews();Q_EMIT stateChanged();return;}
-    const auto output=execution::RetainSnapshot<Result>(action,[]{return std::make_unique<Result>();});if(!output){m_error=tr("Preferences result is unavailable.");notifyViews();Q_EMIT stateChanged();return;}
-    const auto ticket=++m_operation_id;++m_pending;const QPointer<UiPreferencesStore> observer{this};
-    m_work->submitAsync<std::shared_ptr<const Result>>([action,state=m_native,output,key=m_key](auto done,auto failed){
-        return execution::Submit(*action,[state,output]{auto settings=Open(state->id);settings->sync();if(settings->status()!=QSettings::NoError)throw std::runtime_error("Unable to read UI preferences");state->values=Read(*settings);output->watch=preferences::Paths(*settings);output->values=state->values;output->revision=++state->revision;output->loaded=true;return std::shared_ptr<const Result>{output};},done,failed,{execution::Lane::Core,key,execution::WorkClass::Action});
-    },[observer,ticket](auto result){if(observer&&!observer->m_closed)observer->publish(std::move(result),ticket);},[observer,ticket](std::exception_ptr){if(!observer||observer->m_closed)return;--observer->m_pending;if(ticket==observer->m_operation_id)observer->m_error=tr("Unable to read UI preferences.");observer->notifyViews();Q_EMIT observer->stateChanged();},action);
-    if(observer&&!m_closed){notifyViews();Q_EMIT stateChanged();}
-}
-quint64 UiPreferencesStore::write(QStringList keys,Mutation mutation){
-    if(m_closed||!m_ready||!m_native)return 0;
-    const auto action=m_services.scheduler->openActionScope();
-    if(!action){m_error=tr("Preferences could not be saved.");notifyViews();Q_EMIT stateChanged();return 0;}
-    const auto output=execution::RetainSnapshot<Result>(action,[]{return std::make_unique<Result>();});if(!output){m_error=tr("Preferences result is unavailable.");notifyViews();Q_EMIT stateChanged();return 0;}
-    const auto receipt=std::make_shared<std::atomic<Outcome>>(Pending);const auto ticket=++m_operation_id;m_receipt=receipt;++m_pending;
+void UiPreferencesStore::load()
+{
+    if (m_loading) return;
+    m_loading = true;
     const QPointer<UiPreferencesStore> observer{this};
-    const bool admitted=m_work->submitAsync<std::shared_ptr<const Result>>([state=m_native,action,output,receipt,keys=std::move(keys),mutation=std::move(mutation),key=m_key](auto done,auto failed){
-        const auto rejected=[receipt,failed](std::exception_ptr error){if(receipt->load()==Pending)*receipt=Failed;failed(error);};
-        return execution::Submit(*action,[state,output,receipt,keys,mutation]{
-            auto settings=Open(state->id);settings->sync();if(settings->status()!=QSettings::NoError)throw std::runtime_error("Unable to read UI preferences before saving");auto candidate=Read(*settings);mutation(candidate);
+    const auto loading = qScopeGuard([observer] { if (observer) observer->m_loading = false; });
+    const auto ticket = ++m_operation_id;
+    ++m_pending;
+    const bool admitted = submit(ticket, [state = m_native](Result& result) {
+        auto settings = Open(state->id);
+        settings->sync();
+        if (settings->status() != QSettings::NoError) throw std::runtime_error("Unable to read UI preferences");
+        state->values = Read(*settings);
+        result.values = state->values;
+        result.watch = preferences::Paths(*settings);
+        result.revision = ++state->revision;
+        result.loaded = true;
+    });
+    if (observer && !m_closed && (admitted || m_ready)) {
+        notifyViews();
+        if (observer && !m_closed) Q_EMIT stateChanged();
+    }
+}
+quint64 UiPreferencesStore::write(QStringList keys, Mutation mutation)
+{
+    if (m_closed || !m_ready) return 0;
+    const auto receipt = std::make_shared<std::atomic<Outcome>>(Pending);
+    const auto ticket = ++m_operation_id;
+    m_receipt = receipt;
+    ++m_pending;
+    const QPointer<UiPreferencesStore> observer{this};
+    const bool admitted = submit(ticket,
+        [state = m_native, receipt, keys = std::move(keys), mutation = std::move(mutation)](Result& result) {
+            auto settings = Open(state->id);
+            settings->sync();
+            if (settings->status() != QSettings::NoError) throw std::runtime_error("Unable to read UI preferences before saving");
+            auto candidate = Read(*settings);
+            mutation(candidate);
             // Only original intent keys are written. Unrelated legacy settings
             // and independently selected chain namespaces remain untouched.
-            for(const auto& key:keys)settings->setValue(key,KeyValue(candidate,key));
+            for (const auto& key : keys) settings->setValue(key, KeyValue(candidate, key));
             settings->sync();
-            if(settings->status()!=QSettings::NoError){*receipt=Uncertain;output->error=QObject::tr("Display preferences may not have been saved.");}
-            else{*receipt=Applied;state->values=std::move(candidate);}
-            output->watch=preferences::Paths(*settings);output->values=state->values;output->revision=++state->revision;output->loaded=true;return std::shared_ptr<const Result>{output};
-        },done,rejected,{execution::Lane::Core,key,execution::WorkClass::Action});
-    },[observer,ticket](auto result){if(observer&&!observer->m_closed)observer->publish(std::move(result),ticket);},[observer,receipt,ticket](std::exception_ptr){if(receipt->load()==Pending)*receipt=Failed;if(!observer||observer->m_closed)return;--observer->m_pending;if(ticket==observer->m_operation_id)observer->m_error=receipt->load()==Applied?tr("The preferences write completed, but its result could not be published."):tr("UI preferences write was rejected.");observer->notifyViews();Q_EMIT observer->stateChanged();},action);
-    if(!admitted&&receipt->load()==Pending)*receipt=Failed;
-    if(observer&&!m_closed){notifyViews();Q_EMIT stateChanged();}return admitted?ticket:0;
+            if (settings->status() != QSettings::NoError) {
+                *receipt = Uncertain;
+                result.error = QObject::tr("Display preferences may not have been saved.");
+            } else {
+                *receipt = Applied;
+                state->values = std::move(candidate);
+            }
+            result.values = state->values;
+            result.watch = preferences::Paths(*settings);
+            result.revision = ++state->revision;
+            result.loaded = true;
+        }, receipt);
+    if (observer && !m_closed) {
+        notifyViews();
+        if (observer && !m_closed) Q_EMIT stateChanged();
+    }
+    return admitted ? ticket : 0;
+}
+bool UiPreferencesStore::submit(quint64 ticket, std::function<void(Result&)> effect, Receipt receipt)
+{
+    const QPointer<UiPreferencesStore> observer{this};
+    const auto deliver = [observer, post = m_post, ticket, receipt](std::shared_ptr<const Result> result) {
+        try {
+            post([observer, ticket, receipt, result = std::move(result)] {
+                if (!observer || observer->m_closed) return;
+                if (result) observer->publish(result, ticket);
+                else observer->failed(ticket, receipt);
+            });
+        } catch (...) {
+            // The write receipt records the actual outcome independently of GUI delivery.
+        }
+    };
+    const auto mark_failed = [receipt] {
+        if (receipt && receipt->load() == Pending) *receipt = Failed;
+    };
+    if (m_effects.post([outcomes = m_outcomes, effect = std::move(effect), deliver, mark_failed] {
+            std::shared_ptr<const Result> result;
+            try {
+                auto output = std::make_shared<Result>();
+                effect(*output);
+                result = std::move(output);
+            } catch (...) {
+                mark_failed();
+            }
+            if (!outcomes->post([deliver, result] { deliver(result); })) deliver(std::move(result));
+        })) return true;
+
+    mark_failed();
+    if (observer && !m_closed) {
+        if (!m_ready && !receipt) failed(ticket, receipt, true);
+        else deliver({});
+    }
+    return false;
+}
+void UiPreferencesStore::failed(quint64 ticket, const Receipt& receipt, bool admission_rejected)
+{
+    --m_pending;
+    if (ticket == m_operation_id) {
+        if (receipt) {
+            m_error = receipt->load() == Applied
+                ? tr("The preferences write completed, but its result could not be published.")
+                : tr("UI preferences write was rejected.");
+        } else {
+            m_error = admission_rejected ? tr("Preferences could not be read.") : tr("Unable to read UI preferences.");
+        }
+    }
+    const QPointer<UiPreferencesStore> observer{this};
+    notifyViews();
+    if (observer && !m_closed) Q_EMIT stateChanged();
 }
 void UiPreferencesStore::publish(std::shared_ptr<const Result> result,quint64 ticket){
     --m_pending;if(result->revision>=m_revision){m_revision=result->revision;m_result=std::move(result);m_ready=m_result->loaded;m_watch.update(m_result->watch);if(ticket==m_operation_id)m_error=m_result->error;}
     const QPointer<UiPreferencesStore> guard{this};notifyViews();if(guard&&!m_closed)Q_EMIT stateChanged();if(guard&&!m_closed)finishRefresh();
 }
-void UiPreferencesStore::close(){if(m_closed)return;m_watch.stop();m_closed=true;m_pending=0;m_work->close();m_result.reset();m_native.reset();}
-void UiPreferencesStore::whenDrained(std::function<void()> done){close();m_work->close(std::move(done));}
+void UiPreferencesStore::close()
+{
+    if (m_closed) return;
+    m_watch.stop();
+    m_closed = true;
+    m_pending = 0;
+    m_effects.close();
+    m_effects.whenDrained([outcomes = m_outcomes] { outcomes->close(); });
+    m_result.reset();
+    m_native.reset();
+}
+void UiPreferencesStore::whenDrained(std::function<void()> done)
+{
+    close();
+    if (!done) return;
+    m_outcomes->whenDrained([post = m_post, done = std::move(done)] { post(done); });
+}
 bool UiPreferencesStore::attach(AppPreferences* view){
     if(m_closed)return false;
     const auto id=++m_next_view;m_views.emplace(id,view);
     connect(view,&QObject::destroyed,this,[this,id]{m_views.erase(id);});return true;
 }
-void UiPreferencesStore::notifyViews(){if(m_closed)return;if(m_notify_scheduled){m_notify_again=true;return;}m_notify_cursor=0;m_notify_scheduled=true;const QPointer<UiPreferencesStore> guard{this};try{m_services.post([guard]{if(guard)guard->notifyTurn();});}catch(...){m_notify_scheduled=false;}}
+void UiPreferencesStore::notifyViews(){if(m_closed)return;if(m_notify_scheduled){m_notify_again=true;return;}m_notify_cursor=0;m_notify_scheduled=true;const QPointer<UiPreferencesStore> guard{this};try{m_post([guard]{if(guard)guard->notifyTurn();});}catch(...){m_notify_scheduled=false;}}
 void UiPreferencesStore::notifyTurn(){
     if(m_closed){m_notify_scheduled=false;return;}const QPointer<UiPreferencesStore> guard{this};int count{0};
     while(count++<32){const auto it=m_views.upper_bound(m_notify_cursor);if(it==m_views.end()){m_notify_scheduled=false;if(std::exchange(m_notify_again,false))notifyViews();return;}m_notify_cursor=it->first;const auto view=it->second;if(view)Q_EMIT view->changed();if(!guard||m_closed)return;}
-    try{m_services.post([guard]{if(guard)guard->notifyTurn();});}catch(...){m_notify_scheduled=false;}
+    try{m_post([guard]{if(guard)guard->notifyTurn();});}catch(...){m_notify_scheduled=false;}
 }
 void AppPreferences::componentComplete(){if(auto* context=qmlContext(this))configure(qobject_cast<UiPreferencesStore*>(context->contextProperty(QStringLiteral("uiPreferencesStore")).value<QObject*>()));}
 void AppPreferences::configure(UiPreferencesStore* store){if(m_store||!store)return;m_store=store;if(!store->attach(this))m_store=nullptr;Q_EMIT changed();}

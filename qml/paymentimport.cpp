@@ -3,9 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/paymentimport.h>
+#include <qml/executor.h>
+#include <qml/retainedvalue.h>
 #include <qml/models/bitcoinuri.h>
 #include <qml/psbtwork.h>
-#include <qml/retainedvalue.h>
 
 #include <QCryptographicHash>
 #include <QFile>
@@ -25,7 +26,7 @@
 
 namespace paymentimport {
 namespace {
-constexpr qsizetype MAX_TEXT{1024 * 1024}, MAX_FILE{4 * 1024 * 1024};
+constexpr qsizetype MAX_TEXT{1024 * 1024}, MAX_FILE{MAX_FILE_SIZE_PSBT};
 constexpr auto RETRY{std::chrono::milliseconds{100}};
 Inspection Invalid(const QString& error) { Inspection result; result.error = error.left(4096); return result; }
 QString PaymentIdentity(const senddraft::PaymentRequest& payment)
@@ -131,21 +132,22 @@ struct Owner::Delivery {
         Reply reply;
     };
     std::shared_ptr<Cell> cell;
-    std::shared_ptr<execution::Scheduler> scope;
-    execution::TaskId cleanup;
+    std::shared_ptr<void> outcome;
     ReplyKind kind;
     std::optional<Child> child;
     uint64_t identity{0}, source{0}, target{0};
-    void complete(Reply value) const
+    void complete(Reply value)
     {
+        std::shared_ptr<void> release;
         {
             std::lock_guard lock{cell->mutex};
             if (!cell->ready) {
                 cell->reply = std::move(value);
                 cell->ready = true;
+                release = std::move(outcome);
             }
         }
-        scope->activateCleanup(cleanup);
+        release.reset();
     }
 };
 struct Owner::State {
@@ -161,46 +163,38 @@ struct Owner::State {
     bool closing{false}, retired{false}, wake_pending{false}, use_requested{false};
     std::chrono::steady_clock::time_point retry_at{};
 };
-struct Owner::Close {
-    std::mutex mutex;
-    std::shared_ptr<Owner> owner;
-};
-
-Owner::Owner(uint64_t identity, Services services, std::shared_ptr<execution::Scheduler> scope,
-             Notify notify, Retired retired, std::shared_ptr<State> state)
-    : m_identity(identity), m_services(std::move(services)), m_scope(std::move(scope)),
-      m_key(m_scope->allocateKey()), m_notify(std::move(notify)), m_retired(std::move(retired)), m_state(std::move(state)),
-      m_close(std::make_shared<Close>()) {}
+Owner::Owner(uint64_t identity, Services services, Notify notify, Retired retired, std::shared_ptr<State> state)
+    : m_identity(identity), m_services(std::move(services)),
+      m_outcomes(std::make_shared<execution::ValueCleanupQueue>(m_services.outcomes)), m_notify(std::move(notify)),
+      m_retired(std::move(retired)), m_state(std::move(state)) {}
 
 std::shared_ptr<Owner> Owner::Create(uint64_t identity, Services services, Notify notify, Retired retired)
 {
-    if (!identity || !services.scheduler) return {};
-    auto scope = services.scheduler->openActionScope();
-    if (!scope) return {};
-    auto state = execution::RetainValues<State>(scope, [] { return std::make_unique<State>(); });
-    if (!state) return {};
+    if (!identity || !services.reads || !services.outcomes) return {};
     if (!services.read) services.read = ReadSource;
     if (!services.analyze) services.analyze = [](const Inspection& source) { return AnalyzeSource(source); };
     if (!services.now) services.now = std::chrono::steady_clock::now;
-    auto owner = std::shared_ptr<Owner>{new Owner(identity, std::move(services), scope, std::move(notify), std::move(retired), std::move(state))};
-    const auto cell = owner->m_close;
-    // Retire on Domain through an already reserved Cleanup relay. The slot
-    // holds no Owner until close(), so dropping an unused actor cannot cycle.
-    const auto close = execution::Submit(*scope, [] {}, [cell] {
-        std::shared_ptr<Owner> original;
-        { std::lock_guard lock{cell->mutex}; original = std::move(cell->owner); }
-        if (original) original->closeOnDomain();
-    }, {}, {execution::Lane::Cleanup, scope->allocateKey()}, true);
-    if (!close) return {};
-    owner->m_close_task = close.id;
+    auto owner = std::shared_ptr<Owner>{new Owner(identity, std::move(services), std::move(notify),
+        std::move(retired), std::make_shared<State>())};
+    auto closing = std::make_shared<std::shared_ptr<Owner>>();
+    auto reservation = owner->m_outcomes->hold([closing] {
+        if (*closing) (*closing)->closeOnQueue();
+    });
+    if (!reservation) return owner;
+    owner->m_post_close = [closing, reservation = std::move(reservation)](auto self) mutable {
+        *closing = std::move(self);
+        reservation.reset();
+    };
     return owner;
 }
 
 execution::SubmitResult Owner::submit(std::function<void()> decision)
 {
-    return execution::Submit(*m_scope, [self = shared_from_this(), decision = std::move(decision)] {
+    auto run = [self = shared_from_this(), decision = std::move(decision)] {
         decision(); self->publish();
-    }, [] {}, {}, {execution::Lane::Domain, m_key});
+    };
+    const bool accepted = m_services.outcomes->post(std::move(run));
+    return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
 }
 
 void Owner::publish()
@@ -218,6 +212,10 @@ void Owner::publish()
     try { if (m_notify) m_notify(std::move(snapshot)); } catch (...) {}
     if (state.flow.phase() == Phase::Closed && !state.native_jobs && state.deliveries.empty() && !state.retired) {
         state.retired = true;
+        state.target.reset();
+        state.result.reset();
+        state.input.reset();
+        state.inspection.reset();
         if (m_retired) m_retired(m_identity);
     }
 }
@@ -225,8 +223,7 @@ void Owner::publish()
 execution::SubmitResult Owner::inspect(Input input)
 {
     if (input.value.size() > MAX_TEXT) return {{}, execution::Rejection::Capacity};
-    auto retained = execution::RetainValues<Input>(m_scope, [&] { return std::make_unique<Input>(std::move(input)); });
-    if (!retained) return {{}, execution::Rejection::Closed};
+    auto retained = std::make_shared<Input>(std::move(input));
     return submit([self = shared_from_this(), retained] {
         auto& state = *self->m_state;
         const auto source = state.flow.inspect();
@@ -270,8 +267,7 @@ void Owner::consumed(uint64_t source, std::shared_ptr<const Inspection> output, 
 template <bool Analysis>
 void Owner::read(uint64_t source)
 {
-    auto output = execution::RetainValues<Inspection>(m_scope, [] { return std::make_unique<Inspection>(); });
-    if (!output) { m_state->flow.inspectionFailed(source); m_state->error = QStringLiteral("Import result is unavailable."); return; }
+    auto output = std::make_shared<Inspection>();
     const auto input = m_state->input;
     const auto original = m_state->inspection;
     ++m_state->native_jobs;
@@ -280,10 +276,11 @@ void Owner::read(uint64_t source)
         self->consumed<Analysis>(source, output, error);
         self->cancelObsolete(); self->publish();
     };
-    const auto submitted = execution::Submit(*m_scope, [output, input, original, services = m_services, presentation_allowed = m_presentation_allowed] {
+    auto task = execution::MakeTask([output, input, original, services = m_services, presentation_allowed = m_presentation_allowed] {
         *output = Analysis ? services.analyze(*original) : services.read(*input);
         output->presentation_allowed = presentation_allowed;
-    }, [completed] { completed({}); }, completed, {execution::Lane::Core});
+    }, [completed] { completed({}); }, completed);
+    const auto submitted = m_outcomes->postWithOutcome(*m_services.reads, std::move(task));
     if (!submitted) completed(std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}));
 }
 
@@ -297,21 +294,22 @@ std::shared_ptr<Owner::Delivery> Owner::reserve(ReplyKind kind, std::optional<Ch
     auto cell = std::make_shared<Delivery::Cell>();
     auto delivery = std::make_shared<Delivery>();
     delivery->cell = cell;
-    delivery->scope = m_scope;
     delivery->kind = kind;
     delivery->child = child;
     delivery->identity = identity;
     delivery->source = source;
     delivery->target = target;
-    const auto cleanup_reservation = execution::Submit(*m_scope, [cell] {
+    const auto take = [cell] {
         std::lock_guard lock{cell->mutex};
         return std::move(cell->reply);
-    }, [self = shared_from_this(), identity, kind, source, target, child](Reply reply) {
+    };
+    const auto consume = [self = shared_from_this(), identity, kind, source, target, child](Reply reply) {
         self->m_state->deliveries.erase(identity);
         self->finish(std::move(reply), kind, source, target, child, identity);
-    }, {}, {execution::Lane::Cleanup, m_scope->allocateKey()}, true);
-    if (!cleanup_reservation) return {};
-    delivery->cleanup = cleanup_reservation.id;
+    };
+    auto outcome = m_outcomes->hold([take, consume] { consume(take()); });
+    if (!outcome) return {};
+    delivery->outcome = std::move(outcome);
     try {
         state.deliveries.emplace(identity, delivery);
     } catch (...) {
@@ -491,12 +489,14 @@ execution::SubmitResult Owner::close()
 {
     m_presentation_allowed->store(false);
     if (!m_close_requested.exchange(true)) {
-        { std::lock_guard lock{m_close->mutex}; m_close->owner = shared_from_this(); }
-        if (!m_scope->activateCleanup(m_close_task)) std::terminate();
+        auto post = std::move(m_post_close);
+        m_post_close = {};
+        if (!post) return {{}, execution::Rejection::Closed};
+        post(shared_from_this());
     }
-    return {m_close_task, execution::Rejection::None};
+    return {{}, execution::Rejection::None};
 }
-void Owner::closeOnDomain()
+void Owner::closeOnQueue()
 {
     auto& state = *m_state;
     state.closing = true;

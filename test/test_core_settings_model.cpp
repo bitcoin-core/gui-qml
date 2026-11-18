@@ -5,8 +5,7 @@
 #include <qml/asyncjoin.h>
 #include <qml/executor.h>
 #include <qml/guipresentation.h>
-#include <qml/retainedsnapshot.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <qml/retainedvalue.h>
 #include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
@@ -21,9 +20,6 @@
 #include <stdexcept>
 namespace {
 bool Publish(std::deque<std::function<void()>>& gui){if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;}
-bool Settle(ManualRoutedExecution& transport,std::deque<std::function<void()>>& gui){
-    for(int turn=0;turn<512;++turn){if(!transport.queuedIdle()){if(!transport.stepNext())return false;continue;}if(Publish(gui))continue;return true;}return false;
-}
 bool Settle(ManualStartupExecution& transport, std::deque<std::function<void()>>& gui)
 {
     for (int turn = 0; turn < 512; ++turn) {
@@ -137,26 +133,24 @@ private Q_SLOTS:
 };
 void CoreSettingsModelTests::manualDecisionOutcomeAndPresentation()
 {
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial;initial.listen=false;
-    CoreSettingsModel model{initial};model.configureServices({transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}});
-    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(model.pending());
-    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(model.pending());QVERIFY(Publish(gui));QVERIFY(!model.pending());
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());
+    QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(model.pending());QVERIFY(Publish(gui));QVERIFY(!model.pending());
     bool before{false},after{false};
     model.setBeforeChangeHandler([&](auto origin){before=origin==CoreSettingsModel::ChangeOrigin::User&&!model.values().listen;});
     model.setAfterChangeHandler([&](const auto& change,auto origin){after=origin==CoreSettingsModel::ChangeOrigin::User&&change.accepted&&model.values().listen;});
     const auto ticket=model.changeListen(true);QVERIFY(ticket);QVERIFY(!model.values().listen);
-    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(!model.values().listen);QVERIFY(!before);
-    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(!model.values().listen);QVERIFY(!before);QVERIFY(!after);
+    QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(!model.values().listen);QVERIFY(!before);QVERIFY(!after);
     QVERIFY(Publish(gui));QVERIFY(before);QVERIFY(after);QVERIFY(model.values().listen);QVERIFY(model.isTouched("listen"));
     QCOMPARE(model.operationId(),ticket);QCOMPARE(model.operationState(),CoreSettingsModel::Applied);
     model.close();transport.drain();QVERIFY(transport.quiescent());
 }
 void CoreSettingsModelTests::followupPreviewPreservesOriginalOutcomeTicket()
 {
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial;initial.listen=false;
-    CoreSettingsModel model{initial};model.configureServices({transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}});
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());
     QVERIFY(Settle(transport,gui));
     QSignalSpy outcomes{&model,&CoreSettingsModel::operationFinished};
     model.setAfterChangeHandler([&](const auto&,auto origin){if(origin==CoreSettingsModel::ChangeOrigin::User)model.refresh();});
@@ -172,7 +166,7 @@ void CoreSettingsModelTests::acceptedEffectContinuesAfterGlobalClose()
 {
     ManualStartupExecution transport;std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial;initial.natpmp=false;
-    CoreSettingsModel model{initial};model.configureServices({nullptr,[&](auto turn){gui.push_back(std::move(turn));}}, &transport.executor());QVERIFY(Settle(transport,gui));
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     int effects{0};bool actual{false};
     model.setEffectPort([&](const auto& change,auto,execution::OwnedWork::QueuePost action,auto done,auto failed){
         const auto admitted=SubmitCoreEffect(action,[&,change]{++effects;actual=change.after.natpmp;
@@ -197,7 +191,7 @@ void CoreSettingsModelTests::oldPreviewCannotReplaceNewUserIntent()
 {
     std::deque<std::function<void()>> gui; ManualStartupExecution transport;
     QmlCoreSettings::Values initial;initial.listen=false;initial.server=false;
-    CoreSettingsModel model{initial};model.configureServices({nullptr,[&](auto turn){gui.push_back(std::move(turn));}}, &transport.executor());QVERIFY(Settle(transport,gui));
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     const auto original=model.publishedUserRevision();QVERIFY(model.changeListen(true));
     QmlCoreSettings::Values old_preview=initial;old_preview.server=true;bool adopted{true};
     QVERIFY(model.applyPreviewValuesPreservingTouched(old_preview,{},[&](bool value){adopted=value;},true,original));
@@ -207,8 +201,8 @@ void CoreSettingsModelTests::oldPreviewCannotReplaceNewUserIntent()
 }
 void CoreSettingsModelTests::queuedDecisionsOwnEffectsBeforeOutcomeDelivery()
 {
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;QmlCoreSettings::Values initial;initial.listen=false;initial.natpmp=false;
-    CoreSettingsModel model{initial};model.configureServices({transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}});QVERIFY(Settle(transport,gui));
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;QmlCoreSettings::Values initial;initial.listen=false;initial.natpmp=false;
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     auto actual=std::make_shared<QmlCoreSettings::Values>(initial);auto effects=std::make_shared<int>(0);
     model.setEffectPort([actual,effects](const auto& change,auto,execution::OwnedWork::QueuePost action,auto done,auto failed){
         if(!change.accepted||(!QmlCoreSettings::ValuesChanged(change)&&!change.force_write)){done(CoreSettingsModel::EffectResult{});return;}
@@ -221,18 +215,18 @@ void CoreSettingsModelTests::queuedDecisionsOwnEffectsBeforeOutcomeDelivery()
     QVERIFY(model.changeListen(true));QVERIFY(model.changeNatpmp(true));bool preview_applied{true};
     QVERIFY(model.applyPreviewValuesPreservingTouched(initial,{},[&](bool applied){preview_applied=applied;},true,model.userRevision()));
     // Execute both decisions and the preview before delivering ANY outcome.
-    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(transport.step(execution::Lane::Domain));
+    QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(transport.step(execution::Lane::Utility));QVERIFY(transport.step(execution::Lane::Utility));
     QCOMPARE(*effects,0);QVERIFY(model.changeListen(false));
-    for(int turn=0;turn<4;++turn)QVERIFY(transport.step(execution::Lane::Domain));
+    QVERIFY(transport.step(execution::Lane::Utility));
     QCOMPARE(*effects,0);QVERIFY(Settle(transport,gui));QVERIFY(!preview_applied);
     QCOMPARE(*effects,3);QVERIFY(!actual->listen);QVERIFY(actual->natpmp);QVERIFY(!model.values().listen);QVERIFY(model.values().natpmp);
     model.close();transport.drain();QVERIFY(transport.quiescent());
 }
 void CoreSettingsModelTests::queuedDuplicateRetriesFailedOriginalWithoutLosingOtherKeys()
 {
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial;initial.listen=false;initial.natpmp=false;
-    CoreSettingsModel model{initial};model.configureServices({transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}});QVERIFY(Settle(transport,gui));
+    CoreSettingsModel model{initial};model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     auto actual=std::make_shared<QmlCoreSettings::Values>(initial);auto effects=std::make_shared<int>(0);
     model.setEffectPort([actual,effects](const auto& change,auto,execution::OwnedWork::QueuePost action,auto done,auto failed){
         if(!change.accepted||(!QmlCoreSettings::ValuesChanged(change)&&!change.force_write)){done(CoreSettingsModel::EffectResult{});return;}
@@ -247,7 +241,7 @@ void CoreSettingsModelTests::queuedDuplicateRetriesFailedOriginalWithoutLosingOt
     QVERIFY(model.changeListen(true));QVERIFY(model.changeNatpmp(true));const auto retry=model.changeListen(true);QVERIFY(retry);
     // All decisions precede all Core writes: the equal duplicate remains an
     // independently owned write while the original same-key write is pending.
-    for(int decision=0;decision<3;++decision)QVERIFY(transport.step(execution::Lane::Domain));
+    for(int decision=0;decision<3;++decision)QVERIFY(transport.step(execution::Lane::Utility));
     QCOMPARE(*effects,0);QVERIFY(Settle(transport,gui));
     QCOMPARE(*effects,3);QVERIFY(actual->listen);QVERIFY(actual->natpmp);
     QVERIFY(model.values().listen);QVERIFY(model.values().natpmp);
@@ -256,35 +250,33 @@ void CoreSettingsModelTests::queuedDuplicateRetriesFailedOriginalWithoutLosingOt
 }
 void CoreSettingsModelTests::heldTypingCoalesces()
 {
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;CoreSettingsModel model;
-    model.configureServices({transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}});QVERIFY(Settle(transport,gui));
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;CoreSettingsModel model;
+    model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()};QVERIFY(Settle(transport,gui));
     draft->setProxyEnabled(true);transport.drain();QCOMPARE(gui.size(),size_t{1});
     for(int edit=0;edit<10'000;++edit)draft->setProxyAddress(QStringLiteral("192.0.2.%1:9050").arg(edit%200+1));
-    QCOMPARE(gui.size(),size_t{1});QVERIFY(transport.queuedIdle());QVERIFY(draft->pending());QVERIFY(!draft->canApply());
+    QCOMPARE(gui.size(),size_t{1});QVERIFY(transport.quiescent());QVERIFY(draft->pending());QVERIFY(!draft->canApply());
     draft->setProxyAddress("127.0.0.1:9050");QVERIFY(Publish(gui));QVERIFY(draft->pending());
     // A stale completion queues one latest observation; it cannot resubmit on
     // the synchronous failure/completion stack, and the manual port owns it.
     // Releasing the old outcome may queue Native cleanup. It must not start
     // the successor decision before the independent GUI follow-up turn.
-    QVERIFY((transport.queuedCountIf([](const auto& turn){
-        return (turn.lane==execution::Lane::Core||turn.lane==execution::Lane::Domain)&&turn.phase==execution::Phase::Queued;
-    }) == 0));QCOMPARE(gui.size(),size_t{1});
+    QVERIFY(transport.quiescent());QCOMPARE(gui.size(),size_t{1});
     QVERIFY(Settle(transport,gui));QVERIFY(draft->canApply());QVERIFY(draft->proxyError().isEmpty());
     model.close();transport.drain();QVERIFY(transport.quiescent());
 }
 
 void CoreSettingsModelTests::ownedWorkRetriesOutcomeAndDrainWithoutReplayingEffect()
 {
-    ManualRoutedExecution transport;int effects{0},publications{0};
-    execution::OwnedWork work{{transport.scheduler,[](auto){throw std::runtime_error("primary post rejected");}}};
+    ManualStartupExecution transport;int effects{0},publications{0};
+    execution::OwnedWork work{transport.executor(), [](auto){throw std::runtime_error("primary post rejected");}};
     QVERIFY(work.submit([&]{return ++effects;},[&](int result){QCOMPARE(result,1);++publications;},[](auto){QFAIL("Unexpected effect failure");}));
     transport.drain();QCOMPARE(effects,1);QCOMPARE(publications,0);QTRY_COMPARE(publications,1);
-    bool drained{false};work.close([&]{drained=true;});QTRY_VERIFY(drained);
+    bool drained{false};work.close([&]{drained=true;});transport.drain();QTRY_VERIFY(drained);
     transport.drain();QCOMPARE(effects,1);QVERIFY(transport.quiescent());
 
     int posted{0};std::deque<std::function<void()>> rejected;
-    execution::OwnedWork duplicate{{transport.scheduler,[&](auto callback){++posted;rejected.push_back(std::move(callback));throw std::runtime_error("enqueued before rejection");}}};
+    execution::OwnedWork duplicate{transport.executor(), [&](auto callback){++posted;rejected.push_back(std::move(callback));throw std::runtime_error("enqueued before rejection");}};
     QVERIFY(duplicate.submit([&]{return ++effects;},[&](int){++publications;},[](auto){QFAIL("Unexpected effect failure");}));
     transport.drain();QTRY_COMPARE(publications,2);while(Publish(rejected)){}QCOMPARE(publications,2);QCOMPARE(effects,2);
     duplicate.close();transport.drain();QVERIFY(transport.quiescent());
@@ -292,10 +284,11 @@ void CoreSettingsModelTests::ownedWorkRetriesOutcomeAndDrainWithoutReplayingEffe
 void CoreSettingsModelTests::ownedWorkDrainDropsNativeCaptureWhileClosedFacadeLives()
 {
     int effects{0},published{0},drained{0},destroyed{0};
-    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
-    execution::OwnedWork work{{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+    ManualStartupExecution transport;std::deque<std::function<void()>> gui;
+    execution::OwnedWork work{transport.executor(), [&](auto turn){gui.push_back(std::move(turn));}};
     struct Native {int& destroyed;~Native(){++destroyed;}};
-    auto value=execution::RetainSnapshot<Native>(transport.scheduler,[&]{return std::unique_ptr<Native>{new Native{destroyed}};});
+    auto cleanup = std::make_shared<execution::ValueCleanupQueue>(std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility)));
+    auto value=execution::RetainValues<Native>([cleanup](auto retire) { return cleanup->hold(std::move(retire)); },[&]{return std::unique_ptr<Native>{new Native{destroyed}};});
     QVERIFY(value);std::weak_ptr<Native> original{value};
     QVERIFY(work.submit([&]{++effects;return 42;},[&](int){++published;},[](std::exception_ptr){QFAIL("Accepted effect failed");}));
     work.close([value,&drained]{QVERIFY(value);++drained;});value.reset();
@@ -306,7 +299,7 @@ void CoreSettingsModelTests::ownedWorkDrainDropsNativeCaptureWhileClosedFacadeLi
     // Release of the last GUI alias only activates reserved Native cleanup.
     QCOMPARE(destroyed,0);transport.drain();QCOMPARE(destroyed,1);
     work.close();transport.drain();while(Publish(gui)){}
-    QCOMPARE(drained,1);QCOMPARE(effects,1);QCOMPARE(transport.scheduler->pending(),size_t{0});
+    QCOMPARE(drained,1);QCOMPARE(effects,1);QVERIFY(transport.quiescent());
     // work is intentionally still alive: no consumed callback capture may
     // require destroying its closed facade to finish the Native ledger.
 }
@@ -314,7 +307,7 @@ void CoreSettingsModelTests::ownedWorkDrainDropsNativeCaptureWhileClosedFacadeLi
 void CoreSettingsModelTests::proxyDraftKeepsOriginalLiteralAndAtomicPair()
 {
     std::deque<std::function<void()>> gui; ManualStartupExecution transport;
-    CoreSettingsModel model;model.configureServices({nullptr,[&](auto turn){gui.push_back(std::move(turn));}}, &transport.executor());QVERIFY(Settle(transport,gui));
+    CoreSettingsModel model;model.configureServices([&](auto turn){gui.push_back(std::move(turn));}, &transport.executor());QVERIFY(Settle(transport,gui));
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()};QVERIFY(draft);QVERIFY(Settle(transport,gui));
     draft->setProxyEnabled(true);draft->setProxyAddress("not a proxy");transport.drain();
     draft->setProxyAddress("127.0.0.1:9050");while(Publish(gui)){}QVERIFY(draft->pending());QVERIFY(!draft->canApply());
@@ -341,7 +334,7 @@ void CoreSettingsModelTests::realThreadDecisionAndEffectStayOffGui()
         model.close();
         executor.stopAndJoin();
     });
-    model.configureServices({nullptr, presentation::QueuedPost()}, &executor);
+    model.configureServices(presentation::QueuedPost(), &executor);
     QTRY_VERIFY(!model.pending());
     model.setEffectPort([&](const auto& change, auto, auto, auto done, auto failed) {
         decision_native = QThread::currentThread() != gui;
@@ -415,7 +408,7 @@ void CoreSettingsModelTests::manualTypedEntryValues()
         {QStringLiteral("createsGuiOverride"), !locked}};
     CoreSettingsModel model{initial, QmlCoreSettings::CaptureStatuses({{key, status}})};
     SettingsWriteProbe effect{initial}; effect.install(model);
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
     QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model.entry(key)); QVERIFY(entry);
     QCOMPARE(model.entry(key), static_cast<QObject*>(entry)); QVERIFY(!model.entry(QStringLiteral("unsupported")));
@@ -457,7 +450,7 @@ void CoreSettingsModelTests::manualEntryEnabledGroups()
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.listen = false; initial.prune = false;
     CoreSettingsModel model{initial}; SettingsWriteProbe effect{initial}; effect.install(model);
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
     QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model.entry(key)); QVERIFY(entry); QVERIFY(!entry->enabled());
     QSignalSpy enabled{entry, &CoreSettingEntryModel::enabledChanged};
@@ -486,7 +479,7 @@ void CoreSettingsModelTests::manualTouchedPreviewAndContextOwnership()
     QmlCoreSettings::Values initial; initial.listen = false;
     CoreSettingsModel model{initial}; SettingsWriteProbe effect{initial}; effect.install(model);
     QVERIFY(model.defaultProxyAddress().isEmpty()); QVERIFY(!model.publishedChange().accepted); QVERIFY(model.touchedSettings().isEmpty());
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
     QVERIFY(Settle(transport, gui)); QVERIFY(model.publishedChange().accepted); QVERIFY(!model.publishedValuesChanged());
     model.markTouched(QStringLiteral("listen")); QVERIFY(Settle(transport, gui)); QVERIFY(model.isTouched(QStringLiteral("listen")));
     model.setTouchedSettings({QStringLiteral("listen"), QStringLiteral("proxy")}); QVERIFY(Settle(transport, gui));
@@ -521,7 +514,7 @@ void CoreSettingsModelTests::manualTouchedPreviewAndContextOwnership()
 void CoreSettingsModelTests::manualStatusIdentityAndEntryAvailability()
 {
     ManualStartupExecution transport; std::deque<std::function<void()>> gui; CoreSettingsModel model;
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model.entry(QStringLiteral("proxy"))); QVERIFY(entry);
     QSignalSpy statuses{&model, &CoreSettingsModel::statusesChanged}; QSignalSpy entry_status{entry, &CoreSettingEntryModel::statusChanged};
     const QVariantMap value{{QStringLiteral("canEdit"), false}, {QStringLiteral("infoText"), QStringLiteral("Locked by original configuration")},
@@ -556,7 +549,7 @@ void CoreSettingsModelTests::manualRefusedSettingsKeepPersistedValues()
     const QVariantMap status{{QStringLiteral("infoText"), QStringLiteral("Original server source")}};
     CoreSettingsModel model{initial, QmlCoreSettings::CaptureStatuses({{QStringLiteral("server"), status}})};
     SettingsWriteProbe effect{initial}; effect.install(model);
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model.entry(QStringLiteral("server"))); QVERIFY(entry);
     if (refusal == 0) model.close();
     if (refusal == 1) model.setAdmissionReady(false);
@@ -594,7 +587,7 @@ void CoreSettingsModelTests::manualOlderEffectOwnsItsFailureAndContext()
 {
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.listen = false; initial.server = false;
-    CoreSettingsModel model{initial}; model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    CoreSettingsModel model{initial}; model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     struct Held { QmlCoreSettings::Change change; execution::OwnedWork::QueuePost action; std::function<void(CoreSettingsModel::EffectResult)> done; std::function<void(std::exception_ptr)> failed; };
     std::vector<Held> held; int captures{0}, writes{0}; std::vector<int> published; QmlCoreSettings::Values persisted = initial;
     model.setEffectPort([&](const auto& change, auto, auto action, auto done, auto failed) {
@@ -637,7 +630,7 @@ void CoreSettingsModelTests::manualReentrantPublicationStopsAtItsOwner()
     QFETCH(int, stage); QFETCH(bool, destroy);
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; auto model = std::make_unique<CoreSettingsModel>(initial);
-    model->configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model->configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model->entry(QStringLiteral("proxy"))); QVERIFY(entry);
     QSignalSpy statuses{model.get(), &CoreSettingsModel::statusesChanged}, finished{model.get(), &CoreSettingsModel::operationFinished};
     QSignalSpy changed{model.get(), &CoreSettingsModel::operationChanged}, entry_status{entry, &CoreSettingEntryModel::statusChanged};
@@ -684,7 +677,7 @@ void CoreSettingsModelTests::manualProxyDraftValidationBounds()
     ManualStartupExecution transport; std::deque<std::function<void()>> gui; QmlCoreSettings::Values initial;
     initial.proxy_address = QStringLiteral("127.0.0.1:9050"); initial.tor_address = QStringLiteral("[::1]:9050");
     CoreSettingsModel model{initial}; SettingsWriteProbe effect{initial}; effect.install(model);
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()}; QVERIFY(draft); QVERIFY(Settle(transport, gui));
     QVERIFY(draft->ready()); QVERIFY(!draft->dirty());
     QSignalSpy unchanged{draft.get(), &CoreProxyDraft::changed};
@@ -722,7 +715,7 @@ void CoreSettingsModelTests::manualProxyDraftObservationFailure()
     QFETCH(bool, opening); QFETCH(bool, stale);
     ManualStartupExecution transport; std::deque<std::function<void()>> gui; QmlCoreSettings::Values initial;
     CoreSettingsModel model{initial}; SettingsWriteProbe effect{initial}; effect.install(model);
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     if (opening) transport.reject_utility = true;
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()}; QVERIFY(draft);
     if (opening) {
@@ -755,7 +748,7 @@ void CoreSettingsModelTests::manualIndependentDraftsRespectLockedGroups()
     QFETCH(bool, lock_proxy);
     std::deque<std::function<void()>> gui; ManualStartupExecution transport; QmlCoreSettings::Values initial;
     CoreSettingsModel model{initial}; SettingsWriteProbe effect{initial};
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     effect.install(model, /*shared=*/true);
     std::unique_ptr<CoreProxyDraft> first{model.createProxyDraft()}, second{model.createProxyDraft()};
     QVERIFY(Settle(transport, gui)); QVERIFY(first->ready()); QVERIFY(second->ready()); QVERIFY(!first->dirty()); QVERIFY(!second->dirty());
@@ -782,7 +775,7 @@ void CoreSettingsModelTests::manualIndependentDraftsRespectLockedGroups()
 void CoreSettingsModelTests::manualUnrecognizedEntryCannotAdmitCommands()
 {
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
-    CoreSettingsModel model; model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+    CoreSettingsModel model; model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
     QVERIFY(Settle(transport, gui)); SettingsWriteProbe effect{model.values()}; effect.install(model);
     CoreSettingEntryModel entry{QStringLiteral("unsupported"), model};
     const auto ticket = model.operationId(), revision = model.userRevision();
@@ -818,7 +811,7 @@ void CoreSettingsModelTests::manualServiceConfigurationOwnership()
         model.close(); QVERIFY(original.quiescent()); return;
     }
     if (mode == 1) model.close();
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &original.executor());
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &original.executor());
     if (mode == 1) {
         QVERIFY(!model.presentationOpen()); QCOMPARE(model.operationState(), CoreSettingsModel::Closed);
         QVERIFY(!model.createProxyDraft()); QCOMPARE(model.changeListen(false), quint64{0}); model.refresh();
@@ -827,11 +820,11 @@ void CoreSettingsModelTests::manualServiceConfigurationOwnership()
         QVERIFY(original.quiescent()); QVERIFY(gui.empty()); return;
     }
     QVERIFY(Settle(original, gui)); const auto ticket = model.operationId();
-    model.configureServices({nullptr, [&](auto turn) { other_gui.push_back(std::move(turn)); }}, &other.executor());
+    model.configureServices([&](auto turn) { other_gui.push_back(std::move(turn)); }, &other.executor());
     QCOMPARE(model.operationId(), ticket); QVERIFY(other.quiescent());
     QVERIFY(model.changeServer(true)); QVERIFY(!original.quiescent()); QVERIFY(other.quiescent());
     QVERIFY(Settle(original, gui)); QVERIFY(model.values().server); QVERIFY(other_gui.empty());
-    model.close(); model.configureServices({nullptr, {}}, &other.executor());
+    model.close(); model.configureServices({}, &other.executor());
     original.drain(); QVERIFY(original.quiescent()); QVERIFY(other.quiescent());
 }
 
@@ -852,7 +845,7 @@ void CoreSettingsModelTests::manualEffectReadbackAndOneOutcome()
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.listen = false; initial.server = false;
     CoreSettingsModel model{initial}; QmlCoreSettings::Values persisted = initial;
-    model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     int calls{0}, native_attempts{0}, writes{0}, publications{0}, aborts{0};
     std::atomic_bool context_aborted{false};
     const auto context = std::make_shared<const int>(47);
@@ -919,7 +912,7 @@ void CoreSettingsModelTests::manualFailureNotificationsStopAtRetiredOwner()
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.server = false;
     auto model = std::make_unique<CoreSettingsModel>(initial);
-    model->configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model->configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model->entry(QStringLiteral("server"))); QVERIFY(entry);
     QSignalSpy statuses{model.get(), &CoreSettingsModel::statusesChanged}, changed{model.get(), &CoreSettingsModel::operationChanged};
     QSignalSpy value{entry, &CoreSettingEntryModel::valueChanged}, enabled{entry, &CoreSettingEntryModel::enabledChanged};
@@ -958,7 +951,7 @@ void CoreSettingsModelTests::manualDesiredPublicationRetiresWithItsOwner()
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.listen = false; auto persisted = initial;
     auto model = std::make_unique<CoreSettingsModel>(initial);
-    model->configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model->configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     auto* entry = qobject_cast<CoreSettingEntryModel*>(model->entry(QStringLiteral("listen"))); QVERIFY(entry);
     std::vector<SettingsHeldEffect> held; int calls{0}, writes{0}, before{0}, after{0};
     model->setEffectPort([&](const auto& change, auto, auto action, auto done, auto failed) {
@@ -986,7 +979,7 @@ void CoreSettingsModelTests::manualOlderDesiredFrameCannotReplaceNewerIntent()
 {
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; initial.listen = false; initial.server = false; auto persisted = initial;
-    CoreSettingsModel model{initial}; model.configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor());
+    CoreSettingsModel model{initial}; model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor());
     QVERIFY(Settle(transport, gui)); std::vector<SettingsHeldEffect> held; int before{0}, writes{0};
     model.setBeforeChangeHandler([&](auto) { ++before; });
     model.setEffectPort([&](const auto& change, auto, auto action, auto done, auto failed) {
@@ -1027,7 +1020,7 @@ void CoreSettingsModelTests::manualDraftObserverLossAtHeldOutcome()
     QFETCH(bool, opening); QFETCH(bool, failure); QFETCH(int, retire);
     ManualStartupExecution transport; std::deque<std::function<void()>> gui;
     QmlCoreSettings::Values initial; auto model = std::make_unique<CoreSettingsModel>(initial);
-    model->configureServices({nullptr, [&](auto turn) { gui.push_back(std::move(turn)); }}, &transport.executor()); QVERIFY(Settle(transport, gui));
+    model->configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     SettingsWriteProbe effect{initial}; effect.install(*model);
     if (opening && failure) transport.reject_utility = true;
     std::unique_ptr<CoreProxyDraft> draft{model->createProxyDraft()}; QVERIFY(draft);
@@ -1060,14 +1053,12 @@ void CoreSettingsModelTests::manualQueuedResetDoesNotDuplicateANewerOpening_data
 void CoreSettingsModelTests::manualQueuedResetDoesNotDuplicateANewerOpening()
 {
     QFETCH(bool, finish_newer_first);
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui; CoreSettingsModel model;
-    model.configureServices({transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}); QVERIFY(Settle(transport, gui));
+    ManualStartupExecution transport; std::deque<std::function<void()>> gui; CoreSettingsModel model;
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()}; QVERIFY(draft); draft->reset(); transport.drain();
     QVERIFY(Publish(gui)); QVERIFY(!gui.empty()); QVERIFY(!draft->ready());
     draft->reset();
-    const auto decisions = [&] { return transport.queuedCountIf([](const auto& turn) {
-        return turn.lane == execution::Lane::Domain && turn.phase == execution::Phase::Queued;
-    }); };
+    const auto decisions = [&] { return transport.queuedCount(); };
     QCOMPARE(decisions(), size_t{1});
     if (finish_newer_first) {
         transport.drain(); QVERIFY(gui.size() >= size_t{2});
@@ -1084,16 +1075,14 @@ void CoreSettingsModelTests::manualQueuedResetDoesNotDuplicateANewerOpening()
 
 void CoreSettingsModelTests::manualQueuedValidationDoesNotDuplicateNewerInput()
 {
-    ManualRoutedExecution transport; std::deque<std::function<void()>> gui; CoreSettingsModel model;
-    model.configureServices({transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}); QVERIFY(Settle(transport, gui));
+    ManualStartupExecution transport; std::deque<std::function<void()>> gui; CoreSettingsModel model;
+    model.configureServices([&](auto turn) { gui.push_back(std::move(turn)); }, &transport.executor()); QVERIFY(Settle(transport, gui));
     std::unique_ptr<CoreProxyDraft> draft{model.createProxyDraft()}; QVERIFY(Settle(transport, gui));
     draft->setProxyEnabled(true); transport.drain(); draft->setProxyAddress(QStringLiteral("192.0.2.5:9050"));
     QVERIFY(draft->proxyError().isEmpty()); QVERIFY(draft->torError().isEmpty()); QVERIFY(Publish(gui));
     QVERIFY(!gui.empty());
     draft->setTorEnabled(true);
-    const auto decisions = [&] { return transport.queuedCountIf([](const auto& turn) {
-        return turn.lane == execution::Lane::Domain && turn.phase == execution::Phase::Queued;
-    }); };
+    const auto decisions = [&] { return transport.queuedCount(); };
     QCOMPARE(decisions(), size_t{1}); QVERIFY(Publish(gui)); QCOMPARE(decisions(), size_t{1});
     QVERIFY(Settle(transport, gui)); QVERIFY(draft->canApply()); QVERIFY(draft->dirty());
     QCOMPARE(draft->proxyAddress(), QStringLiteral("192.0.2.5:9050")); QVERIFY(draft->torEnabled());
@@ -1143,14 +1132,14 @@ void CoreSettingsModelTests::standaloneEffectJoinsWithPresentationHeld()
     const auto state = std::make_shared<State>();
     auto model = std::make_unique<CoreSettingsModel>();
     auto unblock = qScopeGuard([state] { state->release.release(); });
-    model->configureServices({nullptr, [state, post = presentation::QueuedPost()](auto turn) {
+    model->configureServices([state, post = presentation::QueuedPost()](auto turn) {
         if (!state->hold_publication) {
             post(std::move(turn));
             return;
         }
         std::lock_guard lock{state->mutex};
         state->publications.push_back(std::move(turn));
-    }});
+    });
     QTRY_VERIFY(!model->pending());
     model->setEffect([state](const auto& change, auto) {
         state->entered.release();

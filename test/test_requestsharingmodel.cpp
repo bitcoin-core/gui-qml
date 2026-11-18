@@ -1,12 +1,13 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <test/mocks/receiveeditortest.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
 #include <QSemaphore>
+#include <QScopeGuard>
 #include <QThread>
 #include <QQmlEngine>
 #include <QQmlContext>
@@ -25,9 +26,9 @@ struct Fixture {
     void toHeldWrite(RequestImageExportOperation& operation)
     {
         QVERIFY(operation.choose(QUrl::fromLocalFile("/controlled/request.png")));
-        while (ports.execution.step(Lane::Domain)) {}
+        while (ports.execution.step(Lane::Utility)) {}
         QVERIFY(ports.execution.step(Lane::Core));
-        while (ports.execution.step(Lane::Domain)) {}
+        while (ports.execution.step(Lane::Utility)) {}
         QCOMPARE(operation.phase(), RequestImageExportOperation::Writing); QCOMPARE(ports.file_writes, 0);
     }
 };
@@ -209,7 +210,7 @@ private Q_SLOTS:
     }
     void newFileSelectionAfterRootClosureDoesNotReusePreparationRights()
     {
-        Fixture f; auto operation = f.exportImage(); f.ports.execution.scheduler->stopAcceptingWork();
+        Fixture f; auto operation = f.exportImage(); f.ports.execution.executor().stopAndJoin();
         QVERIFY(!operation->choose(QUrl::fromLocalFile("/controlled/rejected.png"))); f.ports.drain();
         QCOMPARE(operation->errorCode(), RequestImageExportError::Rejected); QCOMPARE(f.ports.inspections, 0); QCOMPARE(f.ports.file_writes, 0);
     }
@@ -286,14 +287,30 @@ private Q_SLOTS:
     }
     void realThreadCancellationAfterInstallAdmissionPreservesActualWrite()
     {
-        BackendExecutor executor; const auto scheduler = executor.scheduler(); const auto gui = QThread::currentThread();
-        auto view = std::make_shared<requestshare::View>(); QVERIFY(view->setActive(true));
-        QSemaphore admitted, release; std::atomic_int writes{0}; std::atomic<QThread*> writer_thread{nullptr};
-        requestshare::Services services; services.execution = {scheduler, presentation::QueuedPost()};
-        services.read = [scheduler](int64_t id, auto done) {
-            return execution::Submit(*scheduler, [id] { requestshare::Source source; source.request_id = id; source.record_revision = 1;
+        const auto gui = QThread::currentThread();
+        QSemaphore admitted, release;
+        std::atomic_int writes{0};
+        std::atomic<QThread*> writer_thread{nullptr};
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(Lane::Utility));
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        auto view = std::make_shared<requestshare::View>();
+        QVERIFY(view->setActive(true));
+        requestshare::Services services;
+        services.post = presentation::QueuedPost();
+        services.utility = utility;
+        services.hold = [] { return std::make_shared<int>(); };
+        const auto read = requestshare::WorkScope(services, /*retain=*/false);
+        services.read = [read](int64_t id, auto done) {
+            return requestshare::Submit(read, [id] {
+                requestshare::Source source;
+                source.request_id = id;
+                source.record_revision = 1;
                 source.opening = std::make_shared<const walletopening::Identity>();
-                source.payload = "bitcoin:original"; source.current = [] { return true; }; return source; }, std::move(done), {}, {Lane::Domain});
+                source.payload = "bitcoin:original";
+                source.current = [] { return true; };
+                return source;
+            }, std::move(done), {}, Lane::Domain);
         };
         services.render = [](const QString&) { QImage image{21, 21, QImage::Format_RGB32}; image.fill(Qt::black); return image; };
         auto files = std::make_shared<requestimageexport::Services>();
@@ -301,16 +318,25 @@ private Q_SLOTS:
         files->write = [&](const auto&, bool, const auto&, const std::shared_ptr<requestshare::Grant>& grant) {
             writer_thread.store(QThread::currentThread());
             if (!grant->admit()) return backup::WriteResult{backup::Error::Changed};
-            admitted.release(); release.acquire(); ++writes; return backup::WriteResult{};
+            admitted.release();
+            release.acquire();
+            ++writes;
+            return backup::WriteResult{};
         };
         services.files = std::move(files);
         auto operation = std::make_unique<RequestImageExportOperation>(17, services, view);
-        QTRY_VERIFY(operation->choosing()); QVERIFY(operation->choose(QUrl::fromLocalFile("/controlled/threaded.png")));
-        const bool entered = admitted.tryAcquire(1, 5000);
-        if (!entered) release.release();
-        QVERIFY(entered); operation->cancel(); release.release(); QTRY_COMPARE(operation->phase(), RequestImageExportOperation::Completed);
-        QCOMPARE(writes.load(), 1); QVERIFY(operation->result().admitted); QVERIFY(operation->result().written); QVERIFY(writer_thread.load() != gui);
-        operation.reset(); executor.shutdown(); QTRY_VERIFY(executor.isDrained());
+        QTRY_VERIFY(operation->choosing());
+        QVERIFY(operation->choose(QUrl::fromLocalFile("/controlled/threaded.png")));
+        QVERIFY(admitted.tryAcquire(1, 5000));
+        operation->cancel();
+        release.release();
+        QTRY_COMPARE(operation->phase(), RequestImageExportOperation::Completed);
+        QCOMPARE(writes.load(), 1);
+        QVERIFY(operation->result().admitted);
+        QVERIFY(operation->result().written);
+        QVERIFY(writer_thread.load() != gui);
+        operation.reset();
+        executor.stopAndJoin();
     }
 };
 BITCOINQML_REGISTER_QT_TEST(RequestSharingModelTests)

@@ -540,21 +540,20 @@ QString AddressListModel::addressAt(int row) const
     return node ? node->row.entry->address : QString{};
 }
 AddressListModel::~AddressListModel() { closeImpl(false); }
-void AddressListModel::configureSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void AddressListModel::configureSession(std::shared_ptr<walletopening::Session> opening, presentation::Post post)
 {
-    attachSession(std::move(opening), std::move(services));
+    attachSession(std::move(opening), std::move(post));
     rebuild();
 }
-void AddressListModel::attachSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
+void AddressListModel::attachSession(std::shared_ptr<walletopening::Session> opening, presentation::Post post)
 {
     Q_ASSERT(!m_query && !m_visible);
-    m_opening = std::move(opening); m_services = std::move(services);
-    if (m_opening && !m_services.scheduler) m_services.scheduler = m_opening->scheduler();
-    if (!m_services.post) {
+    m_opening = std::move(opening); m_post = std::move(post);
+    if (!m_post) {
         m_bridge = presentation::MakeGuiObject();
-        m_services.post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
+        m_post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
     }
-    m_services.post = presentation::ReliablePost(std::move(m_services.post));
+    m_post = presentation::ReliablePost(std::move(m_post));
 }
 void AddressListModel::close()
 {
@@ -584,7 +583,7 @@ void AddressListModel::rebuild()
         // which refreshes this model after installing that original session.
         const auto opening = m_wallet_model->opening();
         if (!m_wallet_model->available() || !opening) return;
-        attachSession(opening, {opening->scheduler(), {}});
+        attachSession(opening, {});
     }
     if (!m_opening || !m_opening->available()) return;
     if (m_query || m_label_job || m_pending) { notifyRefreshState(); return; }
@@ -593,7 +592,7 @@ void AddressListModel::rebuild()
     m_dirty = false; m_labels_dirty = false; m_pending_labels = false;
     const auto generation = ++m_query_generation;
     const QPointer<AddressListModel> observer{this};
-    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Projection>>>(m_services.scheduler,
+    m_query = std::make_shared<execution::SnapshotQuery<std::shared_ptr<const Projection>>>(
         [opening = m_opening, previous = m_visible, root = m_root, category = m_category, show_used = m_show_used, unit = m_display_unit] {
             (void)previous; // Retains immutable source roots throughout Native planning.
             auto wallet = opening->borrow();
@@ -605,9 +604,9 @@ void AddressListModel::rebuild()
             });
             if (!projection) throw std::runtime_error("Address projection is unavailable");
             return std::shared_ptr<const Projection>{std::move(projection)};
-        }, [post = m_services.post, observer, generation] {
+        }, [post = m_post, observer, generation] {
             post([observer, generation] { if (observer && observer->m_query_generation == generation) observer->publishSnapshot(); });
-        });
+        }, m_opening->observationPost());
     const auto query = m_query;
     query->request();
     if (!observer || m_stopping || generation != m_query_generation) return;
@@ -621,11 +620,9 @@ void AddressListModel::rebuildLabels()
     const auto opening = m_opening;
     const auto previous = m_visible;
     const auto* root = m_root;
-    const auto post = m_services.post;
+    const auto post = m_post;
     auto job = walletopening::RetainValues<LabelJob>(opening, [] { return std::make_unique<LabelJob>(); });
-    if (!observer || m_stopping || generation != m_query_generation) return;
     auto projection = walletopening::RetainValues<Projection>(opening, [] { return std::make_unique<Projection>(); });
-    if (!observer || m_stopping || generation != m_query_generation) return;
     if (!job || !projection) {
         if (prepareLabelPublication(generation, true)) notifyRefreshState();
         return;
@@ -652,7 +649,7 @@ bool AddressListModel::prepareLabelPublication(quint64 generation, bool failed)
     if (m_dirty || m_labels_dirty) {
         // Preserve the dirty successor as pending, but start it on a fresh
         // presentation turn instead of recursing through capacity callbacks.
-        m_services.post([observer, generation] {
+        m_post([observer, generation] {
             if (observer && !observer->m_stopping && observer->m_query_generation == generation) observer->rebuild();
         });
         return false;
@@ -725,7 +722,7 @@ void AddressListModel::applyTurn(quint64 generation)
         else notifyRefreshState();
     }
     else {
-        try { m_services.post([observer, generation] { if (observer) observer->applyTurn(generation); }); }
+        try { m_post([observer, generation] { if (observer) observer->applyTurn(generation); }); }
         catch (...) { m_read_error = tr("Address presentation could not be delivered. Refresh to retry."); Q_EMIT readErrorChanged(); }
     }
 }

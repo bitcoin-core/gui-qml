@@ -17,7 +17,8 @@
 #include <qml/models/signertransaction.h>
 #include <qml/models/psbtfee.h>
 #include <qml/psbtpolicy.h>
-#include <qml/backendexecutor.h>
+#include <qml/asyncjoin.h>
+#include <qml/executor.h>
 #include <qml/walletbalanceadapter.h>
 
 #include <common/messages.h>
@@ -71,8 +72,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -314,6 +317,7 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
     , m_fee_policy(std::move(wallet.fee_policy))
     , m_name(std::move(wallet.captured_name))
     , m_canonical_identity(wallet.canonical_identity)
+    , m_services(std::move(wallet.services))
     , m_node(node)
     , m_backup_services(std::move(backup_services))
     , m_psbt_fee_services(std::move(psbt_services))
@@ -342,13 +346,17 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
     initializeBackend();
     initializeOpening(std::move(wallet));
     const QPointer<WalletQmlModel> receipt_observer{this};
-    if (m_opening) {
+    using ReceiptOwners = std::pair<std::shared_ptr<walletreceipts::Reader>, std::shared_ptr<walletrequests::Store>>;
+    auto retirement = walletopening::RetainValues<ReceiptOwners>(m_opening, [] { return std::make_unique<ReceiptOwners>(); });
+    if (retirement) {
+        m_receipt_retirement = retirement;
         m_receipts = std::make_shared<walletreceipts::Reader>(m_opening,
             [bridge = m_notification_bridge, receipt_observer] {
                 QMetaObject::invokeMethod(bridge.get(), [receipt_observer] {
                     if (receipt_observer && receipt_observer->observationsAllowed()) receipt_observer->publishReceipts();
                 }, Qt::QueuedConnection);
             });
+        retirement->first = m_receipts;
         const auto weak_reader = std::weak_ptr<walletreceipts::Reader>{m_receipts};
         // These bounded GUI ports never transfer native ownership. This
         // facade retains Reader/Session until the projection is closed below.
@@ -384,6 +392,7 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
                 const auto reader = weak_reader.lock(); return reader && reader->settled();
             }, walletrequests::SettingsReservationStorage(m_canonical_identity ? std::optional<QString>{m_name} : std::nullopt).clear,
             walletrequests::SettingsReservationStorage(m_canonical_identity ? std::optional<QString>{m_name} : std::nullopt));
+        retirement->second = m_request_store;
         m_receipts->onSnapshot([weak = std::weak_ptr<walletrequests::Store>{m_request_store}](auto snapshot) {
             if (const auto store = weak.lock()) store->observed(snapshot);
         });
@@ -392,7 +401,7 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
         });
         if (!m_backup_services.coordinator) m_backup_services.coordinator = std::make_shared<backup::InstallCoordinator>();
         auto receive_ports = MakeReceivePorts(m_opening, m_request_store,
-            {m_opening->scheduler(), m_fee_read_services.post}, m_backup_services.coordinator);
+            m_fee_read_services.post, m_backup_services.coordinator);
         receive_ports.receipts = m_receipt_projection;
         m_receive = new WalletReceiveModel(2, std::move(receive_ports), this);
         // The store watches the shown address, so a payment to it marks it used.
@@ -408,12 +417,18 @@ WalletQmlModel::WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
     initializeFeeEstimator();
     initializePsbtFeeReader();
     initializeBalanceReader();
-    m_sign_verify_message_model->setOpening(m_opening, {m_opening->scheduler(), m_fee_read_services.post});
+    m_sign_verify_message_model->setOpening(m_opening, m_fee_read_services.post);
     m_imported_psbt_model->configureSession(m_opening, m_psbt_fee_services);
 }
 
 WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
+    : WalletQmlModel(node, Services{}, parent)
+{
+}
+
+WalletQmlModel::WalletQmlModel(interfaces::Node* node, Services services, QObject* parent)
     : QObject(parent)
+    , m_services(std::move(services))
     , m_node(node)
 {
     connect(this, &WalletQmlModel::signerApprovalChanged, this, &WalletQmlModel::unverifiedSigningResultChanged);
@@ -435,10 +450,10 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
     m_receive_requests = new ReceiveRequestHistoryModel(this);
     m_imported_psbt_model = new PsbtQmlModel(false, m_node, this);
-    initializeBackend();
+    initializeBackend(/*detached=*/true);
     initializeFeeEstimator();
     initializePsbtFeeReader();
-    m_sign_verify_message_model->setOpening({}, {m_backend_executor->scheduler(), m_fee_read_services.post});
+    m_sign_verify_message_model->setOpening({}, m_fee_read_services.post, m_services.outcomes);
     m_imported_psbt_model->configureSession({}, m_psbt_fee_services);
 }
 
@@ -450,9 +465,9 @@ WalletQmlModel::WalletQmlModel(QObject* parent)
 struct WalletQmlModel::ReviewRetirement : std::enable_shared_from_this<ReviewRetirement> {
     std::map<WalletQmlModelTransaction*, QPointer<WalletQmlModelTransaction>> reviews;
     std::shared_ptr<QObject> bridge{presentation::MakeGuiObject()};
-    QPointer<WalletQmlModel> observer;
     std::function<void(std::function<void()>)> post{presentation::ReliablePost(
         [bridge = bridge](auto callback) { QMetaObject::invokeMethod(bridge.get(), std::move(callback), Qt::QueuedConnection); })};
+    std::function<void()> done;
     bool closing{false}, scheduled{false};
     void add(WalletQmlModelTransaction* review) {
         reviews.emplace(review, review);
@@ -468,29 +483,36 @@ struct WalletQmlModel::ReviewRetirement : std::enable_shared_from_this<ReviewRet
     void enqueue() {
         if (std::exchange(scheduled, true)) return;
         const auto self = shared_from_this();
-        post([self] { self->scheduled = false; self->pump(); });
+        post([self] { self->pump(); });
     }
     void pump() {
-        if (!closing) return;
+        // A destroyed handler can run a nested Qt loop. Keep this batch
+        // active until each destructor returns before acknowledging retirement.
         for (int budget = 0; budget < 32 && !reviews.empty(); ++budget) {
             const auto review = reviews.begin()->second; reviews.erase(reviews.begin());
             if (review) { review->close(); delete review; }
         }
+        scheduled = false;
         if (!reviews.empty()) { enqueue(); return; }
-        if (observer) { observer->m_reviews_drained = true; observer->checkShutdownFinished(); }
+        if (auto callback = std::exchange(done, {})) callback();
     }
-    void close() { closing = true; enqueue(); }
+    void close() { closing = true; if (!reviews.empty()) enqueue(); }
+    void whenRetired(std::function<void()> callback)
+    {
+        if (scheduled || !reviews.empty()) done = std::move(callback);
+        else callback();
+    }
 };
 void WalletQmlModel::setReviewRetirementPostForTesting(std::function<void(std::function<void()>)> post)
 {
     if (m_closed || !post) return;
-    if (!m_review_retirement) { m_review_retirement = std::make_shared<ReviewRetirement>(); m_review_retirement->observer = this; }
+    if (!m_review_retirement) m_review_retirement = std::make_shared<ReviewRetirement>();
     m_review_retirement->post = presentation::ReliablePost(std::move(post));
 }
 void WalletQmlModel::registerReview(WalletQmlModelTransaction* review)
 {
-    if (!m_review_retirement) { m_review_retirement = std::make_shared<ReviewRetirement>(); m_review_retirement->observer = this; }
-    m_reviews_drained = false; m_review_retirement->add(review);
+    if (!m_review_retirement) m_review_retirement = std::make_shared<ReviewRetirement>();
+    m_review_retirement->add(review);
     if (m_closed) m_review_retirement->close();
 }
 
@@ -540,7 +562,6 @@ void WalletQmlModel::setNode(interfaces::Node* node)
 void WalletQmlModel::initializeOpening(SharedWallet wallet)
 {
     if (!std::visit([](const auto& source) { return bool(source); }, wallet.wallet)) return;
-    m_opening_drained = false;
     m_available_published = true;
     const QPointer<WalletQmlModel> observer{this};
     if (!wallet.preferences.read && m_node) wallet.preferences.read = [node = m_node](const std::string& name) {
@@ -551,11 +572,12 @@ void WalletQmlModel::initializeOpening(SharedWallet wallet)
     // A Node void write cannot establish persistence. Production injects the
     // public Chain adapter, which supplies atomic update and a disk outcome.
     m_opening = std::make_shared<walletopening::Session>(
-        wallet.observations ? std::move(wallet.observations) : m_backend_executor->scheduler(),
-        m_backend_executor->scheduler(), m_unload_requested,
+        m_unload_requested,
         [bridge = m_notification_bridge, observer] {
             QMetaObject::invokeMethod(bridge.get(), [observer] { if (observer) observer->publishOpening(); }, Qt::QueuedConnection);
-        }, std::move(wallet.preferences), std::chrono::steady_clock::now, m_closed.shared(), std::move(wallet.native_events));
+        }, std::move(wallet.preferences), std::chrono::steady_clock::now, m_closed.shared(), std::move(wallet.native_events),
+        walletopening::Session::Queues{m_services.cleanup, m_services.shutdown, m_services.core, m_services.outcomes,
+                                       m_services.native_cleanup});
     const QPointer<WalletQmlModel> approval_observer{this};
     const auto approval_post = presentation::ReliablePost(m_fee_read_services.post);
     const auto approval_gate = m_approval_running;
@@ -572,22 +594,9 @@ void WalletQmlModel::initializeOpening(SharedWallet wallet)
     m_security->bind(m_opening, m_notification_bridge, [this] {
         return available() && !preparationBusy() && !sendBusy() && !signerApprovalBusy();
     });
-    const auto started = std::visit([&](auto& source) {
-        if constexpr (std::is_same_v<std::decay_t<decltype(source)>, std::unique_ptr<interfaces::Wallet>>) {
-            return m_opening->start(source, wallet.unload_handler);
-        } else {
-            return m_opening->start(source);
-        }
-    }, wallet.wallet);
-    if (started.borrower) {
-        // Drop the source reference while the startup borrower pins cleanup.
-        std::visit([](auto& source) { source.reset(); }, wallet.wallet);
-    } else if (std::visit([](const auto& source) { return bool(source); }, wallet.wallet)) {
-        m_backend_executor->submit(this, [source = std::move(wallet.wallet), handler = std::move(wallet.unload_handler)]() mutable {
-            if (handler) handler->disconnect();
-            handler.reset();
-            std::visit([](auto& value) { value.reset(); }, source);
-        }, [] {});
+    const auto started = m_opening->start(wallet.wallet, wallet.unload_handler);
+    if (std::visit([](const auto& source) { return bool(source); }, wallet.wallet)) {
+        m_opening->retireUnclaimed(wallet.wallet, wallet.unload_handler);
     }
     if (!started) m_opening->retire();
     if (started && m_address_list_model) m_address_list_model->refresh();
@@ -610,7 +619,7 @@ void WalletQmlModel::publishOpening()
     auto update = m_opening->take();
     if (!update) return;
     const QPointer<WalletQmlModel> guard{this};
-    if (m_stopping || m_closed) { checkShutdownFinished(); return; }
+    if (m_stopping || m_closed) return;
     if (update->metadata && available()) {
         auto metadata = std::move(*update->metadata);
         const QString name = QString::fromStdString(metadata.name);
@@ -663,7 +672,7 @@ void WalletQmlModel::publishOpening()
     if (transactions_changed) {
         // Backend ingress normally arrives first. The revision also makes
         // startup replay and this presentation handoff idempotent.
-        m_receipts->notice(update->transaction_revision, std::move(update->transactions), update->rescan);
+        if (m_receipts) m_receipts->notice(update->transaction_revision, std::move(update->transactions), update->rescan);
         // Ready can reach GUI before this Session mailbox. Acknowledge the
         // current revision after taking it, without waiting for another poll.
         if (m_receipt_projection) m_receipt_projection->invalidate();
@@ -679,8 +688,54 @@ void WalletQmlModel::publishOpening()
     }
 }
 
-void WalletQmlModel::initializeBackend()
+struct WalletQmlModel::NativeDrain {
+    bool finished{false};
+    std::vector<std::function<void()>> callbacks;
+};
+
+void WalletQmlModel::whenNativeDrained(QObject& receiver, std::function<void()> done)
 {
+    if (m_native_drain->finished) {
+        QMetaObject::invokeMethod(&receiver, std::move(done), Qt::QueuedConnection);
+    } else {
+        m_native_drain->callbacks.emplace_back([receiver = QPointer<QObject>{&receiver}, done = std::move(done)] {
+            if (receiver) done();
+        });
+    }
+}
+
+void WalletQmlModel::initializeBackend(bool detached)
+{
+    m_notification_bridge = presentation::MakeGuiObject();
+    m_native_drain = std::make_shared<NativeDrain>();
+    std::shared_ptr<execution::ValueCleanupQueue> values;
+    if (!m_services.core) {
+        m_standalone_executor = std::make_shared<execution::Executor>(execution::Executor::Config{});
+        auto& executor = *m_standalone_executor;
+        m_services.core = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core));
+        m_services.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        m_services.cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        m_services.native_cleanup = std::make_shared<execution::SerialQueue>(
+            executor.makeQueue(execution::Lane::Utility, execution::UtilityWorker::Cleanup));
+        if (detached) {
+            values = std::make_shared<execution::ValueCleanupQueue>(m_services.cleanup);
+            m_psbt_fee_services.value_cleanup = [values](auto cleanup) { return values->hold(std::move(cleanup)); };
+        }
+    }
+    if (!m_services.shutdown && m_services.core && m_services.outcomes) {
+        m_services.shutdown = [core = m_services.core, outcomes = m_services.outcomes, values = std::move(values)](auto done) {
+            auto drain = [core, outcomes, done = std::move(done)]() mutable {
+                core->close();
+                core->whenDrained([outcomes, done = std::move(done)]() mutable {
+                    outcomes->close();
+                    outcomes->whenDrained(std::move(done));
+                });
+            };
+            if (values) values->close(std::move(drain));
+            else drain();
+        };
+    }
+    assert(m_services.shutdown);
     connect(m_security, &WalletSecurityModel::observedChanged, this, &WalletQmlModel::securityStateChanged);
     connect(this, &WalletQmlModel::preparationChanged, m_security, &WalletSecurityModel::capabilitiesChanged);
     connect(this, &WalletQmlModel::sendOperationChanged, m_security, &WalletSecurityModel::capabilitiesChanged);
@@ -722,21 +777,18 @@ void WalletQmlModel::initializeBackend()
         }
         if (had_approval) Q_EMIT signerApprovalChanged();
     });
-    m_backend_executor->setObjectName(QStringLiteral("wallet"));
-    m_notification_bridge = presentation::MakeGuiObject();
-    connect(m_backend_executor.get(), &BackendExecutor::drained, this, [this] {
-        m_backend_drained = true;
-        checkShutdownFinished();
-    });
 }
 
-void WalletQmlModel::checkShutdownFinished()
+void WalletQmlModel::finishShutdown()
 {
-    if (m_stopping && m_backend_drained && m_balance_drained && m_fee_drained && m_opening_drained && m_reviews_drained && !m_shutdown_finished) {
-        if (m_fees) m_fees->finishStop();
-        m_shutdown_finished = true;
-        Q_EMIT shutdownFinished();
-    }
+    if (!m_stopping || !m_native_drain->finished || m_shutdown_finished) return;
+    auto finished = [observer = QPointer<WalletQmlModel>{this}] {
+        if (!observer || std::exchange(observer->m_shutdown_finished, true)) return;
+        if (observer->m_fees) observer->m_fees->finishStop();
+        Q_EMIT observer->shutdownFinished();
+    };
+    if (const auto reviews = m_review_retirement) reviews->whenRetired(std::move(finished));
+    else finished();
 }
 
 void WalletQmlModel::close()
@@ -748,6 +800,9 @@ void WalletQmlModel::close()
     m_preparation_projection.candidate.reset();
     m_preparation_projection.candidate_current = false;
     m_psbt_action_state = PsbtActionState::PsbtClosed;
+    m_psbt_fee_request.reset();
+    m_psbt_fee_pending = false;
+    if (m_file_export_operation) m_file_export_operation->retire();
     if (m_flow_details) m_flow_details->close();
     ++m_flow_revision;
     m_current_flow.clear(); m_flow_lifetime.reset(); m_flow_document.reset(); m_flow_proof.reset(); m_flow_transaction.reset();
@@ -810,8 +865,6 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     m_fee_estimate_pending = false;
     ++m_fee_estimate_revision;
     invalidateFeeRead(true);
-    m_psbt_fee_request.reset();
-    m_psbt_fee_pending = false;
     if (m_request_store) {
         m_request_store->close();
         m_request_store->retire(m_receive_requests->releaseSnapshot());
@@ -819,29 +872,38 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     if (m_receipts) {
         m_receipts->close();
     }
-    if (m_opening) {
-        m_opening->stop(remove_wallet, [bridge = m_notification_bridge, observer] {
-            QMetaObject::invokeMethod(bridge.get(), [observer] {
-                if (!observer) return;
-                observer->m_opening_drained = true;
-                observer->checkShutdownFinished();
-            }, Qt::QueuedConnection);
-        });
-    }
     if (m_fee_bumps) m_fee_bumps->close();
     if (m_imported_psbt_model) m_imported_psbt_model->detachWallet();
     m_sign_verify_message_model->setSecurityStateChangedFn({});
-    const auto backend = m_backend_executor;
-    backend->submit(this, [receipts = std::move(m_receipts), requests = std::move(m_request_store)]() mutable {
-        requests.reset(); receipts.reset();
-    }, [] {});
-    backend->shutdown();
+    m_request_store.reset();
+    m_receipts.reset();
+    m_receipt_retirement.reset();
+    auto finish_native = [drain = m_native_drain, observer] {
+        drain->finished = true;
+        if (observer && observer->m_fees) observer->m_fees->finishStop();
+        for (const auto& callback : std::exchange(drain->callbacks, {})) callback();
+        if (observer) observer->finishShutdown();
+    };
+    std::function<void()> drained;
+    if (auto executor = std::exchange(m_standalone_executor, {})) {
+        // Register the join before asynchronous retirement. Test and app
+        // teardown can wait even if this model no longer exists.
+        const auto bridge = m_notification_bridge;
+        drained = JoinThreadAfterDrain([executor = std::move(executor)] { executor->stopAndJoin(); },
+            bridge.get(), [bridge, finish_native = std::move(finish_native)] { finish_native(); });
+    } else {
+        drained = [bridge = m_notification_bridge, finish_native = std::move(finish_native)] {
+            QMetaObject::invokeMethod(bridge.get(), [bridge, finish_native] { finish_native(); }, Qt::QueuedConnection);
+        };
+    }
+    if (m_opening) m_opening->stop(remove_wallet, std::move(drained));
+    else m_services.shutdown(std::move(drained));
     if (!observer) return;
     if (m_transaction_activity_model) { m_transaction_activity_model->stop(); if (!observer) return; }
     m_security->close(); if (!observer) return;
     if (was_available) { Q_EMIT availableChanged(); if (!observer) return; }
     Q_EMIT balanceObservationChanged();
-    if (observer) observer->checkShutdownFinished();
+    if (observer) observer->finishShutdown();
 }
 
 namespace {
@@ -876,7 +938,6 @@ private:
 
 void WalletQmlModel::initializeFeeEstimator()
 {
-    if (!m_fee_read_services.scheduler) m_fee_read_services.scheduler = m_opening ? m_opening->scheduler() : m_backend_executor->scheduler();
     initializePreparationOwner();
     if (!m_fee_read_services.timer) m_fee_read_services.timer = std::make_shared<QtFeeReadTimer>(this);
     if (!m_fee_read_services.post) {
@@ -884,7 +945,6 @@ void WalletQmlModel::initializeFeeEstimator()
             QMetaObject::invokeMethod(bridge.get(), std::move(publication), Qt::QueuedConnection);
         };
     }
-    const auto fee_retirement_post = presentation::ReliablePost(m_fee_read_services.post);
     m_flow_details = new FlowDetailsModel(this);
     if (const auto gate = m_closed.shared()) {
         auto post = std::move(m_fee_read_services.post);
@@ -892,7 +952,12 @@ void WalletQmlModel::initializeFeeEstimator()
             post([gate, callback = std::move(callback)] { if (!gate->load()) callback(); });
         };
     }
-    m_flow_details->setServices({m_fee_read_services.scheduler, m_fee_read_services.post});
+    auto submit_flow = m_opening ? m_opening->observationPost(execution::Lane::Domain) : nullptr;
+    execution::ValueCleanup hold_flow;
+    if (submit_flow) {
+        hold_flow = [opening = m_opening](auto cleanup) { return opening->holdValues(std::move(cleanup)); };
+    }
+    m_flow_details->setServices(m_fee_read_services.post, std::move(submit_flow), std::move(hold_flow));
     if (!m_fee_read_services.read) {
         m_fee_read_services.read = [opening = m_opening](const FeeReadInput& input) {
             FeeReadResult result;
@@ -918,17 +983,23 @@ void WalletQmlModel::initializeFeeEstimator()
             return result;
         };
     }
-    m_fees->setServices({m_fee_read_services.scheduler, m_fee_read_services.post});
+    auto policy_post = m_opening ? m_opening->observationPost(execution::Lane::Domain) : nullptr;
+    if (!m_opening) {
+        policy_post = [outcomes = m_services.outcomes](std::shared_ptr<execution::Task> task) {
+            const bool accepted = outcomes->post([task = std::move(task)] {
+                task->execute();
+                task->deliver();
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+        };
+    }
+    m_fees->setServices(m_fee_read_services.post, std::move(policy_post));
     const QPointer<WalletQmlModel> fee_observer{this};
-    m_fee_drained = false;
-    m_fee_reader = std::make_shared<feeestimate::Reader>(m_fee_read_services.scheduler, m_fee_read_services.read,
-        [post = presentation::ReliablePost(m_fee_read_services.post), fee_observer] { post([fee_observer] { if (fee_observer) fee_observer->publishFeeEstimates(); }); },
-        [post = fee_retirement_post, fee_observer] { post([fee_observer] {
-            if (!fee_observer) return;
-            fee_observer->m_fee_drained = true;
-            if (fee_observer->m_fees) fee_observer->m_fees->finishStop();
-            fee_observer->checkShutdownFinished();
-        }); });
+    auto notify = [post = presentation::ReliablePost(m_fee_read_services.post), fee_observer] {
+        post([fee_observer] { if (fee_observer) fee_observer->publishFeeEstimates(); });
+    };
+    m_fee_reader = std::make_shared<feeestimate::Reader>(m_services.core,
+        m_opening ? m_services.cleanup : m_services.outcomes, m_fee_read_services.read, std::move(notify));
     connect(m_fees, &FeeSelectionModel::refreshRequested, this, [this] {
         ++m_fee_backend_revision;
         scheduleFeeEstimates();
@@ -965,7 +1036,7 @@ void WalletQmlModel::initializeFeeEstimator()
         Q_EMIT feeEstimateRevisionChanged();
     });
     if (m_send_recipients) {
-        m_send_recipients->setOpening(m_opening, {m_fee_read_services.scheduler, m_fee_read_services.post});
+        m_send_recipients->setOpening(m_opening, m_fee_read_services.post);
         connect(m_send_recipients, &SendRecipientsListModel::maximumRecipientChanged, this, &WalletQmlModel::projectMaximumRecipient);
         connect(m_send_recipients, &SendRecipientsListModel::intentSubmitted, this, &WalletQmlModel::invalidatePreparation);
         connect(m_send_recipients, &SendRecipientsListModel::intentSubmitted, this, &WalletQmlModel::clearFeeEstimates);
@@ -986,7 +1057,7 @@ void WalletQmlModel::initializeFeeEstimator()
         connect(this, &WalletQmlModel::maximumRecipientChanged, this, changed_intent);
     }
     if (m_coins_list_model) {
-        m_coins_list_model->setOpening(m_opening, {m_fee_read_services.scheduler, m_fee_read_services.post});
+        m_coins_list_model->setOpening(m_opening, m_fee_read_services.post);
         connect(m_coins_list_model, &CoinsListModel::selectionSnapshotChanged, this, [this] {
             invalidatePreparation();
             if (coinSelectionPending()) m_send_facts_known = false;
@@ -1003,35 +1074,51 @@ void WalletQmlModel::initializeFeeEstimator()
 void WalletQmlModel::initializePreparationOwner()
 {
     if (m_transaction_attempt) return;
-    m_transaction_attempt = std::make_shared<transactionattempt::Owner>(
-        m_opening ? m_opening->scheduler() : m_backend_executor->scheduler());
+    m_transaction_attempt = std::make_shared<transactionattempt::Owner>(m_services.outcomes);
 }
 
 void WalletQmlModel::initializePsbtFeeReader()
 {
-    if (!m_psbt_fee_services.scheduler) m_psbt_fee_services.scheduler = m_backend_executor->scheduler();
+    if (!m_psbt_fee_services.core) m_psbt_fee_services.core = m_services.core;
+    if (!m_psbt_fee_services.utility) m_psbt_fee_services.utility = m_services.outcomes;
     if (!m_psbt_fee_services.post) m_psbt_fee_services.post = m_fee_read_services.post;
     if (!m_custom_psbt_lookup) m_psbt_fee_services.lookup = psbtfee::NodeLookup(m_node);
     m_imported_psbt_model->setFeeServices(m_psbt_fee_services);
 }
 
-bool WalletQmlModel::requestPsbtFeeProof()
+void WalletQmlModel::setPsbtValueCleanup(execution::ValueCleanup cleanup)
 {
-    const auto token = std::make_shared<const psbtfee::RequestIdentity>();
-    m_psbt_fee_request = token;
-    m_psbt_fee_pending = true;
-    m_current_transaction->setReviewMessage(tr("Checking transaction fee."));
-    const QPointer<WalletQmlModel> observer{this};
-    const auto submit_result = psbtfee::Request(m_psbt_fee_services, m_current_transaction->psbt(), m_current_transaction->feeProof(),
-        [observer, token](psbtfee::Resolution result) {
-            if (observer) observer->applyPsbtFeeProof(token, std::move(result));
-        });
-    if (!submit_result) applyPsbtFeeProof(token, {{}, false, true}, false);
-    Q_EMIT currentTransactionChanged();
-    return submit_result && observer && observer->m_psbt_fee_request == token;
+    m_psbt_fee_services.value_cleanup = std::move(cleanup);
+    m_imported_psbt_model->setFeeServices(m_psbt_fee_services);
 }
 
-void WalletQmlModel::applyPsbtFeeProof(const std::shared_ptr<const psbtfee::RequestIdentity>& token, psbtfee::Resolution result, bool publish)
+bool WalletQmlModel::requestPsbtFeeProof()
+{
+    const QPointer<WalletQmlModel> observer{this};
+    const auto request = std::make_shared<psbtfee::FeeRequest>(
+        [post = m_psbt_fee_services.post, observer] {
+            post([observer] { if (observer) observer->publishPsbtFeeProof(); });
+        });
+    m_psbt_fee_request = request;
+    m_psbt_fee_pending = true;
+    m_current_transaction->setReviewMessage(tr("Checking transaction fee."));
+    const auto submit_result = psbtfee::Request(m_psbt_fee_services, m_current_transaction->psbt(),
+        m_current_transaction->feeProof(), request, m_opening);
+    if (!submit_result) applyPsbtFeeProof(request, {{}, false, true}, false);
+    Q_EMIT currentTransactionChanged();
+    return submit_result && observer && observer->m_psbt_fee_request == request;
+}
+
+void WalletQmlModel::publishPsbtFeeProof()
+{
+    const auto request = m_psbt_fee_request;
+    if (!request || !observationsAllowed()) return;
+    const auto outcome = request->result();
+    if (!outcome) return;
+    applyPsbtFeeProof(request, outcome->value.value_or(psbtfee::Resolution{{}, false, true}));
+}
+
+void WalletQmlModel::applyPsbtFeeProof(const std::shared_ptr<const psbtfee::FeeRequest>& token, psbtfee::Resolution result, bool publish)
 {
     if (m_stopping || !m_current_transaction || m_psbt_fee_request != token) return;
     m_psbt_fee_request.reset();
@@ -1088,21 +1175,16 @@ qint64 WalletQmlModel::balanceSatoshi() const
 
 void WalletQmlModel::initializeBalanceReader()
 {
-    m_balance_drained = false;
     m_balance_state = BalanceState::Unknown;
     const QPointer<WalletQmlModel> observer{this};
-    m_balance_reader = std::make_shared<walletbalance::Reader>(m_opening->scheduler(),
-        walletbalance::WalletRead(m_opening), [bridge = m_notification_bridge, observer] {
-            QMetaObject::invokeMethod(bridge.get(), [observer] {
-                if (observer && observer->observationsAllowed()) observer->publishBalance();
-            }, Qt::QueuedConnection);
-        }, m_unload_requested, [bridge = m_notification_bridge, observer] {
-            QMetaObject::invokeMethod(bridge.get(), [observer] {
-                if (!observer) return;
-                observer->m_balance_drained = true;
-                observer->checkShutdownFinished();
-            }, Qt::QueuedConnection);
-        });
+    auto read = walletbalance::WalletRead(m_opening);
+    auto notify = [bridge = m_notification_bridge, observer] {
+        QMetaObject::invokeMethod(bridge.get(), [observer] {
+            if (observer && observer->observationsAllowed()) observer->publishBalance();
+        }, Qt::QueuedConnection);
+    };
+    m_balance_reader = std::make_shared<walletbalance::Reader>(m_opening->observationPost(),
+        std::move(read), std::move(notify), m_unload_requested);
     m_balance_timer.setInterval(1000);
     connect(&m_balance_timer, &QTimer::timeout, this, &WalletQmlModel::refreshBalance);
     m_balance_timer.start();
@@ -1480,9 +1562,9 @@ void WalletQmlModel::createFeeBumps()
         auto* attempt = new BumpTransactionModel(parent);
         attempt->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
         if (m_opening) {
-            attempt->setOpening(m_opening, {m_opening->scheduler(), m_fee_read_services.post}, {psbtpolicy::ReadNode(m_node, nullptr)});
-        } else if (m_backend_executor) {
-            attempt->setOpening({}, {m_backend_executor->scheduler(), m_fee_read_services.post});
+            attempt->setOpening(m_opening, m_fee_read_services.post, {psbtpolicy::ReadNode(m_node, nullptr, /*enforce_raw_fee_cap=*/false)});
+        } else {
+            attempt->setOpening({}, m_fee_read_services.post);
         }
         return attempt;
     }, this);
@@ -1501,7 +1583,7 @@ void WalletQmlModel::createBackups()
 BackupFileOperation* WalletQmlModel::startBackup(const QString& path, QString& why, std::function<void(backup::Snapshot)> outcome)
 {
     auto services = m_backup_services;
-    if (services.scheduler && (!services.wallet_name || !services.write)) {
+    if (services.utility && (!services.wallet_name || !services.write)) {
         why = tr("Backups are not available for this wallet.");
         return nullptr;
     }
@@ -1509,9 +1591,8 @@ BackupFileOperation* WalletQmlModel::startBackup(const QString& path, QString& w
         services.coordinator = std::make_shared<backup::InstallCoordinator>();
         m_backup_services.coordinator = services.coordinator;
     }
-    if (!services.scheduler) {
+    if (!services.utility) {
         if (!m_opening) { why = tr("This wallet is closing."); return nullptr; }
-        services.scheduler = m_opening->scheduler();
         services.available = [weak = std::weak_ptr<walletopening::Session>{m_opening}] {
             const auto opening = weak.lock(); return opening && opening->available();
         };
@@ -1799,7 +1880,12 @@ TextEditSessionModel* WalletQmlModel::editAddressLabel(const QString& address, Q
 {
     if (!available() || !m_request_store || address.isEmpty() || address.size() > 128) return nullptr;
     TextEditSessionModel::Ports ports;
-    ports.execution = {m_opening->scheduler(), m_fee_read_services.post};
+    ports.post = m_fee_read_services.post;
+    ports.postWork = [utility = m_opening->utilityQueue()](auto work) { return utility->post(std::move(work)); };
+    ports.value_cleanup = [weak = std::weak_ptr<walletopening::Session>{m_opening}](auto cleanup) -> std::shared_ptr<void> {
+        const auto opening = weak.lock();
+        return opening ? opening->holdValues(std::move(cleanup)) : nullptr;
+    };
     ports.validate = [](const QString& value) { return value.size() <= 16384; };
     ports.read = [weak = std::weak_ptr<walletopening::Session>{m_opening}, address](auto done) {
         const auto opening = weak.lock();
@@ -1822,7 +1908,7 @@ TextEditSessionModel* WalletQmlModel::editAddressLabel(const QString& address, Q
         if (!store || !opening) return {};
         const auto action = opening->startAction();
         if (!action) return {};
-        return [store, action, address](const auto& attempt, auto done, const auto&) {
+        return [store, action, address](const auto& attempt, auto done) {
         walletrequests::Command command; command.kind = walletrequests::Kind::Label;
         command.address = address; command.label = attempt.values[0]; command.expected_label = attempt.base[0];
         const auto submit_result = store->submitResult(std::move(command), [saved_value = attempt.values[0], done = std::move(done)](const walletrequests::Result& result) {
@@ -1848,6 +1934,7 @@ TextEditSessionModel* WalletQmlModel::editAddressLabel(const QString& address, Q
     auto* editor = new AddressLabelEditorModel(this, address, std::move(ports), parent);
     if (!editor->available()) { delete editor; return nullptr; }
     connect(this, &WalletQmlModel::availableChanged, editor, [this, editor] { if (!available()) editor->retire(); });
+    connect(this, &QObject::destroyed, editor, &TextEditSessionModel::retire);
     connect(this, &WalletQmlModel::addressLabelsChanged, editor, &TextEditSessionModel::refresh);
     connect(editor, &TextEditSessionModel::changed, this, [this, editor, consumed = QString{}]() mutable {
         const auto result = editor->saveResult();
@@ -1876,7 +1963,7 @@ void WalletQmlModel::requestSendFacts()
     }
     if (!m_send_facts_query) {
         const QPointer<WalletQmlModel> observer{this};
-        m_send_facts_query = std::make_shared<execution::SnapshotQuery<SendFacts>>(m_opening->scheduler(),
+        m_send_facts_query = std::make_shared<execution::SnapshotQuery<SendFacts>>(
             [opening = m_opening, input = m_send_facts_input, node = m_node, policy = m_fee_policy] {
                 wallet::CCoinControl control;
                 quint64 revision;
@@ -1919,7 +2006,7 @@ void WalletQmlModel::requestSendFacts()
                 return facts;
             }, [post = m_fee_read_services.post, observer] {
                 post([observer] { if (observer) observer->publishSendFacts(); });
-            });
+            }, m_opening->observationPost());
     }
     const bool was_known = std::exchange(m_send_facts_known, false);
     m_send_facts_query->request();
@@ -2372,7 +2459,7 @@ void WalletQmlModel::startPreparation(transactionattempt::Result submit_result,
         return;
     }
     if (passphrase) {
-        auto captured = secretinput::Capture(opening->scheduler(), *passphrase);
+        auto captured = secretinput::Capture(opening, *passphrase);
         if (!unchanged()) return;
         if (!captured) {
             reject(transactionattempt::Phase::Failed, tr("The password could not be used. No transaction was prepared."));
@@ -2386,7 +2473,7 @@ void WalletQmlModel::startPreparation(transactionattempt::Result submit_result,
         reject(transactionattempt::Phase::Failed, tr("The transaction could not be prepared. Try again."));
         return;
     }
-    auto operation = std::make_shared<execution::OwnedCommand<walletprepare::Result>>(opening->scheduler(),
+    auto operation = std::make_shared<execution::OwnedCommand<walletprepare::Result>>(
         [post = presentation::ReliablePost(m_fee_read_services.post), observer] {
             post([observer] { if (observer) observer->publishPreparation(); });
         });
@@ -2400,7 +2487,7 @@ void WalletQmlModel::startPreparation(transactionattempt::Result submit_result,
         return;
     }
     m_preparation = operation;
-    m_preparation_lease.emplace(std::move(*hold.lease));
+    m_preparation_lease = std::move(hold);
     const auto admitted = operation->startWith([opening, action, request, output](auto done, auto failed) {
         return opening->perform(action, [request, output](interfaces::Wallet& wallet) {
             return walletprepare::ExecuteInto(wallet, std::move(*request), output);
@@ -2713,7 +2800,7 @@ WalletQmlModel::SentLabelCapture WalletQmlModel::captureSentRecipientLabels(cons
     if (!m_current_transaction->recipientLabels().isEmpty()) {
         auto held = m_opening->holdValues([labels = capture.labels] { labels->clear(); });
         if (!held) return capture;
-        capture.label_lifetime.emplace(std::move(*held.lease));
+        capture.label_lifetime = std::move(held);
         *capture.labels = m_current_transaction->recipientLabels();
     }
     capture.valid = true;
@@ -2775,7 +2862,10 @@ std::shared_ptr<const paymentimport::TargetPort> WalletQmlModel::importTarget(Se
     psbtwork::Context context{m_psbt_fee_services.lookup, psbtwork::NodeBroadcast(m_node)};
     context.policy = m_psbt_fee_services.policy;
     paymentimport::ReviewServices services;
-    services.scheduler = opening->scheduler(); services.view = view;
+    services.observe = opening->observationPost(execution::Lane::Domain);
+    services.retire = [opening](auto work) { return opening->retireValues(std::move(work)); };
+    services.hold = [opening](auto cleanup) { return opening->holdValues(std::move(cleanup)); };
+    services.view = view;
     services.current = [opening, current] { return current->load() && opening->available(); };
     services.prepare = [opening, context, unit](auto source, auto done, auto failed) {
         // Complete the retained result on Native before the Domain acknowledgment
@@ -2863,7 +2953,7 @@ std::shared_ptr<FileExportRequest> WalletQmlModel::preparePsbtFileExport(
     const QPointer<WalletQmlModel> observer{this};
     const auto opening = m_opening;
     auto services = m_backup_services;
-    services.scheduler = opening ? opening->scheduler() : m_psbt_fee_services.scheduler;
+    services.utility = opening ? opening->utilityQueue() : m_psbt_fee_services.utility;
     services.post = presentation::ReliablePost(m_fee_read_services.post);
     services.available = [has_opening = bool(opening), weak = std::weak_ptr<walletopening::Session>{opening}] {
         if (!has_opening) return true;
@@ -2871,50 +2961,13 @@ std::shared_ptr<FileExportRequest> WalletQmlModel::preparePsbtFileExport(
     };
     const auto action_slot = std::make_shared<PsbtExportActionSlot>();
     if (opening) {
+        services.value_cleanup = [opening](auto retire) { return opening->holdValues(std::move(retire)); };
         services.submit = [weak = std::weak_ptr<walletopening::Session>{opening}, action_slot](backup::Services::Work work) {
             const auto session = weak.lock();
             const auto action = action_slot->get();
             if (!session || !action) return execution::SubmitResult{{}, execution::Rejection::Closed};
-            return session->submitActionWork(action, [work = std::move(work)] { work({}); });
+            return session->planAction(action, [work = std::move(work)] { work({}); });
         };
-        services.reserve_prompt_retirement = [weak = std::weak_ptr<walletopening::Session>{opening}, action_slot](std::function<void()> work) {
-            const auto session = weak.lock();
-            const auto action = action_slot->get();
-            if (!session || !action) return execution::SubmitResult{{}, execution::Rejection::Closed};
-            return session->reserveActionCleanup(action, std::move(work));
-        };
-        services.activate_prompt_retirement = [weak = std::weak_ptr<walletopening::Session>{opening}, action_slot](execution::TaskId id) {
-            const auto session = weak.lock();
-            const auto action = action_slot->get();
-            return session && action && session->activateActionCleanup(action, id);
-        };
-    } else if (services.scheduler) {
-        // A detached PSBT export still needs a private serialization key for
-        // its close receipt; unkeyed Core and Cleanup turns could race while
-        // inspecting an existing destination.
-        const auto scheduler = services.scheduler;
-        try {
-            const auto action_key = scheduler->allocateKey();
-            services.submit = [scheduler, action_key](backup::Services::Work work) {
-                return execution::Submit(*scheduler, [work = std::move(work)] { work({}); }, [] {}, {},
-                    {execution::Lane::Core, action_key, execution::WorkClass::Action});
-            };
-            services.reserve_prompt_retirement = [scheduler, action_key](std::function<void()> work) {
-                return execution::Submit(*scheduler, std::move(work), [] {}, {},
-                    {execution::Lane::Cleanup, action_key, execution::WorkClass::Action}, true);
-            };
-            services.activate_prompt_retirement = [scheduler](execution::TaskId id) {
-                return scheduler->activateCleanup(id);
-            };
-        } catch (...) {
-            services.submit = [](backup::Services::Work) {
-                return execution::SubmitResult{{}, execution::Rejection::Transport};
-            };
-            services.reserve_prompt_retirement = [](std::function<void()>) {
-                return execution::SubmitResult{{}, execution::Rejection::Transport};
-            };
-            services.activate_prompt_retirement = [](execution::TaskId) { return false; };
-        }
     }
     const auto previous_outcome = std::move(services.outcome);
     services.outcome = [receipt, action_slot, previous_outcome](backup::Snapshot snapshot) {
@@ -3060,7 +3113,13 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
     const QPointer<WalletQmlModelTransaction> review{m_current_transaction};
     const bool had_review = bool(review);
     const auto opening = m_opening;
-    const auto scheduler = opening ? opening->scheduler() : m_psbt_fee_services.scheduler;
+    const auto core = m_psbt_fee_services.core;
+    const auto utility = m_psbt_fee_services.utility;
+    const auto detached_cleanup = !opening && core && utility ? m_psbt_fee_services.value_cleanup : nullptr;
+    const execution::ValueCleanup reserve_value = [opening, detached_cleanup](auto cleanup) {
+        if (opening) return opening->holdValues(std::move(cleanup));
+        return detached_cleanup ? detached_cleanup(std::move(cleanup)) : std::shared_ptr<void>{};
+    };
     const auto post = presentation::ReliablePost(m_fee_read_services.post);
     const auto path = QString{requested_path};
     const auto review_document = review ? review->psbt() : nullptr;
@@ -3080,7 +3139,6 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
     // releasing an old reservation can itself call an injected resource port.
     auto previous_action = std::move(m_psbt_action);
     auto previous_lease = std::move(m_psbt_action_lease);
-    m_psbt_action_lease.reset(); // Destroy only the now-empty moved-from handle.
     (void)previous_action; (void)previous_lease;
     const auto id = ++m_psbt_action_id;
     m_psbt_action_kind = kind; m_psbt_action_state = PsbtActionState::PsbtPending;
@@ -3139,7 +3197,7 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
         return id;
     }
     auto weak = std::make_shared<std::weak_ptr<PsbtAction>>();
-    auto operation = std::make_shared<PsbtAction>(scheduler, [weak, receipt, post, observer, id, kind, file_export_request] {
+    auto operation = std::make_shared<PsbtAction>([weak, receipt, post, observer, id, kind, file_export_request] {
         if (const auto owner = weak->lock()) {
             if (const auto result = owner->result(); result && result->value) {
                 if (kind == PsbtActionKind::Save && file_export_request) {
@@ -3160,40 +3218,39 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
     if (!owns_pending()) { rejected({}); return id; }
     *weak = operation;
     auto owner = std::make_shared<std::shared_ptr<PsbtAction>>(operation);
-    auto hold = [&]() -> execution::Borrow {
-        if (opening) return opening->holdValues([owner] { owner->reset(); });
-        if (!scheduler) return {{}, execution::Rejection::Closed};
-        const auto key = scheduler->allocateKey();
-        const auto cleanup = execution::Submit(*scheduler, [owner] { owner->reset(); }, [] {}, {}, {execution::Lane::Cleanup, key}, true);
-        if (!cleanup) return {{}, cleanup.rejection};
-        auto held = scheduler->borrow(key); scheduler->activateCleanup(cleanup.id); return held;
-    }();
+    auto hold = reserve_value([owner] { owner->reset(); });
     if (!owns_pending()) { rejected({}); return id; }
-    if (!scheduler || !hold) { rejected(tr("PSBT result is unavailable.")); return id; }
+    if (!hold) { rejected(tr("PSBT result is unavailable.")); return id; }
     std::shared_ptr<CTransactionRef> transaction_owner;
     if (kind == PsbtActionKind::Broadcast) {
         const auto factory = [] { return std::make_unique<CTransactionRef>(); };
-        transaction_owner = opening ? walletopening::RetainValues<CTransactionRef>(opening, factory)
-            : execution::RetainValues<CTransactionRef>(scheduler, factory);
+        transaction_owner = execution::RetainValues<CTransactionRef>(reserve_value, factory);
         if (!owns_pending()) { rejected({}); return id; }
         if (!transaction_owner) { rejected(tr("The PSBT transaction result is not available.")); return id; }
     }
     const auto output_factory = [] { return std::make_unique<PsbtActionValue>(); };
-    auto output = opening ? walletopening::RetainValues<PsbtActionValue>(opening, output_factory)
-        : execution::RetainValues<PsbtActionValue>(scheduler, output_factory);
+    auto output = execution::RetainValues<PsbtActionValue>(reserve_value, output_factory);
     if (!owns_pending()) { rejected({}); return id; }
     if (!output) { rejected(tr("The PSBT result is not available.")); return id; }
-    m_psbt_action = operation; m_psbt_action_lease.emplace(std::move(*hold.lease));
-    auto effect = [kind, path, document, assessment, proof, reviewed, fee, fill, unit, context, transaction_owner](interfaces::Wallet* wallet) {
+    m_psbt_action = operation; m_psbt_action_lease = std::move(hold);
+    using Import = std::pair<std::shared_ptr<const PartiallySignedTransaction>, QString>;
+    const auto load = [path]() -> Import {
+        PartiallySignedTransaction imported{CMutableTransaction{}, 2};
+        auto error = psbtwork::LoadFile(path, imported);
+        if (!error.isEmpty()) return {nullptr, std::move(error)};
+        return {std::make_shared<const PartiallySignedTransaction>(std::move(imported)), {}};
+    };
+    auto effect = [kind, load, document, assessment, proof, reviewed, fee, fill, unit, context, transaction_owner](
+                      interfaces::Wallet* wallet, std::optional<Import> loaded) {
         PsbtActionValue value;
         if (kind == PsbtActionKind::Recheck) {
             if (wallet) value.imported = psbtwork::PrepareReview(*wallet, document, context, unit);
             else value.error = QStringLiteral("No wallet is loaded.");
         } else if (kind == PsbtActionKind::Import) {
-            CMutableTransaction empty; PartiallySignedTransaction imported{empty, 2};
-            value.error = psbtwork::LoadFile(path, imported);
+            auto [imported, error] = loaded ? std::move(*loaded) : load();
+            value.error = std::move(error);
             if (value.error.isEmpty()) {
-                if (wallet) value.imported = psbtwork::PrepareReview(*wallet, std::make_shared<const PartiallySignedTransaction>(std::move(imported)), context, unit);
+                if (wallet) value.imported = psbtwork::PrepareReview(*wallet, std::move(imported), context, unit);
                 else value.error = QStringLiteral("No wallet is loaded.");
             }
         } else if (kind == PsbtActionKind::Save) {
@@ -3212,8 +3269,8 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
         }
         return value;
     };
-    auto work = [effect, output](interfaces::Wallet* wallet) {
-        *output = effect(wallet);
+    auto work = [effect, output](interfaces::Wallet* wallet, std::optional<Import> loaded = {}) {
+        *output = effect(wallet, std::move(loaded));
         auto value = *output;
         value.lifetime = output;
         // The production review constructor consumes an already-retained
@@ -3224,18 +3281,53 @@ quint64 WalletQmlModel::startPsbtAction(PsbtActionKind kind, const QString& requ
         if (value.export_document) value.export_document = std::shared_ptr<const PartiallySignedTransaction>{output, value.export_document.get()};
         return value;
     };
-    execution::SubmitResult submit_result;
+    execution::SubmitResult submit_result{{}, execution::Rejection::Closed};
     if (opening) {
         const bool observation = kind == PsbtActionKind::Import || kind == PsbtActionKind::Recheck;
         const auto action = observation ? nullptr : opening->startAction();
         if (!owns_pending()) { rejected({}); return id; }
-        if (observation) submit_result = operation->startWith([opening, work](auto done, auto failed) {
+        if (kind == PsbtActionKind::Import && m_services.outcomes) {
+            submit_result = operation->startWith([opening, utility = m_services.outcomes, load, work](auto done, auto failed) {
+                const bool accepted = utility->post([opening, load, work, done, failed] {
+                    try {
+                        if (!opening->observationOpen()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
+                        auto loaded = load();
+                        if (!loaded.first) {
+                            done(work(nullptr, std::move(loaded)));
+                            return;
+                        }
+                        const auto review = opening->read([work, loaded = std::move(loaded)](interfaces::Wallet& wallet) mutable {
+                            return work(&wallet, std::move(loaded));
+                        }, done, failed);
+                        if (!review) {
+                            const auto cause = review.rejection == execution::Rejection::Closed
+                                ? execution::NotStarted::Cause::Cancelled : execution::NotStarted::Cause::Transport;
+                            failed(std::make_exception_ptr(execution::NotStarted{cause}));
+                        }
+                    } catch (...) {
+                        failed(std::current_exception());
+                    }
+                });
+                return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+            });
+        } else if (observation) submit_result = operation->startWith([opening, work](auto done, auto failed) {
             return opening->read([work](interfaces::Wallet& wallet) { return work(&wallet); }, std::move(done), std::move(failed), execution::WorkClass::Observation);
         });
         else if (action) submit_result = operation->startWith([opening, action, work](auto done, auto failed) {
             return opening->perform(action, [work](interfaces::Wallet& wallet) { return work(&wallet); }, std::move(done), std::move(failed));
         });
-    } else submit_result = operation->start([work] { return work(nullptr); }, {execution::Lane::Core});
+    } else if (detached_cleanup) {
+        const auto queue = kind == PsbtActionKind::Import ? utility : core;
+        submit_result = operation->startWith([queue, utility, work](auto done, auto failed) {
+            auto task = execution::MakeTask([work] { return work(nullptr); }, std::move(done), std::move(failed));
+            const bool accepted = queue->post([queue, utility, task = std::move(task)] {
+                task->execute();
+                const auto deliver = [task] { task->deliver(); };
+                if (queue == utility || !utility->post(deliver)) deliver();
+            });
+            return execution::SubmitResult{{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
+        });
+    }
     if (submit_result) abandon_unaccepted_export.dismiss();
     // Effect admission can close/delete/replace the observer. The original
     // command owns its actual outcome independently; never adopt a successor.
@@ -3361,7 +3453,7 @@ void WalletQmlModel::publishPsbtAction()
                 if (previous) previous->deleteLater();
                 m_current_transaction->setPsbt({}); m_psbt_document_lease.reset(); m_current_transaction->setRequiresRecheck(false);
                 m_current_transaction->setPsbt(imported.document);
-                if (m_psbt_action_lease) { m_psbt_document_lease.emplace(std::move(*m_psbt_action_lease)); m_psbt_action_lease.reset(); }
+                m_psbt_document_lease = std::move(m_psbt_action_lease);
                 m_current_transaction->setFeeProof(imported.review->proof
                     ? std::shared_ptr<const psbtfee::Analysis>{imported.review, imported.review->proof.get()}
                     : std::shared_ptr<const psbtfee::Analysis>{});
@@ -3469,7 +3561,7 @@ void WalletQmlModel::requestCurrentFlow()
     }
     if (!m_flow_query) {
         const QPointer<WalletQmlModel> observer{this};
-        m_flow_query = std::make_shared<execution::SnapshotQuery<ReviewFlowResult>>(m_opening->scheduler(),
+        m_flow_query = std::make_shared<execution::SnapshotQuery<ReviewFlowResult>>(
             [opening = m_opening, input = m_flow_input] {
                 CTransactionRef transaction;
                 std::shared_ptr<const PartiallySignedTransaction> document;
@@ -3500,7 +3592,7 @@ void WalletQmlModel::requestCurrentFlow()
                 return result;
             }, [post = m_fee_read_services.post, observer] {
                 post([observer] { if (observer) observer->publishCurrentFlow(); });
-            });
+            }, m_opening->observationPost());
     }
     const QPointer<WalletQmlModel> observer{this};
     if (m_flow_details) m_flow_details->clearSource();

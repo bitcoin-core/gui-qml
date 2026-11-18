@@ -1,12 +1,13 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/backendexecutor.h>
+#include <qml/executor.h>
 #include <qml/models/activityexportoperation.h>
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/transaction.h>
-#include <test/mocks/manualexecutionenvironment.h>
+#include <test/mocks/walletsession.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <test/qt_test_registry.h>
 
 #include <QFile>
@@ -36,20 +37,27 @@ std::shared_ptr<const activityview::Hold> Source()
     frame->rows.emplace("tx:original", row); frame->presentation = activityview::Insert({}, "tx:original", row);
     auto hold = std::make_shared<activityview::Hold>(); hold->snapshot = std::move(frame); return hold;
 }
+void SetUtility(activityexport::Files& files, const std::shared_ptr<walletopening::Session>& opening)
+{
+    files.utility = opening->utilityQueue();
+    files.value_cleanup = [opening](auto cleanup) { return opening->holdValues(std::move(cleanup)); };
+    files.available = [opening] { return opening->available(); };
+}
 struct Fixture {
-    ManualRoutedExecution commands;
+    ManualStartupExecution commands;
+    const std::shared_ptr<walletopening::Session> opening = MakeWalletSession(commands.executor(), [] {});
     std::deque<std::function<void()>> gui;
     std::vector<activityexport::Receipt> outcomes;
     int inspected{0}, installed{0};
-    explicit Fixture(size_t slots = 1) : commands(execution::Options{}, slots) {}
+    ~Fixture() { opening->stop(false, {}); commands.drain(); }
     activityexport::Files files()
     {
         auto coordinator = std::make_shared<backup::InstallCoordinator>(); activityexport::Files result;
         result.inspect = [this](const QString& path) { ++inspected; const auto bytes = path.toUtf8(); return backup::Inspect({bytes.constData(), size_t(bytes.size())}, "activity", ".csv"); };
         result.install = [this, coordinator](const backup::Proposal& target, bool approved, const auto& producer) { ++installed; return backup::Write(target, approved, producer, *coordinator); };
-        result.available = [] { return true; }; result.outcome = [this](const auto& receipt) { outcomes.push_back(receipt); }; return result;
+        SetUtility(result, opening); result.outcome = [this](const auto& receipt) { outcomes.push_back(receipt); }; return result;
     }
-    execution::SnapshotServices execution() { return {commands.scheduler, [this](auto callback) { gui.push_back(std::move(callback)); }}; }
+    presentation::Post post() { return [this](auto callback) { gui.push_back(std::move(callback)); }; }
     void publish() { while (!gui.empty()) { auto callback = std::move(gui.front()); gui.pop_front(); callback(); } }
 };
 }
@@ -61,7 +69,7 @@ private Q_SLOTS:
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("original.csv");
         auto source = Source(); const std::weak_ptr<const activityview::Snapshot> original = source->snapshot;
-        ActivityExportOperation operation{{path, source, 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation operation{{path, source, 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
         source.reset(); QVERIFY(operation.start()); QVERIFY(operation.busy()); QCOMPARE(f.installed, 0);
         f.commands.drain(); QCOMPARE(f.outcomes.size(), size_t{1}); QVERIFY(f.outcomes.front().written); QVERIFY(f.outcomes.front().outcome_known);
         QCOMPARE(f.outcomes.front().operation, operation.operationId()); QCOMPARE(f.outcomes.front().snapshot_revision, QStringLiteral("71")); QCOMPARE(f.outcomes.front().unit, 0);
@@ -69,10 +77,74 @@ private Q_SLOTS:
         const auto bytes = Read(path); QVERIFY(bytes.contains("Amount (BTC)")); QVERIFY(bytes.contains("1.23456789")); QVERIFY(bytes.contains("\"Original, \"\"note\"\"\nnext\""));
         f.publish(); QVERIFY(operation.saved()); QVERIFY(operation.resultPresent()); QCOMPARE(operation.finalPath(), path); QVERIFY(operation.error().isEmpty());
     }
+    void sessionUtilityOwnsOverwriteAndRetirementWithSchedulerClosed_data()
+    {
+        QTest::addColumn<bool>("approve");
+        QTest::newRow("confirmed") << true;
+        QTest::newRow("retired") << false;
+    }
+
+    void sessionUtilityOwnsOverwriteAndRetirementWithSchedulerClosed()
+    {
+        QFETCH(bool, approve);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("original.csv");
+        QVERIFY(Put(path, "old"));
+        Fixture f;
+        ManualStartupExecution worker;
+        const auto opening = MakeWalletSession(worker.executor(), [] {});
+        auto files = f.files();
+        SetUtility(files, opening);
+        bool stopped{false};
+        const auto cleanup = qScopeGuard([&] {
+            opening->stop(false, [&] { stopped = true; });
+            worker.drain();
+            f.publish();
+            QVERIFY(stopped);
+        });
+
+        auto source = Source();
+        const std::weak_ptr<const activityview::Snapshot> original = source->snapshot;
+        ActivityExportOperation operation{{path, std::move(source), 3}, files, f.post(), ActivityFilterProxyModel::WriteCsv};
+        QVERIFY(operation.start());
+        worker.drain();
+        QVERIFY(operation.busy());
+        QVERIFY(f.outcomes.empty());
+        f.publish();
+        QVERIFY(operation.confirmationRequired());
+        QCOMPARE(f.inspected, 1);
+        QCOMPARE(f.installed, 0);
+        QVERIFY(!original.expired());
+        QCOMPARE(Read(path), QByteArray{"old"});
+        if (approve) {
+            QVERIFY(operation.confirm());
+            worker.drain();
+        } else {
+            operation.retire();
+        }
+        opening->stop(false, [&] { stopped = true; });
+        worker.drain();
+        QVERIFY(stopped);
+        QCOMPARE(worker.coreSubmissions(), size_t{0});
+        QVERIFY(original.expired());
+        QCOMPARE(f.outcomes.size(), size_t{1});
+        QCOMPARE(f.outcomes.front().written, approve);
+        QCOMPARE(f.outcomes.front().operation, operation.operationId());
+        QCOMPARE(f.outcomes.front().snapshot_revision, QStringLiteral("71"));
+        QCOMPARE(f.installed, approve ? 1 : 0);
+        if (approve) QVERIFY(Read(path).contains("123456789"));
+        else QCOMPARE(Read(path), QByteArray{"old"});
+        f.publish();
+        QCOMPARE(operation.saved(), approve);
+        QCOMPARE(operation.cancelled(), !approve);
+        QVERIFY(f.commands.quiescent());
+    }
+
     void existingDestinationNeedsExactVersionConsentAndRetainsTheOriginalFrame()
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("original.csv"); QVERIFY(Put(path, "old"));
-        ActivityExportOperation operation{{path, Source(), 3}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation operation{{path, Source(), 3}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
         QVERIFY(operation.start()); f.commands.drain(); f.publish(); QVERIFY(operation.confirmationRequired()); QVERIFY(operation.replacing()); QCOMPARE(f.installed, 0); QCOMPARE(Read(path), QByteArray{"old"});
         QCOMPARE(operation.snapshotRevision(), QStringLiteral("71")); QCOMPARE(operation.displayUnit(), 3); QVERIFY(operation.confirm()); f.commands.drain(); f.publish();
         QVERIFY(operation.saved()); QCOMPARE(f.installed, 1); QVERIFY(Read(path).contains("123456789")); QCOMPARE(f.outcomes.size(), size_t{1}); QVERIFY(f.outcomes.front().written);
@@ -80,7 +152,7 @@ private Q_SLOTS:
     void changedDestinationCannotUseOldConsent()
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("original.csv"); QVERIFY(Put(path, "old"));
-        ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
         QVERIFY(operation.start()); f.commands.drain(); f.publish(); QVERIFY(operation.confirmationRequired()); QVERIFY(Put(path, "changed independently"));
         QVERIFY(operation.confirm()); f.commands.drain(); f.publish(); QVERIFY(!operation.saved()); QVERIFY(operation.resultPresent()); QVERIFY(operation.outcomeKnown());
         QCOMPARE(Read(path), QByteArray{"changed independently"}); QCOMPARE(f.outcomes.size(), size_t{1}); QCOMPARE(f.outcomes.front().error, backup::Error::Changed);
@@ -88,7 +160,7 @@ private Q_SLOTS:
     void rewrittenSuffixRequiresConsentToTheActualFinalPath()
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto requested = directory.filePath("original.txt");
-        ActivityExportOperation operation{{requested, Source(), 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation operation{{requested, Source(), 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
         QVERIFY(operation.start()); f.commands.drain(); f.publish(); QVERIFY(operation.confirmationRequired()); QVERIFY(!operation.replacing());
         QVERIFY(operation.finalPath().endsWith(".csv")); QVERIFY(operation.finalPath() != requested); QVERIFY(!QFile::exists(requested)); QCOMPARE(f.installed, 0);
         QVERIFY(operation.confirm()); f.commands.drain(); f.publish(); QVERIFY(operation.saved()); QVERIFY(!QFile::exists(requested)); QVERIFY(!Read(operation.finalPath()).isEmpty());
@@ -96,17 +168,17 @@ private Q_SLOTS:
     void refusalAndRetirementBeforeAdmissionNeverWrite()
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("original.csv"); QVERIFY(Put(path, "old"));
-        auto operation = std::make_unique<ActivityExportOperation>(activityexport::Request{path, Source(), 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv);
+        auto operation = std::make_unique<ActivityExportOperation>(activityexport::Request{path, Source(), 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv);
         QVERIFY(operation->start()); f.commands.drain(); f.publish(); QVERIFY(operation->confirmationRequired()); QVERIFY(operation->cancel()); f.commands.drain(); f.publish();
         QCOMPARE(operation->phase(), BackupFileOperation::Phase::Declined); QVERIFY(operation->cancelled()); QCOMPARE(f.installed, 0); QCOMPARE(Read(path), QByteArray{"old"});
-        operation = std::make_unique<ActivityExportOperation>(activityexport::Request{directory.filePath("unstarted.csv"), Source(), 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv);
+        operation = std::make_unique<ActivityExportOperation>(activityexport::Request{directory.filePath("unstarted.csv"), Source(), 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv);
         QVERIFY(operation->start()); operation.reset(); f.commands.drain(); f.publish(); QCOMPARE(f.installed, 0); QVERIFY(!QFile::exists(directory.filePath("unstarted.csv")));
         Fixture closing;
         auto source = Source(); const std::weak_ptr<const activityview::Snapshot> frame{source->snapshot};
-        ActivityExportOperation retained{{path, source, 0}, closing.files(), closing.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation retained{{path, source, 0}, closing.files(), closing.post(), ActivityFilterProxyModel::WriteCsv};
         source.reset(); QVERIFY(retained.start()); closing.commands.drain(); closing.publish(); QVERIFY(retained.confirmationRequired());
-        closing.commands.scheduler->stopAcceptingWork(); retained.retire(); QVERIFY(!frame.expired());
-        closing.commands.drain(); closing.publish(); QVERIFY(frame.expired()); QCOMPARE(closing.commands.scheduler->pending(), size_t{0});
+        closing.opening->utilityQueue()->close(); retained.retire(); QVERIFY(!frame.expired());
+        closing.commands.drain(); closing.publish(); QVERIFY(frame.expired()); QCOMPARE(closing.commands.queuedCount(), size_t{0});
         QVERIFY(!retained.confirm()); QCOMPARE(retained.phase(), BackupFileOperation::Phase::Retired);
         QVERIFY(retained.resultPresent()); QVERIFY(retained.cancelled()); QVERIFY(retained.outcomeKnown());
         QCOMPARE(closing.installed, 0); QCOMPARE(Read(path), QByteArray{"old"});
@@ -114,7 +186,7 @@ private Q_SLOTS:
     void failedProducerPreservesTheOriginalDestination()
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("original.csv"); QVERIFY(Put(path, "original bytes"));
-        int produced{0}; ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.execution(), [&](const auto& request) {
+        int produced{0}; ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.post(), [&](const auto& request) {
             ++produced; if (!Put(request.path, "partial staging")) return activityexport::Result{false, request.path, "staging fixture failure"};
             return activityexport::Result{false, request.path, "controlled output failure"};
         }};
@@ -142,7 +214,7 @@ private Q_SLOTS:
     {
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("actual.csv"); auto files = f.files();
         files.install = [&](const backup::Proposal&, bool, const auto&) -> backup::WriteResult { ++f.installed; if (!Put(path, "physically installed")) return {backup::Error::Install}; throw std::runtime_error("late transport fault"); };
-        ActivityExportOperation operation{{path, Source(), 0}, files, f.execution(), ActivityFilterProxyModel::WriteCsv}; QVERIFY(operation.start()); f.commands.drain(); f.publish();
+        ActivityExportOperation operation{{path, Source(), 0}, files, f.post(), ActivityFilterProxyModel::WriteCsv}; QVERIFY(operation.start()); f.commands.drain(); f.publish();
         QVERIFY(operation.resultPresent()); QVERIFY(!operation.saved()); QVERIFY(!operation.outcomeKnown()); QCOMPARE(operation.errorCode(), ActivityExportOperation::OutcomeUnknown); QCOMPARE(f.installed, 1); QCOMPARE(Read(path), QByteArray{"physically installed"}); QCOMPARE(f.outcomes.size(), size_t{1}); QVERIFY(!f.outcomes.front().outcome_known);
         QVERIFY(!operation.start()); f.commands.drain(); QCOMPARE(f.installed, 1);
     }
@@ -151,12 +223,12 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f;
         const auto cleanup = qScopeGuard([&] { f.commands.drain(); f.publish(); });
         auto source = Source(); const std::weak_ptr<const activityview::Snapshot> frame{source->snapshot};
-        ActivityExportOperation operation{{directory.filePath("closed.csv"), source, 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
-        source.reset(); f.commands.scheduler->stopAcceptingWork(); QVERIFY(!operation.start());
+        ActivityExportOperation operation{{directory.filePath("closed.csv"), source, 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
+        source.reset(); f.opening->utilityQueue()->close(); QVERIFY(!operation.start());
         QVERIFY(!frame.expired()); // Rejection cannot free the original large value on GUI.
         f.commands.drain(); f.publish(); QCOMPARE(f.inspected, 0); QCOMPARE(f.installed, 0); QVERIFY(!operation.saved()); QVERIFY(operation.resultPresent());
         QVERIFY2(frame.expired(), "Rejected CSV frame must retire on Native while the failed projection remains alive");
-        QCOMPARE(f.commands.scheduler->pending(), size_t{0}); QCOMPARE(operation.snapshotRevision(), QStringLiteral("71"));
+        QCOMPARE(f.commands.queuedCount(), size_t{0}); QCOMPARE(operation.snapshotRevision(), QStringLiteral("71"));
     }
     void competingConsentCommandsHaveOneOrderedNativeOutcome_data()
     {
@@ -164,41 +236,67 @@ private Q_SLOTS:
     }
     void competingConsentCommandsHaveOneOrderedNativeOutcome()
     {
-        QFETCH(bool, approve_first); QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f{2}; const auto path = directory.filePath("ordered.csv"); QVERIFY(Put(path, "original"));
+        QFETCH(bool, approve_first); QTemporaryDir directory; QVERIFY(directory.isValid()); Fixture f; const auto path = directory.filePath("ordered.csv"); QVERIFY(Put(path, "original"));
         const auto cleanup = qScopeGuard([&] {
-            do { f.commands.drain(); f.publish(); } while (!f.commands.queuedIdle() || !f.commands.activeIdle());
+            do { f.commands.drain(); f.publish(); } while (!f.commands.quiescent());
             QVERIFY(f.commands.quiescent());
             QCOMPARE(f.outcomes.size(), size_t{1}); QCOMPARE(f.installed, approve_first ? 1 : 0);
             if (!approve_first) QCOMPARE(Read(path), QByteArray{"original"});
         });
-        ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.execution(), ActivityFilterProxyModel::WriteCsv};
+        ActivityExportOperation operation{{path, Source(), 0}, f.files(), f.post(), ActivityFilterProxyModel::WriteCsv};
         QVERIFY(operation.start()); f.commands.drain(); f.publish(); QVERIFY(operation.confirmationRequired());
         if (approve_first) { QVERIFY(operation.confirm()); QVERIFY(operation.cancel()); }
         else { QVERIFY(operation.cancel()); QVERIFY(operation.confirm()); }
-        const auto first = f.commands.dispatchNext(execution::Lane::Core); QVERIFY(first);
-        const auto concurrent = f.commands.dispatchNext(execution::Lane::Core);
-        const bool first_finished = f.commands.finishWork(*first);
-        const bool second_finished = !concurrent || f.commands.finishWork(*concurrent);
-        f.commands.drain(); f.publish(); QVERIFY(first_finished && second_finished);
-        QVERIFY(!concurrent); // A two-slot scheduler must still serialize this operation's state writer.
+        const auto first = f.commands.take(execution::Lane::Utility); QVERIFY(first);
+        const auto concurrent = f.commands.take(execution::Lane::Utility);
+        first();
+        if (concurrent) concurrent();
+        f.commands.drain(); f.publish();
+        QVERIFY(!concurrent); // Both consent commands serialize on the same queue.
         QCOMPARE(f.outcomes.size(), size_t{1}); QCOMPARE(f.installed, approve_first ? 1 : 0); QCOMPARE(operation.saved(), approve_first);
         if (!approve_first) QCOMPARE(Read(path), QByteArray{"original"});
         f.commands.drain(); f.publish(); QCOMPARE(f.outcomes.size(), size_t{1});
     }
     void realWorkerWriteSurvivesObserverLossAndDoesNotBlockGuiOrNativeOutcome()
     {
-        QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("worker.csv"); BackendExecutor backend;
-        QSemaphore entered, release; std::atomic<int> outcomes{0}; std::atomic<bool> off_gui{false}; std::mutex mutex; std::deque<std::function<void()>> gui;
-        activityexport::Files files; const auto coordinator = std::make_shared<backup::InstallCoordinator>();
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("worker.csv");
+        QSemaphore entered, release;
+        std::atomic<int> outcomes{0};
+        std::atomic_bool off_gui{false};
+        std::mutex mutex;
+        std::deque<std::function<void()>> gui;
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto opening = MakeWalletSession(executor, [] {});
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        activityexport::Files files;
+        SetUtility(files, opening);
+        const auto coordinator = std::make_shared<backup::InstallCoordinator>();
         files.inspect = [](const QString& raw) { const auto bytes = raw.toUtf8(); return backup::Inspect({bytes.constData(), size_t(bytes.size())}, "activity", ".csv"); };
-        files.install = [&](const auto& target, bool approved, const auto& producer) { off_gui = QThread::currentThread() != qApp->thread(); entered.release(); release.acquire(); return backup::Write(target, approved, producer, *coordinator); };
+        files.install = [&, coordinator](const auto& target, bool approved, const auto& producer) {
+            off_gui = QThread::currentThread() != qApp->thread();
+            entered.release();
+            release.acquire();
+            return backup::Write(target, approved, producer, *coordinator);
+        };
         files.outcome = [&](const auto& receipt) { if (receipt.written) ++outcomes; };
-        execution::SnapshotServices execution{backend.scheduler(), [&](auto callback) { std::lock_guard lock{mutex}; gui.push_back(std::move(callback)); }};
-        auto operation = std::make_unique<ActivityExportOperation>(activityexport::Request{path, Source(), 0}, files, execution, ActivityFilterProxyModel::WriteCsv);
-        QVERIFY(operation->start()); const bool writing = entered.tryAcquire(1, 5000); if (!writing) release.release(); QVERIFY(writing);
-        bool heartbeat{false}; QMetaObject::invokeMethod(qApp, [&] { heartbeat = true; }, Qt::QueuedConnection); QTRY_VERIFY(heartbeat);
-        operation.reset(); release.release(); QTRY_COMPARE(outcomes.load(), 1); QVERIFY(off_gui.load()); QVERIFY(!Read(path).isEmpty());
-        backend.shutdown(); QTRY_VERIFY(backend.isDrained());
+        presentation::Post post{[&](auto callback) { std::lock_guard lock{mutex}; gui.push_back(std::move(callback)); }};
+        auto operation = std::make_unique<ActivityExportOperation>(activityexport::Request{path, Source(), 0}, files, post, ActivityFilterProxyModel::WriteCsv);
+        QVERIFY(operation->start());
+        QVERIFY(entered.tryAcquire(1, 5000));
+        const auto heartbeat = std::make_shared<bool>(false);
+        QMetaObject::invokeMethod(qApp, [heartbeat] { *heartbeat = true; }, Qt::QueuedConnection);
+        QTRY_VERIFY(*heartbeat);
+        operation.reset();
+        release.release();
+        QTRY_COMPARE(outcomes.load(), 1);
+        QVERIFY(off_gui.load());
+        QVERIFY(!Read(path).isEmpty());
+        auto stopped = std::make_shared<std::atomic_bool>(false);
+        opening->stop(false, [stopped] { stopped->store(true); });
+        QTRY_VERIFY(stopped->load());
+        executor.stopAndJoin();
         { std::lock_guard lock{mutex}; gui.clear(); }
     }
 };
