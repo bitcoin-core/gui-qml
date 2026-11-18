@@ -51,6 +51,8 @@ add_executable(bitcoinqml_unit_tests
   test_texteditsessionmodel.cpp
   test_appmode.cpp
   test_backendexecutor.cpp
+  test_backuppolicy.cpp
+  test_backuppolicyoperation.cpp
   test_fileexportoperation.cpp
   test_execution.cpp
   test_guipresentation.cpp
@@ -300,6 +302,9 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestimageexportoperation.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/activityexportoperation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/activityexportoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/backuppolicyoperation.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/backuppolicyoperation.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/backuppolicy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/walletrequesterror.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/walletrequesterror.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/requestsharing.cpp
