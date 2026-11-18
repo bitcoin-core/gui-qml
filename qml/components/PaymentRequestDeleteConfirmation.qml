@@ -4,34 +4,28 @@
 
 import QtQuick 2.15
 
+import org.bitcoincore.qt 1.0
+
 import "../controls"
 
 // Asks before deleting a payment request, which can't be undone, and reports
-// a failed delete in an alert. Every "Delete payment request" action uses it.
+// a failed delete in an alert. The request's own delete question decides.
 AlertPopup {
     id: root
 
-    property var wallet: null
-    property string requestId: ""
+    property WalletReceiveModel receive: null
+    readonly property RequestDeleteController controller: deletion
 
-    signal deleted(string requestId)
+    //! Asks whether to delete saved request \p id.
+    function confirmDelete(id) { return deletion.request(id) }
 
-    function confirmDelete(requestWallet, id) {
-        wallet = requestWallet
-        requestId = id
-        open()
+    RequestDeleteController {
+        id: deletion
+        receive: root.receive
     }
 
-    function deleteRequest() {
-        const id = requestId
-        if (!wallet || !wallet.removeReceiveRequest(id)) {
-            failurePopup.open()
-            return false
-        }
-        deleted(id)
-        return true
-    }
-
+    shown: deletion.asking
+    onCloseRequested: deletion.cancel()
     title: qsTr("Delete payment request?")
     message: qsTr("The request is removed from this wallet. This can't be undone. Payments to its address will still arrive in your wallet, but won't be linked to a payment request.")
     messageObjectName: "deletePaymentRequestMessage"
@@ -46,14 +40,18 @@ AlertPopup {
         text: qsTr("Delete")
         role: AlertAction.Destructive
         buttonObjectName: "deletePaymentRequestConfirmButton"
-        onTriggered: root.deleteRequest()
+        // Confirming ends the question, which closes the alert.
+        closesPopup: false
+        onTriggered: deletion.confirm()
     }
 
     property AlertPopup failurePopup: AlertPopup {
         objectName: root.objectName.length > 0 ? root.objectName + "Error" : ""
         parent: root.parent
+        shown: deletion.failed
+        onCloseRequested: deletion.dismiss()
         title: qsTr("Payment request not deleted")
-        message: qsTr("The payment request could not be deleted. Please try again.")
+        message: deletion.error.length > 0 ? deletion.error : qsTr("The payment request could not be deleted. Please try again.")
         messageObjectName: "deletePaymentRequestErrorMessage"
 
         AlertAction {

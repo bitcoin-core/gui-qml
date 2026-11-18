@@ -21,7 +21,6 @@
 #include <qml/models/activitydetailmodel.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/fileexportoperation.h>
-#include <qml/models/imageexportoperation.h>
 #include <qml/models/filesaveoperation.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
@@ -29,6 +28,7 @@
 #include <qml/models/sendimportmodel.h>
 #include <qml/models/preparationoperation.h>
 #include <qml/models/psbtoperation.h>
+#include <qml/models/requestdeletecontroller.h>
 #include <qml/models/requestviewcontroller.h>
 #include <qml/models/senddraftcontroller.h>
 #include <qml/models/senddraftinterface.h>
@@ -60,7 +60,6 @@
 #include <qml/models/options_model.h>
 #include <qml/models/settingseditormodel.h>
 #include <qml/models/uipreferences.h>
-#include <qml/models/paymentrequest.h>
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peercommandmodel.h>
 #include <qml/models/peercommandoperation.h>
@@ -168,13 +167,6 @@ struct BitcoinUriModelForeign {
     QML_FOREIGN(BitcoinUriModel)
     QML_NAMED_ELEMENT(BitcoinUri)
     QML_SINGLETON
-};
-
-struct ImageExportOperationForeign {
-    Q_GADGET
-    QML_FOREIGN(ImageExportOperation)
-    QML_NAMED_ELEMENT(ImageExportOperation)
-    QML_UNCREATABLE("Owned by an image export command")
 };
 
 struct FileSaveOperationForeign {
@@ -343,6 +335,7 @@ struct PreparationOperationForeign { Q_GADGET QML_FOREIGN(PreparationOperation) 
 struct SendDraftInterfaceForeign { Q_GADGET QML_FOREIGN(SendDraftInterface) QML_NAMED_ELEMENT(SendDraftInterface) QML_UNCREATABLE("A wallet") };
 struct SendDraftControllerForeign { Q_GADGET QML_FOREIGN(SendDraftController) QML_NAMED_ELEMENT(SendDraftController) };
 struct RequestViewControllerForeign { Q_GADGET QML_FOREIGN(RequestViewController) QML_NAMED_ELEMENT(RequestViewController) };
+struct RequestDeleteControllerForeign { Q_GADGET QML_FOREIGN(RequestDeleteController) QML_NAMED_ELEMENT(RequestDeleteController) };
 struct PsbtOperationForeign { Q_GADGET QML_FOREIGN(PsbtOperation) QML_NAMED_ELEMENT(PsbtOperation) QML_UNCREATABLE("Started by a wallet") };
 struct SendOperationForeign { Q_GADGET QML_FOREIGN(SendOperation) QML_NAMED_ELEMENT(SendOperation) QML_UNCREATABLE("Started by a wallet") };
 struct TransactionReviewInterfaceForeign { Q_GADGET QML_FOREIGN(TransactionReviewInterface) QML_NAMED_ELEMENT(TransactionReviewInterface) QML_UNCREATABLE("A wallet") };
@@ -368,17 +361,17 @@ struct ActivityDetailModelForeign {
     QML_UNCREATABLE("Owned by an Activity view")
 };
 
+struct ActivityDetailControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(ActivityDetailController)
+    QML_NAMED_ELEMENT(ActivityDetailController)
+};
+
 struct AddressListModelForeign {
     Q_GADGET
     QML_FOREIGN(AddressListModel)
     QML_NAMED_ELEMENT(AddressListModel)
     QML_UNCREATABLE("Owned by the application")
-};
-
-struct PaymentRequestForeign {
-    Q_GADGET
-    QML_FOREIGN(PaymentRequest)
-    QML_NAMED_ELEMENT(PaymentRequest)
 };
 
 struct TransactionForeign {
@@ -494,13 +487,6 @@ struct SecurityOperationModelForeign {
     QML_FOREIGN(SecurityOperationModel)
     QML_NAMED_ELEMENT(SecurityOperationModel)
     QML_UNCREATABLE("Owned by a security command")
-struct WalletCloseQuestionForeign {
-    Q_GADGET
-    QML_FOREIGN(WalletCloseQuestion)
-    QML_NAMED_ELEMENT(WalletCloseQuestion)
-    QML_UNCREATABLE("Owned by a wallet")
-};
-
 };
 
 struct WalletQmlModelForeign {
@@ -508,6 +494,13 @@ struct WalletQmlModelForeign {
     QML_FOREIGN(WalletQmlModel)
     QML_NAMED_ELEMENT(WalletQmlModel)
     QML_UNCREATABLE("Owned by the application")
+};
+
+struct WalletCloseQuestionForeign {
+    Q_GADGET
+    QML_FOREIGN(WalletCloseQuestion)
+    QML_NAMED_ELEMENT(WalletCloseQuestion)
+    QML_UNCREATABLE("Owned by a wallet")
 };
 
 struct WalletQmlModelTransactionForeign {

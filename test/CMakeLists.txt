@@ -96,7 +96,6 @@ add_executable(bitcoinqml_unit_tests
   test_qmlbitcoinunits.cpp
   test_imageprovider.cpp
   test_qrimageprovider.cpp
-  test_imageexportoperation.cpp
   test_qmlengine.cpp
   test_nodemodel.cpp
   test_nodelifecycle.cpp
@@ -324,6 +323,8 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receivereservationmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestdeletecontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestdeletecontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestsharingmodel.cpp
@@ -434,7 +435,7 @@ if(NOT qml_test_names)
 endif()
 # Seed the longest suites so clean builds do not need timing history to schedule
 # them first. These are relative scheduling hints, not timeouts or assertions.
-set_tests_properties(bitcoinqml_qml_sendcreate bitcoinqml_qml_requestpayment PROPERTIES COST 20)
+set_tests_properties(bitcoinqml_qml_sendcreate PROPERTIES COST 20)
 set_tests_properties(bitcoinqml_qml_activitylist PROPERTIES COST 16)
 
 # Qt 6.2 has no QTest::failOnWarning(); leave this check disabled there too,

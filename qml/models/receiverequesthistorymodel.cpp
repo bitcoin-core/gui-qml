@@ -4,14 +4,15 @@
 
 #include <qml/models/receiverequesthistorymodel.h>
 
-#include <qml/bitcoinunits.h>
+#include <qml/walletrequestdata.h>
 #include <streams.h>
 
 #include <algorithm>
 #include <ios>
+#include <utility>
 
 #include <QDebug>
-#include <QUrl>
+#include <QPointer>
 
 ReceiveRequestHistoryModel::ReceiveRequestHistoryModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -21,15 +22,84 @@ ReceiveRequestHistoryModel::ReceiveRequestHistoryModel(QObject* parent)
 int ReceiveRequestHistoryModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid()) return 0;
-    return static_cast<int>(m_entries.size());
+    return count();
+}
+
+int ReceiveRequestHistoryModel::count() const
+{
+    return static_cast<int>(m_snapshot ? m_snapshot->records.size() : m_entries.size());
+}
+
+std::shared_ptr<const walletrequests::Snapshot> ReceiveRequestHistoryModel::setSnapshot(std::shared_ptr<const walletrequests::Snapshot> snapshot)
+{
+    if (snapshot == m_snapshot) return {};
+    const QPointer<ReceiveRequestHistoryModel> observer{this};
+    beginResetModel();
+    if (!observer) return {};
+    auto old = std::exchange(m_snapshot, std::move(snapshot));
+    endResetModel();
+    if (observer) Q_EMIT countChanged();
+    return old;
+}
+
+std::shared_ptr<const walletrequests::Snapshot> ReceiveRequestHistoryModel::releaseSnapshot()
+{
+    return std::exchange(m_snapshot, {});
+}
+
+const walletrequests::Record* ReceiveRequestHistoryModel::preparedEntry(const QString& request_id) const
+{
+    if (!m_snapshot) return nullptr;
+    bool valid{false};
+    const auto id = request_id.toLongLong(&valid);
+    return valid ? m_snapshot->find(id) : nullptr;
+}
+
+QString ReceiveRequestHistoryModel::firstRequestIdForAddress(const QString& address) const
+{
+    if (m_snapshot) {
+        const auto found = m_snapshot->by_address.find(address);
+        if (found == m_snapshot->by_address.end() || found->second.empty()) return {};
+        return m_snapshot->find(found->second.front())->display.id;
+    }
+    const auto found = m_ids_by_address.constFind(address);
+    return found == m_ids_by_address.cend() || found->empty() ? QString{} : QString::number(found->front());
 }
 
 QVariant ReceiveRequestHistoryModel::data(const QModelIndex& index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(m_entries.size())) {
+    if (!index.isValid() || index.row() < 0 || index.row() >= count()) {
         return {};
     }
-    return dataForEntry(m_entries[index.row()], role);
+    return m_snapshot ? dataForRecord(*m_snapshot->records[index.row()], role) : dataForEntry(m_entries[index.row()], role);
+}
+
+QVariant ReceiveRequestHistoryModel::dataForRecord(const walletrequests::Record& record, int role) const
+{
+    const auto& display = record.display;
+    switch (role) {
+    case IdRole: return display.id;
+    case DateRole: return display.date;
+    case DateIsoRole: return display.date_iso;
+    case AddressRole: return display.address;
+    case AddressShortRole: return display.address_short;
+    case LabelRole: return display.label_preview;
+    case MessageRole: return display.message_preview;
+    case NoteSelfRole: return display.note_preview;
+    case AmountSatRole: return QVariant::fromValue<qlonglong>(record.entry.recipient.amount);
+    case AmountDisplayRole: return display.amount;
+    case UriRole: return display.uri;
+    }
+    return {};
+}
+
+QVariantMap ReceiveRequestHistoryModel::recordMap(const walletrequests::Record& record) const
+{
+    QVariantMap result;
+    const auto names = roleNames();
+    for (auto it = names.cbegin(); it != names.cend(); ++it) result.insert(QString::fromLatin1(it.value()), dataForRecord(record, it.key()));
+    result.insert(QStringLiteral("paymentReceived"), record.entry.payment_received);
+    return result;
 }
 
 QVariant ReceiveRequestHistoryModel::dataForEntry(const QmlRecentRequestEntry& entry, int role) const
@@ -172,31 +242,25 @@ QVariantList ReceiveRequestHistoryModel::matchingEntriesForAddress(const QString
 {
     QVariantList matches;
     if (address.isEmpty()) return matches;
+    if (m_snapshot) {
+        const auto found = m_snapshot->by_address.find(address);
+        if (found != m_snapshot->by_address.end()) {
+            for (const auto id : found->second) matches.append(recordMap(*m_snapshot->find(id)));
+        }
+        return matches;
+    }
     for (const int64_t id : m_ids_by_address.value(address)) {
         matches.append(entryMap(m_entries[indexOfId(id)]));
     }
     return matches;
 }
 
-std::vector<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entriesForAddress(const QString& address) const
-{
-    std::vector<QmlRecentRequestEntry> matches;
-    if (address.isEmpty()) return matches;
-    for (const int64_t id : m_ids_by_address.value(address)) {
-        matches.push_back(m_entries[indexOfId(id)]);
-    }
-    return matches;
-}
-
-QSet<QString> ReceiveRequestHistoryModel::requestAddresses() const
-{
-    QSet<QString> addresses;
-    for (auto it = m_ids_by_address.cbegin(); it != m_ids_by_address.cend(); ++it) addresses.insert(it.key());
-    return addresses;
-}
-
 std::optional<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entryById(const QString& request_id) const
 {
+    if (m_snapshot) {
+        const auto record = preparedEntry(request_id);
+        return record ? std::optional{record->entry} : std::nullopt;
+    }
     bool ok{false};
     const int64_t id = request_id.toLongLong(&ok);
     if (!ok) return std::nullopt;
@@ -207,6 +271,7 @@ std::optional<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entryById(const
 
 int64_t ReceiveRequestHistoryModel::maxId() const
 {
+    if (m_snapshot) return m_snapshot->max_id;
     int64_t max_id = 0;
     for (const auto& entry : m_entries) {
         if (entry.id > max_id) max_id = entry.id;
@@ -264,33 +329,11 @@ std::string ReceiveRequestHistoryModel::SerializeEntry(const QmlRecentRequestEnt
 
 QString ReceiveRequestHistoryModel::FormatAmountBtc(CAmount amount_sats)
 {
-    if (amount_sats <= 0) return {};
-    return QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, amount_sats, false,
-                                   QmlBitcoinUnits::SeparatorStyle::NEVER);
+    return walletrequests::FormatAmountBtc(amount_sats);
 }
 
 QString ReceiveRequestHistoryModel::BuildBitcoinUri(const QString& address, CAmount amount_sats,
-                                                    const QString& label, const QString& message)
+                                                   const QString& label, const QString& message)
 {
-    if (address.isEmpty()) return {};
-
-    QString result = QStringLiteral("bitcoin:") + address;
-
-    QStringList params;
-    if (amount_sats > 0) {
-        const QString amount_str = FormatAmountBtc(amount_sats);
-        if (!amount_str.isEmpty()) {
-            params << QStringLiteral("amount=") + amount_str;
-        }
-    }
-    if (!label.isEmpty()) {
-        params << QStringLiteral("label=") + QString::fromUtf8(QUrl::toPercentEncoding(label));
-    }
-    if (!message.isEmpty()) {
-        params << QStringLiteral("message=") + QString::fromUtf8(QUrl::toPercentEncoding(message));
-    }
-    if (!params.isEmpty()) {
-        result += QStringLiteral("?") + params.join(QLatin1Char('&'));
-    }
-    return result;
+    return walletrequests::BuildBitcoinUri(address, amount_sats, label, message);
 }

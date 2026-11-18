@@ -108,10 +108,6 @@
       "header": "qml/models/receivereservationmodel.h",
       "writable": {},
       "required": {
-        "token": {
-          "type": "QString",
-          "constant": true
-        },
         "active": {
           "type": "bool",
           "constant": false

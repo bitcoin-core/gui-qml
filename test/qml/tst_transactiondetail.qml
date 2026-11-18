@@ -21,7 +21,10 @@ TestCase {
     FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/bitcoincoresans/semibold" : "" }
     FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
     Component { id: detailComponent; TransactionDetail { width: 1180; height: 1100; wallet: testWalletModel } }
+    Component { id: speedUpCompleteComponent; SpeedUpComplete { width: 560; height: 460 } }
     Component { id: activityComponent; ActivityList { width: 1180; height: 1100; wallet: testWalletModel } }
+    Component { id: bumpComponent; TestBumpTransactionModel {} }
+    Component { id: bumpOverlayComponent; SpeedUpOverlay {} }
     SignalSpy { id: transactionSpy; signalName: "showTransaction" }
 
     function entry(id, amount, ownership, overrides) {
@@ -50,11 +53,12 @@ TestCase {
     function init() {
         testSetup.failOnWarnings()
         Theme.paletteId = "core-dark"
+        tryCompare(Theme, "dark", true)
         walletController.reset()
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
+        testWalletModel.available = true
         optionsModel.thirdPartyTransactionUrls = ""
-        testWalletModel.lastLoadedPaymentRequestDetailId = ""
         testBumpModel.reset()
         transactionSpy.target = null
         transactionSpy.clear()
@@ -77,9 +81,131 @@ TestCase {
         tryCompare(overlay, "visible", false)
     }
 
+    function test_password_context_closes_after_review_invalidation_data() {
+        return [{tag: "ineligible", phase: FeeBumpOperation.NeedsRevalidation},
+                {tag: "failed", phase: FeeBumpOperation.Failed}]
+    }
+    function test_password_context_closes_after_review_invalidation(data) {
+        testBumpModel.requireUnlock = true
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "readyToConfirm", true)
+        findChild(overlay, "updateTransactionButton").clicked()
+        const popup = findChild(overlay, "speedUpPassphrasePopup")
+        tryCompare(popup, "opened", true)
+        const prepared = testBumpModel.preparationCount
+        testBumpModel.state = data.phase
+        tryCompare(popup, "opened", false)
+        verify(overlay.opened)
+        verify(!overlay.readyToConfirm)
+        compare(testBumpModel.preparationCount, prepared)
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+    }
+
+    // An overlay acts on one wallet. Given another, its controller warns,
+    // discards its uncommitted review and starts nothing on either wallet.
+    function test_wallet_switch_discards_the_review_and_disables_the_overlay() {
+        const overlay = createTemporaryObject(bumpOverlayComponent, this, {wallet: testWalletModel, txid: "first-wallet-transaction"})
+        verify(overlay !== null)
+        overlay.open()
+        tryCompare(overlay, "readyToConfirm", true)
+        const secondPrepared = testSecondBumpModel.preparationCount
+        ignoreWarning(new RegExp("FeeBumpController was given a second wallet"))
+        overlay.wallet = testSecondWalletModel
+        tryCompare(overlay, "readyToConfirm", false)
+        compare(testBumpModel.state, FeeBumpOperation.Idle)
+        compare(testSecondBumpModel.preparationCount, secondPrepared)
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+        overlay.open()
+        tryCompare(overlay, "visible", false)
+        compare(testSecondBumpModel.preparationCount, secondPrepared)
+    }
+
+    // A committed bump that finishes while the overlay is closed stays with
+    // the wallet; the next open shows its result once, then a fresh review.
+    function test_result_finished_while_closed_is_shown_once() {
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "readyToConfirm", true)
+        testBumpModel.state = FeeBumpOperation.Committing
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+        compare(testBumpModel.state, FeeBumpOperation.Committing)
+        testBumpModel.setNewTxidForTest("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+        testBumpModel.setWalletStatesForTest(FeeBumpOperation.WalletRecordRecorded, FeeBumpOperation.WalletSubmissionMempool)
+        testBumpModel.state = FeeBumpOperation.Succeeded
+
+        findChild(page, "speedUpBanner").primaryClicked()
+        const complete = findChild(page, "speedUpCompletePopup")
+        tryCompare(complete, "opened", true)
+        compare(complete.txid, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+        findChild(complete.contentItem, "speedUpCompleteDoneButton").clicked()
+        tryCompare(complete, "opened", false)
+
+        const prepared = testBumpModel.preparationCount
+        findChild(page, "speedUpBanner").primaryClicked()
+        tryCompare(overlay, "readyToConfirm", true)
+        compare(testBumpModel.preparationCount, prepared + 1)
+        compare(complete.opened, false)
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+    }
+
+    function test_uncertain_replacement_offers_a_query_without_preparing_again() {
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "opened", true)
+        tryCompare(overlay, "readyToConfirm", true)
+        const prepared = testBumpModel.preparationCount
+        const observations = testBumpModel.observationCount
+        testBumpModel.state = FeeBumpOperation.Uncertain
+        const button = findChild(overlay, "updateTransactionButton")
+        compare(button.text, "Check transaction status")
+        verify(button.enabled)
+        button.clicked()
+        compare(testBumpModel.observationCount, observations + 1)
+        compare(testBumpModel.preparationCount, prepared)
+        compare(testBumpModel.state, FeeBumpOperation.Uncertain)
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+    }
+
+    function test_wallet_unavailability_retires_the_owned_password_and_review() {
+        testBumpModel.requireUnlock = true
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "opened", true)
+        tryCompare(overlay, "readyToConfirm", true)
+        findChild(overlay, "updateTransactionButton").clicked()
+        const popup = findChild(overlay, "speedUpPassphrasePopup")
+        tryCompare(popup, "opened", true)
+        testWalletModel.available = false
+        tryCompare(popup, "visible", false)
+        tryCompare(overlay, "visible", false)
+        testWalletModel.available = true
+    }
+    function test_other_transaction_retires_the_original_review() {
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "readyToConfirm", true)
+        page.transactionId = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        tryCompare(overlay, "visible", false)
+        compare(testBumpModel.state, FeeBumpOperation.Idle)
+    }
+
     function createDetail(data, properties) {
+        const value = data || transaction()
+        if (value.flow) value.flow = testSetup.prepareTransactionFlow(value.flow)
+        testTransactionActivityModel.setRows([value])
         const page = createTemporaryObject(detailComponent, this,
-            Object.assign({transactionData: data || transaction()}, properties || {}))
+            Object.assign({transactionId: value.txid}, properties || {}))
         verify(page !== null)
         waitForRendering(page)
         return page
@@ -197,7 +323,12 @@ TestCase {
         compare(findChild(page, "transactionDetailFlow").inputEntries.length, data.inputs)
         compare(findChild(page, "transactionDetailFlow").outputEntries.length, data.outputs + 1)
     }
+    Component { id: receiveFixtureComponent; ControlledReceiveFixture {} }
+
     function test_output_navigation_keeps_wallet_impact_and_request_association() {
+        // Saved requests open through the wallet's receive model.
+        const fixture = createTemporaryObject(receiveFixtureComponent, this)
+        testWalletModel.setReceive(fixture.receive)
         const data = transaction({label: "", activityType: TransactionActivityModel.Multiple})
         data.flow.outputs[1].paymentRequests = [{requestId: "paid", noteSelf: "Rent"}]
         testTransactionActivityModel.setRows([data])
@@ -209,8 +340,8 @@ TestCase {
         compare(page.amount, data.amount)
         compare(findChild(page, "transactionDetailFlow").selectedEntryId, "output:1")
         compare(findChild(page, "transactionFlowOutput_1").requests[0].requestId, "paid")
-        findChild(page, "transactionDetailFlow").paymentRequestRequested("paid")
-        tryCompare(testWalletModel, "lastLoadedPaymentRequestDetailId", "paid")
+        findChild(page, "transactionDetailFlow").paymentRequestRequested("17")
+        fixture.settle()
         const modal = findChild(page, "transactionPaymentRequestModal")
         tryCompare(modal, "opened", true)
         compare(stack.depth, 2)
@@ -219,6 +350,7 @@ TestCase {
         tryCompare(modal, "visible", false)
         compare(stack.depth, 2)
         tryCompare(stack.currentItem, "depth", 6)
+        testWalletModel.setReceive(null)
     }
     function test_fee_bump_opens_existing_review() {
         const page = createDetail()
@@ -227,7 +359,7 @@ TestCase {
         findChild(page, "speedUpBanner").primaryClicked()
         const overlay = findChild(page, "speedUpOverlay")
         tryCompare(overlay, "opened", true)
-        verify(overlay.readyToConfirm)
+        tryCompare(overlay, "readyToConfirm", true)
         compare(overlay.verticalOffset, 0)
         compare(overlay.background.color, Theme.color.surface1)
         compare(overlay.background.border.color, Theme.color.surface2)
@@ -237,11 +369,33 @@ TestCase {
         mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
         tryCompare(overlay, "visible", false)
     }
+    function test_fee_bump_revalidation_requires_explicit_reprepare() {
+        testBumpModel.revalidateOnNextConfirm()
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "readyToConfirm", true)
+        mouseClick(findChild(overlay.contentItem, "updateTransactionButton"))
+        tryCompare(testBumpModel, "state", FeeBumpOperation.NeedsRevalidation)
+        const error = findChild(overlay.contentItem, "speedUpErrorText")
+        tryCompare(error, "visible", true)
+        verify(error.text.indexOf("Prepare it again") >= 0)
+        verify(!overlay.readyToConfirm)
+        const prepareAgain = findChild(overlay.contentItem, "updateTransactionButton")
+        compare(prepareAgain.text, "Prepare again")
+        verify(prepareAgain.enabled)
+        mouseClick(prepareAgain)
+        tryCompare(overlay, "readyToConfirm", true)
+        compare(testBumpModel.preparationCount, 2)
+        mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
+        tryCompare(overlay, "visible", false)
+    }
     function test_fee_bump_success_opens_modal_completion() {
         const page = createDetail()
         findChild(page, "speedUpBanner").primaryClicked()
         const overlay = findChild(page, "speedUpOverlay")
         tryCompare(overlay, "opened", true)
+        tryCompare(overlay, "readyToConfirm", true)
         verify(waitForRendering(overlay.contentItem))
         mouseClick(findChild(overlay.contentItem, "updateTransactionButton"))
 
@@ -249,8 +403,34 @@ TestCase {
         verify(complete !== null)
         tryCompare(complete, "opened", true)
         compare(complete.txid, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        const outcome = findChild(complete.contentItem, "speedUpOutcomeText")
+        verify(outcome.text.indexOf("is in the mempool") >= 0)
+        verify(outcome.text.indexOf("broadcast") < 0)
         findChild(complete.contentItem, "speedUpCompleteDoneButton").clicked()
         tryCompare(complete, "opened", false)
+    }
+    function test_fee_bump_completion_reports_only_observed_wallet_state_data() {
+        return [
+            {tag: "mempool", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionMempool, text: "is in the mempool"},
+            {tag: "confirmed", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionConfirmed, text: "confirmed"},
+            {tag: "not-in-mempool", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionNotInMempool, text: "not in the node's mempool"},
+            {tag: "conflicted", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionConflicted, text: "conflicts with another transaction"},
+            {tag: "abandoned", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionAbandoned, text: "was abandoned"},
+            {tag: "recorded-unknown-status", record: FeeBumpOperation.WalletRecordRecorded, submission: FeeBumpOperation.WalletSubmissionUnknown, text: "is saved in the wallet"},
+            {tag: "absent-record", record: FeeBumpOperation.WalletRecordAbsentAtObservation, submission: FeeBumpOperation.WalletSubmissionUnknown, text: "does not show the replacement"},
+            {tag: "unknown-record", record: FeeBumpOperation.WalletRecordUnknown, submission: FeeBumpOperation.WalletSubmissionUnknown, text: "may not have been saved or sent"}
+        ]
+    }
+    function test_fee_bump_completion_reports_only_observed_wallet_state(data) {
+        const complete = createTemporaryObject(speedUpCompleteComponent, testCase.Window.window.contentItem)
+        verify(complete !== null)
+        complete.walletRecordState = data.record
+        complete.walletSubmissionState = data.submission
+        complete.open()
+        tryCompare(complete, "opened", true)
+        const outcome = findChild(complete.contentItem, "speedUpOutcomeText")
+        verify(outcome.text.indexOf(data.text) >= 0, outcome.text)
+        verify(outcome.text.indexOf("broadcast") < 0, outcome.text)
     }
     function test_full_width_scroll_and_narrow_layout() {
         const page = createDetail(transaction(), {width: 390, height: 650})
@@ -328,23 +508,99 @@ TestCase {
         verify(toggle.opened)
         verify(overview.visible && technical.visible && section.visible)
         compare(section.width, findChild(page, "transactionDetailsGrid").width)
+        tryVerify(function() { return findChild(page, "transactionRawText") !== null })
         const text = findChild(page, "transactionRawText")
-        compare(text.text, raw)
+        verify(text.text.length <= 1024)
+        compare(text.text, raw.slice(0, text.text.length))
         verify(text.readOnly)
         const scroll = findChild(page, "transactionRawScroll")
-        tryVerify(function() { return text.contentHeight > scroll.height })
+        verify(scroll.count > 1)
         verify(text.width <= scroll.width)
         const copy = findChild(page, "transactionRawCopyButton")
         verify(copy.enabled)
         copy.clicked()
-        verify(copy.copied)
-        compare(Clipboard.text(), raw)
+        compare(copy.copied, false)
+        tryCompare(copy, "copied", true)
+        compare(testSetup.nativeClipboardText(), raw)
         toggle.clicked()
         verify(!overview.visible && !technical.visible && !section.visible)
-        compare(text.text, "")
-        page.transactionData = transaction({rawTransaction: ""})
+        compare(scroll.model, null)
+        testTransactionActivityModel.setRows([transaction({rawTransaction: ""})])
         toggle.clicked()
         verify(!copy.enabled)
+    }
+
+    function test_complete_lists_virtualize_all_rows_and_document_preserves_long_fields() {
+        const data = transaction()
+        const literal = "abcdef0123456789".repeat(8192)
+        data.flow.outputs = []
+        for (let i = 0; i < 1001; ++i) data.flow.outputs.push(entry("output:" + i, 1000, "external"))
+        data.flow.outputCount = 1001
+        data.flow.outputs[0].scriptHex = literal
+        data.flow.outputs[0].paymentRequests = []
+        for (let i = 0; i < 20; ++i) data.flow.outputs[0].paymentRequests.push({requestId: "request-" + i})
+        const page = createDetail(data)
+        page.detailsExpanded = true
+        const rows = findChild(page, "transactionAllOutputsRows")
+        tryCompare(rows, "count", 1001)
+        verify(waitForRendering(page))
+        verify(testSetup.namedChildCount(page, "transactionEntryPreview") < 32)
+        page.openEntry("outputs", 0)
+        const popup = findChild(page, "transactionEntryPopup")
+        tryCompare(popup, "opened", true)
+        const document = findChild(page, "transactionEntryDocument")
+        tryVerify(function() { return document.count > 128 })
+        compare(testSetup.entryFieldText(page.activityModel.entryDocument, "scriptHex"), literal)
+        compare(testSetup.entryFieldText(page.activityModel.entryDocument, "paymentRequests[19].requestId"), "request-19")
+        page.visible = false
+        tryCompare(popup, "visible", false)
+    }
+
+    function test_late_copy_outcome_does_not_acknowledge_another_transaction() {
+        const original = transaction({rawTransaction: "02000000aabbcc"})
+        const page = createDetail(original)
+        page.detailsExpanded = true
+        const copy = findChild(page, "transactionRawCopyButton")
+        copy.clicked()
+        verify(!copy.copied)
+        const successor = transaction({txid: "28c8263f6b9a0000000000000000000000000000000000000000419b4d41c441", rawTransaction: "02000000ddeeff"})
+        testTransactionActivityModel.setRows([successor])
+        page.transactionId = successor.txid
+        tryVerify(function() { return testSetup.nativeClipboardText() === original.rawTransaction })
+        verify(!copy.copied)
+        compare(page.txid, successor.txid)
+    }
+
+    function test_same_opening_details_have_independent_view_interest() {
+        const firstValue = transaction({label: "First detail"})
+        const secondValue = transaction({txid: "28c8263f6b9a0000000000000000000000000000000000000000419b4d41c441", label: "Second detail"})
+        testTransactionActivityModel.setRows([firstValue, secondValue])
+        const first = createTemporaryObject(detailComponent, this, {transactionId: firstValue.txid})
+        const second = createTemporaryObject(detailComponent, this, {transactionId: secondValue.txid})
+        verify(first !== null && second !== null)
+        verify(first.wallet === second.wallet)
+        verify(first.activityModel !== second.activityModel)
+        tryCompare(first, "txid", firstValue.txid)
+        tryCompare(second, "txid", secondValue.txid)
+        compare(first.transactionData.label, "First detail")
+        compare(second.transactionData.label, "Second detail")
+        testTransactionActivityModel.setRows([
+            Object.assign({}, firstValue, {depth: 7}), Object.assign({}, secondValue, {depth: 7})])
+        tryCompare(first, "depth", 7)
+        tryCompare(second, "depth", 7)
+        first.visible = false
+        tryCompare(first.activityModel, "active", false)
+        compare(second.activityModel.active, true)
+        compare(second.txid, secondValue.txid)
+        first.transactionId = secondValue.txid
+        compare(second.txid, secondValue.txid)
+        testTransactionActivityModel.setRows([Object.assign({}, secondValue, {depth: 8})])
+        tryCompare(second, "depth", 8)
+        first.visible = true
+        tryCompare(first, "depth", 8)
+        testWalletModel.available = false
+        tryCompare(first.activityModel, "active", false)
+        tryCompare(second.activityModel, "active", false)
     }
 
     function test_hidden_fee_uses_accessible_amount_presentation() {

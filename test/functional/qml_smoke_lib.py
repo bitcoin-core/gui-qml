@@ -83,7 +83,20 @@ def wait_review_send(gui, *, terminal):
             return False
         assert observed["key"] == terminal, observed
         return True
-    wait_until(original_terminal, "the original " + terminal + " action receipt")
+    wait_until(finished, "the review's " + terminal + " send")
+
+
+def wait_review_psbt(gui, *, terminal):
+    """Wait until the review page's PSBT action reaches the named final state."""
+    controller = "sendTransactionReviewController"
+    def finished():
+        observed = gui.get_enum_property(controller, "psbtState")
+        assert observed["enum"] == "State", observed
+        if observed["key"] in ("None", "Pending"):
+            return False
+        assert observed["key"] == terminal, observed
+        return True
+    wait_until(finished, "the review's " + terminal + " PSBT action")
 
 
 def save_review_psbt(gui, path):
@@ -210,8 +223,8 @@ def open_receive(gui):
     if gui.object_exists("paymentRequestModal"):
         gui.wait_for_property("paymentRequestModal", "visible", False)
     gui.click("receiveTabButton")
-    gui.wait_for_page("receiveWorkspace", timeout_ms=10000)
-    gui.wait_for_property("receiveWorkspace", "receive.editor.available", True)
+    gui.wait_for_page("receivePage", timeout_ms=10000)
+    gui.wait_for_property("receivePage", "receive.editor.available", True)
     gui.settle()
 
 
@@ -226,14 +239,14 @@ def edit_request_field(gui, field, value):
 
 def create_request(gui, amount, label, message, note_self=None):
     """Save the typed original editor, then verify its immutable reopened fields."""
-    gui.wait_for_property("receiveWorkspace", "receive.editor.available", True)
-    editor_id = gui.get_property("receiveWorkspace", "receive.editor.editorId")
+    gui.wait_for_property("receivePage", "receive.editor.available", True)
+    editor_id = gui.get_property("receivePage", "receive.editor.editorId")
     assert editor_id
     for field, value in (("amount", amount), ("label", label), ("message", message), ("note", note_self)):
         if value:
             edit_request_field(gui, field, value)
     gui.wait_for_property("receiveSaveRequestButton", "enabled", True)
-    assert gui.get_property("receiveWorkspace", "receive.editor.editorId") == editor_id
+    assert gui.get_property("receivePage", "receive.editor.editorId") == editor_id
     gui.click("receiveSaveRequestButton")
     gui.wait_for_property("paymentRequestModal", "opened", True)
     gui.wait_for_property("paymentRequestModal", "openedEditor.busy", False)

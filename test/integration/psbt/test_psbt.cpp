@@ -28,6 +28,7 @@
 #include <QTemporaryDir>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <future>
 #include <thread>
@@ -254,7 +255,10 @@ private Q_SLOTS:
         QVERIFY(qmltest::CreateWallet(m_app, "send-standby"));
         struct { bool seen{false}, released{false}, can_send{true}, can_sign{true}, can_broadcast{true}; } at_shutdown;
         QObject::connect(wallet, &WalletQmlModel::shutdownFinished, wallet, [&, wallet] {
-            if (!at_shutdown.seen && wallet) at_shutdown = {true, !wallet->wallet(), wallet->currentTransactionCanSend(),
+            if (at_shutdown.seen || !wallet) return;
+            const auto stopped = std::make_shared<std::atomic_bool>(false);
+            wallet->opening()->stop(false, [stopped] { stopped->store(true); });
+            at_shutdown = {true, stopped->load(), wallet->currentTransactionCanSend(),
                 wallet->currentTransactionCanSignOnly(), wallet->currentTransactionCanBroadcast()};
         });
         UniValue request{UniValue::VARR}; request.push_back("send-without-wallet");

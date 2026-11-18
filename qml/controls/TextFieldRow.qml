@@ -51,7 +51,9 @@ FormRow {
 
     onValueChanged: if (tracksValue && !modified) text = value
     // Also covers a caller that assigned field.text and so replaced its binding.
-    onTextChanged: if (input.text !== text) input.text = text
+    // A typed editor's draft owns the field: a changed committed value must
+    // not overwrite what the user typed while the draft is unsaved.
+    onTextChanged: if (!textInput && input.text !== text) input.text = text
     Component.onCompleted: if (tracksValue) reset()
 
     trailingItem: RowLayout {

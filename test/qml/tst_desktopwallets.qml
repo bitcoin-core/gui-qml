@@ -391,13 +391,15 @@ TestCase {
         compare(tooltip.text, "Blocktime\n" + Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), "f", 0))
     }
 
+    Component { id: receiveFixtureComponent; ControlledReceiveFixture {} }
+
     function test_receive_view_addresses_opens_address_settings() {
+        const fixture = createTemporaryObject(receiveFixtureComponent, testCase)
+        testWalletModel.setReceive(fixture.receive)
         const page = createDesktopWallets()
         findChild(page, "receiveTabButton").clicked()
         const view = page.activeView
-        findChild(view, "receiveMoreButton").clicked()
-        tryCompare(findChild(view, "receiveMoreMenu"), "opened", true)
-        const historyButton = findChild(view, "requestPaymentHistoryButton")
+        const historyButton = findChild(view, "receiveViewAddressesButton")
         verify(historyButton !== null)
         historyButton.clicked()
         compare(findChild(page, "desktopWalletSettingsTabButton").checked, true)
@@ -405,6 +407,7 @@ TestCase {
         tryCompare(walletSettings, "parent", page.walletSettingsHost)
         tryCompare(walletSettings, "depth", 2)
         compare(walletSettings.currentItem.objectName, "addressListPage")
+        testWalletModel.setReceive(null)
     }
     function test_addresses_settings_preserves_details_popup() {
         const page = createDesktopWallets()

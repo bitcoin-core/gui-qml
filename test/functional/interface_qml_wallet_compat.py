@@ -81,7 +81,7 @@ def create_unencrypted_wallet(gui, wallet_name):
 
 def create_full_payment_request(gui):
     gui.click("receiveTabButton")
-    gui.wait_for_page("receiveWorkspace", timeout_ms=10000)
+    gui.wait_for_page("receivePage", timeout_ms=10000)
     gui.wait_for_property("receiveAmountInput", "visible", True, timeout_ms=10000)
     create_request(gui, REQUEST_AMOUNT, REQUEST_LABEL, REQUEST_MESSAGE, REQUEST_NOTE_SELF)
     gui.wait_for_property("paymentRequestModal", "opened", True, timeout_ms=10000)

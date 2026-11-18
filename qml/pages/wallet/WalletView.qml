@@ -201,10 +201,11 @@ Item {
             onVisibleChanged: if (!visible) root.pageHidden(sendPage)
             onViewTransactionInActivity: (txid) => root.navigateToTransaction(txid)
         }
-        ReceiveViewHost {
+        ReceivePage {
             id: receivePage
             wallet: root.wallet
             walletViewActive: root.active
+            onWalletSelectionRequested: root.walletSelectionRequested()
             onVisibleChanged: if (!visible) root.pageHidden(receivePage)
             onPaymentRequestCreated: {
                 activityPage.pop(null)

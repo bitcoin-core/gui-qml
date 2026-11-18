@@ -40,8 +40,6 @@ TestCase {
     function cleanup() {
         walletController.setOpenWallets([testWalletModel])
         walletController.setSelectedWalletObject(testWalletModel)
-        testWalletModel.currentPaymentRequest.label = ""
-        testSecondWalletModel.currentPaymentRequest.label = ""
     }
 
     function test_close_question_presentation_uses_original_context_data() {
@@ -135,13 +133,11 @@ TestCase {
         const popups = {
             review: findChild(first.sendPage, "transactionReviewPopup"),
             sendPassphrase: findChild(first.sendPage, "sendTransactionPassphrasePopup"),
-            receiveMenu: findChild(first.receivePage, "receiveMoreMenu"),
         }
         const dialogs = {
             exportCsv: findChild(first.activityPage, "activityExportDialog"),
             psbtOpen: findChild(first.sendPage, "sendPsbtOpenDialog"),
             psbtSave: findChild(first.sendPage, "sendTransactionReviewSaveDialog"),
-            requestQrSave: findChild(first.receivePage, "requestPaymentSaveQRDialog"),
             backup: findChild(first.settingsStack, "walletSettingsBackupDialog"),
         }
         for (const name in popups) {
@@ -212,7 +208,7 @@ TestCase {
     }
 
     function test_switching_wallet_hides_view_and_closes_its_popups_data() {
-        return ["exportCsv", "psbtOpen", "psbtSave", "requestQrSave", "backup"].map(function(name) { return {tag: name, dialogName: name} })
+        return ["exportCsv", "psbtOpen", "psbtSave", "backup"].map(function(name) { return {tag: name, dialogName: name} })
     }
     function test_switching_wallet_hides_view_and_closes_its_popups(data) {
         const page = createShell()
@@ -353,10 +349,6 @@ TestCase {
         note.text = "rent"
         testWalletModel.coinsListModel.setManualInputSelection(true)
 
-        testWalletModel.currentPaymentRequest.label = "Alice"
-        const firstName = findChild(first.receivePage, "requestPaymentYourNameInput")
-        verify(firstName !== null)
-        compare(firstName.text, "Alice")
 
         walletController.setSelectedWalletObject(testSecondWalletModel)
         // The second wallet opens on its own last tab.
@@ -371,15 +363,10 @@ TestCase {
         compare(findChild(page, "sendTabButton").checked, true)
         compare(note.text, "rent")
         compare(first.sendPage.manualCoinSelection, true)
-        compare(testWalletModel.currentPaymentRequest.label, "Alice")
-        compare(firstName.text, "Alice")
-        compare(findChild(second.receivePage, "requestPaymentYourNameInput").text, "")
 
         // Picking the wallet that is already shown changes nothing.
         walletController.setSelectedWallet("reselect-same-wallet")
         compare(page.viewForWallet(testWalletModel), first)
-        compare(testWalletModel.currentPaymentRequest.label, "Alice")
-        compare(firstName.text, "Alice")
         compare(note.text, "rent")
     }
 

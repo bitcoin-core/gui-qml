@@ -30,8 +30,6 @@
 #include <qml/models/flowdetailsmodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
-#include <qml/models/paymentrequest.h>
-#include <qml/models/imageexportoperation.h>
 #include <qml/models/receiverequestoperation.h>
 #include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/sendrecipient.h>
@@ -78,9 +76,9 @@ namespace walletprepare { struct Request; struct Result; }
 class PsbtQmlModel;
 class TransactionReviewInterface;
 class WalletSendOperation;
-class WalletCloseQuestion;
 class WalletTransactionReviewInterface;
 class WalletSendDraftInterface;
+class WalletCloseQuestion;
 
 class WalletQmlModel : public QObject, public ReviewOwner
 {
@@ -150,21 +148,15 @@ private:
     Q_PROPERTY(quint64 importedReviewChild READ importedReviewChild NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString importedReviewToken READ importedReviewToken NOTIFY currentTransactionChanged)
     Q_PROPERTY(SignVerifyMessageModel* signVerifyMessageModel READ signVerifyMessageModel CONSTANT)
-    Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
-    Q_PROPERTY(PaymentRequest* receivingAddress READ receivingAddress CONSTANT)
-    Q_PROPERTY(PaymentRequest* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending READ receiveRequestReconciliationPending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(QString receiveRequestReconciliationError READ receiveRequestReconciliationError NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(bool receiveRequestsLoaded MEMBER m_request_storage_loaded NOTIFY receiveRequestStorageChanged)
     Q_PROPERTY(bool receiveRequestsBusy MEMBER m_request_storage_busy NOTIFY receiveRequestStorageChanged)
     Q_PROPERTY(QString receiveRequestStorageError MEMBER m_request_storage_error NOTIFY receiveRequestStorageChanged)
-    Q_PROPERTY(bool receivingAddressReady MEMBER m_receiving_address_ready NOTIFY receivingAddressStateChanged)
-    Q_PROPERTY(bool receivingAddressPending MEMBER m_receiving_address_pending NOTIFY receivingAddressStateChanged)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(QVariantMap currentTransactionFlow READ currentTransactionFlowPreview NOTIFY currentTransactionFlowChanged)
     Q_PROPERTY(FlowDetailsModel* currentTransactionFlowDetails READ currentTransactionFlowDetails CONSTANT)
-    Q_PROPERTY(quint64 currentTransactionFlowRevision READ currentTransactionFlowRevision NOTIFY currentTransactionFlowChanged)
     Q_PROPERTY(bool sendDraftSweepsWallet READ sendDraftSweepsWallet NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool currentTransactionSweepsWallet READ currentTransactionSweepsWallet NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionIsImportedPsbt READ currentTransactionIsImportedPsbt NOTIFY currentTransactionChanged)
@@ -243,7 +235,7 @@ public:
                    FeeReadServices fee_services, psbtfee::Services proof_services, backup::Services backup_services,
                    QObject* parent = nullptr);
     struct SharedWallet {
-        std::shared_ptr<interfaces::Wallet> wallet;
+        walletopening::Source wallet;
         // Production composition shares the controller's bounded R08 lanes.
         std::shared_ptr<execution::Scheduler> observations{};
         QString captured_name{};
@@ -252,6 +244,7 @@ public:
         std::shared_ptr<std::atomic_bool> shutdown_gate{};
         walletopening::NativeEvents native_events{};
         bool canonical_identity{false};
+        std::unique_ptr<interfaces::Handler> unload_handler{};
     };
     WalletQmlModel(SharedWallet wallet, interfaces::Node* node,
                    FeeReadServices fee_services, psbtfee::Services proof_services, backup::Services backup_services,
@@ -266,7 +259,7 @@ public:
     QString backupFileName() const;
     void setDisplayName(const QString& display_name);
     QString balance() const;
-    qint64 displayedBalanceSatoshi() const { return m_wallet ? m_balance : 0; }
+    qint64 displayedBalanceSatoshi() const { return m_opening && !m_stopping ? m_balance : 0; }
     // Native balance reads are background-only; all facade readers use cache.
     qint64 balanceSatoshi() const;
     bool balanceKnown() const { return m_balance_known; }
@@ -283,14 +276,8 @@ public:
     QString importedReviewToken() const { return m_imported_review_owner && m_imported_review_child
         ? QString::number(m_imported_review_owner) + QLatin1Char(':') + QString::number(m_imported_review_child) : QString{}; }
     WalletReceiveModel* receive() const { return m_receive; }
-    Q_INVOKABLE ReceiveRequestOperation* commitPaymentRequest();
-    Q_INVOKABLE ReceiveRequestOperation* commitPaymentRequestWithPassphrase(const QString& passphrase);
     Q_INVOKABLE void reloadReceiveRequests();
-    Q_INVOKABLE ReceiveRequestOperation* removeReceiveRequest(const QString& request_id);
-    Q_INVOKABLE bool loadPaymentRequest(const QString& request_id);
-    Q_INVOKABLE bool loadPaymentRequestDetail(const QString& request_id);
-    Q_INVOKABLE ReceiveRequestOperation* updatePaymentRequest(const QString& request_id, qint64 amount, const QString& label, const QString& message, const QString& note);
-    Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
+    ReceiveRequestOperation* removeReceiveRequest(const QString& request_id);
 
     TransactionActivityModel* transactionActivityModel();
     AddressListModel* addressListModel() const { return m_address_list_model; }
@@ -298,13 +285,6 @@ public:
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
     SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
     SignVerifyMessageModel* signVerifyMessageModel() const { return m_sign_verify_message_model; }
-    PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
-    PaymentRequest* receivingAddress() const { return m_receiving_address; }
-    Q_INVOKABLE ReceiveRequestOperation* ensureReceivingAddress(bool next = false, const QString& address_type = {});
-    Q_INVOKABLE ReceiveRequestOperation* resumeReceivingAddress(ReceiveRequestOperation* original, const QString& passphrase);
-    Q_INVOKABLE ReceiveRequestOperation* retryReceivingAddress(ReceiveRequestOperation* original);
-    Q_INVOKABLE ReceiveRequestOperation* commitReceivingPaymentRequest();
-    PaymentRequest* detailPaymentRequest() const { return m_detail_payment_request; }
     ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
     bool receiveRequestReconciliationPending() const;
     QString receiveRequestReconciliationError() const { return m_receipt_projection ? m_receipt_projection->errorText() : QString{}; }
@@ -312,7 +292,6 @@ public:
     QVariantMap currentTransactionFlow() const;
     QVariantMap currentTransactionFlowPreview() const;
     FlowDetailsModel* currentTransactionFlowDetails() const { return m_flow_details; }
-    quint64 currentTransactionFlowRevision() const { return m_flow_revision; }
     bool sendDraftSweepsWallet() const;
     bool currentTransactionSweepsWallet() const { return m_current_transaction && m_current_transaction->source() == CurrentTransactionSource::SendDraft && m_current_transaction->sweepsWallet(); }
     bool currentTransactionIsImportedPsbt() const { return m_current_transaction && m_current_transaction->source() == CurrentTransactionSource::ImportedPsbt; }
@@ -355,7 +334,6 @@ public:
     Q_INVOKABLE QString estimatedFeeForTarget(unsigned int target_blocks) const;
     Q_INVOKABLE int feeTargetIndex(unsigned int target_blocks) const;
     Q_INVOKABLE void scheduleFeeEstimates();
-    Q_INVOKABLE ReceiveRequestOperation* setCurrentPaymentRequestAddress(const QString& address);
     WalletSecurityModel* security() const { return m_security; }
     SecurityState securityState() const;
     bool securityBusy() const;
@@ -363,7 +341,6 @@ public:
     Q_INVOKABLE bool encryptWallet(const QString& passphrase);
     Q_INVOKABLE bool changeWalletPassphrase(const QString& old_passphrase, const QString& new_passphrase);
     WalletBackups* backups() const { return m_backups; }
-    Q_INVOKABLE ImageExportOperation* savePaymentRequestImage(PaymentRequest* request, const QImage& image, const QUrl& path);
     FileExportOperationModel* fileExportOperation() const { return m_file_export_operation; }
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE bool setDefaultReceiveAddressType(const QString& address_type);
@@ -383,14 +360,13 @@ public:
     QString psbtSubmittedTxid() const;
     Q_INVOKABLE void discardCurrentTransaction();
     PsbtQmlModel* importedPsbt() const { return m_imported_psbt_model; }
-    interfaces::Wallet* wallet() const { return m_wallet.get(); }
     interfaces::Node* node() const { return m_node; }
     std::shared_ptr<BackendExecutor> backendExecutor() const { return m_backend_executor; }
     // False once the wallet is unloading or closing. Set from the unload
     // notification's own thread, before the GUI hears about it.
     bool shutdownComplete() const { return m_shutdown_finished; }
     bool observationsAllowed() const { return !m_stopping && !m_closed; }
-    bool available() const { return m_wallet && !m_closed && !m_unload_requested->load() && (!m_opening_native_events.unloaded || !m_opening_native_events.unloaded->load()); }
+    bool available() const { return m_opening && !m_closed && m_opening->observationOpen(); }
     ApprovalState signerApprovalState() const;
     QString signerUnverifiedResultToken() const;
     bool signerApprovalBusy() const;
@@ -483,7 +459,6 @@ Q_SIGNALS:
     void maximumRecipientChanged();
     void receiveRequestReconciliationPendingChanged();
     void receiveRequestStorageChanged();
-    void receivingAddressStateChanged();
     void externalSignerApprovalSucceeded();
     void signerApprovalChanged();
     void unverifiedSigningResultChanged();
@@ -542,13 +517,9 @@ private:
     void invalidatePreparation();
     bool setCurrentTransaction(WalletQmlModelTransaction* transaction, bool from_preparation = false);
     transactionattempt::CurrentFacts preparationFacts() const;
-    ReceiveRequestOperation* savePaymentRequest(PaymentRequest* request, bool consume_address = false);
-    ReceiveRequestOperation* submitRequest(walletrequests::Command command, PaymentRequest* draft = nullptr, bool consume_address = false);
+    ReceiveRequestOperation* submitRequest(walletrequests::Command command);
     void publishRequestHistory();
-    bool applyRequest(PaymentRequest* target, walletrequests::PreparedRequest data, bool as_template = false);
     void refreshReceiveRequestPayments();
-    CAmount receivedPaymentRequestAmount(const QString& address) const;
-    void updateReceivedPaymentRequestAmounts();
     friend class WalletSendOperation;
     void setSendRunning(bool running);
     //! Applies a finished send's effects on the wallet and its review, then
@@ -630,7 +601,7 @@ private:
 
     bool startSecurity(walletsecurity::Kind kind, const QString& current, const QString& replacement);
     WalletSecurityModel* const m_security{new WalletSecurityModel(this)};
-    void initializeOpening();
+    void initializeOpening(SharedWallet wallet);
     void publishOpening();
     struct ReviewRetirement;
     std::shared_ptr<ReviewRetirement> m_review_retirement;
@@ -640,8 +611,6 @@ private:
     qint64 m_coin_selection_target{0};
     void refreshCoinSelectionTarget();
     walletopening::ClosedFlag m_closed;
-    walletopening::Session::Preferences m_opening_preferences;
-    walletopening::NativeEvents m_opening_native_events;
     walletopening::FeePolicy m_fee_policy;
     std::optional<walletopening::Question> m_close_question;
     //! Presents m_close_question; replaced with each new question.
@@ -657,7 +626,6 @@ private:
     bool m_metadata_known{false}, m_private_keys_disabled{false}, m_external_signer{false}, m_opening_drained{true};
     std::shared_ptr<BackendExecutor> m_backend_executor{std::make_shared<BackendExecutor>(execution::Options{})};
     std::shared_ptr<QObject> m_notification_bridge;
-    std::shared_ptr<execution::Scheduler> m_balance_scheduler;
     std::shared_ptr<walletbalance::Reader> m_balance_reader;
     QTimer m_balance_timer;
     qint64 m_balance{0};
@@ -665,7 +633,6 @@ private:
     BalanceState m_balance_state{BalanceState::Unavailable};
     bool m_stopping{false};
     bool m_backend_drained{false}, m_balance_drained{true}, m_shutdown_finished{false};
-    std::shared_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
@@ -674,17 +641,14 @@ private:
     CoinsListModel* m_coins_list_model{nullptr};
     SendRecipientsListModel* m_send_recipients{nullptr};
     SignVerifyMessageModel* m_sign_verify_message_model{nullptr};
-    PaymentRequest* m_current_payment_request{nullptr};
-    PaymentRequest* m_receiving_address{nullptr};
-    PaymentRequest* m_detail_payment_request{nullptr};
     ReceiveRequestHistoryModel* m_receive_requests{nullptr};
     std::shared_ptr<walletreceipts::Reader> m_receipts;
     std::shared_ptr<walletrequests::Store> m_request_store;
     WalletReceiveModel* m_receive{nullptr};
+    //! The reservation address the request store watches for payments.
+    QString m_watched_receive_address;
     bool m_request_storage_loaded{false}, m_request_storage_busy{false};
     QString m_request_storage_error;
-    bool m_receiving_address_ready{false}, m_receiving_address_pending{false};
-    std::shared_ptr<const walletrequests::AddressIntent> m_receiving_intent;
     ReceiptReconciliationModel* m_receipt_projection{nullptr};
     void publishReceipts();
     WalletQmlModelTransaction* m_current_transaction{nullptr};
@@ -782,21 +746,6 @@ private:
     std::shared_ptr<const PartiallySignedTransaction> m_flow_document;
     std::shared_ptr<const psbtfee::Analysis> m_flow_proof;
     int m_flow_unit{-1};
-/** One "close this wallet?" question. Answering a question the wallet has
- * replaced or closed does nothing. */
-class WalletCloseQuestion final : public QObject
-{
-    Q_OBJECT
-    Q_PROPERTY(WalletQmlModel* wallet READ wallet CONSTANT)
-public:
-    explicit WalletCloseQuestion(WalletQmlModel* wallet) : QObject(wallet), m_wallet(wallet) {}
-    WalletQmlModel* wallet() const { return m_wallet; }
-    Q_INVOKABLE void accept() { if (m_wallet) m_wallet->answerCloseQuestion(this, true); }
-    Q_INVOKABLE void decline() { if (m_wallet) m_wallet->answerCloseQuestion(this, false); }
-private:
-    const QPointer<WalletQmlModel> m_wallet;
-};
-
     quint64 m_flow_revision{0};
     std::shared_ptr<const void> m_flow_lifetime;
     QVariantMap m_current_flow;
@@ -827,6 +776,21 @@ private:
 
 /** Wallet association for the shared text editor; persistence remains behind
  * its original-opening ports, never a later global wallet selection. */
+/** One "close this wallet?" question. Answering a question the wallet has
+ * replaced or closed does nothing. */
+class WalletCloseQuestion final : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(WalletQmlModel* wallet READ wallet CONSTANT)
+public:
+    explicit WalletCloseQuestion(WalletQmlModel* wallet) : QObject(wallet), m_wallet(wallet) {}
+    WalletQmlModel* wallet() const { return m_wallet; }
+    Q_INVOKABLE void accept() { if (m_wallet) m_wallet->answerCloseQuestion(this, true); }
+    Q_INVOKABLE void decline() { if (m_wallet) m_wallet->answerCloseQuestion(this, false); }
+private:
+    const QPointer<WalletQmlModel> m_wallet;
+};
+
 class AddressLabelEditorModel final : public TextEditSessionModel {
     Q_OBJECT
     Q_PROPERTY(WalletQmlModel* wallet READ wallet NOTIFY walletChanged)

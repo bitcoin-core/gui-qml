@@ -34,6 +34,7 @@ struct TransactionAction
     // A mixed-input contribution is an aggregate, not a payment to an external
     // output. WalletTx provides its total debit but no per-input values.
     std::vector<COutPoint> inputs;
+    bool operator==(const TransactionAction&) const = default;
 };
 
 /** Transaction-level activity, before labels, requests, status and filtering.
@@ -57,6 +58,7 @@ struct TransactionActivity
     QString replaces_txid;
     QString replaced_by_txid;
     std::vector<TransactionAction> actions;
+    bool operator==(const TransactionActivity&) const = default;
 
     // Includes the wallet's fee impact. Do not add fee again or sum actions:
     // internal outputs move existing funds, and mixed receipts include inputs

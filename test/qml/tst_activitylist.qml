@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
 import "../../qml/controls"
@@ -23,6 +24,8 @@ TestCase {
     FontLoader { source: testSetup.supportsApplicationFonts ? "qrc:/fonts/robotomono/regular" : "" }
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
+    Component { id: requestFixtureComponent; ControlledReceiveFixture {} }
+    Component { id: signalSpyComponent; SignalSpy {} }
 
     Component {
         id: iconImageComponent
@@ -98,12 +101,15 @@ TestCase {
     property string motionMode: ""
 
     function cleanup() {
+        testWalletModel.setReceive(null)
         Theme.motion.mode = motionMode
     }
     function init() {
         testSetup.failOnWarnings()
+        testWalletModel.setReceive(null)
         motionMode = Theme.motion.mode
         Theme.paletteId = "core-dark"
+        tryCompare(Theme, "dark", true)
         walletController.reset()
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
@@ -111,10 +117,23 @@ TestCase {
         testTransactionActivityModel.loading = false
         testTransactionActivityModel.loadError = ""
         testTransactionActivityModel.setRows(rows())
-        testWalletModel.lastLoadedPaymentRequestDetailId = ""
-        testWalletModel.lastRemovedRequestId = ""
-        testWalletModel.removeReceiveRequestResult = true
         testWalletModel.receiveRequestReconciliationPending = false
+        testWalletModel.setRecipientLabelsErrorForTest("")
+    }
+    function test_outgoing_note_error_is_bound_to_the_original_wallet() {
+        const page = createPage()
+        const banner = findChild(page, "outgoingNoteStatus")
+        verify(banner !== null)
+        compare(banner.visible, false)
+        testWalletModel.setRecipientLabelsErrorForTest("Transaction committed; outgoing notes could not be saved.")
+        tryCompare(banner, "visible", true)
+        compare(banner.message, testWalletModel.recipientLabelsError)
+        page.wallet = null
+        tryCompare(banner, "visible", false)
+        page.wallet = testWalletModel
+        tryCompare(banner, "visible", true)
+        testWalletModel.setRecipientLabelsErrorForTest("")
+        tryCompare(banner, "visible", false)
     }
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
@@ -195,7 +214,6 @@ TestCase {
         if (data.request) {
             mouseClick(copyRequest)
             compare(Clipboard.text(), "bitcoin:bc1qexample?amount=0.0001&label=Invoice")
-            compare(testWalletModel.lastLoadedPaymentRequestDetailId, "")
         } else {
             mouseClick(copyId)
             compare(Clipboard.text(), data.id)
@@ -203,12 +221,54 @@ TestCase {
             mouseClick(target, target.width / 2, target.height / 2, Qt.RightButton)
             tryCompare(menu, "opened", true)
             mouseClick(copyRaw)
-            compare(Clipboard.text(), "02000000abcdef")
+            tryVerify(function() { return testSetup.nativeClipboardText() === "02000000abcdef" })
         }
         tryCompare(menu, "visible", false)
         compare(page.depth, 1)
     }
 
+    function test_typed_request_copy_owns_its_receipt_and_final_use_guard_data() {
+        return [{tag: "exact-original-delivery", payment: false}, {tag: "payment-during-preparation", payment: true}]
+    }
+    function test_typed_request_copy_owns_its_receipt_and_final_use_guard(data) {
+        const fixture = createTemporaryObject(requestFixtureComponent, this)
+        verify(fixture !== null)
+        testWalletModel.setReceive(fixture.receive)
+        fixture.settle()
+        testTransactionActivityModel.setRows([row({activityId: "request:17", txid: "", requestId: "17",
+            address: "bcrt1q-original", isPendingRequest: true, isPending: true, statusKnown: false})])
+        const page = createPage()
+        const item = findChild(page, "activityRequest_17")
+        verify(item !== null)
+        mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
+        const menu = findChild(page, "activityRequestContextMenu")
+        tryCompare(menu, "opened", true)
+        fixture.settle()
+        const copy = findChild(menu.contentItem, "activityCopyPaymentRequest")
+        tryCompare(copy, "enabled", true)
+        mouseClick(copy, copy.width / 2, copy.height / 2)
+        fixture.backend()
+        const original = menu.requestSharing.lastOperation
+        verify(original !== null)
+        compare(original.result.requestId, "17")
+        compare(original.result.admitted, false)
+        compare(fixture.clipboardWrites, 0)
+        if (data.payment) fixture.markSavedUsed()
+        fixture.settle()
+        compare(original.result.performed, !data.payment)
+        compare(fixture.clipboardWrites, data.payment ? 0 : 1)
+        compare(fixture.writes, 0)
+        compare(original.result.requestId, "17")
+        if (data.payment) {
+            verify(!copy.enabled)
+            compare(menu.opened, true)
+            menu.close()
+        } else {
+            compare(fixture.copiedText, "bitcoin:bcrt1q-original?amount=0.000001&message=original%20message")
+            tryCompare(menu, "opened", false)
+        }
+        testWalletModel.setReceive(null)
+    }
     function test_request_copy_waits_for_payment_scan() {
         testWalletModel.receiveRequestReconciliationPending = true
         const page = createPage()
@@ -223,12 +283,21 @@ TestCase {
     }
 
     function test_right_click_delete_request_data() {
-        return [{tag: "success", succeeds: true}, {tag: "failure", succeeds: false}]
+        return [{tag: "success", succeeds: true}, {tag: "failure", succeeds: false}, {tag: "failure-then-wallet-change", succeeds: false, walletChange: true}]
     }
+    Component { id: deleteFixtureComponent; ControlledReceiveFixture {} }
     function test_right_click_delete_request(data) {
-        testWalletModel.removeReceiveRequestResult = data.succeeds
+        // The real saved request 17 of a controlled receive model.
+        const fixture = createTemporaryObject(deleteFixtureComponent, this)
+        testWalletModel.setReceive(fixture.receive)
+        if (!data.succeeds) fixture.setNextWriteError(ReceiveError.Persistence)
+        testTransactionActivityModel.setRows(rows().concat([row({activityId: "request:17", txid: "", requestId: "17",
+            label: "Saved request", isPendingRequest: true, isPending: true, amount: "0.00010000 BTC", netAmountSat: 10000,
+            timestamp: new Date(2026, 8, 11, 9, 12).getTime() / 1000,
+            activityType: TransactionActivityModel.Receive, statusKnown: false})]))
         const page = createPage()
-        const item = findChild(page, "activityRequest_invoice")
+        const item = findChild(page, "activityRequest_17")
+        verify(item !== null)
         mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
         const menu = findChild(page, "activityRequestContextMenu")
         tryCompare(menu, "opened", true)
@@ -236,21 +305,28 @@ TestCase {
         compare(button.role, ContextMenuButton.Destructive)
         mouseClick(button)
         tryCompare(menu, "visible", false)
-        // Nothing is deleted until the user confirms.
-        compare(testWalletModel.lastRemovedRequestId, "")
         const confirmation = findChild(page, "activityDeletePaymentRequestConfirmation")
-        tryCompare(confirmation, "opened", true)
+        tryVerify(function() { fixture.settle(); return confirmation.opened })
+        // Nothing is deleted until the user confirms.
+        compare(fixture.writes, 0)
         findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
-        tryCompare(confirmation, "opened", false)
+        tryVerify(function() { fixture.settle(); return !confirmation.visible })
+        compare(fixture.writes, 1)
         const error = findChild(page, "activityDeletePaymentRequestConfirmationError")
         if (data.succeeds) {
-            compare(testWalletModel.lastRemovedRequestId, "invoice")
             compare(error.opened, false)
+            compare(confirmation.controller.deletion, null)
         } else {
-            compare(testWalletModel.lastRemovedRequestId, "")
             tryCompare(error, "opened", true)
+            verify(confirmation.controller.error.length > 0)
+            // A failure belongs to the wallet it happened in.
+            if (data.walletChange) testWalletModel.setReceive(null)
+            else findChild(error.contentItem, "deletePaymentRequestErrorCloseButton").clicked()
+            tryCompare(error, "visible", false)
+            compare(confirmation.controller.deletion, null)
         }
         compare(page.depth, 1)
+        testWalletModel.setReceive(null)
     }
 
     function test_rows_share_metadata_and_keep_batch_children_visible() {
@@ -429,10 +505,12 @@ TestCase {
         compare(findChild(request, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-payment-request.svg")
         compare(findChild(request, "activityRowIcon").accent, Theme.color.paymentRequest)
         verify(findChild(request, "activityPendingRing").visible)
+        // Opening a saved request is covered with a receive fixture below.
+        const opened = createTemporaryObject(signalSpyComponent, this, {target: page.currentItem, signalName: "paymentRequestRequested"})
         mouseClick(findChild(request, "activityRowOpenButton"))
-        tryCompare(findChild(page, "paymentRequestModal"), "opened", true)
+        tryCompare(opened, "count", 1)
+        compare(opened.signalArguments[0][0], "invoice")
         compare(page.depth, 1)
-        compare(testWalletModel.lastLoadedPaymentRequestDetailId, "invoice")
     }
 
     function test_pending_balance_excludes_requests_and_updates_with_transactions() {
@@ -558,6 +636,24 @@ TestCase {
         compare(findRow(other, "single").dateTimeLabel, "Sep 14, 10:03 PM")
     }
 
+    function test_detail_date_uses_the_same_locale_clock_convention_data() {
+        return [{tag: "german-24-hour", locale: "de_DE", marker: "14.09."}, {tag: "us-12-hour", locale: "en_US", marker: "/14/"}]
+    }
+    function test_detail_date_uses_the_same_locale_clock_convention(data) {
+        const previous = testSetup.localeName()
+        testSetup.setLocale(data.locale)
+        try {
+            const page = createPage()
+            mouseClick(findChild(findRow(page, "single"), "activityRowOpenButton"))
+            tryCompare(page, "depth", 2)
+            const text = findChild(page.currentItem, "transactionSummarySubtitle")
+            verify(text !== null)
+            verify(text.text.indexOf(data.marker) >= 0, text.text)
+            verify(text.text.indexOf(data.locale === "de_DE" ? "22:03" : "10:03") >= 0, text.text)
+            compare(/(?:AM|PM)/.test(text.text), data.locale === "en_US")
+        } finally { testSetup.setLocale(previous) }
+    }
+
     function test_parent_navigation_uses_wallet_total_and_updates_live() {
         const page = createPage()
         const batch = findRow(page, "batch")
@@ -599,8 +695,12 @@ TestCase {
     }
 
     function test_request_modal_preserves_activity_and_transaction_navigation() {
+        // Saved requests open through the wallet's receive model.
+        const fixture = createTemporaryObject(requestFixtureComponent, this)
+        testWalletModel.setReceive(fixture.receive)
         const page = createPage()
-        page.currentItem.paymentRequestRequested("invoice")
+        page.currentItem.paymentRequestRequested("17")
+        fixture.settle()
         const modal = findChild(page, "paymentRequestModal")
         verify(modal !== null)
         tryCompare(modal, "opened", true)
@@ -611,7 +711,8 @@ TestCase {
         page.navigateToTransaction("batch")
         tryCompare(page.currentItem, "txid", "batch")
         const detail = page.currentItem
-        detail.openPaymentRequestDetail("invoice")
+        detail.openPaymentRequestDetail("17")
+        fixture.settle()
         const detailModal = findChild(detail, "transactionPaymentRequestModal")
         tryCompare(detailModal, "opened", true)
         compare(page.depth, 2)
@@ -624,9 +725,10 @@ TestCase {
         detailModal.close()
         tryCompare(detailModal, "visible", false)
         compare(page.currentItem.txid, "batch")
-        compare(testTransactionActivityModel.requestedTransaction(), "batch")
+        compare(page.currentItem.activityModel.transactionId, "batch")
         page.pop()
         tryCompare(page, "depth", 1)
+        testWalletModel.setReceive(null)
     }
 
     function test_history_loading_and_failure_states() {
@@ -638,6 +740,32 @@ TestCase {
         testTransactionActivityModel.loadError = "Please try again."
         tryCompare(findChild(page, "activityEmptyStateTitle"), "text", "Activity could not be loaded")
         verify(findChild(page, "activityRetryButton").visible)
+        testTransactionActivityModel.loadError = ""
+        testTransactionActivityModel.loading = true
+        tryCompare(findChild(page, "activityEmptyStateTitle"), "text", "Loading wallet activity…")
+        testTransactionActivityModel.loading = false
+        tryCompare(findChild(page, "activityEmptyStateTitle"), "text", "No activity yet")
+    }
+
+    function test_refresh_failure_with_rows_remains_visible_and_retryable() {
+        testTransactionActivityModel.setRows(rows())
+        const page = createPage()
+        const banner = findChild(page, "activityRefreshError")
+        const message = findChild(page, "activityRefreshErrorText")
+        const retry = findChild(page, "activityRefreshErrorPrimaryButton")
+        verify(banner !== null)
+        verify(message !== null)
+        verify(retry !== null)
+        compare(banner.visible, false)
+
+        testTransactionActivityModel.loadError = "The latest wallet history could not be loaded."
+        tryCompare(banner, "visible", true)
+        compare(message.text, "The latest wallet history could not be loaded.")
+        verify(retry.visible)
+        compare(findChild(page, "activityEmptyState").visible, false)
+
+        testTransactionActivityModel.loadError = ""
+        tryCompare(banner, "visible", false)
     }
 
     function test_amount_filter_and_empty_states() {
@@ -832,6 +960,7 @@ TestCase {
     }
 
     function test_filter_button_animates_and_reserves_space() {
+        // This case observes intermediate animation frames.
         Theme.motion.mode = "full"
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
@@ -852,6 +981,7 @@ TestCase {
         tryVerify(function() { return button.x < expandedX })
         tryCompare(badge, "visible", false)
         tryCompare(button, "x", initialX)
+        Theme.motion.resetMode()
     }
 
     function test_multiselect_types_and_counted_clear_menu() {
@@ -948,6 +1078,133 @@ TestCase {
         tryCompare(proxy, "dateFilter", ActivityFilterProxyModel.CustomRange)
         verify(button.active)
         compare(button.text, "Date")
+    }
+
+    function test_open_amount_range_keeps_committed_values_when_history_maximum_changes() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        verify(proxy.setAmountRange(100, 500))
+        mouseClick(findChild(page, "activityAmountFilterButton"))
+        const popup = findChild(page, "activityAmountFilterPopup")
+        tryCompare(popup, "opened", true)
+        const slider = findChild(page, "activityAmountRangeSlider")
+        compare(Math.round(slider.lowerValue), 100)
+        compare(Math.round(slider.upperValue), 500)
+        const next = rows()
+        next[6].netAmountSat = 500000000
+        testTransactionActivityModel.setRows(next)
+        tryCompare(slider, "maxValue", 500000000)
+        compare(Math.round(slider.lowerValue), 100)
+        compare(Math.round(slider.upperValue), 500)
+        compare(proxy.minAmount, 100)
+        compare(proxy.maxAmount, 500)
+        compare(popup.opened, true)
+    }
+    function test_open_amount_range_retains_lower_only_boundary_after_maximum_shrinks() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        verify(proxy.setAmountRange(800, -1))
+        mouseClick(findChild(page, "activityAmountFilterButton"))
+        const popup = findChild(page, "activityAmountFilterPopup")
+        tryCompare(popup, "opened", true)
+        const slider = findChild(page, "activityAmountRangeSlider")
+        testTransactionActivityModel.setRows([row({netAmountSat: 500})])
+        tryCompare(proxy, "availableMaxAmount", 500)
+        compare(slider.maxValue, 800)
+        compare(slider.lowerValue, 800)
+        compare(slider.upperValue, 800)
+        compare(proxy.minAmount, 800)
+        compare(proxy.maxAmount, -1)
+    }
+    function test_request_only_history_exposes_a_reachable_amount_range() {
+        const page = createPage()
+        testTransactionActivityModel.setRows([row({activityId: "request:only", txid: "", requestId: "only", isPendingRequest: true, isPending: true, netAmountSat: 9000})])
+        const proxy = findChild(page, "activityFilterProxyModel")
+        tryCompare(proxy, "availableMaxAmount", 9000)
+        mouseClick(findChild(page, "activityAmountFilterButton"))
+        const popup = findChild(page, "activityAmountFilterPopup")
+        tryCompare(popup, "opened", true)
+        const slider = findChild(page, "activityAmountRangeSlider")
+        verify(slider.enabled)
+        const handle = slider.second.handle
+        const start = handle.mapToItem(slider, handle.width / 2, handle.height / 2)
+        mouseDrag(slider, start.x, start.y, -slider.width / 2, 0)
+        verify(proxy.maxAmount > 0 && proxy.maxAmount < 9000)
+        compare(proxy.pendingBalanceSat, 0)
+        compare(proxy.count, 0)
+    }
+    function test_date_reset_clears_a_preset_without_touching_other_filters() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        proxy.searchText = "original"
+        proxy.typeFilters = [ActivityFilterProxyModel.Received]
+        verify(proxy.setAmountRange(100, 500))
+        proxy.dateFilter = ActivityFilterProxyModel.ThisWeek
+        mouseClick(findChild(page, "activityDateFilterButton"))
+        const popup = findChild(page, "activityDateFilterPopup")
+        tryCompare(popup, "opened", true)
+        mouseClick(findChild(popup.contentItem, "activityDateCustomRange"))
+        const reset = findChild(page, "activityDateRangeReset")
+        tryCompare(reset, "visible", true)
+        verify(reset.enabled)
+        // Expanding the calendar changes its parent layout after visible is
+        // published. Dispatch to the settled control, not its old preset-row
+        // coordinates; the model's clear command itself is synchronous.
+        verify(waitForItemPolished(popup.contentItem))
+        verify(waitForItemPolished(reset.parent))
+        verify(waitForItemPolished(reset))
+        verify(waitForRendering(popup.contentItem))
+        const window = testCase.Window.window
+        verify(window !== null)
+        tryVerify(function() {
+            if (!(reset.width > 0 && reset.height > 0)) return false
+            const cx = reset.width / 2
+            const cy = reset.height / 2
+            const point = reset.mapToItem(window.contentItem, cx, cy)
+            if (point.x < 0 || point.y < 0 || point.x >= window.width || point.y >= window.height) return false
+            for (let ancestor = reset; ancestor; ancestor = ancestor.parent) {
+                if (!ancestor.visible || ancestor.opacity <= 0) return false
+                if (!ancestor.clip) continue
+                const local = reset.mapToItem(ancestor, cx, cy)
+                if (local.x < 0 || local.y < 0 || local.x >= ancestor.width || local.y >= ancestor.height) return false
+            }
+            return true
+        })
+        const clicked = createTemporaryObject(signalSpyComponent, testCase, { target: reset, signalName: "clicked" })
+        verify(clicked !== null)
+        try {
+            verify(clicked.valid)
+            mouseClick(reset, reset.width / 2, reset.height / 2)
+            compare(clicked.count, 1)
+            compare(proxy.dateFilter, ActivityFilterProxyModel.DateAll)
+            compare(proxy.searchText, "original")
+            compare(proxy.typeFilters.length, 1)
+            compare(proxy.typeFilters[0], ActivityFilterProxyModel.Received)
+            compare(proxy.minAmount, 100)
+            compare(proxy.maxAmount, 500)
+            compare(reset.enabled, false)
+        } finally {
+            clicked.target = null
+        }
+    }
+    function test_two_live_grouping_views_and_reopen_keep_the_last_explicit_choice() {
+        const first = createPage()
+        const second = createPage()
+        first.visible = false
+        chooseGrouping(second, "activityGroupDay")
+        tryCompare(findChild(first, "activityFilterProxyModel"), "groupBy", ActivityFilterProxyModel.Day)
+        first.visible = true
+        second.visible = false
+        chooseGrouping(first, "activityGroupMonth")
+        tryCompare(findChild(second, "activityFilterProxyModel"), "groupBy", ActivityFilterProxyModel.Month)
+        second.visible = true
+        first.visible = false
+        chooseGrouping(second, "activityGroupMonth")
+        first.destroy()
+        second.destroy()
+        wait(0)
+        const reopened = createPage()
+        tryCompare(findChild(reopened, "activityFilterProxyModel"), "groupBy", ActivityFilterProxyModel.Month)
     }
 
     function test_amount_slider_updates_live_and_resets() {
@@ -1058,10 +1315,12 @@ TestCase {
         verify(amount.y >= metadata.y + metadata.height)
         verify(receive.width <= page.width)
         Theme.paletteId = "core-light"
+        tryCompare(Theme, "dark", false)
         page.width = 1180
         tryCompare(receive, "compact", false)
         tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.txIncoming)
         compare(page.currentItem.background.color, Theme.color.background)
         Theme.paletteId = "core-dark"
+        tryCompare(Theme, "dark", true)
     }
 }

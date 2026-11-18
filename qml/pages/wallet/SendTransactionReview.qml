@@ -21,7 +21,6 @@ Page {
     readonly property var flowDetails: wallet ? wallet.currentTransactionFlowDetails : null
     readonly property bool detailsContextValid: wallet !== null && wallet.available && transaction !== null
         && flowDetails !== null && flowDetails.context === transaction
-        && flowDetails.revision === wallet.currentTransactionFlowRevision
     readonly property bool detailsReady: detailsContextValid && !flowDetails.pending && flowDetails.error.length === 0
     readonly property TransactionReviewInterface reviewInterface: sendController.reviewInterface
     readonly property bool importedPsbt: reviewInterface && reviewInterface.currentTransactionIsImportedPsbt === true
@@ -519,7 +518,7 @@ Page {
 
     function openReviewEntry(side, row) {
         if (!root.detailsReady) return
-        if (root.flowDetails.requestEntryDetails(side, row, root.transaction, root.wallet.currentTransactionFlowRevision)) reviewEntryPopup.open()
+        if (root.flowDetails.requestEntryDetails(side, row, root.transaction)) reviewEntryPopup.open()
     }
     TransactionEntryPopup {
         id: reviewEntryPopup

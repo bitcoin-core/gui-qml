@@ -64,7 +64,8 @@ Item {
         } else if (isInactive) {
             parts.push(replacedByTxid.length > 0 ? qsTr("Replaced")
                 : status === Transaction.Abandoned ? qsTr("Cancelled")
-                : status === Transaction.Conflicted ? qsTr("Conflicted") : qsTr("Not accepted"))
+                : status === Transaction.Conflicted ? qsTr("Conflicted")
+                : status === Transaction.NotAccepted ? qsTr("Not accepted") : qsTr("Not in mempool"))
         } else if (!statusKnown) {
             parts.push(qsTr("Updating status…"))
         } else {
