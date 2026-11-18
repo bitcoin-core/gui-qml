@@ -84,7 +84,7 @@ DialogPopup {
                     animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("Original fee")
-                    value: root.bumpModel ? root.bumpModel.oldFee : ""
+                    value: root.operation ? root.operation.oldFee : ""
                     valueTextStyle: Theme.text.amountCaption
                     valueMaximumWidth: root.availableWidth * 0.6
                     dividerColor: Theme.color.surfaceDivider
@@ -95,7 +95,7 @@ DialogPopup {
                     animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("New fee")
-                    value: root.bumpModel ? root.bumpModel.newFee : ""
+                    value: root.operation ? root.operation.newFee : ""
                     valueTextStyle: Theme.text.amountCaption
                     valueMaximumWidth: root.availableWidth * 0.6
                     showDivider: false

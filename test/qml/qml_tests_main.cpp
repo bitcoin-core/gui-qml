@@ -1896,7 +1896,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool balanceKnown MEMBER m_balance_known NOTIFY balanceChanged)
     Q_PROPERTY(qint64 balanceSatoshi MEMBER m_balance_satoshi NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
-    Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
+    Q_PROPERTY(FeeBumpInterface* feeBumps READ feeBumps CONSTANT)
     Q_PROPERTY(MockSignVerifyMessageModel* signVerifyMessageModel READ signVerifyMessageModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
@@ -2329,7 +2329,7 @@ public:
     QString m_close_question_token;
     quint64 m_close_sequence{0};
     QObject* m_transaction_activity_model{nullptr};
-    QObject* m_bump_model{nullptr};
+    MockFeeBumps* m_fee_bumps{nullptr};
     MockSignVerifyMessageModel* m_sign_verify_model{nullptr};
     QObject* m_recipients{nullptr};
     QObject* m_maximum_recipient{nullptr};
@@ -2371,7 +2371,7 @@ public:
     QString m_last_saved_psbt_path;
 
     QObject* transactionActivityModel() const { return m_transaction_activity_model; }
-    QObject* bumpModel() const { return m_bump_model; }
+    FeeBumpInterface* feeBumps();
     MockSignVerifyMessageModel* signVerifyMessageModel() const { return m_sign_verify_model; }
     QObject* recipients() const { return m_recipients; }
     QObject* coinsListModel() const { return m_coins_list_model; }
@@ -2568,6 +2568,7 @@ public:
     int discardCurrentTransactionCalls() const { return m_discard_current_transaction_calls; }
     bool sendAmountExhaustsBalance() const { return m_send_amount_exhausts_balance; }
     QString lastBackupPath() const { return m_last_backup_path; }
+    MockWalletBackups* backups() { return &m_backups; }
     int backupWalletCalls() const { return m_backup_wallet_calls; }
     Q_INVOKABLE QString estimatedFeeForTarget(const int target) const
     {
@@ -2589,7 +2590,7 @@ public:
         }
     }
     void setTransactionActivityModel(QObject* model) { m_transaction_activity_model = model; }
-    void setBumpModel(QObject* model) { m_bump_model = model; }
+    void setBumpModel(MockBumpTransactionModel* model);
     void setSignVerifyMessageModel(MockSignVerifyMessageModel* model) { m_sign_verify_model = model; }
     void setRecipients(QObject* model) { m_recipients = model; }
     void setCoinsListModel(QObject* model)
@@ -2833,14 +2834,7 @@ public:
         m_settings_error.clear();
         Q_EMIT settingsErrorChanged();
     }
-    Q_INVOKABLE bool backupWallet(const QString& path)
-    {
-        m_last_backup_path = path;
-        ++m_backup_wallet_calls;
-        clearSettingsError();
-        Q_EMIT backupWalletCallsChanged();
-        return true;
-    }
+    //! The next backup a page starts waits to confirm `path`.
     Q_INVOKABLE void prepareBackupConfirmationTestState(const QString& path, bool replacing)
     {
         m_backups.prepare(path, replacing);
@@ -5822,7 +5816,8 @@ private:
     QVector<int> m_wallet_load_states{1, 0};
 };
 
-class MockBumpTransactionModel : public QObject
+//! A fee bump attempt for QML tests; tests set its state directly.
+class MockBumpTransactionModel : public FeeBumpOperation
 {
     Q_OBJECT
     Q_PROPERTY(FeeBumpOperation::State state READ state WRITE setState NOTIFY stateChanged)
@@ -5865,7 +5860,7 @@ public:
 
     Q_INVOKABLE void revalidateOnNextConfirm() { m_revalidate_next_confirm = true; }
 
-    void setState(int state)
+    void setState(State state)
     {
         if (m_state == state) return;
         m_state = state;
@@ -5976,12 +5971,6 @@ public:
         Q_EMIT needsUnlockChanged();
     }
 
-Q_SIGNALS:
-    void stateChanged();
-    void actionTypeChanged();
-    void resultChanged();
-    void needsUnlockChanged();
-
 private:
     int m_state{Idle};
     int m_observation_count{0};
@@ -6001,6 +5990,48 @@ private:
     bool m_revalidate_next_confirm{false};
     int m_preparation_count{0};
 };
+
+//! A wallet's fee bumps for FeeBumpController: each open reviews the wallet's
+//! one test attempt, which stays with the wallet past its commit point.
+class MockFeeBumps : public FeeBumpInterface
+{
+    Q_OBJECT
+public:
+    explicit MockFeeBumps(QObject* parent) : FeeBumpInterface(parent) {}
+    std::function<bool()> walletAvailable;
+    void setOperation(MockBumpTransactionModel* operation) { m_operation = operation; }
+    bool available() const override { return !walletAvailable || walletAvailable(); }
+    FeeBumpOperation* openFeeBump(const QString& txid, unsigned target_blocks) override
+    {
+        if (!available() || !m_operation) return nullptr;
+        if (m_operation->committed() && !m_presented) return m_operation;
+        m_presented = false;
+        return m_operation->review(txid, target_blocks) ? m_operation : nullptr;
+    }
+    void presented(FeeBumpOperation* attempt) override { if (attempt == m_operation) m_presented = true; }
+    void release(FeeBumpOperation* attempt) override
+    {
+        if (attempt == m_operation && (!m_operation->committed() || m_presented)) m_operation->discard();
+    }
+private:
+    QPointer<MockBumpTransactionModel> m_operation;
+    bool m_presented{false};
+};
+
+FeeBumpInterface* MockWalletQmlModel::feeBumps()
+{
+    if (!m_fee_bumps) {
+        m_fee_bumps = new MockFeeBumps(this);
+        m_fee_bumps->walletAvailable = [this] { return m_available; };
+        connect(this, &MockWalletQmlModel::availableChanged, m_fee_bumps, &WalletInterface::availableChanged);
+    }
+    return m_fee_bumps;
+}
+void MockWalletQmlModel::setBumpModel(MockBumpTransactionModel* model)
+{
+    feeBumps();
+    m_fee_bumps->setOperation(model);
+}
 
 // Configurable presentation fixture. Transaction interpretation and filtering
 // correctness are covered by the C++ model tests; this supplies their QML roles.
@@ -7666,7 +7697,9 @@ public Q_SLOTS:
         qmlRegisterUncreatableType<MockReceiveRequestOperation>("org.bitcoincore.qt", 1, 0, "ReceiveRequestOperation", "Test fixture");
         qmlRegisterUncreatableType<MockTransaction>("org.bitcoincore.qt", 1, 0, "Transaction", "Test stub type");
         qmlRegisterUncreatableType<MockSendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "Test stub type");
-        qmlRegisterUncreatableType<MockBumpTransactionModel>("org.bitcoincore.qt", 1, 0, "BumpTransactionModel", "Test stub type");
+        qmlRegisterUncreatableType<FeeBumpOperation>("org.bitcoincore.qt", 1, 0, "FeeBumpOperation", "Opened by a FeeBumpController");
+        qmlRegisterUncreatableType<FeeBumpInterface>("org.bitcoincore.qt", 1, 0, "FeeBumpInterface", "A wallet");
+        qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
         qmlRegisterType<MockBumpTransactionModel>("org.bitcoincore.qt", 1, 0, "TestBumpTransactionModel");
         qmlRegisterUncreatableType<FileSaveOperation>("org.bitcoincore.qt", 1, 0, "FileSaveOperation", "Started by a save request");
         qmlRegisterUncreatableType<MockWalletSecurity>("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Test fixture");
@@ -7728,6 +7761,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testRecipientsModel"), &recipients_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testCoinsListModel"), &coins_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testSecondBumpModel"), &second_bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopTrayIconController"), &desktop_tray_icon_controller);
         engine->rootContext()->setContextProperty(QStringLiteral("rpcConsoleModel"), &rpc_console_model);

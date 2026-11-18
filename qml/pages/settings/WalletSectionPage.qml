@@ -66,6 +66,15 @@ SettingsPage {
         backupDialog.open()
     }
 
+    // This page's backup. It ends an unwritten backup when the page hides;
+    // the wallet keeps one backup at a time across its pages.
+    WalletBackupController {
+        id: backup
+        objectName: "walletBackupController"
+        backups: root.wallet ? root.wallet.backups : null
+        active: root.visible
+    }
+
     AppFileDialog {
         id: backupDialog
         objectName: "walletSettingsBackupDialog"

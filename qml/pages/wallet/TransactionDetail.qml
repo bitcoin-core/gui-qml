@@ -242,7 +242,7 @@ Page {
         id: speedUpOverlay
         parent: Overlay.overlay
         txid: root.txid
-        bumpModel: root.wallet ? root.wallet.bumpModel : null
+        wallet: root.wallet
         onBumpSucceeded: {
             speedUpComplete.txid = speedUpOverlay.newTxid
             speedUpComplete.open()

@@ -590,8 +590,8 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, inter
     connect(&m_receive_payment_poll_timer, &QTimer::timeout, this, &WalletQmlModel::pollUnconfirmedReceiveRequestPayments);
     reloadReceiveRequests();
     m_address_list_model = new AddressListModel(this);
-    m_bump_transaction_model = new BumpTransactionModel(m_wallet.get(), this);
-    m_bump_transaction_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
+    createBackups();
+    createFeeBumps();
     m_coins_list_model = new CoinsListModel(this);
     m_send_recipients = new SendRecipientsListModel(this);
     connect(m_send_recipients, &SendRecipientsListModel::totalAmountChanged,
@@ -615,8 +615,8 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     , m_node(node)
 {
     m_address_list_model = new AddressListModel(this);
-    m_bump_transaction_model = new BumpTransactionModel(nullptr, this);
-    m_bump_transaction_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
+    createBackups();
+    createFeeBumps();
     m_coins_list_model = new CoinsListModel(this);
     m_send_recipients = new SendRecipientsListModel(this);
     connect(m_send_recipients, &SendRecipientsListModel::totalAmountChanged,
@@ -696,7 +696,7 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
     auto handlers = std::make_tuple(std::move(m_handler_status_changed), std::move(m_handler_address_list_changed),
                                    std::move(m_handler_transaction_changed), std::move(m_handler_unload));
-    if (m_bump_transaction_model) m_bump_transaction_model->detachWallet();
+    if (m_fee_bumps) m_fee_bumps->close();
     if (m_imported_psbt_model) m_imported_psbt_model->detachWallet();
     auto wallet = std::move(m_wallet);
     m_sign_verify_message_model->setWallet(nullptr);
@@ -1063,7 +1063,7 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
     return true;
 }
 
-bool WalletQmlModel::backupWallet(const QString& path)
+void WalletQmlModel::createFeeBumps()
 {
     clearSettingsError();
     if (!m_wallet) {

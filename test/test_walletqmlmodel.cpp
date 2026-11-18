@@ -647,6 +647,14 @@ void CompleteReviewPsbt(PartiallySignedTransaction& psbt)
 {
     psbt.inputs[0].final_script_sig = CScript{} << std::vector<unsigned char>{};
 }
+//! A wallet settings page's backup, as WalletSectionPage declares it.
+struct BackupPage {
+    std::unique_ptr<WalletBackupController> controller{std::make_unique<WalletBackupController>()};
+    explicit BackupPage(WalletQmlModel& model) { controller->setBackups(model.backups()); controller->setActive(true); }
+    bool begin(const QString& path) { return controller->begin(path); }
+    BackupFileOperation* operation() const { return qobject_cast<BackupFileOperation*>(controller->operation()); }
+    QString error() const { return controller->error(); }
+};
 
 QString WritePsbt(const PartiallySignedTransaction& psbt, const QTemporaryDir& temp_dir, const QString& name)
 {
@@ -881,7 +889,8 @@ void WalletQmlModelTests::backupWalletForwardsPath()
     QVERIFY(model->backupWallet("/tmp/fake-wallet.bak"));
     QCOMPARE(wallet->backup_calls, 1);
     QCOMPARE(wallet->last_backup_path, std::string("/tmp/fake-wallet.bak"));
-    QVERIFY(model->settingsError().isEmpty());
+    QVERIFY(page.error().isEmpty());
+    QTRY_VERIFY(!model->backups()->busy());
 }
 
 void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()
@@ -3689,7 +3698,7 @@ void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenT
 void WalletQmlModelTests::bumpTransactionOnLockedWalletRequiresPassword()
 {
     auto [wallet, model] = MakePasswordWalletModel();
-    auto* bump_model = model->bumpModel();
+    auto* bump_model = qobject_cast<BumpTransactionModel*>(model->feeBumps()->attemptFor({}));
 
     bump_model->prepareFeeBump(QString::fromStdString(Txid::FromUint256(uint256::ONE).GetHex()), 1);
     QCOMPARE(bump_model->state(), BumpTransactionModel::NeedsConfirmation);
@@ -3706,7 +3715,7 @@ void WalletQmlModelTests::bumpTransactionOnLockedWalletRequiresPassword()
 void WalletQmlModelTests::bumpTransactionWithPassphraseUnlocksCommitsAndRelocks()
 {
     auto [wallet, model] = MakePasswordWalletModel();
-    auto* bump_model = model->bumpModel();
+    auto* bump_model = qobject_cast<BumpTransactionModel*>(model->feeBumps()->attemptFor({}));
 
     bump_model->prepareFeeBump(QString::fromStdString(Txid::FromUint256(uint256::ONE).GetHex()), 1);
     QCOMPARE(bump_model->state(), BumpTransactionModel::NeedsConfirmation);
@@ -3732,7 +3741,7 @@ void WalletQmlModelTests::bumpTransactionWithWrongPassphraseDoesNotSign()
         wallet->unlock_passphrases.emplace_back(passphrase.begin(), passphrase.end());
         return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("")}};
     };
-    auto* bump_model = model->bumpModel();
+    auto* bump_model = qobject_cast<BumpTransactionModel*>(model->feeBumps()->attemptFor({}));
 
     bump_model->prepareFeeBump(QString::fromStdString(Txid::FromUint256(uint256::ONE).GetHex()), 1);
     QCOMPARE(bump_model->state(), BumpTransactionModel::NeedsConfirmation);

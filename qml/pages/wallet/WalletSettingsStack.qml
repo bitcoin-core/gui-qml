@@ -10,13 +10,14 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../settings" as SettingsPages
 
-// Wallet settings and their sub-pages for one wallet. Shown in the "Wallet
-// settings" section of the shared settings page while its wallet is active.
+// Wallet settings and their sub-pages for one wallet, for the stack's whole
+// life (doc/architecture.md, "Scopes"). Shown in the "Wallet settings" section
+// of the shared settings page while its wallet is active.
 PageStack {
     id: root
     objectName: "walletSettingsStack"
 
-    property WalletQmlModel wallet: null
+    required property WalletQmlModel wallet
 
     signal selectWalletRequested()
     signal receiveRequested()

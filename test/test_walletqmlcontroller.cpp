@@ -1426,8 +1426,10 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     // before the GUI thread hears about it or drops the wallet.
     QVERIFY(!alpha_model->available());
     QVERIFY(controller.isWalletOpen("alpha_wallet"));
-    QVERIFY(!alpha_model->backupWallet(QStringLiteral("/nonexistent/alpha.bak")));
-    QCOMPARE(alpha_model->settingsError(), QString{"This wallet is closing."});
+    QVERIFY(!alpha_model->backups()->available());
+    QString why;
+    QVERIFY(!alpha_model->backups()->startBackup(QStringLiteral("/nonexistent/alpha.bak"), why));
+    QCOMPARE(why, QString{"This wallet is closing."});
     QTRY_COMPARE(available_spy.count(), 1);
 
     QTRY_COMPARE(load_state_spy.count(), 1);

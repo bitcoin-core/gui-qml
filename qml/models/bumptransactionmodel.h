@@ -23,7 +23,9 @@ class Wallet;
 
 struct bilingual_str;
 
-class BumpTransactionModel : public QObject
+/** A fee bump attempt (FeeBumpOperation) on one wallet opening. The wallet's
+ * FeeBumps creates one per review. Attempt and commit ids are C++-only. */
+class BumpTransactionModel : public FeeBumpOperation
 {
     Q_OBJECT
 
@@ -60,14 +62,11 @@ public:
     Q_INVOKABLE void prepareFeeBump(const QString& txid, unsigned int targetBlocks);
     Q_INVOKABLE bool confirmFeeBump();
     Q_INVOKABLE bool confirmFeeBumpWithPassphrase(const QString& passphrase);
-    Q_INVOKABLE void reset();
+    void reset();
     void setSecurityStateChangedFn(std::function<void()> fn);
 
 Q_SIGNALS:
-    void stateChanged();
     void actionTypeChanged();
-    void resultChanged();
-    void needsUnlockChanged();
 
 private:
     void setState(State state);

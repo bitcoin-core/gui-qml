@@ -114,7 +114,8 @@ private:
     Q_PROPERTY(double minimumCustomFeeRate READ minimumCustomFeeRate CONSTANT)
     Q_PROPERTY(bool feeEstimatePending READ feeEstimatePending NOTIFY feeEstimatePendingChanged)
     Q_PROPERTY(int feeEstimateRevision READ feeEstimateRevision NOTIFY feeEstimateRevisionChanged)
-    Q_PROPERTY(BumpTransactionModel* bumpModel READ bumpModel CONSTANT)
+    //! This wallet's fee bumps; a page bumps a transaction through its FeeBumpController.
+    Q_PROPERTY(FeeBumpInterface* feeBumps READ feeBumps CONSTANT)
     Q_PROPERTY(bool isWalletLoaded READ isWalletLoaded NOTIFY walletIsLoadedChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(bool isEncrypted READ isEncrypted NOTIFY securityStateChanged)
@@ -155,7 +156,7 @@ public:
 
     TransactionActivityModel* transactionActivityModel();
     AddressListModel* addressListModel() const { return m_address_list_model; }
-    BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
+    FeeBumps* feeBumps() const { return m_fee_bumps; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
     SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
     SignVerifyMessageModel* signVerifyMessageModel() const { return m_sign_verify_message_model; }
@@ -372,7 +373,8 @@ private:
     interfaces::Node* m_node{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
-    BumpTransactionModel* m_bump_transaction_model{nullptr};
+    FeeBumps* m_fee_bumps{nullptr};
+    void createFeeBumps();
     CoinsListModel* m_coins_list_model{nullptr};
     SendRecipientsListModel* m_send_recipients{nullptr};
     SignVerifyMessageModel* m_sign_verify_message_model{nullptr};

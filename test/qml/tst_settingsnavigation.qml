@@ -631,6 +631,37 @@ TestCase {
         compare(findChild(view, "walletSettingsEmptyHeading").visible, true)
     }
 
+    // A wallet settings stack keeps one wallet for its life: switching the
+    // host's wallet replaces the stack, its pages and their controllers, and
+    // returning creates a new, idle page.
+    function test_switchingTheHostWalletRecreatesItsStack() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+            { "wallet": testWalletModel })
+        verify(view !== null)
+        view.selectSection("wallet")
+        const first = findChild(view, "walletSettingsStack")
+        verify(first !== null)
+        const firstBackup = findChild(first, "walletBackupController")
+        verify(firstBackup !== null)
+        compare(firstBackup.backups, testWalletModel.backups)
+        first.openAddressHistory()
+        tryCompare(first, "depth", 2)
+
+        view.wallet = testSecondWalletModel
+        tryVerify(function() { const stack = findChild(view, "walletSettingsStack"); return stack !== null && stack !== first })
+        const second = findChild(view, "walletSettingsStack")
+        compare(second.wallet, testSecondWalletModel)
+        compare(second.depth, 1)
+        compare(findChild(second, "walletBackupController").backups, testSecondWalletModel.backups)
+
+        view.wallet = testWalletModel
+        tryVerify(function() { const stack = findChild(view, "walletSettingsStack"); return stack !== null && stack !== second })
+        const again = findChild(view, "walletSettingsStack")
+        compare(again.wallet, testWalletModel)
+        compare(again.depth, 1)
+        compare(findChild(again, "walletBackupController").operation, null)
+    }
+
     function test_walletSettingsEmptyStateMatchesWalletAvailability() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
