@@ -30,9 +30,9 @@ BanListModel::BanListModel(interfaces::Node& node, QObject* parent, bool backend
     connect(this,&QAbstractItemModel::rowsInserted,this,&BanListModel::countChanged);
     connect(this,&QAbstractItemModel::rowsRemoved,this,&BanListModel::countChanged);
 }
-BanListModel::~BanListModel() { closeAdmission(); }
-void BanListModel::closeAdmission() { m_unban_command.reset(); NativeListModel::closeAdmission(); }
-void BanListModel::beginShutdown() { closeAdmission(); }
+BanListModel::~BanListModel() { close(); }
+void BanListModel::close() { m_unban_command.reset(); NativeListModel::close(); }
+void BanListModel::beginShutdown() { close(); }
 void BanListModel::backendInitialized() { if(stopping()||m_backend_ready)return; m_backend_ready=true; refresh(); }
 void BanListModel::refresh() { if(m_backend_ready)refreshNative(); }
 QHash<int,QByteArray> BanListModel::roleNames() const { return {{int(BanRoles::AddressRole),"address"},{int(BanRoles::BanUntilRole),"banUntil"}}; }

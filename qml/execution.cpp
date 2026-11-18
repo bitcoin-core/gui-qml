@@ -506,7 +506,7 @@ void TaskQueue::deliver(TaskId id)
     // The local task (including an unobserved owning result) dies on this lane.
 }
 
-void TaskQueue::closeAdmission()
+void TaskQueue::close()
 {
     std::lock_guard lock{m_mutex};
     m_closed = true;

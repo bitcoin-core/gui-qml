@@ -104,7 +104,7 @@ public:
     bool exportRejected() const { return m_export_rejected; }
     QString exportError() const { return m_export_error; }
     QString exportedPath() const { return m_exported_path; }
-    void closeAdmission();
+    void close();
     struct WorkReport { size_t examined{0}, prepared{0}, patches{0}, turns{0}, largestTurn{0}; bool delta{false}; };
     WorkReport lastWork() const { return m_last_work; }
     // Bounded clock handoff; manual clocks call this explicitly.

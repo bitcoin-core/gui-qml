@@ -173,7 +173,7 @@ public:
     void requestTransactionDetails(const QString& txid);
     void setDisplayUnit(int unit);
     void stop();
-    void closeAdmission();
+    void close();
     activityexport::Files activityFiles() const override;
     // Pure Domain projection shared by immutable activity consumers.
     static activityview::Row presentationRow(const activityview::Row& row);

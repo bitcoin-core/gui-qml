@@ -23,7 +23,7 @@ public:
     quint64 requestDisconnectPeer(qint64 id); // Bare-ID compatibility only.
     quint64 requestBanPeer(const QString& raw_address, int64_t duration);
     void readinessChanged() { if (!m_closed) Q_EMIT changed(); }
-    void closeAdmission();
+    void close();
     void refresh();
 Q_SIGNALS:
     void changed();

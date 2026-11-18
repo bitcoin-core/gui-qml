@@ -100,14 +100,14 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv,boo
         },[observer](std::exception_ptr){if(!observer||observer->m_stopping)return;observer->m_preview_in_flight=false;
             observer->setPreviewError(tr("The startup settings could not be read."));if(observer&&!observer->m_stopping)observer->setPreviewPending(false);});
 }
-void OnboardingOptionsModel::closeAdmission()
+void OnboardingOptionsModel::close()
 {
     if(std::exchange(m_stopping,true))return;
     m_inspection_cancel->store(true);
     ++m_preview_request_id;++m_storage_request_id;++m_storage_projection_revision;++m_path_revision;
     m_work->close();m_argv.reset();
     if(m_flow&&!m_preparing){m_flow->close();m_flow.reset();}
-    m_core_settings.closeAdmission();
+    m_core_settings.close();
 }
 
 void OnboardingOptionsModel::publishShutdown()
@@ -141,7 +141,7 @@ void OnboardingOptionsModel::finishDrain()
 void OnboardingOptionsModel::beginShutdown()
 {
     if(std::exchange(m_shutdown_requested,true))return;
-    closeAdmission();
+    close();
     if (m_flow) {m_flow->close();m_flow.reset();}
     const QPointer<OnboardingOptionsModel> observer{this};
     m_work->close([observer]{if(observer){observer->m_readers_drained=true;observer->finishDrain();}});
@@ -163,7 +163,7 @@ void OnboardingOptionsModel::setPreviewPending(bool pending)
     if(!observer||m_stopping)return;
 }
 
-OnboardingOptionsModel::~OnboardingOptionsModel(){closeAdmission();m_preparation_work->close();if(m_executor)m_executor->shutdown();}
+OnboardingOptionsModel::~OnboardingOptionsModel(){close();m_preparation_work->close();if(m_executor)m_executor->shutdown();}
 
 QString OnboardingOptionsModel::unpruneConsentToken()const
 {
@@ -316,7 +316,7 @@ void OnboardingOptionsModel::prepareNode(ArgsManager& args,std::function<bool()>
     }
     m_stopping=true;++m_preview_request_id;++m_storage_request_id;++m_storage_projection_revision;++m_path_revision;
     m_inspection_cancel->store(true);
-    m_work->close();m_argv.reset();m_core_settings.closeAdmission();if(!observer)return;
+    m_work->close();m_argv.reset();m_core_settings.close();if(!observer)return;
     if(!admitted){
         m_preparation_state->store(PreparationFailed);
         if(m_flow){m_flow->close();m_flow.reset();}
@@ -361,7 +361,7 @@ void OnboardingOptionsModel::prepareNodeAsync(ArgsManager& args,onboarding::Asyn
     }
     m_stopping=true;++m_preview_request_id;++m_storage_request_id;++m_storage_projection_revision;++m_path_revision;
     m_inspection_cancel->store(true);
-    m_work->close();m_argv.reset();m_core_settings.closeAdmission();if(!observer)return;
+    m_work->close();m_argv.reset();m_core_settings.close();if(!observer)return;
     if(!admitted){
         m_preparation_state->store(PreparationFailed);
         if(m_flow){m_flow->close();m_flow.reset();}

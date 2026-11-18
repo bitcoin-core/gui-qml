@@ -61,7 +61,7 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE quint64 requestEntryDetails(const QString& side, int row);
     Q_INVOKABLE quint64 requestCopyRawTransaction(const QString& txid);
-    void closeAdmission();
+    void close();
     void retryPublications();
 Q_SIGNALS:
     void transactionIdChanged();

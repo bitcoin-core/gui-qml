@@ -375,13 +375,13 @@ private Q_SLOTS:
     }
 
     void closedRecoveryOwnerHasNoOutstandingDrain() {
-        ManualRoutedExecution transport;transport.scheduler->closeAdmission();int drained{0};QList<onboarding::Projection> frames;
+        ManualRoutedExecution transport;transport.scheduler->close();int drained{0};QList<onboarding::Projection> frames;
         onboarding::Coordinator owner{{transport.scheduler,[](auto turn){turn();}},[&](auto frame){frames.push_back(std::move(frame));},[&]{++drained;}};
         QCOMPARE(drained,1);QCOMPARE(frames.size(),1);QCOMPARE(frames.front().phase,onboarding::Phase::Failed);
         QVERIFY(!owner.finish(1,Request(),{}));owner.close();transport.drain();QCOMPARE(drained,1);QVERIFY(transport.quiescent());
     }
     void facadeClosedRecoveryOwnerStillFinishesShutdown() {
-        ManualRoutedExecution transport;transport.scheduler->closeAdmission();std::deque<std::function<void()>> gui;QTemporaryDir directory;
+        ManualRoutedExecution transport;transport.scheduler->close();std::deque<std::function<void()>> gui;QTemporaryDir directory;
         OnboardingOptionsModel model{{"bitcoin-qt","-regtest","-datadir="+directory.path().toStdString()},false,nullptr,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
         QSignalSpy shutdown{&model,&OnboardingOptionsModel::shutdownFinished};model.beginShutdown();
         for(int i=0;i<100;++i){if(transport.stepNext())continue;if(gui.empty())break;auto turn=std::move(gui.front());gui.pop_front();turn();}

@@ -203,7 +203,7 @@ TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet, Servi
     reload(); armPoll();
 }
 
-TransactionActivityModel::~TransactionActivityModel() { m_in_model_update = false; closeAdmission(); finishClose(); }
+TransactionActivityModel::~TransactionActivityModel() { m_in_model_update = false; close(); finishClose(); }
 
 int TransactionActivityModel::rowCount(const QModelIndex& parent) const { return parent.isValid() ? 0 : activityview::Size(m_root); }
 QVariant TransactionActivityModel::data(const QModelIndex& index, int role) const
@@ -214,7 +214,7 @@ QVariant TransactionActivityModel::data(const QModelIndex& index, int role) cons
 }
 QHash<int, QByteArray> TransactionActivityModel::roleNames() const { return roles(); }
 
-void TransactionActivityModel::closeAdmission()
+void TransactionActivityModel::close()
 {
     if (std::exchange(m_stopped, true)) return;
     m_services.cancel_poll(); m_apply_timer.stop(); m_cancelled->store(true);
@@ -233,7 +233,7 @@ void TransactionActivityModel::finishClose()
 void TransactionActivityModel::stop()
 {
     if (m_stopped) return;
-    closeAdmission(); m_loading = m_details_loading = false;
+    close(); m_loading = m_details_loading = false;
     Q_EMIT loadingChanged();
 }
 void TransactionActivityModel::reload()

@@ -120,7 +120,7 @@ public:
     void prepareNodeAsync(ArgsManager& args, onboarding::AsyncPreparation preparation);
 
     void beginShutdown();
-    void closeAdmission();
+    void close();
     bool presentationOpen() const {return !m_stopping;}
     bool validationPending() const { return m_preview_pending; }
     QString dataDir() const { return m_data_dir; }

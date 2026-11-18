@@ -246,11 +246,11 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node,int interval,exe
     m_engine=execution::RetainSnapshot<TrafficEngine>(m_services.scheduler,[]{return std::make_unique<TrafficEngine>();});
     if(!m_engine)m_error=tr("Traffic history is unavailable.");
 }
-NetworkTrafficTower::~NetworkTrafficTower(){closeAdmission();if(m_executor)m_executor->shutdown();}
-void NetworkTrafficTower::closeAdmission(){m_stopping=true;m_timer->stop();m_inflight=false;m_again=false;m_work->close();m_snapshot.reset();m_engine.reset();}
+NetworkTrafficTower::~NetworkTrafficTower(){close();if(m_executor)m_executor->shutdown();}
+void NetworkTrafficTower::close(){m_stopping=true;m_timer->stop();m_inflight=false;m_again=false;m_work->close();m_snapshot.reset();m_engine.reset();}
 void NetworkTrafficTower::beginShutdown(){
     if(std::exchange(m_shutdown_started,true))return;
-    closeAdmission();const QPointer<NetworkTrafficTower> observer{this};
+    close();const QPointer<NetworkTrafficTower> observer{this};
     if(m_executor){m_executor->whenDrained(this,[observer]{if(observer)Q_EMIT observer->drained();});m_executor->shutdown();}
     else m_work->close([observer]{if(observer)Q_EMIT observer->drained();});
 }

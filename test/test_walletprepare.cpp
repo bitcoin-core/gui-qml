@@ -219,7 +219,7 @@ private Q_SLOTS:
         });
         source.fill(QChar{'y'});QCOMPARE(wallet->unlocks,0);QCOMPARE(wallet->creates,0);
         if(scenario==2){QVERIFY(!admitted);commands.drain();QCOMPARE(wallet->unlocks,0);QCOMPARE(wallet->creates,0);}
-        else{QVERIFY(admitted);if(scenario==1)opening->closeAdmission();QVERIFY(commands.step(execution::Lane::Core));
+        else{QVERIFY(admitted);if(scenario==1)opening->close();QVERIFY(commands.step(execution::Lane::Core));
             QCOMPARE(wallet->unlocks,1);QCOMPARE(wallet->creates,1);QCOMPARE(wallet->locks,1);QVERIFY(wallet->locked);QVERIFY(!operation->result());
             QVERIFY(commands.step(execution::Lane::Domain));QVERIFY(operation->result()->value);QCOMPARE(operation->result()->value->error,walletprepare::Error::None);QVERIFY(operation->result()->value->review);}
         captured.input.reset();operation.reset();output.reset();action.reset();opening->retire();commands.drain();retirement.drain();QVERIFY(commands.quiescent());QVERIFY(retirement.quiescent());
@@ -337,7 +337,7 @@ private Q_SLOTS:
             [output, &wallet] { return walletprepare::ExecuteInto(wallet, Request(), output); },
             [&](auto value) { observed = std::move(value); });
         QVERIFY(admitted); output.reset();
-        commands.scheduler->closeAdmission();
+        commands.scheduler->close();
         commands.drain();
         QVERIFY(observed); QCOMPARE(observed->error, walletprepare::Error::None);
         QVERIFY(observed->review); QVERIFY(observed->lifetime); QCOMPARE(wallet.creates, 1); QCOMPARE(wallet.internals, 0);
@@ -350,7 +350,7 @@ private Q_SLOTS:
     void closedCommandsDoNotCaptureValues()
     {
         ManualRoutedExecution commands, retirement;
-        commands.scheduler->closeAdmission();
+        commands.scheduler->close();
         auto opening = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler,
             std::make_shared<std::atomic_bool>(false), [] {});
         int factories{0};
@@ -376,7 +376,7 @@ private Q_SLOTS:
         QCOMPARE(wallet->creates, 0); QVERIFY(!operation->result());
         QVERIFY(commands.step(execution::Lane::Core));
         QCOMPARE(wallet->creates, 1); QVERIFY(!operation->result());
-        opening->closeAdmission();
+        opening->close();
         QVERIFY(!opening->startAction());
         QVERIFY(commands.step(execution::Lane::Domain));
         QCOMPARE(notices, 1);

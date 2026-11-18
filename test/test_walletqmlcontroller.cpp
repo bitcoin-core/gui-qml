@@ -483,7 +483,7 @@ struct ManualControllerGraph {
         services.scheduler = decorate ? decorate(native.scheduler) : native.scheduler;
         services.post = [this](auto callback) { posts.push_back(std::move(callback)); };
         services.shutdown = [this](auto callback) {
-            native.scheduler->closeAdmission();
+            native.scheduler->close();
             native_drained = std::move(callback);
         };
         controller = std::make_unique<WalletQmlController>(node, std::move(services));
@@ -2018,7 +2018,7 @@ void WalletQmlControllerTests::importErrorProjectionUsesOriginalRevisionAndVirtu
     QCOMPARE(raw_changed.count(), 2);
     disconnect(reentrant);
     controller.setWalletLoadError(QStringLiteral("late legacy wallet"));
-    controller.closeAdmission();
+    controller.close();
     env.drain(); env.publishAll(); // Quiet fence suppresses accepted late observations.
     QCOMPARE(raw_changed.count(), 2);
 }
@@ -2058,7 +2058,7 @@ void WalletQmlControllerTests::importErrorCaptureOverflowPreservesActualOutcomeA
     QCOMPARE(controller.walletLoadError(), actual_error);
     QCOMPARE(controller.walletImportErrorTitle(), QStringLiteral("This wallet type is not supported"));
     QVERIFY(controller.walletImportErrorProjectionError().isEmpty());
-    controller.closeAdmission(); env.drain(); env.publishAll();
+    controller.close(); env.drain(); env.publishAll();
 }
 
 void WalletQmlControllerTests::importErrorProjectionRejectionAndUnknownOversizedSourceStayExplicit()
@@ -2090,7 +2090,7 @@ void WalletQmlControllerTests::importErrorProjectionRejectionAndUnknownOversized
     QVERIFY(!controller.retryWalletImportErrorPresentation());
     QVERIFY(controller.walletLoadError() != QStringLiteral("file does not exist"));
     QCOMPARE(controller.walletImportErrorHelpModel()->rowCount(), 0);
-    controller.closeAdmission(); env.drain(); env.publishAll();
+    controller.close(); env.drain(); env.publishAll();
 }
 
 void WalletQmlControllerTests::createErrorProjectionRetainsNativeDocumentAndFencesSupersededPublication()
@@ -2151,7 +2151,7 @@ void WalletQmlControllerTests::createErrorProjectionRetainsNativeDocumentAndFenc
     QVERIFY(AwaitWalletOperation(controller));
     QCOMPARE(controller.walletCreateError(), QStringLiteral("Successor failure"));
     QVERIFY(!controller.walletLoadHasError());
-    controller.closeAdmission(); QCOMPARE(details->rowCount(), 0);
+    controller.close(); QCOMPARE(details->rowCount(), 0);
 }
 
 void WalletQmlControllerTests::migrationErrorReceiptPreparesBoundedMessageAndFrozenFullDetails()
@@ -2188,7 +2188,7 @@ void WalletQmlControllerTests::migrationErrorReceiptPreparesBoundedMessageAndFro
         QVERIFY(chunk.size() <= 1024); complete += chunk;
     }
     QCOMPARE(complete, original); // Full original document is frozen independently of the latest error.
-    controller.closeAdmission(); QCOMPARE(details->rowCount(), 0);
+    controller.close(); QCOMPARE(details->rowCount(), 0);
 }
 
 void WalletQmlControllerTests::manualShutdownFencesInventoryBeforeBoundedRetirement()
@@ -2219,7 +2219,7 @@ void WalletQmlControllerTests::manualShutdownFencesInventoryBeforeBoundedRetirem
     QVERIFY(original->opening()->read([probe](interfaces::Wallet&) { if (QThread::currentThread() == qApp->thread()) probe->on_gui = true; ++probe->effects; return true; }, [probe](bool) { ++probe->outcomes; }, {}, execution::WorkClass::Action));
     QSignalSpy closed(controller.get(), &WalletQmlController::walletLoadStateChanged);
     QSignalSpy drained(controller.get(), &WalletQmlController::walletsDrained);
-    controller->closeAdmission();
+    controller->close();
     for (auto* object : wallets) { auto* wallet = qobject_cast<WalletQmlModel*>(object); QVERIFY(!wallet->available()); QVERIFY(!wallet->opening()->startAction()); }
     for (const auto& form : forms) { QVERIFY(!form->ready()); const auto before = form->name(); form->setName("late change"); QCOMPARE(form->name(), before); }
     const auto late = loader.captured_load_wallet_fn; late(std::make_unique<FakeWallet>("late-wallet", nullptr));
@@ -4161,7 +4161,7 @@ void WalletQmlControllerTests::provisioningChecksOwnManualPhases()
     if (scenario == 1) { check.setName("different"); check.setXpub("garbage"); }
     if (scenario == 3) {
         QSignalSpy changes{&check, &WalletProvisioningCheck::changed};
-        check.closeAdmission(); QCOMPARE(changes.size(), 0);
+        check.close(); QCOMPARE(changes.size(), 0);
         environment.publishAll(); QCOMPARE(changes.size(), 0);
     } else {
         environment.drain(); environment.publishAll();
@@ -4169,7 +4169,7 @@ void WalletQmlControllerTests::provisioningChecksOwnManualPhases()
         else if (scenario == 1) { QVERIFY(check.ready()); QVERIFY(check.nameError().isEmpty()); QVERIFY(!check.xpubValid()); QCOMPARE(check.name(), QStringLiteral("different")); }
         else { QVERIFY(check.ready()); QCOMPARE(check.nameError(), QStringLiteral("A wallet with this name already exists")); QVERIFY(check.xpubValid()); }
     }
-    check.closeAdmission(); environment.drain(); environment.publishAll(); QVERIFY(environment.quiescent());
+    check.close(); environment.drain(); environment.publishAll(); QVERIFY(environment.quiescent());
 }
 
 void WalletQmlControllerTests::validateXpubAcceptsValidKey()
@@ -4760,7 +4760,7 @@ void WalletQmlControllerTests::signerDiscoveryRejectsPublicationAfterQuietClose(
     QVERIFY(env.step(execution::Lane::Core));
     while (env.step(execution::Lane::Domain)) {}
     QCOMPARE(gui.size(), size_t{1});
-    controller.closeAdmission();
+    controller.close();
     QSignalSpy changed{&controller, &WalletQmlController::externalSignerStatusChanged};
     while (!gui.empty()) { gui.front()(); gui.pop_front(); }
     QCOMPARE(changed.count(), 0);
@@ -4896,7 +4896,7 @@ void WalletQmlControllerTests::capturedSecretSurvivesQueueDelayAndQuietClose()
         auto original = operation->m_owner; QVERIFY(original);
         // Creation now has an explicit validation phase. Hold the accepted
         // Core mutation, not its earlier cancellable validation read.
-        source.fill(QLatin1Char('z')); controller.closeAdmission(); QCOMPARE(loader.create_wallet_calls, 0);
+        source.fill(QLatin1Char('z')); controller.close(); QCOMPARE(loader.create_wallet_calls, 0);
         QVERIFY(graph.until([&] { return walletcreation::Terminal(original->snapshot().phase); }));
         QVERIFY(exact); QVERIFY(native); QCOMPARE(loader.create_wallet_calls, 1);
         QCOMPARE(original->errorText(), QStringLiteral("Captured creation reached Native"));
@@ -4919,7 +4919,7 @@ void WalletQmlControllerTests::capturedSecretSurvivesQueueDelayAndQuietClose()
     auto* operation = controller.creationOperation(); QVERIFY(operation);
     auto original = operation->m_owner; QVERIFY(original);
     QTRY_VERIFY(probe->entered.available() > 0);
-    source.fill(QLatin1Char('z')); controller.closeAdmission(); QCOMPARE(loader.migrate_wallet_calls, 1);
+    source.fill(QLatin1Char('z')); controller.close(); QCOMPARE(loader.migrate_wallet_calls, 1);
     probe->release.release(); QTRY_VERIFY(walletcreation::Terminal(original->snapshot().phase));
     QVERIFY(probe->exact.load()); QVERIFY(probe->native.load()); QVERIFY(probe->native.load() != QThread::currentThread());
     QCOMPARE(loader.migrate_wallet_calls, 1); QVERIFY(original->errorText().contains(QStringLiteral("reached Native"))); original.reset();

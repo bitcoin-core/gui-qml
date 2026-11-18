@@ -27,7 +27,7 @@ struct Fixture {
     bool stopped_at_native_entry{false}, stored_before_publish{true};
     explicit Fixture(bool closed = false)
     {
-        if (closed) execution.scheduler->closeAdmission();
+        if (closed) execution.scheduler->close();
         native.attempted = true; native.success = true;
         Effects effects;
         effects.initialize = [this](const std::atomic_bool& stopping) {

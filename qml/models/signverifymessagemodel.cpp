@@ -46,7 +46,7 @@ void SignVerifyMessageModel::setOpening(std::shared_ptr<walletopening::Session> 
     requestAddressValidation();
 }
 
-void SignVerifyMessageModel::closeAdmission()
+void SignVerifyMessageModel::close()
 {
     m_closed = true;
     if (m_address_query) m_address_query->close();
@@ -71,7 +71,7 @@ void SignVerifyMessageModel::retryPublications()
 void SignVerifyMessageModel::setWallet(interfaces::Wallet* wallet)
 {
     if (m_wallet == wallet) return;
-    if (m_opening || !wallet) closeAdmission();
+    if (m_opening || !wallet) close();
     m_wallet = wallet;
 }
 void SignVerifyMessageModel::setSecurityStateChangedFn(SecurityStateChangedFn fn) { m_security_state_changed = std::move(fn); }

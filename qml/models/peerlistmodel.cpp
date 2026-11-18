@@ -108,16 +108,16 @@ PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent, bool backe
     m_timer = new QTimer(this); m_timer->setInterval(250);
     connect(m_timer, &QTimer::timeout, this, &PeerListModel::refresh); refresh();
 }
-PeerListModel::~PeerListModel() { m_destroying = true; closeAdmission(); }
+PeerListModel::~PeerListModel() { m_destroying = true; close(); }
 void PeerListModel::startAutoRefresh() { if (stopping()) return; m_auto_refresh_requested = true; if (m_backend_ready) m_timer->start(); }
 void PeerListModel::stopAutoRefresh() { m_auto_refresh_requested = false; m_timer->stop(); }
 void PeerListModel::backendInitialized() { if (stopping() || m_backend_ready) return; m_backend_ready = true; refresh(); if (m_auto_refresh_requested) m_timer->start(); }
-void PeerListModel::beginShutdown() { closeAdmission(); }
-void PeerListModel::closeAdmission() {
+void PeerListModel::beginShutdown() { close(); }
+void PeerListModel::close() {
     if (stopping()) return;
     if (m_timer) m_timer->stop();
     m_details.reset();
-    NativeListModel::closeAdmission();
+    NativeListModel::close();
     if (!m_destroying) Q_EMIT commandsChanged();
 }
 void PeerListModel::refresh() { if (m_backend_ready) refreshNative(); }

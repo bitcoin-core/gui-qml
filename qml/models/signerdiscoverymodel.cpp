@@ -40,7 +40,7 @@ SignerDiscoveryModel::SignerDiscoveryModel(Services services, QObject* parent)
         [observer, post = m_services.discovery.post] { post([observer] { if (observer) observer->publish(); }); },
         [observer, post = m_services.retire] { post([observer] { if (observer) { observer->m_discovery_drained = true; observer->finishDrain(); } }); });
 }
-SignerDiscoveryModel::~SignerDiscoveryModel() { closeAdmission(); }
+SignerDiscoveryModel::~SignerDiscoveryModel() { close(); }
 int SignerDiscoveryModel::rowCount(const QModelIndex& parent) const { return parent.isValid() ? 0 : int(m_devices.size()); }
 QVariant SignerDiscoveryModel::data(const QModelIndex& index, int role) const
 {
@@ -188,7 +188,7 @@ void SignerDiscoveryModel::publish()
     if (!m_pending && m_services.stop) m_services.stop();
     Q_EMIT changed();
 }
-void SignerDiscoveryModel::closeAdmission()
+void SignerDiscoveryModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     m_version_gate->store(0);

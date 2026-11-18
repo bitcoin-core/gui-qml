@@ -800,8 +800,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         std::shared_ptr<startup::preparation::Coordinator> startup_preparation;
         std::shared_ptr<execution::OwnedCommand<StartupPreparationSummary>> preparation_summary;
         const auto retire_startup_runtime=[&](std::function<void()> done){
-            desktop_intent_model.closeAdmission();
-            if(desktop_service)desktop_service->closeAdmission();
+            desktop_intent_model.close();
+            if(desktop_service)desktop_service->close();
             if(startup_preparation)startup_preparation->close();
             // The coordinator may already own Service's one stop callback.
             // Drain observes physical retirement without registering another.
@@ -1008,7 +1008,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             if(!actual->value)return EXIT_FAILURE;
             const auto outcome=std::move(*actual->value);
             if(outcome.status!=desktopintent::transport::ProbeStatus::Missing){
-                desktop_service->closeAdmission();desktop_intent_model.closeAdmission();
+                desktop_service->close();desktop_intent_model.close();
 #ifdef ENABLE_TEST_AUTOMATION
                 if(!startup::Run(startup_services,[transfer=outcome.transfer]{
                     return !gArgs.IsArgSet("-test-automation")||PrintStartupTransfer(transfer);
@@ -1296,12 +1296,12 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         QObject::connect(&node_model, &NodeModel::requestedShutdown,
                          &shutdown_coordinator, &QmlShutdownCoordinator::requestShutdown);
         shutdown_coordinator.addAdmissionFence([&] {
-            if(desktop_service)desktop_service->closeAdmission();
-            desktop_intent_model.closeAdmission();
+            if(desktop_service)desktop_service->close();
+            desktop_intent_model.close();
         });
-        shutdown_coordinator.addAdmissionFence([&] { init_executor.closeAdmission(); });
-        shutdown_coordinator.addAdmissionFence([&] { node_model.closeAdmission(); });
-        shutdown_coordinator.addAdmissionFence([&] { bitcoin_uri_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { init_executor.close(); });
+        shutdown_coordinator.addAdmissionFence([&] { node_model.close(); });
+        shutdown_coordinator.addAdmissionFence([&] { bitcoin_uri_model.close(); });
         shutdown_coordinator.addBeforeInterruptTask(retire_startup_runtime);
         shutdown_coordinator.addAdmissionFence([&] { presentation_services.close(); });
         shutdown_coordinator.addBeforeInterruptTask([&](std::function<void()> done) {
@@ -1318,7 +1318,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         shutdown_coordinator.addParticipant(&debug_log_model, &DebugLogModel::drained, [&] { debug_log_model.stop(); });
 #ifdef ENABLE_WALLET
         if (wallet_controller) {
-            shutdown_coordinator.addAdmissionFence([&] { wallet_controller->closeAdmission(); });
+            shutdown_coordinator.addAdmissionFence([&] { wallet_controller->close(); });
             shutdown_coordinator.addParticipant(wallet_controller.get(), &WalletQmlController::walletsDrained,
                                                 [&] { wallet_controller->beginShutdown(); });
         }
@@ -1337,7 +1337,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         });
 
         NetworkTrafficTower network_traffic_tower{*node, 1000, {node_model.queryScheduler(), presentation_post}};
-        shutdown_coordinator.addAdmissionFence([&] { network_traffic_tower.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { network_traffic_tower.close(); });
         QObject::connect(&node_model, &NodeModel::chainStateReady,
                          &network_traffic_tower, &NetworkTrafficTower::startSampling);
         shutdown_coordinator.addParticipant(&network_traffic_tower, &NetworkTrafficTower::drained,
@@ -1350,7 +1350,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         ChainModel chain_model{runtime.chain};
         BlockClockModel block_clock_model{block_clock_history,
             execution::SnapshotServices{node_model.queryScheduler(), presentation_post}};
-        shutdown_coordinator.addAdmissionFence([&] { block_clock_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { block_clock_model.close(); });
         setupChainQSettings(&app, chain_model.networkName());
 
 
@@ -1362,7 +1362,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             true,
 #endif
             {node_model.queryScheduler(), presentation_post}};
-        shutdown_coordinator.addAdmissionFence([&] { desktop_window_behavior_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { desktop_window_behavior_model.close(); });
         DesktopTrayIconController desktop_tray_icon_controller;
 
         qGuiApp->setQuitOnLastWindowClosed(false);
@@ -1374,16 +1374,16 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
         PeerListModel peer_model{*node, nullptr, backend_ready, {node_model.queryScheduler(), {}}};
         peer_model.setCommands(node_model.peerCommands());
-        shutdown_coordinator.addAdmissionFence([&] { node_model.peerCommands()->closeAdmission(); });
-        shutdown_coordinator.addAdmissionFence([&] { peer_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { node_model.peerCommands()->close(); });
+        shutdown_coordinator.addAdmissionFence([&] { peer_model.close(); });
         QObject::connect(&node_model, &NodeModel::chainStateReady,
                          &peer_model, &PeerListModel::backendInitialized);
         PeerListSortProxy peer_model_sort_proxy{nullptr};
-        shutdown_coordinator.addAdmissionFence([&] { peer_model_sort_proxy.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { peer_model_sort_proxy.close(); });
         peer_model_sort_proxy.setSourceModel(&peer_model);
 
         BanListModel ban_list_model{*node, nullptr, backend_ready, {node_model.queryScheduler(), {}}};
-        shutdown_coordinator.addAdmissionFence([&] { ban_list_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { ban_list_model.close(); });
         QObject::connect(&node_model, &NodeModel::bannedListChanged,
                          &ban_list_model, &BanListModel::refresh);
         QObject::connect(&node_model, &NodeModel::chainStateReady,
@@ -1397,7 +1397,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &peer_model, [&] {
             peer_model.beginShutdown();
             ban_list_model.beginShutdown();
-            block_clock_model.closeAdmission();
+            block_clock_model.close();
             QObject::disconnect(&node_model, nullptr, &ban_list_model, nullptr);
             QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
         });
@@ -1426,7 +1426,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         pre_init_onboarding_context.finishPreferences();
         auto* ui_preferences = startup::InstallPreferences(*engine,
             {node_model.queryScheduler(), presentation_post}, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
-        shutdown_coordinator.addAdmissionFence([ui_preferences] { ui_preferences->closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([ui_preferences] { ui_preferences->close(); });
         shutdown_coordinator.addBeforeInterruptTask([ui_preferences](std::function<void()> done) {
             ui_preferences->whenDrained(std::move(done));
         });
@@ -1446,7 +1446,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         RpcConsoleModel rpc_console_model{*node, {node_model.queryScheduler(), presentation_post}};
         shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
                                             [&] { rpc_console_model.beginShutdown(); });
-        shutdown_coordinator.addAdmissionFence([&] { rpc_console_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { rpc_console_model.close(); });
         QObject::connect(&node_model, &NodeModel::nodeInitialized,
                          &rpc_console_model, &RpcConsoleModel::onNodeInitialized);
         engine->rootContext()->setContextProperty("rpcConsoleModel", &rpc_console_model);
@@ -1457,7 +1457,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             wallet_list_model = std::make_unique<WalletListModel>(*node,
                 execution::SnapshotServices{wallet_controller->backgroundScheduler(), presentation_post});
             wallet_list_model->setBackendAvailability(WalletListModel::BackendAvailability::Uninitialized);
-            shutdown_coordinator.addAdmissionFence([&] { wallet_list_model->closeAdmission(); });
+            shutdown_coordinator.addAdmissionFence([&] { wallet_list_model->close(); });
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
                              wallet_list_model.get(), &WalletListModel::setWalletLoadState);
             QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
@@ -1500,7 +1500,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 #endif
 
         OptionsQmlModel options_model(*node, gArgs, {node_model.queryScheduler(), presentation_post});
-        shutdown_coordinator.addAdmissionFence([&] { options_model.closeAdmission(); });
+        shutdown_coordinator.addAdmissionFence([&] { options_model.close(); });
         shutdown_coordinator.addBeforeInterruptParticipant(&options_model, &OptionsQmlModel::shutdownFinished,
                                             [&] { options_model.beginShutdown(); });
 #ifdef ENABLE_WALLET

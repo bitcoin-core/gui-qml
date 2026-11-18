@@ -392,7 +392,7 @@ private Q_SLOTS:
             env.drain(); env.publishAll();
             auto original_scope = env.scheduler->openActionScope();
             QVERIFY(original_scope);
-            model.closeAdmission();
+            model.close();
             if (workers_stopped) { model.beginShutdown(); env.drain(); env.publishAll(); }
             env.scheduler->closeOrdinaryAdmission();
             QVERIFY(!env.scheduler->openActionScope());
@@ -416,7 +416,7 @@ private Q_SLOTS:
             }
             QVERIFY(complete.endsWith(diagnostic)); QVERIFY(!loss->load());
             QVERIFY(!model.queryScheduler()->openActionScope());
-            model.closeAdmission(); model.beginShutdown();
+            model.close(); model.beginShutdown();
             env.drain(); env.publishAll(); env.drain();
             QCOMPARE(env.scheduler->pending(), size_t{0});
             QVERIFY(model.isDrained()); // Quiet publication must not require facade destruction.
@@ -576,7 +576,7 @@ void NodeModelTests::originalAdmissionIsCountedBeforeQuietClose()
     std::thread producer;
     const auto cleanup = qScopeGuard([&] {
         probe->release.release(); if (producer.joinable()) producer.join(); original.reset(); model.beginShutdown();
-        env.scheduler->closeAdmission(); env.drain(); env.publishAll();
+        env.scheduler->close(); env.drain(); env.publishAll();
         QVERIFY(QTest::qWaitFor([&] { env.drain(); env.publishAll(); return model.isDrained(); }, ASYNC_TIMEOUT_MS));
     });
     probe->pause = kind;
@@ -586,7 +586,7 @@ void NodeModelTests::originalAdmissionIsCountedBeforeQuietClose()
         else admitted = execution::Submit(*port, [probe] { ++probe->effects; }, [] {}, {}, {execution::Lane::Cleanup, port->allocateKey()}, true);
     });
     QVERIFY(probe->entered.tryAcquire(1, ASYNC_TIMEOUT_MS));
-    model.closeAdmission(); QVERIFY(!port->openActionScope());
+    model.close(); QVERIFY(!port->openActionScope());
     model.beginShutdown(); env.drain(); env.publishAll(); QCoreApplication::processEvents();
     QVERIFY(!model.isDrained()); // Upstream has not accepted anything yet, but the original admission is already counted.
     probe->release.release(); producer.join();
@@ -612,7 +612,7 @@ void NodeModelTests::sharedRetirementUsesControlledCleanupAndActualDrain()
     QVERIFY(settle());QVERIFY(model.notificationsReady());QVERIFY(model.findChildren<BackendExecutor*>().isEmpty());
     QFETCH(bool, fence_first);
     if (fence_first) {
-        model.closeAdmission();
+        model.close();
         QVERIFY(!model.queryScheduler()->openActionScope());
         for (const auto lane : {execution::Lane::Core, execution::Lane::Domain, execution::Lane::Cleanup}) {
             const auto admission = execution::Submit(*model.queryScheduler(), [] {}, [] {}, {},
@@ -636,7 +636,7 @@ void NodeModelTests::manualOriginalActionScopeOwnsLateStagesAndNativeCleanup()
     const auto cleanup = qScopeGuard([&] { model.beginShutdown(); env.drain(); env.publishAll(); });
     env.drain(); env.publishAll(); QVERIFY(model.notificationsReady());
     auto original = model.queryScheduler()->openActionScope(); QVERIFY(original);
-    model.closeAdmission(); QVERIFY(!model.queryScheduler()->openActionScope());
+    model.close(); QVERIFY(!model.queryScheduler()->openActionScope());
     int effects{0}, outcomes{0}, retired{0};
     QVERIFY(execution::Submit(*original, [&] { ++effects; return 7; }, [&](int value) { QCOMPARE(value, 7); ++outcomes; }, {}, {execution::Lane::Core, {}, execution::WorkClass::Action}));
     // A late pure value result reserves its cleanup through the original scope,
@@ -1123,7 +1123,7 @@ void NodeModelTests::peerAdmissionDoesNotWaitForNetworkObservation()
         QVERIFY(model.peerCommands()->pending());
         QCOMPARE(effects, 0);
         if (shutdown) model.beginShutdown();
-        else model.closeAdmission();
+        else model.close();
         QVERIFY(!model.networkBackendAvailable());
         QVERIFY(!model.peerCommands()->canStart());
         QCOMPARE(model.peerCommands()->requestDisconnectPeer(8), quint64{0});
@@ -2257,7 +2257,7 @@ void NodeModelTests::manualInitializationStopsAfterPublicReentrancy()
         synchronized_at_boundary = model->initialSyncComplete();
         if (invalidation == 0) model->requestShutdown();
         else if (invalidation == 1) model->beginShutdown();
-        else if (invalidation == 2) model->closeAdmission();
+        else if (invalidation == 2) model->close();
         else if (invalidation == 3) model.reset();
     };
     switch (boundary) {

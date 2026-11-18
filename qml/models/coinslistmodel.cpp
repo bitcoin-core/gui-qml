@@ -501,7 +501,7 @@ CoinsListModel::CoinsListModel(WalletQmlModel* parent) : QAbstractListModel(pare
         connect(parent, &WalletQmlModel::walletContentsChanged, this, &CoinsListModel::update);
     }
 }
-CoinsListModel::~CoinsListModel() { closeAdmission(); retireValues(); }
+CoinsListModel::~CoinsListModel() { close(); retireValues(); }
 void CoinsListModel::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
 {
     if (m_stopping || !opening || (m_opening && m_opening != opening) || m_backend) return;
@@ -538,7 +538,7 @@ void CoinsListModel::setOpening(std::shared_ptr<walletopening::Session> opening,
         m_read_error = tr("Wallet coin services could not be initialized."); Q_EMIT readErrorChanged();
     }
 }
-void CoinsListModel::closeAdmission()
+void CoinsListModel::close()
 {
     if (m_stopping) return;
     m_stopping = true; ++m_reconcile_turn;

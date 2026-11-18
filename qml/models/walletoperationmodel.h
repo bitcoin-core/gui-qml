@@ -146,7 +146,7 @@ public:
     QUrl source() const { return QUrl{m_source}; }
     QString errorText() const;
     QString warningText() const;
-    void closeAdmission();
+    void close();
     QString presentationId() const override { return operationId(); }
     bool presentationBusy() const override { return busy(); }
     bool presentationTerminal() const override { return terminal(); }

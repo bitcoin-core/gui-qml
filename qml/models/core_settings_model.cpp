@@ -199,7 +199,7 @@ QmlCoreSettings::Change Observe(QmlCoreSettings::Session& session){
 CoreSettingsModel::CoreSettingsModel(QObject* parent):QObject(parent){}
 CoreSettingsModel::CoreSettingsModel(QmlCoreSettings::Values values,QmlCoreSettings::StatusProjection statuses,QObject* parent)
     :QObject(parent),m_initial_values(std::move(values)),m_initial_statuses(std::move(statuses.values)){}
-CoreSettingsModel::~CoreSettingsModel(){closeAdmission();if(m_executor)m_executor->shutdown();}
+CoreSettingsModel::~CoreSettingsModel(){close();if(m_executor)m_executor->shutdown();}
 void CoreSettingsModel::configureServices(execution::SnapshotServices services){
     if(m_work||m_stopping)return;
     initializeServices(std::move(services));
@@ -216,7 +216,7 @@ void CoreSettingsModel::initializeServices(execution::SnapshotServices services)
     if(!m_native){m_error=tr("Settings preview is unavailable.");m_operation_state=Failed;return;}
 }
 void CoreSettingsModel::setAdmissionReady(bool ready){if(m_stopping||m_admission_ready==ready)return;m_admission_ready=ready;notifyStatusesChanged();}
-void CoreSettingsModel::closeAdmission(){m_stopping=true;++*m_context;m_pending=0;m_operation_state=Closed;if(m_work)m_work->close();if(m_projection){m_initial_values=m_projection->values;m_initial_statuses=m_projection->statuses;m_empty_touched=m_projection->touched;}m_projection.reset();m_native.reset();}
+void CoreSettingsModel::close(){m_stopping=true;++*m_context;m_pending=0;m_operation_state=Closed;if(m_work)m_work->close();if(m_projection){m_initial_values=m_projection->values;m_initial_statuses=m_projection->statuses;m_empty_touched=m_projection->touched;}m_projection.reset();m_native.reset();}
 const QmlCoreSettings::Values& CoreSettingsModel::values() const{return m_projection?m_projection->values:m_initial_values;}
 const QSet<QString>& CoreSettingsModel::touchedSettings() const{return m_projection?m_projection->touched:m_empty_touched;}
 QVariantMap CoreSettingsModel::statuses() const{return m_projection?m_projection->statuses:m_initial_statuses;}

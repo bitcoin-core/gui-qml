@@ -291,8 +291,8 @@ void DesktopWindowBehaviorModelTests::manualPreferencesOwnOutcomesAfterClose()
     model->setShowTrayIcon(false);
     QVERIFY(!model->showTrayIcon()); QVERIFY(!model->minimizeToTray());
     QCOMPARE(writes, 0); QVERIFY(model->persistencePending());
-    model->closeAdmission(); model.reset();
-    env.scheduler->closeAdmission();
+    model->close(); model.reset();
+    env.scheduler->close();
     env.drain(); QCOMPARE(writes, 1);
     QVERIFY(!persisted.show_tray); QVERIFY(!persisted.minimize_tray);
     gui.drain(); QVERIFY(env.quiescent());
@@ -326,7 +326,7 @@ void DesktopWindowBehaviorModelTests::manualLostPublicationRecoversActualLoadAnd
     model.retryPersistence(); QVERIFY(model.settingsReady()); QVERIFY(!model.persistencePending()); QCOMPARE(reads, 1); QCOMPARE(writes, 0);
     model.setMinimizeOnClose(true); env.drain(); QCOMPARE(writes, 1); QVERIFY(model.persistencePending());
     model.retryPersistence(); QVERIFY(!model.persistencePending()); QCOMPARE(writes, 1); QVERIFY(model.minimizeOnClose());
-    model.closeAdmission(); env.drain();
+    model.close(); env.drain();
 }
 
 void DesktopWindowBehaviorModelTests::manualPreferencesReportWriteFailure()
@@ -358,7 +358,7 @@ void DesktopWindowBehaviorModelTests::manualRetryQueriesWithoutReplayingAWrite()
     QCOMPARE(writes,1);QVERIFY(!model.persistenceError().isEmpty());
     model.retryPersistence();env.drain();gui.drain();
     QCOMPARE(writes,1);QCOMPARE(reads,2);QCOMPARE(model.minimizeOnClose(),saved);QVERIFY(!model.persistencePending());
-    model.closeAdmission();env.drain();gui.drain();
+    model.close();env.drain();gui.drain();
 }
 
 void DesktopWindowBehaviorModelTests::externalWriterRefreshesExistingModel()
@@ -379,7 +379,7 @@ void DesktopWindowBehaviorModelTests::manualRefreshWaitsForWriteAndCoalesces()
     model.setMinimizeOnClose(true);env.drain();QCOMPARE(writes,1);QVERIFY(model.persistencePending());
     persisted.show_tray=false;model.refreshSettings();model.refreshSettings();QCOMPARE(reads,1);
     gui.drain();env.drain();gui.drain();QCOMPARE(reads,2);QCOMPARE(writes,1);QVERIFY(!model.showTrayIcon());QVERIFY(model.minimizeOnClose());QVERIFY(!model.persistencePending());
-    model.closeAdmission();model.refreshSettings();env.drain();gui.drain();QCOMPARE(reads,2);
+    model.close();model.refreshSettings();env.drain();gui.drain();QCOMPARE(reads,2);
 }
 void DesktopWindowBehaviorModelTests::nativeWritePreservesUnrelatedExternalPreference()
 {
@@ -392,7 +392,7 @@ void DesktopWindowBehaviorModelTests::nativeWritePreservesUnrelatedExternalPrefe
     model.setShowTrayIcon(false);env.drain();gui.drain();
     QSettings actual;actual.sync();QVERIFY(actual.value("fMinimizeOnClose").toBool());QVERIFY(actual.value("fHideTrayIcon").toBool());
     QVERIFY(model.minimizeOnClose());QVERIFY(!model.showTrayIcon());
-    model.closeAdmission();env.drain();gui.drain();
+    model.close();env.drain();gui.drain();
 }
 
 void DesktopWindowBehaviorModelTests::heldNativeWorkKeepsOriginalPreferenceNamespace()
@@ -411,7 +411,7 @@ void DesktopWindowBehaviorModelTests::heldNativeWorkKeepsOriginalPreferenceNames
     transport.drain();gui.drain();QVERIFY(model.settingsReady());QVERIFY(!model.showTrayIcon());
     model.setMinimizeOnClose(true);transport.drain();gui.drain();QVERIFY(model.minimizeOnClose());
     first.sync();second.sync();QVERIFY(first.value("fMinimizeOnClose").toBool());QVERIFY(!second.value("fMinimizeOnClose").toBool());
-    model.closeAdmission();transport.drain();gui.drain();QVERIFY(transport.quiescent());
+    model.close();transport.drain();gui.drain();QVERIFY(transport.quiescent());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

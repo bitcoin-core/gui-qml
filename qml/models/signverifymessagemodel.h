@@ -56,7 +56,7 @@ public:
     using SecurityStateChangedFn = std::function<void()>;
     explicit SignVerifyMessageModel(interfaces::Wallet* wallet = nullptr, QObject* parent = nullptr);
     void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     void retryPublications();
     void setWallet(interfaces::Wallet* wallet);
     void setSecurityStateChangedFn(SecurityStateChangedFn fn);

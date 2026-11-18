@@ -82,7 +82,7 @@ public:
     Q_INVOKABLE void copyAll();
     Q_INVOKABLE void nextSearchResult();
     Q_INVOKABLE void previousSearchResult();
-    void closeAdmission();
+    void close();
 Q_SIGNALS:
     void sourceModelChanged();
     void activeChanged();

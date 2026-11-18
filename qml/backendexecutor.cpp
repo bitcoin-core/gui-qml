@@ -338,7 +338,7 @@ void BackendExecutor::shutdown()
     if (m_stopping) return;
     m_stopping = true;
     if (m_group) m_group->stopping = true;
-    m_scheduler->closeAdmission();
+    m_scheduler->close();
     qDebug() << __func__ << ": Stopping thread" << m_thread;
     m_gui_completions.clear();
     disconnect(m_worker, nullptr, this, nullptr);

@@ -307,7 +307,7 @@ private Q_SLOTS:
         old->reload();
         f.env.drain();
         f.wallet->beginShutdown();
-        f.source->closeAdmission();
+        f.source->close();
         const auto publications=f.env.publicationCount();
         QVERIFY(publications>0);
         Fixture reopened;
@@ -350,7 +350,7 @@ private Q_SLOTS:
         QCOMPARE(first->requestCopyRawTransaction(Id(f.native->first)),quint64{0});
         QCOMPARE(second->requestEntryDetails("outputs",0),quint64{0});
         const auto first_count=first_changed.count(),second_count=second_changed.count();
-        f.source->closeAdmission();
+        f.source->close();
         f.env.publishAll();
         f.settle();
         QCOMPARE(first_changed.count(),first_count);
@@ -407,7 +407,7 @@ private Q_SLOTS:
         QVERIFY(view->requestCopyRawTransaction(Id(f.native->first)));
         // Hold the accepted Domain turn, then close its original opening.
         f.wallet->beginShutdown();
-        f.source->closeAdmission();
+        f.source->close();
         QCOMPARE(view->state(),ActivityDetailModel::Closed);
         QVERIFY(f.env.scheduler->pending()>0);
         QCOMPARE(QGuiApplication::clipboard()->text(),QStringLiteral("before original handoff"));

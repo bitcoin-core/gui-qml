@@ -38,7 +38,7 @@ public:
     bool ready()const{return m_ready;}bool pending()const{return m_pending!=0;}
     QString error()const{return m_error;}
     const UiPreferencesValues& values()const;
-    void closeAdmission();
+    void close();
     void whenDrained(std::function<void()>);
     std::shared_ptr<const std::atomic<Outcome>> lastWriteReceipt()const{return m_receipt;}
     quint64 operationId()const{return m_operation_id;}

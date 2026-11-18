@@ -172,7 +172,7 @@ void WalletOperationModel::start()
     Q_EMIT activated(this);
     if (guard && !m_closed) owner->start(); else owner->detach();
 }
-void WalletOperationModel::closeAdmission()
+void WalletOperationModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     if (m_owner) {

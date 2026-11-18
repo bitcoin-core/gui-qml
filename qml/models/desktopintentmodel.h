@@ -52,7 +52,7 @@ public:
     void setWalletEnabled(bool enabled);
     void setReady(bool ready);
     void setAdmissionGate(std::shared_ptr<const std::atomic_bool> closed) { m_parent_admission->store(std::move(closed)); }
-    void closeAdmission();
+    void close();
 #ifdef ENABLE_WALLET
     void setFactory(BitcoinUriModel* factory);
     PaymentImportOperation* inspection() const { return m_inspection; }

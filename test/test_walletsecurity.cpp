@@ -157,7 +157,7 @@ private Q_SLOTS:
         WalletSecurityModel model;
         model.bind(f.session, presentation::MakeGuiObject(), [] { return true; });
         auto* operation = model.beginEncryption(); QVERIFY(operation);
-        f.session->closeAdmission();
+        f.session->close();
         QVERIFY(!operation->submitCredentials(operation->operationId(), {}, "replacement", "replacement"));
         QVERIFY(operation->cancel());
         f.commands.drain(); QCOMPARE(f.wallet->encryptions, 0);

@@ -408,7 +408,7 @@ private Q_SLOTS:
     void closedRetirementAcquiresNoWalletOrHandlers()
     {
         ManualRoutedExecution commands, retirement;
-        retirement.scheduler->closeAdmission();
+        retirement.scheduler->close();
         auto native = std::make_shared<Wallet>();
         auto closed = std::make_shared<std::atomic_bool>(false);
         auto session = std::make_shared<walletopening::Session>(commands.scheduler, retirement.scheduler, closed, [] {});
@@ -565,7 +565,7 @@ private Q_SLOTS:
         int observations{0}, actions{0};
         QVERIFY(fixture.session->postDomain([&] { ++observations; }));
         QVERIFY(fixture.session->postDomain([&] { ++actions; }, execution::WorkClass::Action));
-        fixture.session->closeAdmission();
+        fixture.session->close();
         fixture.commands.drain();
         QCOMPARE(observations, 0); QCOMPARE(actions, 1);
         QCOMPARE(fixture.session->postDomain([] {}).rejection, execution::Rejection::Closed);
@@ -611,7 +611,7 @@ private Q_SLOTS:
                     }));
                 }));
         }));
-        fixture.session->closeAdmission(); fixture.commands.scheduler->closeAdmission();
+        fixture.session->close(); fixture.commands.scheduler->close();
         fixture.session->retire(); QVERIFY(!fixture.session->startAction()); action.reset();
         QVERIFY(!fixture.retirement.step(Lane::Cleanup)); // Original accepted action still pins its native wallet.
         QCOMPARE(trace.size(), size_t{0});
@@ -689,7 +689,7 @@ private Q_SLOTS:
             execution::Admission reserveCleanup(std::shared_ptr<execution::Task> task, execution::TaskSpec spec) override
             {
                 const auto result = queue->reserveCleanup(std::move(task), spec);
-                queue->closeAdmission();
+                queue->close();
                 return result;
             }
             bool activateCleanup(execution::TaskId id) override { return queue->activateCleanup(id); }

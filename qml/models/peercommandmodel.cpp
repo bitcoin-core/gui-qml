@@ -45,7 +45,7 @@ QMetaObject::Connection PeerCommandModel::observe(QObject* receiver, std::functi
     return connect(this, &PeerCommandModel::changed, receiver, std::move(changed));
 }
 void PeerCommandModel::admitted() { m_pending = true; if (!m_closed) Q_EMIT changed(); }
-void PeerCommandModel::closeAdmission()
+void PeerCommandModel::close()
 {
     if (m_closed) return;
     m_closed = true; m_store->close(); Q_EMIT changed();

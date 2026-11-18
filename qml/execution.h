@@ -192,7 +192,7 @@ public:
     ResourceKey allocateKey() override;
     void closeOrdinaryAdmission() override;
     bool cancelQueued(TaskId id) override;
-    void closeAdmission();
+    void close();
     size_t pending() const override;
     std::optional<Phase> phase(TaskId id) const;
 

@@ -437,7 +437,7 @@ private Q_SLOTS:
             QVERIFY(f.opening->postDomain([&]{independent_domain=true;}));
             QVERIFY(f.commands.step(Lane::Domain));QVERIFY(!independent_domain);QCOMPARE(f.wallet->generated,0);
             QVERIFY(f.commands.step(Lane::Domain));QVERIFY(independent_domain);QCOMPARE(f.wallet->generated,0);
-        }else if(boundary==1)f.opening->closeAdmission();
+        }else if(boundary==1)f.opening->close();
         else if(boundary==3){const auto admitted=f.store->submit(Reserve(true));QVERIFY(admitted);newer=admitted.operation;}
         f.commands.drain();QVERIFY(original.operation->result());
         const Error expected[]={Error::None,Error::Closed,Error::Rejected,Error::Changed};

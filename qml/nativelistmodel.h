@@ -43,7 +43,7 @@ public:
     bool hasChildren(const QModelIndex& parent = {}) const override { return !parent.isValid() && rowCount() > 0; }
     bool projectionPending() const { return m_pending; }
     QString readError() const { return m_error; }
-    virtual void closeAdmission();
+    virtual void close();
     std::shared_ptr<execution::Scheduler> scheduler() const { return m_services.scheduler; }
     execution::SnapshotServices services() const { return m_services; }
     NativeVersionHandle completedSnapshot() const { return m_completed; }

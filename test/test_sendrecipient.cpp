@@ -31,7 +31,7 @@ struct Fixture {
         finish();
     }
     ~Fixture() {
-        if (recipients) recipients->closeAdmission();
+        if (recipients) recipients->close();
         recipients.reset();
         // Independent bounded GUI retirement outlives the facade, including a
         // deliberately throwing primary transport and its real queued fallback.
@@ -239,7 +239,7 @@ private Q_SLOTS:
         connect(recipient->amount(), &BitcoinAmount::inputChanged, f.recipients.get(), [&] {
             if (handled) return;
             handled = true;
-            if (outcome == 0) f.recipients->closeAdmission();
+            if (outcome == 0) f.recipients->close();
             if (outcome == 1) f.recipients.reset();
             if (outcome == 2) recipient->amount()->setSatoshi(9000);
             if (outcome == 3) recipient->applyImportedPayment({Address(7), "newer", "newer message", {}, CAmount{7000}, false});
@@ -335,7 +335,7 @@ private Q_SLOTS:
         f.recipients->clear(); f.finish(); QCOMPARE(f.recipients->draftId(), id);
         QCOMPARE(f.recipients->state(), SendRecipientsListModel::DraftState::Empty); QVERIFY(f.recipients->revision() != revision);
         QCOMPARE(captured->recipients.front().amount, CAmount{100000});
-        f.recipients->currentRecipient()->chooseMaximum(); f.recipients->closeAdmission(); f.finish();
+        f.recipients->currentRecipient()->chooseMaximum(); f.recipients->close(); f.finish();
         QCOMPARE(f.recipients->state(), SendRecipientsListModel::DraftState::Retired); QCOMPARE(f.recipients->count(), 0);
         QCOMPARE(captured->recipients.front().amount, CAmount{100000});
     }
@@ -375,12 +375,12 @@ private Q_SLOTS:
                 env.drain(); while (!posts.empty()) { auto work = std::move(posts.front()); posts.pop_front(); work(); }
             }
         };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->closeAdmission(); recipient.reset(); settle(); });
+        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle(); });
         recipient->setOpening({}, {scheduler, [&](auto work) { posts.push_back(std::move(work)); }}); settle();
         recipient->setAddress(Address()); settle();
         QSignalSpy draft{recipient.get(), &SendRecipient::draftChanged};
         auto trigger = scheduler->armSubmit(execution::Lane::Domain, 1, [&] {
-            if (outcome == 0) recipient->closeAdmission();
+            if (outcome == 0) recipient->close();
             else if (outcome == 1) recipient.reset();
             else recipient->amount()->setSatoshi(9000);
         });
@@ -395,7 +395,7 @@ private Q_SLOTS:
             QCOMPARE(recipient->validationSnapshot()->amount, CAmount{9000});
         } else if (outcome == 0) { QVERIFY(recipient); QVERIFY(!recipient->validationPending()); }
         else QVERIFY(!recipient);
-        scheduler->disarm(); if (recipient) recipient->closeAdmission(); recipient.reset(); settle();
+        scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle();
         QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void cleanupAdmissionKeepsOriginalValidationOwner_data()
@@ -422,9 +422,9 @@ private Q_SLOTS:
                 }
             }
         };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->closeAdmission(); recipient.reset(); settle(); });
+        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle(); });
         const auto trigger = scheduler->armCleanup(1, [&] {
-            if (outcome == 0) recipient->closeAdmission();
+            if (outcome == 0) recipient->close();
             else if (outcome == 1) recipient.reset();
             else recipient->setOpening({}, {scheduler, [&](auto turn) { ++new_posted; new_posts.push_back(std::move(turn)); }});
         });
@@ -438,7 +438,7 @@ private Q_SLOTS:
             QCOMPARE(old_posted, size_t{0}); QVERIFY(new_posted > 0);
         } else if (outcome == 0) { QVERIFY(recipient); QVERIFY(!recipient->validationPending()); }
         else QVERIFY(!recipient);
-        scheduler->disarm(); if (recipient) recipient->closeAdmission(); recipient.reset(); settle();
+        scheduler->disarm(); if (recipient) recipient->close(); recipient.reset(); settle();
         QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void quietCloseDuringQtMutation_data() {
@@ -450,7 +450,7 @@ private Q_SLOTS:
         QFETCH(int, mutation); QFETCH(bool, about); Fixture f; f.recipients->add(); f.finish();
         auto* model = f.recipients.get(); bool closed{false}; int at_end{-1};
         const auto close = [&] {
-            const auto rows = model->rowCount(); model->closeAdmission();
+            const auto rows = model->rowCount(); model->close();
             QCOMPARE(model->rowCount(), rows); closed = true;
         };
         if (mutation == 0) {
@@ -481,7 +481,7 @@ private Q_SLOTS:
         QSignalSpy validity{first.data(), &SendRecipient::isValidChanged};
         for (auto* recipient : rows)
             connect(recipient, &QObject::destroyed, this, [&] { ++destroyed; });
-        f.recipients->closeAdmission();
+        f.recipients->close();
         QCOMPARE(f.recipients->count(), 0); QVERIFY(first);
         const auto address = first->address()->address();
         first->setAddress(Address(9));
@@ -497,7 +497,7 @@ private Q_SLOTS:
         QVERIFY(intents.empty()); QVERIFY(drafts.empty()); QVERIFY(validity.empty());
         QVERIFY(!first->validationPending()); QVERIFY(!first->isValid());
         QCOMPARE(f.commands.scheduler->pending(), pending);
-        f.commands.scheduler->closeAdmission(); f.commands.drain();
+        f.commands.scheduler->close(); f.commands.drain();
         QCOMPARE(destroyed, 0); QVERIFY(f.commands.scheduler->pending() > 0);
         QVERIFY(f.publishOne()); QCOMPARE(destroyed, 32); QVERIFY(first);
         f.recipients.reset(); // Remaining GUI handoffs have an independent owner.
@@ -632,7 +632,7 @@ private Q_SLOTS:
     void quietCloseAndObserverLossDoNotPublishAcceptedValidation() {
         Fixture f; auto* recipient = f.recipients->currentRecipient(); f.fill(recipient, 4, 1000);
         QSignalSpy changed{recipient, &SendRecipient::isValidChanged};
-        recipient->closeAdmission(); f.recipients->closeAdmission(); f.recipients.reset();
+        recipient->close(); f.recipients->close(); f.recipients.reset();
         f.commands.drain(); while (f.publishOne()) {}
         QCOMPARE(changed.count(), 0);
     }
@@ -645,7 +645,7 @@ private Q_SLOTS:
             QTRY_VERIFY(!recipient.validationPending()); QVERIFY(recipient.isValid());
             QVERIFY(recording->thread(execution::Lane::Domain));
             QVERIFY(recording->thread(execution::Lane::Domain) != QThread::currentThread());
-            recipient.closeAdmission();
+            recipient.close();
         }
         executor.shutdown(); QTRY_VERIFY(executor.isDrained());
     }

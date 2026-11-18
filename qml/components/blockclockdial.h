@@ -64,7 +64,7 @@ public:
     /** Background rendering uses the first services assigned; the dial closes
      * when they close. Without services it reports rendering as unavailable. */
     void setServices(PresentationServices* services);
-    void closeAdmission();
+    void close();
     Q_INVOKABLE void retryRendering();
     void paint(QPainter * painter) override;
 

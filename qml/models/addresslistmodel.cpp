@@ -539,7 +539,7 @@ QString AddressListModel::addressAt(int row) const
     const auto* node = row < 0 || row >= count() ? nullptr : Projection::At(m_root, row);
     return node ? node->row.entry->address : QString{};
 }
-AddressListModel::~AddressListModel() { closeAdmissionImpl(false); }
+AddressListModel::~AddressListModel() { closeImpl(false); }
 void AddressListModel::configureSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
 {
     attachSession(std::move(opening), std::move(services));
@@ -556,11 +556,11 @@ void AddressListModel::attachSession(std::shared_ptr<walletopening::Session> ope
     }
     m_services.post = presentation::ReliablePost(std::move(m_services.post));
 }
-void AddressListModel::closeAdmission()
+void AddressListModel::close()
 {
-    closeAdmissionImpl(true);
+    closeImpl(true);
 }
-void AddressListModel::closeAdmissionImpl(bool notify)
+void AddressListModel::closeImpl(bool notify)
 {
     if (std::exchange(m_stopping, true)) return;
     for (const auto& editor : m_label_editors) if (editor) editor->retire();

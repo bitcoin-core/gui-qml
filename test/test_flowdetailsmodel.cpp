@@ -30,7 +30,7 @@ struct Fixture {
     QObject original, successor;
     std::unique_ptr<FlowDetailsModel> model{std::make_unique<FlowDetailsModel>()};
     Fixture() { model->setServices({scheduler, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }}); }
-    ~Fixture() { scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); commands.drain(); }
+    ~Fixture() { scheduler->disarm(); if (model) model->close(); model.reset(); commands.drain(); }
     void publish() { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } }
     void finish() { do { commands.drain(); publish(); } while (!commands.queuedIdle() || !commands.activeIdle()); }
 };
@@ -53,7 +53,7 @@ private Q_SLOTS:
         QObject context;
         auto model = std::make_unique<FlowDetailsModel>();
         const auto cleanup = qScopeGuard([&] {
-            scheduler->disarm(); duplicates.clear(); if (model) model->closeAdmission(); model.reset(); commands.drain();
+            scheduler->disarm(); duplicates.clear(); if (model) model->close(); model.reset(); commands.drain();
         });
         model->setServices({scheduler, [&](auto callback) {
             if (enqueue) duplicates.push_back(std::move(callback));
@@ -72,7 +72,7 @@ private Q_SLOTS:
         QCOMPARE(Row(model->outputRows(), 2).value("dataText").toString(), QStringLiteral("original"));
         while (!duplicates.empty()) { auto callback = std::move(duplicates.front()); duplicates.pop_front(); callback(); }
         QCOMPARE(changed.count(), before + 1);
-        model->closeAdmission(); model.reset(); commands.drain();
+        model->close(); model.reset(); commands.drain();
         QCOMPARE(commands.scheduler->pending(), size_t{0});
     }
     void sourceAdmissionKeepsOriginalContext_data()
@@ -108,7 +108,7 @@ private Q_SLOTS:
         QSignalSpy documents{f.model.get(), &FlowDetailsModel::entryDetailsChanged};
         int notices_after{-1}, documents_after{-1};
         auto change = [&] {
-            if (action == 0) f.model->closeAdmission();
+            if (action == 0) f.model->close();
             else if (action == 1) f.model.reset();
             else f.model->publishSource(Flow(7, "successor"),
                 QVariantList{QVariantMap{{"label", "successor recipient"}, {"amountSat", 2000}}}, &f.successor, 2);
@@ -147,7 +147,7 @@ private Q_SLOTS:
                 QCOMPARE(f.model->outputRows()->rowCount(), 0);
             }
         }
-        if (f.model) f.model->closeAdmission();
+        if (f.model) f.model->close();
         f.model.reset();
         f.finish();
         QVERIFY(!f.commands.scheduler->phase(admitted));
@@ -187,7 +187,7 @@ private Q_SLOTS:
         if(stage==1){f.commands.drain();QVERIFY(f.model->pending());QCOMPARE(f.model->outputRows()->rowCount(),0);}
         if(stage==2){f.finish();QCOMPARE(f.model->outputRows()->rowCount(),1001);}
         QSignalSpy notices{f.model.get(),&FlowDetailsModel::snapshotChanged};
-        f.model->closeAdmission();const auto closed_notices=notices.count();f.finish();
+        f.model->close();const auto closed_notices=notices.count();f.finish();
         QCOMPARE(notices.count(),closed_notices);QCOMPARE(f.model->outputRows()->rowCount(),0);
         QCOMPARE(f.commands.scheduler->pending(),size_t{0});QVERIFY(f.commands.quiescent());
     }
@@ -240,7 +240,7 @@ private Q_SLOTS:
     void closeDuringModelResetDoesNotPublishOrLeaveNativeOwnersOnGui() {
         Fixture f; f.model->publishSource(Flow(30), {}, &f.original, 1);
         QSignalSpy changed{f.model.get(), &FlowDetailsModel::snapshotChanged};
-        connect(f.model->inputRows(), &QAbstractItemModel::modelAboutToBeReset, f.model.get(), [&] { f.model->closeAdmission(); });
+        connect(f.model->inputRows(), &QAbstractItemModel::modelAboutToBeReset, f.model.get(), [&] { f.model->close(); });
         f.finish(); QCOMPARE(changed.count(), 0); QCOMPARE(f.model->inputRows()->rowCount(), 0); QCOMPARE(f.model->outputRows()->rowCount(), 0);
         QCOMPARE(f.model->requestEntryDetails("outputs", 0, &f.original, 1), quint64{0});
     }
@@ -263,7 +263,7 @@ private Q_SLOTS:
             model.publishSource(Flow(1001), {}, &context, 11, std::move(anchor));
             QTRY_VERIFY(!model.pending()); QCOMPARE(model.outputRows()->rowCount(), 1001);
             QVERIFY(recording->thread(execution::Lane::Domain) != nullptr && recording->thread(execution::Lane::Domain) != QThread::currentThread());
-            model.closeAdmission();
+            model.close();
         }
         QTRY_VERIFY(retired->load() != nullptr); QVERIFY(retired->load() != QThread::currentThread());
         executor.shutdown(); QTRY_VERIFY(executor.isDrained());

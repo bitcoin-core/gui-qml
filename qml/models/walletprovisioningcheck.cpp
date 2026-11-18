@@ -20,8 +20,8 @@ WalletProvisioningCheck::WalletProvisioningCheck(interfaces::Node& node, executi
     if (!m_services.post) m_services.post = [bridge = m_bridge](auto turn) { QMetaObject::invokeMethod(bridge.get(), std::move(turn), Qt::QueuedConnection); };
     refresh();
 }
-WalletProvisioningCheck::~WalletProvisioningCheck() { closeAdmission(); }
-void WalletProvisioningCheck::closeAdmission() { m_closed = true; m_pending = false; if (m_query) m_query->close(); m_query.reset(); m_registry.reset(); }
+WalletProvisioningCheck::~WalletProvisioningCheck() { close(); }
+void WalletProvisioningCheck::close() { m_closed = true; m_pending = false; if (m_query) m_query->close(); m_query.reset(); m_registry.reset(); }
 void WalletProvisioningCheck::setName(const QString& value) { if (m_closed || m_name == value) return; m_name = value; const QPointer<WalletProvisioningCheck> guard{this}; refresh(); if (guard) Q_EMIT inputChanged(); }
 void WalletProvisioningCheck::setXpub(const QString& value) { if (m_closed || m_xpub == value) return; m_xpub = value; const QPointer<WalletProvisioningCheck> guard{this}; refresh(); if (guard) Q_EMIT inputChanged(); }
 void WalletProvisioningCheck::setPath(const QString& value) { if (m_closed || m_path == value) return; m_path = value; const QPointer<WalletProvisioningCheck> guard{this}; refresh(); if (guard) Q_EMIT inputChanged(); }

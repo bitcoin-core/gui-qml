@@ -186,7 +186,7 @@ public:
     QList<QObject*> openWallets() const;
     void unloadWallets();
     void beginShutdown();
-    void closeAdmission();
+    void close();
     void setRetirementPostForTesting(std::function<void(std::function<void()>)> post);
     bool initialized() const { return m_initialized; }
     bool isWalletLoaded() const { return m_is_wallet_loaded; }

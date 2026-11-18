@@ -62,7 +62,7 @@ SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
         connect(m_wallet, &WalletQmlModel::sendFactsChanged, this, &SendRecipient::requestValidation);
     }
 }
-SendRecipient::~SendRecipient() { closeAdmission(); }
+SendRecipient::~SendRecipient() { close(); }
 bool SendRecipient::inputLocked() const { return m_closed || (m_importing && m_importing->load()); }
 void SendRecipient::setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services)
 {
@@ -119,7 +119,7 @@ void SendRecipient::setOpening(std::shared_ptr<walletopening::Session> opening, 
     { std::lock_guard lock{input->mutex}; input->initialized = false; }
     requestValidation();
 }
-void SendRecipient::closeAdmission()
+void SendRecipient::close()
 {
     if (m_closed) return;
     m_closed = true; if (m_query) m_query->close();

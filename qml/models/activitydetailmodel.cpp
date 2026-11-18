@@ -47,7 +47,7 @@ m_document(std::make_unique<ActivityValueListModel>(ActivityValueListModel::Kind
     QQmlEngine::setObjectOwnership(this, QQmlEngine::CppOwnership);
     connect(&source, &TransactionActivityModel::snapshotChanged, this, &ActivityDetailModel::refresh);
     connect(&source, &TransactionActivityModel::loadingChanged, this, [this] {
-        if (!m_source || m_source->m_stopped) { closeAdmission();
+        if (!m_source || m_source->m_stopped) { close();
             return; }
         if (m_pending && !m_operation) {
             const QPointer<ActivityDetailModel> observer{this};
@@ -55,12 +55,12 @@ m_document(std::make_unique<ActivityValueListModel>(ActivityValueListModel::Kind
             if (observer && !m_closed) Q_EMIT transactionDetailsChanged();
         }
     });
-    connect(&source, &QObject::destroyed, this, &ActivityDetailModel::closeAdmission);
+    connect(&source, &QObject::destroyed, this, &ActivityDetailModel::close);
     connect(source.m_wallet_model, &WalletQmlModel::availableChanged, this, [this] {
-        if (!m_opening || !m_opening->observationOpen()) closeAdmission();
+        if (!m_opening || !m_opening->observationOpen()) close();
     });
 }
-ActivityDetailModel::~ActivityDetailModel() { closeAdmission(); }
+ActivityDetailModel::~ActivityDetailModel() { close(); }
 QAbstractItemModel* ActivityDetailModel::detailInputs() { return m_inputs.get(); }
 QAbstractItemModel* ActivityDetailModel::detailOutputs() { return m_outputs.get(); }
 QAbstractItemModel* ActivityDetailModel::detailActions() { return m_actions.get(); }
@@ -109,7 +109,7 @@ void ActivityDetailModel::clearRows(bool quiet)
     if (!observer) return;
     m_document->setSnapshot({}, quiet);
 }
-void ActivityDetailModel::closeAdmission()
+void ActivityDetailModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     ++m_generation;
@@ -123,7 +123,7 @@ void ActivityDetailModel::closeAdmission()
 void ActivityDetailModel::refresh()
 {
     if (m_closed) return;
-    if (!m_opening || !m_opening->observationOpen()) { closeAdmission();
+    if (!m_opening || !m_opening->observationOpen()) { close();
         return; }
     if (m_publishing) {
         ++m_generation;
@@ -322,7 +322,7 @@ void ActivityDetailModel::publish()
     const auto result = m_operation->result();
     if (!result) return;
     m_operation.reset();
-    if (!m_opening->observationOpen()) { closeAdmission();
+    if (!m_opening->observationOpen()) { close();
         return; }
     if (m_again || (result->value && result->value->generation != m_generation)) {
         m_again = false;

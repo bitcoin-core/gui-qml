@@ -53,7 +53,7 @@ struct NativeFixture {
         }
         QTest::qFail("Native list did not settle within its turn budget", __FILE__, __LINE__);
     }
-    ~NativeFixture() { model.closeAdmission(); rows.clear(); settle(); }
+    ~NativeFixture() { model.close(); rows.clear(); settle(); }
 };
 }
 class PersistentTreeTests : public QObject {
@@ -193,7 +193,7 @@ private Q_SLOTS:
         NativeFixture fixture;
         for (int id = 0; id < 65; ++id) fixture.rows.push_back(fixture.row(id, id));
         int observed_after_insert{-1};
-        connect(&fixture.model, &QAbstractItemModel::rowsAboutToBeInserted, this, [&] { fixture.model.closeAdmission(); });
+        connect(&fixture.model, &QAbstractItemModel::rowsAboutToBeInserted, this, [&] { fixture.model.close(); });
         connect(&fixture.model, &QAbstractItemModel::rowsInserted, this, [&] { observed_after_insert = fixture.model.rowCount(); });
         fixture.model.refresh(); fixture.env.drain(); QVERIFY(fixture.publishOne());
         QCOMPARE(observed_after_insert, 1); QCOMPARE(fixture.model.rowCount(), 0);

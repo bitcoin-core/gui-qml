@@ -335,20 +335,20 @@ SettingsEditorModel* OptionsQmlModel::createSettingsEditor()
 }
 OptionsQmlModel::~OptionsQmlModel()
 {
-    closeAdmission();
+    close();
     if(m_executor)m_executor->shutdown();
 }
-void OptionsQmlModel::closeAdmission()
+void OptionsQmlModel::close()
 {
     m_preference_watch.stop();
     m_stopping=true; m_pending=false; m_forwarded_signer_pending=false; m_validation_pending=false;m_signer_validation_pending=false; ++m_signer_validation_revision;
-    m_work->close();m_links.reset();m_core_settings.closeAdmission();
+    m_work->close();m_links.reset();m_core_settings.close();
     for(const auto& editor:m_editors)if(editor)editor->retire();
 }
 void OptionsQmlModel::beginShutdown()
 {
     if(std::exchange(m_shutdown_started,true))return;
-    closeAdmission();
+    close();
     const QPointer<OptionsQmlModel> observer{this};
     if(m_executor) {
         m_executor->whenDrained(this,[observer] {if(observer)Q_EMIT observer->shutdownFinished();});

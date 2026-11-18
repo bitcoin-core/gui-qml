@@ -33,7 +33,7 @@ public:
     void setSourceModel(QAbstractItemModel* source) override;
     QModelIndex mapToSource(const QModelIndex& index) const override;
     QModelIndex mapFromSource(const QModelIndex& index) const override;
-    void closeAdmission() override;
+    void close() override;
 
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;

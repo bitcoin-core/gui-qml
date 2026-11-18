@@ -62,7 +62,7 @@ public:
     bool project(bool success, QString failure = {}, QString warning_heading = {}, QString error_prefix = {}, bool normalize = true);
     bool resetInput(std::shared_ptr<execution::Scheduler> original_diagnostic_scope = {});
     void retryPublication();
-    void closeAdmission();
+    void close();
 Q_SIGNALS:
     void changed();
     void finished();

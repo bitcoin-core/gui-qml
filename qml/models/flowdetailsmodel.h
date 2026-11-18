@@ -52,7 +52,7 @@ public:
     void publishSource(const QVariantMap& flow, const QVariantList& recipients, QObject* context,
                        quint64 revision, std::shared_ptr<const void> original_anchor = {}, int display_unit = 0);
     void clearSource();
-    void closeAdmission();
+    void close();
     void retryPublications();
     QObject* context() const { return m_context; }
     quint64 revision() const { return m_revision; }

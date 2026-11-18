@@ -583,10 +583,10 @@ execution::Admission Service::begin(QString directory, QString network, std::vec
         {execution::Lane::Core, state->key});
     return submitted ? submitted : reject(submitted.rejection);
 }
-void Service::closeAdmission() { m_flags->admission_closed = true; }
+void Service::close() { m_flags->admission_closed = true; }
 execution::Admission Service::stop(std::function<void()> completed)
 {
-    closeAdmission();
+    close();
     { std::lock_guard lock{m_flags->mutex};
       if (completed) {
           if (m_flags->retired) return {{}, execution::Rejection::Closed};

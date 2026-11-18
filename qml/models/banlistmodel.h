@@ -42,7 +42,7 @@ public:
 
     Q_INVOKABLE bool unbanAt(int row);
     void beginShutdown();
-    void closeAdmission() override;
+    void close() override;
 
 public Q_SLOTS:
     void refresh();

@@ -67,10 +67,10 @@ PeerListSortProxy::PeerListSortProxy(QObject* parent) : NativeListModel({}, pare
     connect(this, &QAbstractItemModel::rowsInserted, this, &PeerListSortProxy::countChanged);
     connect(this, &QAbstractItemModel::rowsRemoved, this, &PeerListSortProxy::countChanged);
 }
-PeerListSortProxy::~PeerListSortProxy() { m_destroying = true; closeAdmission(); }
-void PeerListSortProxy::closeAdmission() {
+PeerListSortProxy::~PeerListSortProxy() { m_destroying = true; close(); }
+void PeerListSortProxy::close() {
     if (stopping()) return;
-    m_details.reset(); m_input.reset(); NativeListModel::closeAdmission();
+    m_details.reset(); m_input.reset(); NativeListModel::close();
     if (!m_destroying) Q_EMIT admissionClosed();
 }
 void PeerListSortProxy::setSourceModel(QAbstractItemModel* source) {

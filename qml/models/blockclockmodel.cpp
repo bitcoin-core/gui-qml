@@ -46,7 +46,7 @@ BlockClockModel::BlockClockModel(std::shared_ptr<BlockClockHistory> history, exe
     updateCurrentTime(now);
     if (start_timer) scheduleNextClockUpdate(now);
 }
-BlockClockModel::~BlockClockModel() { closeAdmission(); }
+BlockClockModel::~BlockClockModel() { close(); }
 void BlockClockModel::stop()
 {
     if (std::exchange(m_stopped, true)) return;
@@ -54,7 +54,7 @@ void BlockClockModel::stop()
     if (m_query) m_query->close();
     m_query.reset(); m_pending = false; m_clock_timer.stop();
 }
-void BlockClockModel::closeAdmission()
+void BlockClockModel::close()
 {
     stop();
     m_projection.reset(); m_native.reset();

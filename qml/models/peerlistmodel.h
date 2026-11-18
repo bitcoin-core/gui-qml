@@ -41,7 +41,7 @@ public:
     Q_INVOKABLE
     void stopAutoRefresh();
     void beginShutdown();
-    void closeAdmission() override;
+    void close() override;
     int rowForId(qint64 id) const { return indexForKey(QString::number(id)); }
     void watchDetails(qint64 id, PeerPresentationObserver* details);
     void setCommands(PeerCommandPort* commands);

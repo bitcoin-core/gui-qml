@@ -44,7 +44,7 @@ public:
     bool initializationSucceeded() const { return m_initialization && m_initialization->success; }
     bool initializationCancelled() const { return m_initialization && m_initialization->cancelled; }
 public Q_SLOTS:
-    void closeAdmission();
+    void close();
     void initialize();
     void interrupt();
     void shutdown();

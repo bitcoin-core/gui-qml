@@ -69,7 +69,7 @@ public:
     BlockClockModel(std::shared_ptr<BlockClockHistory> history, execution::SnapshotServices services, bool start_timer = true,
                     CurrentTimeProvider current_time_provider = {}, QObject* parent = nullptr);
     ~BlockClockModel() override;
-    void closeAdmission();
+    void close();
 
     qint64 periodStart() const { return m_period_start; }
     qreal currentTimeFraction() const { return m_current_time_fraction; }

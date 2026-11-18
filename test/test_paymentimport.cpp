@@ -131,7 +131,7 @@ private Q_SLOTS:
         source->cancel(); QVERIFY(!source->requestFile(QUrl::fromLocalFile(path))); commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         auto* cancelled = importer.captureImport(nullptr, nullptr, &view); QVERIFY(cancelled); cancelled->cancel();
         QVERIFY(!cancelled->requestFile(QUrl::fromLocalFile(path))); commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-        importer.closeAdmission(); commands.drain();
+        importer.close(); commands.drain();
     }
     void readerKeepsPublicMetadataSeparateFromPrivateNote() {
         const auto result = paymentimport::ReadSource({paymentimport::Input::Kind::Text, Uri()});
@@ -424,7 +424,7 @@ private Q_SLOTS:
         QVERIFY(operation->fileExportOperation()->saved());
         QFile saved{dir.filePath("original.psbt")}; QVERIFY(saved.open(QIODevice::ReadOnly)); QCOMPARE(saved.readAll(), bytes);
         operation->cancel(); QVERIFY(!operation->requestSaveOriginal(operation->exportToken(), dir.filePath("closed")));
-        model.closeAdmission(); delete operation;
+        model.close(); delete operation;
         do {
             commands.drain();
             while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }
@@ -439,10 +439,10 @@ private Q_SLOTS:
             commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
             operation->cancel(); commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); commands.drain();
         }
-        importer.closeAdmission(); commands.drain();
+        importer.close(); commands.drain();
     }
     void closedSchedulerAndUnusedActorCannotRetainScope() {
-        ManualRoutedExecution refused; refused.scheduler->closeAdmission(); paymentimport::Services services; services.scheduler = refused.scheduler;
+        ManualRoutedExecution refused; refused.scheduler->close(); paymentimport::Services services; services.scheduler = refused.scheduler;
         QVERIFY(!paymentimport::Owner::Create(89, std::move(services), {}));
         refused.drain(); QCOMPARE(refused.scheduler->pending(), size_t{0});
         ManualRoutedExecution unused; services = {}; services.scheduler = unused.scheduler;
@@ -502,7 +502,7 @@ private Q_SLOTS:
         const auto publish = [](auto& queue) { while (!queue.empty()) { auto turn = std::move(queue.front()); queue.pop_front(); turn(); } };
         const auto pump = [&] { sources.drain(); commands.drain(); publish(target_gui); publish(source_gui); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); };
         const auto cleanup = qScopeGuard([&] {
-            importer.closeAdmission(); model.beginShutdown();
+            importer.close(); model.beginShutdown();
             if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && model.backendExecutor()->isDrained() && commands.quiescent(); }, 3000))
                 QTest::qFail("Original typed import and wallet graph did not physically drain", __FILE__, __LINE__);
         });
@@ -514,7 +514,7 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor([&] { pump(); return operation->canReview() || operation->state() == PaymentImportOperation::State::Failed; }, 5000));
         QCOMPARE(operation->state(), PaymentImportOperation::State::Inspecting); QVERIFY(operation->canReview());
         operation->openReview(); sources.drain();
-        if (boundary == 3) model.closeAdmission();
+        if (boundary == 3) model.close();
         commands.drain();
         QVERIFY(!model.currentTransaction()); // The Native factory is separate from GUI adoption.
         if (boundary != 5) {
@@ -551,7 +551,7 @@ private Q_SLOTS:
         const auto publish = [](auto& queue) { while (!queue.empty()) { auto turn = std::move(queue.front()); queue.pop_front(); turn(); } };
         const auto pump = [&] { sources.drain(); commands.drain(); publish(target_gui); publish(source_gui); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); };
         const auto cleanup = qScopeGuard([&] {
-            importer.closeAdmission(); model.beginShutdown();
+            importer.close(); model.beginShutdown();
             if (!QTest::qWaitFor([&] { pump(); return model.shutdownComplete() && model.backendExecutor()->isDrained() && commands.quiescent() && sources.quiescent() && target_gui.empty() && source_gui.empty(); }, 3000))
                 QTest::qFail("Original applied import graph did not physically drain", __FILE__, __LINE__);
         });
@@ -569,7 +569,7 @@ private Q_SLOTS:
         QCOMPARE(operation->sourceKind(), PaymentImportOperation::SourceKind::PaymentSource);
         operation->apply(); sources.drain(); commands.drain(); publish(source_gui);
         QCOMPARE(dispatches, 1); QCOMPARE(operation->state(), PaymentImportOperation::State::Applying);
-        model.closeAdmission(); commands.scheduler->closeOrdinaryAdmission(); operation->cancel();
+        model.close(); commands.scheduler->closeOrdinaryAdmission(); operation->cancel();
         QVERIFY(QTest::qWaitFor([&] { pump(); return operation->state() == PaymentImportOperation::State::Closed; }, 5000));
         QCOMPARE(operation->outcome(), PaymentImportOperation::Outcome::AppliedOutcome);
         QVERIFY(operation->resultId() > 0); QCOMPARE(dispatches, 1); QVERIFY(queries >= 1); QVERIFY(!operation->pending());
@@ -586,7 +586,7 @@ private Q_SLOTS:
         QCOMPARE(operation->outcome(), PaymentImportOperation::Outcome::NoOutcome);
         QCOMPARE(operation->address(), Address()); QCOMPARE(operation->publicLabel(), QStringLiteral("Public"));
         QCOMPARE(operation->message(), QStringLiteral("Message")); QCOMPARE(operation->amount(), qint64{12'345'678}); QVERIFY(!operation->canApply());
-        operation->cancel(); commands.drain(); model.closeAdmission(); delete operation;
+        operation->cancel(); commands.drain(); model.close(); delete operation;
         do {
             commands.drain();
             while (!gui.empty()) { auto turn = std::move(gui.front()); gui.pop_front(); turn(); }

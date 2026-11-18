@@ -524,7 +524,7 @@ private Q_SLOTS:
         Fixture f; f.wallet->signer = true;
         const auto send = PsbtRequest();
         const walletsigning::Request request{send.reviewed, send.psbt, send.proof, send.approved_fee};
-        f.commands.scheduler->closeAdmission();
+        f.commands.scheduler->close();
         const auto result = walletsigning::Approve(*f.wallet, request, f.opening);
         QCOMPARE(result.error, walletsigning::Error::Failed);
         QVERIFY(!result.document && !result.signed_transaction && !result.lifetime);
@@ -942,7 +942,7 @@ private Q_SLOTS:
         if(phase==1)f.wallet->after_unlock=[consent]{consent->withdraw();};
         if(phase==2)f.wallet->before_commit=[consent]{consent->withdraw();};
         auto operation=f.operation();QVERIFY(operation->start(std::move(request)));QVERIFY(!operation->result());
-        if(phase==3)f.opening->closeAdmission();
+        if(phase==3)f.opening->close();
         QVERIFY(f.commands.step(Lane::Domain));
         if(phase==0)consent->withdraw();
         QVERIFY(f.commands.step(Lane::Core));QCOMPARE(f.wallet->commits,phase<2?0:1);QVERIFY(!operation->result());
@@ -968,7 +968,7 @@ private Q_SLOTS:
         if(scenario==2)f.commands.rejectLane(Lane::Core);
         const auto admitted=operation->start(std::move(request));source.fill(QChar{'y'});QCOMPARE(f.wallet->unlocks,0);QCOMPARE(f.wallet->commits,0);
         if(scenario==2){QVERIFY(admitted);f.commands.drain();QCOMPARE(f.wallet->unlocks,0);QCOMPARE(f.wallet->commits,0);QCOMPARE(operation->result()->error,Error::Rejected);}
-        else{QVERIFY(admitted);if(scenario==1)f.opening->closeAdmission();QVERIFY(f.commands.step(Lane::Domain));QVERIFY(f.commands.step(Lane::Core));QCOMPARE(f.wallet->unlocks,1);QCOMPARE(f.wallet->commits,1);QCOMPARE(f.wallet->locks,1);QVERIFY(f.wallet->locked);QVERIFY(!operation->result());
+        else{QVERIFY(admitted);if(scenario==1)f.opening->close();QVERIFY(f.commands.step(Lane::Domain));QVERIFY(f.commands.step(Lane::Core));QCOMPARE(f.wallet->unlocks,1);QCOMPARE(f.wallet->commits,1);QCOMPARE(f.wallet->locks,1);QVERIFY(f.wallet->locked);QVERIFY(!operation->result());
             QCOMPARE(f.commands.queuedCountIf([](const auto& turn) { return turn.lane == Lane::Domain; }), 2);
             QVERIFY(f.commands.step(Lane::Domain)); QVERIFY(!operation->result());
             QVERIFY(f.commands.step(Lane::Domain));
@@ -1003,7 +1003,7 @@ private Q_SLOTS:
         QVERIFY(!command->result());
         QVERIFY(f.commands.step(Lane::Core));
         QVERIFY(!command->result());
-        f.opening->closeAdmission();
+        f.opening->close();
         QVERIFY(!f.opening->startAction());
         QVERIFY(f.commands.step(Lane::Domain));
         QVERIFY(command->result());
@@ -1035,8 +1035,8 @@ private Q_SLOTS:
                 return walletsigning::ApproveInto(wallet, request, output);
             }, std::move(done), std::move(failed));
         }));
-        f.opening->closeAdmission();
-        f.commands.scheduler->closeAdmission();
+        f.opening->close();
+        f.commands.scheduler->close();
         QVERIFY(f.commands.step(execution::Lane::Core));
         QCOMPARE(f.wallet->signs, 1);
         QVERIFY(!command->result());

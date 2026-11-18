@@ -75,7 +75,7 @@ SendRecipientsListModel::SendRecipientsListModel(QObject* parent, senddraft::Lim
     m_retirement_post = presentation::QueuedPost();
     m_recipients->append(createRecipient());
 }
-SendRecipientsListModel::~SendRecipientsListModel() { closeAdmission(); retireValues(); }
+SendRecipientsListModel::~SendRecipientsListModel() { close(); retireValues(); }
 SendRecipient* SendRecipientsListModel::createRecipient()
 {
     auto* recipient = new SendRecipient(m_wallet, m_recipient_owner.get());
@@ -182,12 +182,12 @@ void SendRecipientsListModel::initializeRecipients(int row)
     }
     m_initializing = false; Q_EMIT validationChanged();
 }
-void SendRecipientsListModel::closeAdmission()
+void SendRecipientsListModel::close()
 {
     if (m_closed) return;
     m_owner_closed->store(true); // Stops this list's own background import work.
     // Close every recipient before any GUI handoff; deletion is batched below.
-    for (int row{0}; row < count(); ++row) (*m_recipients)[row]->closeAdmission();
+    for (int row{0}; row < count(); ++row) (*m_recipients)[row]->close();
     m_closed = true; m_maximum_recipient.clear(); ++m_unit_generation; ++m_clear_generation;
     if (m_query) m_query->close();
     if (!m_changing_rows) retireValues();
@@ -210,7 +210,7 @@ void SendRecipientsListModel::retireClosedRows(std::shared_ptr<Retired> retired)
         const auto rows = retired->rows.front();
         if (rows->empty()) { retired->rows.pop_front(); --budget; continue; }
         auto* recipient = rows->takeAt(rows->size() - 1);
-        recipient->closeAdmission(); delete recipient; --budget;
+        recipient->close(); delete recipient; --budget;
     }
     if (!retired->rows.empty()) retired->post([retired] { retireClosedRows(retired); });
     else retired->pumping = false;
@@ -644,7 +644,7 @@ void SendRecipientsListModel::add()
     };
     const QPointer<SendRecipient> prepared{createRecipient()};
     bool adopted{false};
-    const auto discard_unused = qScopeGuard([&] { if (!adopted && prepared) { prepared->closeAdmission(); prepared->deleteLater(); } });
+    const auto discard_unused = qScopeGuard([&] { if (!adopted && prepared) { prepared->close(); prepared->deleteLater(); } });
     if (!current() || !prepared) return;
     prepared->amount()->setUnit(unit);
     if (!current() || !prepared) return;
@@ -678,7 +678,7 @@ void SendRecipientsListModel::removeAt(int row)
     const auto rows = m_recipients; m_pending = true; ++m_revision; m_changing_rows = true;
     beginRemoveRows({}, row, row); if (!guard) return;
     auto* removed = rows->takeAt(row); const auto token = removed->identity();
-    removed->closeAdmission(); removed->setParent(nullptr);
+    removed->close(); removed->setParent(nullptr);
     const QPointer<SendRecipient> removed_guard{removed};
     const auto deferred_delete = qScopeGuard([removed_guard] { if (removed_guard) removed_guard->deleteLater(); });
     if (row < m_current || m_current >= count()) --m_current;
@@ -723,7 +723,7 @@ void SendRecipientsListModel::clear()
     const QPointer<SendRecipient> prepared{createRecipient()};
     bool adopted{false};
     const auto discard_unused = qScopeGuard([&] {
-        if (!adopted && prepared) { prepared->closeAdmission(); prepared->deleteLater(); }
+        if (!adopted && prepared) { prepared->close(); prepared->deleteLater(); }
     });
     if (!current() || !prepared) return;
     ++m_epoch; ++m_clear_generation; m_clearing = false; m_initializing = false; m_initialize_row = 0;
@@ -770,7 +770,7 @@ void SendRecipientsListModel::trimToFront(quint64 generation)
         m_changing_rows = true; beginRemoveRows({}, first, last); if (!guard) return;
         while (rows->size() > first) {
             auto* removed = rows->takeAt(rows->size() - 1); const auto token = removed->identity();
-            removed->closeAdmission(); removed->setParent(nullptr);
+            removed->close(); removed->setParent(nullptr);
             detached[detached_count++] = removed; removeDraft(token);
         }
         endRemoveRows(); if (!guard) return;

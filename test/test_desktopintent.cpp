@@ -92,7 +92,7 @@ private Q_SLOTS:
         QVERIFY(QCoreApplication::sendEvent(QCoreApplication::instance(), &invalid));
         drain(); QVERIFY(!model.error().isEmpty()); QVERIFY(model.canDismiss());
         model.dismiss(); drain(); QVERIFY(model.error().isEmpty());
-        model.closeAdmission();
+        model.close();
         QFileOpenEvent late{QUrl{QStringLiteral("bitcoin:late")}};
         QVERIFY(QCoreApplication::sendEvent(QCoreApplication::instance(), &late));
         drain(); QCOMPARE(model.pendingCount(), 0);
@@ -162,7 +162,7 @@ private Q_SLOTS:
         QObject control_view;
         auto* control = factory.requestImport({paymentimport::Input::Kind::Text, QStringLiteral("bitcoin:control")}, {}, &control_view);
         QVERIFY(control); QCOMPARE(control->requestId(), quint64{1}); // Neither rejected handoff called the Source factory.
-        delete control; model.closeAdmission(); factory.closeAdmission(); drain();
+        delete control; model.close(); factory.close(); drain();
         QCOMPARE(commands.scheduler->pending(), size_t{0});
     }
     void retainedFacadeDoesNotHoldPhysicalShutdownAfterStop()
@@ -183,9 +183,9 @@ private Q_SLOTS:
         const QPointer<PaymentImportOperation> inspection{model.inspection()};
         QSignalSpy changed{&model, &DesktopIntentModel::changed};
         QSignalSpy inspection_changed{inspection.data(), &PaymentImportOperation::changed};
-        model.closeAdmission();
+        model.close();
         QCOMPARE(changed.count(), 0); QCOMPARE(inspection_changed.count(), 0);
-        factory.closeAdmission(); drain();
+        factory.close(); drain();
         QVERIFY(inspection); // The cached presentation deliberately remains alive.
         QCOMPARE(commands.scheduler->pending(), size_t{0});
     }
@@ -205,7 +205,7 @@ private Q_SLOTS:
         const auto unused = std::make_shared<paymentimport::CreationReceipt>(); unused->withdraw();
         QVERIFY(!factory.requestImport({paymentimport::Input::Kind::Text, QStringLiteral("bitcoin:unused")}, {}, &presentation, unused));
         QVERIFY(unused->state() == paymentimport::CreationReceipt::State::NotAccepted);
-        factory.closeAdmission(); commands.drain();
+        factory.close(); commands.drain();
     }
     void facadeDefersInspectionUntilReadyAndRetainsOriginalFactoryReceipt()
     {
@@ -229,7 +229,7 @@ private Q_SLOTS:
         auto* operation = model.takeInspection(&recipient_view); QVERIFY(operation); QCOMPARE(operation->requestId(), original);
         QVERIFY(!model.inspection());
         auto original_owner = model.owner();
-        model.closeAdmission(); factory.closeAdmission(); delete operation; drain();
+        model.close(); factory.close(); delete operation; drain();
         std::optional<desktopintent::Receipt> receipt;
         QVERIFY(original_owner->lookup(QStringLiteral("1"), [&](auto value) { receipt = value; })); drain();
         QVERIFY(receipt); QCOMPARE(receipt->inspection, static_cast<uint64_t>(original));
@@ -271,7 +271,7 @@ private Q_SLOTS:
         }
         QCOMPARE(first, quint64{1}); QVERIFY(model.inspection());
         QCOMPARE(model.inspection()->requestId(), quint64{2}); QCOMPARE(model.pendingCount(), 0);
-        model.closeAdmission(); factory.closeAdmission(); drain();
+        model.close(); factory.close(); drain();
         QCOMPARE(commands.scheduler->pending(), size_t{0});
     }
 #endif

@@ -114,7 +114,7 @@ struct Fixture {
     ~Fixture()
     {
         if (owner) owner->retire();
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         drain();
     }
     std::unique_ptr<interfaces::Wallet> wallet(const std::string& name) { return std::make_unique<TrackedWallet>(probe, name); }
@@ -164,7 +164,7 @@ ScheduleRun RunLifecycleSchedule(uint32_t seed, bool inline_callback, bool captu
 {
     Fixture f;
     ScheduleRun result;
-    const auto finish = qScopeGuard([&] { f.owner->retire(); f.env.scheduler->closeAdmission(); f.drain(); });
+    const auto finish = qScopeGuard([&] { f.owner->retire(); f.env.scheduler->close(); f.drain(); });
     f.catalog = {"DO_NOT_TRACE_schedule_wallet"};
     f.capture_failure = capture_failure;
     if (inline_callback) f.during_registration = [&] { f.notify("DO_NOT_TRACE_inline_callback"); };
@@ -233,7 +233,7 @@ ScheduleRun RunLifecycleSchedule(uint32_t seed, bool inline_callback, bool captu
         } else if (kind == "close") {
             closed = true;
             f.owner->retire();
-            f.env.scheduler->closeAdmission();
+            f.env.scheduler->close();
         } else if (kind == "notify") {
             notified = true;
             f.notify("DO_NOT_TRACE_queued_callback");
@@ -548,7 +548,7 @@ private Q_SLOTS:
         Fixture f; f.catalog = {"never-exposed"};
         QVERIFY(f.owner->start()); f.drain();
         if (boundary == 0) f.boundary->after_borrow = [&] { f.owner->retire(); };
-        if (boundary == 1) f.boundary->after_reserve = [&] { f.owner->retire(); f.env.scheduler->closeAdmission(); };
+        if (boundary == 1) f.boundary->after_reserve = [&] { f.owner->retire(); f.env.scheduler->close(); };
         if (boundary == 2) f.boundary->after_reserve = [&] {
             f.boundary->after_borrow = [&] { f.owner->retire(); };
         };
@@ -699,7 +699,7 @@ private Q_SLOTS:
     {
         Fixture f;
         QVERIFY(f.owner->start()); f.drain();
-        f.env.scheduler->closeAdmission();
+        f.env.scheduler->close();
         f.notify("after-fence"); f.drain();
         QCOMPARE(f.count(Publication::Changed), 0);
         QCOMPARE(f.count(Publication::Retired), 1);
@@ -1021,7 +1021,7 @@ private Q_SLOTS:
         if (stage >= 6) QVERIFY(f.step(Lane::Domain));
         if (stage >= 7) f.drain();
         f.owner->retire();
-        f.env.scheduler->closeAdmission();
+        f.env.scheduler->close();
         if (handoff) {
             // Cancelling a queued refresh may use Cleanup independently. The
             // parent handler and borrowed wallet must still remain alive.
@@ -1092,7 +1092,7 @@ private Q_SLOTS:
         QVERIFY(f.owner->start()); f.drain();
         auto handoff = f.owner->takeInitial();
         QVERIFY(handoff); QCOMPARE(handoff->entries.size(), size_t{2});
-        f.owner->retire(); f.env.scheduler->closeAdmission();
+        f.owner->retire(); f.env.scheduler->close();
         QVERIFY(!f.step(Lane::Cleanup));
         handoff.reset();
         QVERIFY(f.probe->destroyed.empty());

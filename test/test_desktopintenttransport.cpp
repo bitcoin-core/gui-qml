@@ -78,7 +78,7 @@ private Q_SLOTS:
         auto owner = NewOwner(commands.scheduler);
         auto service = Service::Create(commands.scheduler, owner); QVERIFY(service);
         const auto pending = commands.scheduler->pending();
-        service->closeAdmission();
+        service->close();
         QCOMPARE(commands.scheduler->pending(), pending); QVERIFY(!service->retired());
         QVERIFY(!service->start(QStringLiteral("/unused"), QStringLiteral("regtest"), {}, {}));
         QVERIFY(owner->admit({Request(1)}, {})); commands.drain();

@@ -211,7 +211,7 @@ void BlockClockDial::initializeNative()
     if (m_services.scheduler) m_native = execution::RetainSnapshot<Native>(m_services.scheduler, [] { return std::make_unique<Native>(); });
     if (!m_native) m_render_error = tr("Block clock background rendering is unavailable.");
 }
-void BlockClockDial::closeAdmission()
+void BlockClockDial::close()
 {
     if (std::exchange(m_closed, true)) return;
     m_animation_timer.stop(); m_delay_timer.stop();
@@ -223,9 +223,9 @@ void BlockClockDial::setServices(PresentationServices* services)
 {
     if (!services || m_presentation || m_closed) return;
     m_presentation = services;
-    connect(services, &PresentationServices::closed, this, &BlockClockDial::closeAdmission);
+    connect(services, &PresentationServices::closed, this, &BlockClockDial::close);
     Q_EMIT servicesChanged();
-    if (services->isClosed()) { closeAdmission(); return; }
+    if (services->isClosed()) { close(); return; }
     m_services = {services->ports().scheduler, presentation::ReliablePost(services->ports().post)};
     initializeNative();
     if (m_component_complete) { notifyRenderState(); requestRepaint(); }
@@ -383,7 +383,7 @@ BlockClockDial::~BlockClockDial()
 {
     // QQuickItem detaches from its window after derived members are destroyed.
     // Its visibility/window signals must no longer call back into this object.
-    closeAdmission();
+    close();
     disconnect(this, nullptr, this, nullptr);
     disconnect(m_window_visibility_connection);
 }

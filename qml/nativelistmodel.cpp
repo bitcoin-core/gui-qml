@@ -193,8 +193,8 @@ void NativeListModel::configureServices(execution::SnapshotServices services)
     m_view = execution::RetainSnapshot<View>(m_services.scheduler, [] { return std::make_unique<View>(); });
     if (!m_input || !m_view) m_error = tr("Native inventory is unavailable.");
 }
-NativeListModel::~NativeListModel() { closeAdmission(); finishClose(); if (m_executor) m_executor->shutdown(); }
-void NativeListModel::closeAdmission()
+NativeListModel::~NativeListModel() { close(); finishClose(); if (m_executor) m_executor->shutdown(); }
+void NativeListModel::close()
 {
     m_stopping = true; m_pending = false; ++m_generation;
     if (m_query) m_query->close();

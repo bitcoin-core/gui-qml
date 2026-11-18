@@ -88,7 +88,7 @@ private Q_SLOTS:
             ? std::make_shared<TaskQueue>(post, Options{})
             : std::make_shared<TaskQueue>([&](Lane, Phase phase, TaskId id, auto turn) { return post(phase, id, std::move(turn)); }, Options{}, 1);
         const auto step = [&] { auto turn = std::move(turns.front().run); turns.pop_front(); turn(); };
-        const auto finish = qScopeGuard([&] { queue->closeAdmission(); while (!turns.empty()) step(); });
+        const auto finish = qScopeGuard([&] { queue->close(); while (!turns.empty()) step(); });
         std::shared_ptr<Scheduler> owner = scoped ? queue->openActionScope() : queue;
         QVERIFY(owner);
         const auto key = queue->allocateKey();
@@ -96,7 +96,7 @@ private Q_SLOTS:
         QVERIFY(work);
         const auto cleanup = Submit(*owner, [&] { order.push_back(3); }, [&] { order.push_back(4); }, {}, {Lane::Cleanup, key}, true);
         QVERIFY(cleanup); QCOMPARE(turns.size(), size_t{1}); QVERIFY(order.empty());
-        if (scoped) owner.reset(); else queue->closeAdmission();
+        if (scoped) owner.reset(); else queue->close();
         QCOMPARE(queue->phase(cleanup.id), std::make_optional(Phase::Reserved));
         QCOMPARE(turns.size(), size_t{1}); QCOMPARE(turns.front().id, work.id);
         step(); // Work finishes, but its Domain outcome still owns this key.
@@ -144,7 +144,7 @@ private Q_SLOTS:
             ? std::make_shared<TaskQueue>([&](Phase phase, TaskId id, auto turn) { return post(Lane::Core, phase, id, std::move(turn)); }, Options{})
             : std::make_shared<TaskQueue>(post, Options{}, 1);
         const auto drain = [&] { while (!turns.empty()) { auto turn = std::move(turns.front()); turns.pop_front(); turn(); } };
-        const auto finish = qScopeGuard([&] { queue->closeAdmission(); drain(); });
+        const auto finish = qScopeGuard([&] { queue->close(); drain(); });
         const auto key = queue->allocateKey();
         const auto cleanup = Submit(*queue, [&] { ++retired; }, [&] { ++cleanup_outcomes; }, {}, {Lane::Cleanup, key}, true);
         QVERIFY(cleanup); auto held = queue->borrow(key); QVERIFY(held);
@@ -193,7 +193,7 @@ private Q_SLOTS:
         const auto drain = [&] {
             while (!turns.empty()) { auto turn = std::move(turns.front()); turns.pop_front(); active = turn.lane; turn.run(); }
         };
-        const auto finish = qScopeGuard([&] { queue->closeAdmission(); drain(); });
+        const auto finish = qScopeGuard([&] { queue->close(); drain(); });
         struct Capture {
             int& count; Lane& active; bool& native;
             Capture(int& count, Lane& active, bool& native) : count(count), active(active), native(native) {}
@@ -209,7 +209,7 @@ private Q_SLOTS:
         const auto third = Submit(*queue, [&] { effects.push_back(3); return 3; }, [&](int value) { outcomes.push_back(value); }, {}, {Lane::Core, {3, 1}});
         QVERIFY(first && second && third); fail = second.id;
         QCOMPARE(queue->pending(), size_t{3}); QCOMPARE(effects.size(), size_t{0});
-        queue->closeAdmission(); drain();
+        queue->close(); drain();
         QCOMPARE(effects, std::vector<int>({1, 3})); QCOMPARE(outcomes, std::vector<int>({1, 3}));
         QCOMPARE(failed, 1); QCOMPARE(destroyed, 1); QVERIFY(retired_on_cleanup);
         QCOMPARE(queue->pending(), size_t{0}); QVERIFY(turns.empty());
@@ -259,7 +259,7 @@ private Q_SLOTS:
             if (mode == 0) {
                 auto scope = queue->openActionScope(); QVERIFY(scope);
                 QCOMPARE(queue->pending(), size_t{1}); QVERIFY(turns.empty());
-                queue->closeAdmission(); armed = true;
+                queue->close(); armed = true;
                 scope.reset(); // Its original capability owns the final Control drain wake.
             } else if (mode == 1) {
                 const auto cleanup = Submit(*queue, [&] { ++effects; }, [&] { ++outcomes; }, {},
@@ -342,7 +342,7 @@ private Q_SLOTS:
             routed.drain();
         };
         int effects{0}, outcomes{0}, retired{0}, cleanup_outcomes{0};
-        const auto close = qScopeGuard([&] { queue->closeAdmission(); drain(); });
+        const auto close = qScopeGuard([&] { queue->close(); drain(); });
         const auto key = queue->allocateKey();
         std::optional<ResourceLease> held;
         if (!exhausted) {
@@ -359,7 +359,7 @@ private Q_SLOTS:
         QCOMPARE(Submit(*queue, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, refused_key}, true).rejection, Rejection::Closed);
         QCOMPARE(queue->borrow(refused_key).rejection, Rejection::Invalid);
         QCOMPARE(queue->pending(), pending); QCOMPARE(effects, 0); QCOMPARE(retired, 0);
-        queue->closeAdmission(); drain();
+        queue->close(); drain();
         QCOMPARE(effects, exhausted ? 0 : 1); QCOMPARE(outcomes, exhausted ? 0 : 1);
         QCOMPARE(retired, 0); QCOMPARE(cleanup_outcomes, 0);
         held.reset(); drain();
@@ -391,7 +391,7 @@ private Q_SLOTS:
             routed.drain();
         };
         int effects{0}, outcomes{0};
-        const auto cleanup = qScopeGuard([&] { queue->closeAdmission(); drain(); });
+        const auto cleanup = qScopeGuard([&] { queue->close(); drain(); });
         auto scope = queue->openActionScope();
         if (sequence == std::numeric_limits<quint64>::max()) {
             QVERIFY(!scope); QCOMPARE(queue->pending(), size_t{0});
@@ -400,7 +400,7 @@ private Q_SLOTS:
             QVERIFY(Submit(*scope, [&] { ++effects; }, [&] { ++outcomes; }));
             auto next = queue->openActionScope();
             QCOMPARE(bool(next), sequence == 0);
-            next.reset(); queue->closeAdmission();
+            next.reset(); queue->close();
             drain(); QCOMPARE(effects, 1); QCOMPARE(outcomes, 1);
             scope.reset(); drain(); QCOMPARE(queue->pending(), size_t{0});
         }
@@ -414,7 +414,7 @@ private Q_SLOTS:
         QCOMPARE(first->pending(), size_t{1});
         auto second = env.scheduler->openActionScope(); QVERIFY(second);
         QCOMPARE(first->pending(), size_t{2}); QCOMPARE(second->pending(), size_t{2});
-        env.scheduler->closeAdmission(); QVERIFY(env.queuedIdle());
+        env.scheduler->close(); QVERIFY(env.queuedIdle());
         first.reset(); QCOMPARE(second->pending(), size_t{1}); QVERIFY(env.queuedIdle());
         second.reset(); QCOMPARE(env.scheduler->pending(), size_t{0});
         QCOMPARE(env.queuedCountIf([](const auto& turn) { return turn.lane == Lane::Control; }), 1);
@@ -452,7 +452,7 @@ private Q_SLOTS:
         const auto cleanup = Submit(*scope, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, key}, true);
         QVERIFY(cleanup); auto held = scope->borrow(key); QVERIFY(held);
         held.lease.reset(); QVERIFY(!env.step(Lane::Cleanup)); QCOMPARE(retired, 0);
-        env.scheduler->closeAdmission(); QVERIFY(!env.step(Lane::Cleanup));
+        env.scheduler->close(); QVERIFY(!env.step(Lane::Cleanup));
         scope.reset(); QVERIFY(env.step(Lane::Cleanup)); QCOMPARE(retired, 1);
         env.drain(); QVERIFY(env.quiescent());
     }
@@ -461,12 +461,12 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         int retired{0}, outcomes{0};
-        const auto drain = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto drain = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         auto scope = env.scheduler->openActionScope(); QVERIFY(scope);
         const auto key = scope->allocateKey();
         const auto cleanup = Submit(*scope, [&] { ++retired; }, [&] { ++outcomes; }, {}, {Lane::Cleanup, key}, true);
         QVERIFY(cleanup); auto held = scope->borrow(key); QVERIFY(held);
-        env.scheduler->closeAdmission(); scope.reset();
+        env.scheduler->close(); scope.reset();
         QVERIFY(!env.scheduler->activateCleanup(cleanup.id));
         QCOMPARE(env.scheduler->phase(cleanup.id), std::make_optional(Phase::Reserved));
         QVERIFY(!env.step(Lane::Cleanup)); QCOMPARE(retired, 0);
@@ -488,7 +488,7 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         int effects{0}, completed{0}, cancelled{0}, retired{0}, cleanup_outcomes{0};
-        const auto drain = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto drain = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         const auto key = env.scheduler->allocateKey();
         const auto cleanup = Submit(*env.scheduler, [&] { ++retired; }, [&] { ++cleanup_outcomes; }, {},
             {Lane::Cleanup, key}, true);
@@ -526,7 +526,7 @@ private Q_SLOTS:
         QVERIFY(!execution::RetainValues<int>(std::shared_ptr<execution::Scheduler>{}, factory));
         QCOMPARE(constructed, 0);
         ManualRoutedExecution env; int retired{0};
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         const auto held = activityview::HoldValues(env.scheduler, [&] { ++retired; });
         QCOMPARE(held.rejection, execution::Rejection::Closed); QVERIFY(!held);
         QVERIFY(!execution::RetainValues<int>(env.scheduler, factory));
@@ -563,7 +563,7 @@ private Q_SLOTS:
         };
         ManualRoutedExecution env; auto port = std::make_shared<BorrowFault>(env.scheduler);
         int constructed{0};
-        const auto drain = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto drain = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         const auto factory = [&] { ++constructed; return std::make_unique<int>(42); };
         const auto result = values ? RetainValues<int>(port, factory) : RetainSnapshot<int>(port, factory);
         QVERIFY(!result); QCOMPARE(constructed, 0); QCOMPARE(port->borrows, 1); QCOMPARE(port->activations, 1);
@@ -582,7 +582,7 @@ private Q_SLOTS:
             while (!turns.empty()) { auto turn = std::move(turns.front()); turns.pop_front(); turn(); }
         };
         int original_effects{0}, original_outcomes{0}, next_effects{0}, next_outcomes{0};
-        const auto cleanup = qScopeGuard([&] { queue->closeAdmission(); drain(); old = {}; });
+        const auto cleanup = qScopeGuard([&] { queue->close(); drain(); old = {}; });
         const auto original = Submit(*queue, [&] { ++original_effects; }, [&] { ++original_outcomes; });
         QVERIFY(original); drain(); QCOMPARE(original_effects, 1); QCOMPARE(original_outcomes, 1);
         QVERIFY(old); QCOMPARE(queue->pending(), size_t{0});
@@ -591,7 +591,7 @@ private Q_SLOTS:
         old(); QCOMPARE(original_effects, 1); QCOMPARE(original_outcomes, 1); QCOMPARE(next_effects, 0);
         QCOMPARE(queue->phase(next.id), std::make_optional(Phase::Queued));
         drain(); QCOMPARE(next_effects, 1); QCOMPARE(next_outcomes, 1);
-        queue->closeAdmission(); old();
+        queue->close(); old();
         QCOMPARE(original_effects, 1); QCOMPARE(original_outcomes, 1);
         QCOMPARE(next_effects, 1); QCOMPARE(next_outcomes, 1); QCOMPARE(queue->pending(), size_t{0});
     }
@@ -949,7 +949,7 @@ private Q_SLOTS:
                 [&observed](auto result) { observed = std::move(result); });
             if (!next) throw std::runtime_error{"Original Native stage rejected"};
         }, [] {}, {}, {Lane::Domain});
-        QVERIFY(first); env.scheduler->closeAdmission();
+        QVERIFY(first); env.scheduler->close();
         QVERIFY(!env.scheduler->openActionScope());
         QCOMPARE(Submit(*env.scheduler, [] {}, [] {}).rejection, Rejection::Closed);
         QVERIFY(env.step(Lane::Domain)); QCOMPARE(effects, 0);
@@ -964,7 +964,7 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         auto scope = env.scheduler->openActionScope(); QVERIFY(scope);
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         const auto key = scope->allocateKey(); int retired{0};
         const auto cleanup = Submit(*scope, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, key}, true);
         QVERIFY(cleanup); QVERIFY(!env.step(Lane::Cleanup));
@@ -1007,7 +1007,7 @@ private Q_SLOTS:
         for (int index = 0; index < 257; ++index) {
             QVERIFY(Submit(*scope, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, scope->allocateKey()}, true));
         }
-        env.scheduler->closeAdmission(); QVERIFY(env.queuedIdle());
+        env.scheduler->close(); QVERIFY(env.queuedIdle());
         scope.reset(); QCOMPARE(env.queuedCount(), size_t{16}); QCOMPARE(retired, 0);
         env.drain(); QCOMPARE(retired, 257); QVERIFY(env.quiescent());
     }
@@ -1032,7 +1032,7 @@ private Q_SLOTS:
             QVERIFY(Submit(*env.scheduler, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, env.scheduler->allocateKey()}, true));
         }
         QVERIFY(env.queuedIdle());
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         QCOMPARE(env.queuedCount(), size_t{16});
         QCOMPARE(retired, 0);
         env.drain(); QCOMPARE(retired, 257); QVERIFY(env.quiescent());
@@ -1092,7 +1092,7 @@ private Q_SLOTS:
             turns.push_back(std::move(turn)); return true;
         });
         const auto drain = [&] { while (!turns.empty()) { auto turn = std::move(turns.front()); turns.pop_front(); turn(); } };
-        const auto cleanup = qScopeGuard([&] { queue->closeAdmission(); drain(); });
+        const auto cleanup = qScopeGuard([&] { queue->close(); drain(); });
         int effects{0}, failures{0}, retired{0};
         const auto work = Submit(*queue, [&] { ++effects; }, [] {}, [&](std::exception_ptr error) {
             try { std::rethrow_exception(error); }
@@ -1133,7 +1133,7 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         int effects{0}, destroyed{0}, failures{0}, retired{0};
-        const auto cleanup = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto cleanup = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         const auto key = env.scheduler->allocateKey();
         const auto reservation = Submit(*env.scheduler, [&] { ++retired; }, [] {}, {}, {Lane::Cleanup, key}, true);
         QVERIFY(reservation);
@@ -1167,7 +1167,7 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         int effects{0}, outcomes{0}, cleanup_effects{0}, cleanup_outcomes{0};
-        const auto cleanup = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto cleanup = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         const auto key = env.scheduler->allocateKey();
         const auto reserved = Submit(*env.scheduler, [&] { ++cleanup_effects; }, [&] { ++cleanup_outcomes; }, {}, {Lane::Cleanup, key}, true);
         QVERIFY(reserved);
@@ -1207,7 +1207,7 @@ private Q_SLOTS:
         using namespace execution;
         ManualRoutedExecution env;
         int retired{0};
-        const auto cleanup = qScopeGuard([&] { env.scheduler->closeAdmission(); env.drain(); });
+        const auto cleanup = qScopeGuard([&] { env.scheduler->close(); env.drain(); });
         const auto first = env.scheduler->allocateKey(), second = env.scheduler->allocateKey();
         QVERIFY(first != second);
         QCOMPARE(Submit(*env.scheduler, [] {}, [] {}, {}, {Lane::Core, first}, true).rejection, Rejection::Invalid);
@@ -1218,7 +1218,7 @@ private Q_SLOTS:
         QVERIFY(borrowed);
         env.scheduler->closeOrdinaryAdmission();
         QCOMPARE(env.scheduler->borrow(first).rejection, Rejection::Closed);
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         QCOMPARE(env.scheduler->borrow(first).rejection, Rejection::Closed);
         QVERIFY(!env.step(Lane::Cleanup));
         borrowed.lease.reset();
@@ -1455,7 +1455,7 @@ private Q_SLOTS:
         QCOMPARE(effect, 7);
         QCOMPARE(domain, 0);
         QCOMPARE(env.scheduler->phase(admitted.id), std::make_optional(execution::Phase::OutcomeReady));
-        env.scheduler->closeAdmission();
+        env.scheduler->close();
         QCOMPARE(execution::Submit(*env.scheduler, [] {}, [] {}).rejection, execution::Rejection::Closed);
         QVERIFY(env.step());
         QCOMPARE(domain, 9);

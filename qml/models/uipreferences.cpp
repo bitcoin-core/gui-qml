@@ -100,7 +100,7 @@ UiPreferencesStore::UiPreferencesStore(execution::SnapshotServices services,UiPr
     m_native=execution::RetainSnapshot<Native>(m_services.scheduler,[&]{auto state=std::make_unique<Native>();state->id=std::move(id);return state;});
     if(!m_native)m_error=tr("Preferences storage is unavailable.");
 }
-UiPreferencesStore::~UiPreferencesStore(){closeAdmission();}
+UiPreferencesStore::~UiPreferencesStore(){close();}
 const UiPreferencesValues& UiPreferencesStore::values()const{return m_result?m_result->values:m_defaults;}
 void UiPreferencesStore::start(){if(!m_closed&&!m_ready&&!m_pending){m_refresh_requested=false;load();}}
 void UiPreferencesStore::retry(){if(!m_closed&&!m_pending){m_refresh_requested=false;load();}}
@@ -147,8 +147,8 @@ void UiPreferencesStore::publish(std::shared_ptr<const Result> result,quint64 ti
     --m_pending;if(result->revision>=m_revision){m_revision=result->revision;m_result=std::move(result);m_ready=m_result->loaded;m_watch.update(m_result->watch);if(ticket==m_operation_id)m_error=m_result->error;}
     const QPointer<UiPreferencesStore> guard{this};notifyViews();if(guard&&!m_closed)Q_EMIT stateChanged();if(guard&&!m_closed)finishRefresh();
 }
-void UiPreferencesStore::closeAdmission(){if(m_closed)return;m_watch.stop();m_closed=true;m_pending=0;m_work->close();m_result.reset();m_native.reset();}
-void UiPreferencesStore::whenDrained(std::function<void()> done){closeAdmission();m_work->close(std::move(done));}
+void UiPreferencesStore::close(){if(m_closed)return;m_watch.stop();m_closed=true;m_pending=0;m_work->close();m_result.reset();m_native.reset();}
+void UiPreferencesStore::whenDrained(std::function<void()> done){close();m_work->close(std::move(done));}
 bool UiPreferencesStore::attach(AppPreferences* view){
     if(m_closed)return false;
     const auto id=++m_next_view;m_views.emplace(id,view);

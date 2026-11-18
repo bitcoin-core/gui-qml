@@ -111,7 +111,7 @@ private Q_SLOTS:
             throw std::runtime_error("primary presentation transport refused");
         });
         const auto cleanup = qScopeGuard([&] {
-            graph.scheduler->closeAdmission();
+            graph.scheduler->close();
             graph.drain();
             *primary = {};
             post = {};

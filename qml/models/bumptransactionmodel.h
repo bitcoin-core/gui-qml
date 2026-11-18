@@ -48,10 +48,10 @@ public:
     explicit BumpTransactionModel(interfaces::Wallet* wallet, QObject* parent = nullptr);
     void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services,
                     walletbump::Services bump_services = {});
-    void closeAdmission();
+    void close();
     void setDisplayUnit(int unit);
     void retryPublications();
-    void detachWallet() { closeAdmission(); m_wallet = nullptr; }
+    void detachWallet() { close(); m_wallet = nullptr; }
     State state() const { return m_state; }
     bool busy() const { return m_preparing || m_committing || m_rechecking; }
     bool canRecheckOutcome() const;

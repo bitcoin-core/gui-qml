@@ -159,7 +159,7 @@ public:
     bool signerPathValidationPending() const { return m_signer_validation_pending; }
     QString signerPathError() const { return m_signer_validation_error; }
     Q_INVOKABLE void requestExternalSignerPathValidation(const QString& path);
-    void closeAdmission();
+    void close();
     void beginShutdown();
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }

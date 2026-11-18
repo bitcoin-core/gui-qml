@@ -589,7 +589,7 @@ void RpcConsoleModel::resetHistoryNavigation()
 void RpcConsoleModel::clear()
 {
     if (m_stopping) return;
-    if (m_output_generation == std::numeric_limits<quint64>::max()) { closeAdmission(); return; }
+    if (m_output_generation == std::numeric_limits<quint64>::max()) { close(); return; }
     ++m_output_generation;
     m_append_timer.stop();
     for (auto& pending : m_pending_rows) retireOutput(std::move(pending.rows));
@@ -757,7 +757,7 @@ void RpcConsoleModel::setExecuting(bool executing)
     if (m_executing != executing) { m_executing = executing; Q_EMIT executingChanged(); }
 }
 
-void RpcConsoleModel::closeAdmission()
+void RpcConsoleModel::close()
 {
     if (std::exchange(m_stopping, true)) return;
     m_append_timer.stop();
@@ -780,7 +780,7 @@ void RpcConsoleModel::closeAdmission()
 void RpcConsoleModel::beginShutdown()
 {
     if (std::exchange(m_shutdown_started, true)) return;
-    closeAdmission();
+    close();
     m_mailbox.reset();
     if (m_control_executor) m_control_executor->shutdown();
     finishDrain();

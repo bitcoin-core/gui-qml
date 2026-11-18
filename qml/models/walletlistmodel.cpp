@@ -42,8 +42,8 @@ WalletListModel::WalletListModel(interfaces::Node& node, execution::SnapshotServ
         [guard, post = m_services.post] { post([guard] { if (guard) guard->publishSnapshot(); }); });
     observe(m_reader->observation());
 }
-WalletListModel::~WalletListModel() { closeAdmission(); m_reader.reset(); if (m_owned_executor) m_owned_executor->shutdown(); }
-void WalletListModel::closeAdmission()
+WalletListModel::~WalletListModel() { close(); m_reader.reset(); if (m_owned_executor) m_owned_executor->shutdown(); }
+void WalletListModel::close()
 {
     if (std::exchange(m_stopping, true)) return;
     m_pending = false;

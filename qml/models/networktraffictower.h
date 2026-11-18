@@ -44,7 +44,7 @@ public:
     ~NetworkTrafficTower() override;
     void startSampling();
     void beginShutdown();
-    void closeAdmission();
+    void close();
     Q_PROPERTY(bool samplePending READ samplePending NOTIFY sampleStateChanged)
     Q_PROPERTY(QString readError READ readError NOTIFY sampleStateChanged)
     bool samplePending() const {return m_inflight;}

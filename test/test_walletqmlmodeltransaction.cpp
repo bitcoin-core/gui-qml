@@ -46,7 +46,7 @@ struct FrozenReview {
         }
         QTest::qFail("The original review presentation graph did not settle", __FILE__, __LINE__);
     }
-    ~FrozenReview() { scheduler->disarm(); opening->closeAdmission(); settle(); }
+    ~FrozenReview() { scheduler->disarm(); opening->close(); settle(); }
 };
 walletreview::Snapshot AmountSnapshot(CAmount amount, int unit = 0) { walletreview::Snapshot value; value.amount = amount; value.display_unit = unit; return value; }
 } // namespace
@@ -90,7 +90,7 @@ private Q_SLOTS:
         FrozenReview f; auto original = f.create(AmountSnapshot(1000));
         auto parent = std::make_unique<QObject>();
         const auto cleanup = qScopeGuard([&] {
-            f.scheduler->disarm(); parent.reset(); original->closeAdmission(); original.reset(); f.settle();
+            f.scheduler->disarm(); parent.reset(); original->close(); original.reset(); f.settle();
         });
         original->setDisplayUnit(3);
         auto trigger = f.scheduler->armCleanup(1, [&] { parent.reset(); });
@@ -100,7 +100,7 @@ private Q_SLOTS:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         QCOMPARE(trigger->calls.load(), size_t{1}); QVERIFY(trigger->originalId.load() != 0);
         QVERIFY(!parent); QVERIFY(!clone);
-        f.scheduler->disarm(); original->closeAdmission(); f.settle();
+        f.scheduler->disarm(); original->close(); f.settle();
         QCOMPARE(f.environment.scheduler->pending(), size_t{0});
     }
     void throwingPosterKeepsOriginalPresentation()
@@ -113,7 +113,7 @@ private Q_SLOTS:
         std::deque<std::function<void()>> duplicates;
         auto review = std::make_unique<WalletQmlModelTransaction>(std::move(retained), f.opening,
             [&](auto callback) { if (enqueue) duplicates.push_back(std::move(callback)); throw std::runtime_error{"post failed"}; });
-        const auto cleanup = qScopeGuard([&] { duplicates.clear(); if (review) review->closeAdmission(); review.reset(); f.settle(); });
+        const auto cleanup = qScopeGuard([&] { duplicates.clear(); if (review) review->close(); review.reset(); f.settle(); });
         QSignalSpy changed{review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged};
         const auto trigger = f.scheduler->armSubmit(execution::Lane::Domain, 1, [] {});
         review->setDisplayUnit(3); f.environment.drain();
@@ -123,7 +123,7 @@ private Q_SLOTS:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         QVERIFY(!review->presentationPending()); QVERIFY(review->presentationError().isEmpty()); QCOMPARE(changed.count(), 1);
         while (!duplicates.empty()) { auto callback = std::move(duplicates.front()); duplicates.pop_front(); callback(); }
-        QCOMPARE(changed.count(), 1); review->closeAdmission(); review.reset(); f.settle();
+        QCOMPARE(changed.count(), 1); review->close(); review.reset(); f.settle();
         QCOMPARE(f.environment.scheduler->pending(), size_t{0});
     }
     void unknownFeeIsDistinctFromKnownZero()
@@ -187,7 +187,7 @@ void WalletQmlModelTransactionTests::presentationAdmissionKeepsOriginalReview()
     int changes_after{-1}, recipients_after{-1};
     const auto disarm = qScopeGuard([&] { f.scheduler->disarm(); });
     auto change = [&] {
-        if (action == 0) review->closeAdmission();
+        if (action == 0) review->close();
         else if (action == 1) review.reset();
         else review->setDisplayUnit(0);
         changes_after = changes.count();
@@ -225,7 +225,7 @@ void WalletQmlModelTransactionTests::presentationAdmissionKeepsOriginalReview()
             QVERIFY(review->reviewedRecipients().isEmpty());
         }
     }
-    if (review) review->closeAdmission();
+    if (review) review->close();
     review.reset();
     f.settle();
     QVERIFY(!f.environment.scheduler->phase(admitted));
@@ -245,7 +245,7 @@ void WalletQmlModelTransactionTests::manualDisplayUnitProjectionRejectsStalePubl
     QCOMPARE(review->reviewedRecipients().first().toMap().value("label").toString(), QStringLiteral("frozen note"));
     review->setDisplayUnit(3); fixture.environment.drain();
     QSignalSpy quiet(review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged);
-    review->closeAdmission(); fixture.environment.publishAll();
+    review->close(); fixture.environment.publishAll();
     QCOMPARE(quiet.size(), 0); QVERIFY(!review->presentationPending()); QVERIFY(review->reviewedRecipients().isEmpty());
 }
 
@@ -349,7 +349,7 @@ void WalletQmlModelTransactionTests::removingRecipientUpdatesTotalOnce()
         fixture.settle();
     };
     const auto cleanup = qScopeGuard([&] {
-        if (recipients) recipients->closeAdmission();
+        if (recipients) recipients->close();
         recipients.reset(); settle();
         if (!fixture.environment.quiescent())
             QTest::qFail("Recipient removal did not physically retire its original owners", __FILE__, __LINE__);
@@ -373,7 +373,7 @@ void WalletQmlModelTransactionTests::removingRecipientUpdatesTotalOnce()
     QCOMPARE(total_changed_spy.count(), 1);
     settle();
     QCOMPARE(total_changed_spy.count(), 1);
-    recipients->closeAdmission(); recipients.reset(); settle();
+    recipients->close(); recipients.reset(); settle();
     QVERIFY(fixture.environment.quiescent());
 }
 

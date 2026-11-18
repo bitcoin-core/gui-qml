@@ -82,7 +82,7 @@ void WalletSelectionModelTests::stoppingRejectsFurtherAdmission()
 {
     WalletSelectionModel selection{nullptr, {}};
     const auto request = selection.beginSelection("A");
-    selection.closeAdmission();
+    selection.close();
     QVERIFY(!selection.pending());
     QCOMPARE(selection.beginSelection("B"), quint64{0});
     QVERIFY(!selection.select(nullptr));

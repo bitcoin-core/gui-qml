@@ -74,9 +74,9 @@ struct Fixture {
     }
     void stop()
     {
-        if (commands) commands->closeAdmission();
-        if (proxy) proxy->closeAdmission();
-        if (source) source->closeAdmission();
+        if (commands) commands->close();
+        if (proxy) proxy->close();
+        if (source) source->close();
         proxy.reset(); source.reset(); commands.reset(); settle();
     }
 };
@@ -201,7 +201,7 @@ private Q_SLOTS:
         QVERIFY(operation); const auto id = operation->operationId(); const auto reads = f.node.calls.getNodesStats.load();
         if (choice == 0) { QVERIFY(operation->cancel()); QVERIFY(!operation->cancel()); QVERIFY(!operation->confirm()); }
         else {
-            if (choice == 1) f.commands->closeAdmission();
+            if (choice == 1) f.commands->close();
             if (choice == 2) f.execution.scheduler->closeOrdinaryAdmission();
             const bool admitted = operation->confirm(); QCOMPARE(admitted,choice >= 3); QVERIFY(!operation->confirm());
         }
@@ -238,7 +238,7 @@ private Q_SLOTS:
         f.peers.erase(f.peers.begin()); f.source->refresh(); QVERIFY(f.settle());
         QVERIFY(chose_third); QCOMPARE(left.selectedDetails(),third); QCOMPARE(right.selectedDetails(),second);
         left.clear(); QCOMPARE(left.phase(),PeerSelectionModel::Phase::NoSelection); QCOMPARE(right.selectedDetails(),second);
-        f.proxy->closeAdmission(); QCOMPARE(right.phase(),PeerSelectionModel::Phase::Stopped); QVERIFY(!right.select(second));
+        f.proxy->close(); QCOMPARE(right.phase(),PeerSelectionModel::Phase::Stopped); QVERIFY(!right.select(second));
     }
     void sessionHandshakePromotionAndDelayedConstructorKeepConnectionOwnership()
     {
@@ -290,9 +290,9 @@ private Q_SLOTS:
         std::unique_ptr<PeerDetailsModel> detail; std::unique_ptr<PeerCommandOperation> operation;
         const auto finish_original = qScopeGuard([&] {
             release.release(); operation.reset(); detail.reset();
-            if (source) source->closeAdmission();
+            if (source) source->close();
             source.reset();
-            if (commands) commands->closeAdmission();
+            if (commands) commands->close();
             commands.reset();
             backend.shutdown(); QVERIFY2(QTest::qWaitFor([&] { return backend.isDrained(); },5000), "Original native work must drain before fixture destruction");
         });
@@ -316,7 +316,7 @@ private Q_SLOTS:
         QVERIFY(operation->pending()); QCOMPARE(mutations.load(),0); operation.reset(); release.release();
         QTRY_VERIFY(commands->lastResult().present); QCOMPARE(commands->lastResult().nodeIdText,QStringLiteral("7"));
         QCOMPARE(commands->lastResult().outcome,PeerCommandOperation::Outcome::Succeeded); QCOMPARE(mutations.load(),1); QVERIFY(off_gui.load());
-        detail.reset(); source->closeAdmission(); source.reset(); commands->closeAdmission(); commands.reset();
+        detail.reset(); source->close(); source.reset(); commands->close(); commands.reset();
         backend.shutdown(); QTRY_VERIFY(backend.isDrained());
     }
     void retiredProjectionKeepsActualOutcomeWithoutLateSignals_data()
@@ -330,7 +330,7 @@ private Q_SLOTS:
         std::unique_ptr<PeerCommandOperation> operation{detail->prepareDisconnect()}; QVERIFY(operation);
         QSignalSpy notices{operation.get(),&PeerCommandOperation::changed}; QSignalSpy finished{f.commands.get(),&PeerCommandModel::finished};
         QVERIFY(operation->confirm()); const auto admitted_notices = notices.size(); QVERIFY(admitted_notices > 0);
-        if (parent_closes) f.commands->closeAdmission(); else operation->retire();
+        if (parent_closes) f.commands->close(); else operation->retire();
         QCOMPARE(notices.size(),admitted_notices); QVERIFY(f.settle());
         QCOMPARE(f.disconnects,1); QVERIFY(operation->resultPresent()); QCOMPARE(operation->result().outcome,PeerCommandOperation::Outcome::Succeeded);
         QVERIFY(operation->outcomeKnown()); QCOMPARE(notices.size(),admitted_notices);
@@ -372,7 +372,7 @@ private Q_SLOTS:
         auto loan = f.source->data(f.source->index(f.source->rowForId(7)), PeerListModel::StatsRole).value<PeerStatsHandle>();
         const std::weak_ptr<const CNodeCombinedStats> native{loan}; loan.reset();
         const auto reads = f.node.calls.getNodesStats.load();
-        f.commands->closeAdmission(); f.proxy->closeAdmission(); f.source->closeAdmission();
+        f.commands->close(); f.proxy->close(); f.source->close();
         // Keep GUI delivery held: physical Native retirement cannot require
         // releasing a still-live view or presenting a queued notification.
         f.execution.drain(); QVERIFY(f.execution.quiescent()); QVERIFY(native.expired());

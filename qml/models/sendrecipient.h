@@ -55,7 +55,7 @@ public:
     explicit SendRecipient(WalletQmlModel* wallet, QObject* parent = nullptr);
     ~SendRecipient() override;
     void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     /** The owning list sets this flag while it imports a payment request, from
      * its background import work. User input is ignored while it is set. */
     void setImportLock(std::shared_ptr<const std::atomic_bool> importing) { m_importing = std::move(importing); }

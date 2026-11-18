@@ -200,7 +200,7 @@ void BlockClockDialTests::manualRendererCoalescesLatestViewportAndRejectsLatePub
     for (int turn = 0; turn < 32 && (!env.queuedIdle() || !publications.empty()); ++turn) { env.drain(); publish_all(); }
     QCOMPARE(dial.renderedPixelSize(), QSize(399, DIAL_SIZE));
     QSignalSpy changes{&dial, &BlockClockDial::renderStateChanged};
-    dial.setWidth(400); env.drain(); dial.closeAdmission();
+    dial.setWidth(400); env.drain(); dial.close();
     const int before = changes.count(); publish_all(); env.drain();
     QCOMPARE(changes.count(), before); QVERIFY(env.quiescent());
 }
@@ -264,7 +264,7 @@ void BlockClockDialTests::invalidPenGeometryReportsNativeFailureAndRecovers()
     QVERIFY(!dial.renderAvailable());
     dial.setPenWidth(12); settle();
     QVERIFY(dial.renderError().isEmpty()); QVERIFY(dial.renderAvailable());
-    dial.closeAdmission(); settle(); QVERIFY(env.quiescent());
+    dial.close(); settle(); QVERIFY(env.quiescent());
 }
 void BlockClockDialTests::heldEarlierFailureKeepsNewerRenderPending()
 {
@@ -280,7 +280,7 @@ void BlockClockDialTests::heldEarlierFailureKeepsNewerRenderPending()
     QVERIFY(dial.renderPending()); QVERIFY(dial.renderError().isEmpty());
     env.drain(); publish_all();
     QVERIFY(!dial.renderPending()); QVERIFY(!dial.renderError().isEmpty());
-    dial.closeAdmission(); env.drain(); publish_all(); env.drain(); QVERIFY(env.quiescent());
+    dial.close(); env.drain(); publish_all(); env.drain(); QVERIFY(env.quiescent());
 }
 void BlockClockDialTests::oversizedViewportUsesBoundedRasterWithoutDroppingBlocks()
 {

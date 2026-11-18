@@ -174,7 +174,7 @@ QString WalletQmlModelTransaction::txid() const
     return m_txid;
 }
 
-void WalletQmlModelTransaction::closeAdmission()
+void WalletQmlModelTransaction::close()
 {
     if (std::exchange(m_closed, true)) return;
     // Quietly drop aliases before releasing their reserved cleanup owners.

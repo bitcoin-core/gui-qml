@@ -256,7 +256,7 @@ void DebugLogModelTests::constructorReservationKeepsOriginalParentLifetime()
 void DebugLogModelTests::constructorCleanupRefusalStartsNoRead()
 {
     ManualExecutionEnvironment env;
-    env.scheduler->closeAdmission();
+    env.scheduler->close();
     auto model = std::make_unique<DebugLogModel>(fs::path{}, true,
         execution::SnapshotServices{env.scheduler, [&](auto callback) { env.post(std::move(callback)); }});
     const auto cleanup = qScopeGuard([&] {
@@ -325,7 +325,7 @@ void DebugLogModelTests::injectedRetirementUsesOriginalScheduler()
     QCOMPARE(env.scheduler->pending(), size_t{2}); // Original reserved task + live ResourceLease borrower.
     qInfo() << "Original live DebugLog reservation TaskId" << reserved.value << "with one accounted borrower";
     QSignalSpy drained{model.get(), &DebugLogModel::drained};
-    env.scheduler->closeAdmission();
+    env.scheduler->close();
     if (destroy_observer) model.reset(); else model->stop();
     QCOMPARE(drained.count(), 0); // No unrelated worker can release the data.
     QCOMPARE(env.scheduler->pending(), size_t{1});

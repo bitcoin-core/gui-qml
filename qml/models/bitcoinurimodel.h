@@ -32,7 +32,7 @@ public:
     explicit BitcoinUriModel(QObject* parent = nullptr);
     ~BitcoinUriModel() override;
     void setServices(execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     //! Whether pasted text is a payment URI. Decided by its scheme, so a paste
     //! is routed at once: other text is pasted into the field as typed.
     Q_INVOKABLE bool isPaymentUri(const QString& text) const;

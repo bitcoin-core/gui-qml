@@ -59,7 +59,7 @@ public:
     void configureSession(std::shared_ptr<walletopening::Session> opening, psbtfee::Services services);
     void setFeeServices(psbtfee::Services services);
     void setNode(interfaces::Node* node);
-    void closeAdmission();
+    void close();
     void detachWallet();
     bool loaded() const { return bool(m_snapshot && m_snapshot->document); }
     QString status() const { return m_status; }

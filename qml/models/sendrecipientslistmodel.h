@@ -53,7 +53,7 @@ public:
     Q_INVOKABLE void removeRecipient(const QString& recipient_id);
     ~SendRecipientsListModel() override;
     void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     void retryPublications();
     std::shared_ptr<const DraftSnapshot> draftSnapshot() const;
     std::shared_ptr<const paymentimport::TargetPort> importTarget(SendRecipient* recipient);

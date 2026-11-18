@@ -248,7 +248,7 @@ public:
                 state->turns.push_back(std::move(packet));
                 return true;
             })) {}
-    ~ManualExecutionEnvironment() override { scheduler->closeAdmission(); stop(); drain(); }
+    ~ManualExecutionEnvironment() override { scheduler->close(); stop(); drain(); }
     void rejectNext(bool reject = true)
     {
         std::lock_guard<std::mutex> lock{m_state->mutex};

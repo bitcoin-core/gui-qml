@@ -86,7 +86,7 @@ public:
     Q_INVOKABLE void discardChanges();
     Q_INVOKABLE bool apply();
     Q_INVOKABLE void refresh();
-    void closeAdmission();
+    void close();
     bool drained() const { return m_drained; }
     std::shared_ptr<const std::atomic<quint64>> versionGate() const { return m_version_gate; }
     quint64 admissionVersion() const { return m_version_gate->load(); }

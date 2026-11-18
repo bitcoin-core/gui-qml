@@ -65,7 +65,7 @@ public:
     explicit CoinsListModel(WalletQmlModel* parent = nullptr);
     ~CoinsListModel() override;
     void setOpening(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     void retryPublications();
     QString readError() const { return m_read_error; }
     QString lockError() const { return m_lock_error; }

@@ -225,7 +225,7 @@ private Q_SLOTS:
         if (mode == 6) {
             while (f.commands.step(Lane::Domain)) {}
             QVERIFY(f.commands.step(Lane::Core)); QCOMPARE(f.wallet->writes, 1);
-            f.opening->closeAdmission();
+            f.opening->close();
         }
         bool escaped{false};
         try { f.commands.drain(); }

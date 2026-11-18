@@ -106,7 +106,7 @@ void WalletSelectionModel::forget(WalletQmlModel* wallet, WalletQmlModel* succes
     else clear();
 }
 
-void WalletSelectionModel::closeAdmission()
+void WalletSelectionModel::close()
 {
     if (m_closed) return;
     m_closed = true;

@@ -56,7 +56,7 @@ public:
 
     explicit AddressListModel(WalletQmlModel* parent = nullptr);
     ~AddressListModel() override;
-    void closeAdmission();
+    void close();
     QString readError() const { return m_read_error; }
     bool refreshPending() const;
     void configureSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
@@ -89,7 +89,7 @@ Q_SIGNALS:
     void refreshStateChanged();
 
 private:
-    void closeAdmissionImpl(bool notify);
+    void closeImpl(bool notify);
     void attachSession(std::shared_ptr<walletopening::Session> opening, execution::SnapshotServices services);
     struct AddressEntry {
         QString address;

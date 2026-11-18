@@ -371,7 +371,7 @@ void ActivityFilterProxyModelTests::staleDeltaBaseFallsBackWithoutLosingOriginal
     source.setAmount(1, 222); env.publishAll(); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents();
     QVERIFY(!proxy.busy()); QCOMPARE(proxy.rowCount(), 2); QVERIFY(!proxy.lastWork().delta); QCOMPARE(proxy.lastWork().examined, size_t{2});
     QCOMPARE(proxy.index(0).data(TransactionActivityModel::NetAmountSatRole).toLongLong(), 222); QCOMPARE(proxy.index(1).data(TransactionActivityModel::NetAmountSatRole).toLongLong(), 111);
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 void ActivityFilterProxyModelTests::relativeDateRefreshUsesManualClockAndRejectsYesterdayBeforePublish()
 {
@@ -383,7 +383,7 @@ void ActivityFilterProxyModelTests::relativeDateRefreshUsesManualClockAndRejects
     env.drain(); env.publishAll(); QCoreApplication::processEvents(); QVERIFY(!proxy.busy()); QCOMPARE(proxy.rowCount(), 1); QCOMPARE(proxy.index(0).data(TransactionActivityModel::LabelRole).toString(), QStringLiteral("Successor"));
     today = today.addDays(1); QCOMPARE(proxy.requestExportCsv(QStringLiteral("unadmitted.csv")), quint64{0}); QVERIFY(proxy.busy());
     proxy.setDateFilter(ActivityFilterProxyModel::Today); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents(); QCOMPARE(proxy.rowCount(), 0); QCOMPARE(writes, 0);
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 // #1099: the real date timer, not a filter edit, moves an open Today filter past local midnight.
 void ActivityFilterProxyModelTests::automaticDateTimerMovesTodayPastMidnightWithoutAnotherEdit()
@@ -473,7 +473,7 @@ void ActivityFilterProxyModelTests::terminalExportReceiptSurvivesReentrantObserv
     QCOMPARE(proxy.exportResult().finalPath, QStringLiteral("original.csv"));
     env.drain(); env.publishAll(); QCOMPARE(terminal.size(), size_t{2}); QCOMPARE(terminal.back().first, successor); QCOMPARE(terminal.back().second, QStringLiteral("successor.csv"));
     QCOMPARE(effects, 2); QCOMPARE(outcomes, 2); QCOMPARE(proxy.exportResult().finalPath, QStringLiteral("successor.csv"));
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 
 void ActivityFilterProxyModelTests::csvConstructorReservationCanRetireItsOriginalProxy()
@@ -504,13 +504,13 @@ void ActivityFilterProxyModelTests::csvOwnershipRefusalPublishesItsOriginalFailu
     ActivityFilterProxyModel proxy{services}; proxy.setSourceModel(&source);
     QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QVERIFY(!proxy.busy());
     QSignalSpy terminal{&proxy, &ActivityFilterProxyModel::exportFinished};
-    const auto trigger = hooks->armCleanup(1, [&] { env.scheduler->closeAdmission(); });
+    const auto trigger = hooks->armCleanup(1, [&] { env.scheduler->close(); });
     QCOMPARE(proxy.requestExportCsv(QStringLiteral("refused-constructor.csv")), quint64{0});
     QCOMPARE(trigger->calls.load(), size_t{1}); QCOMPARE(effects, 0); QCOMPARE(terminal.count(), 1);
     QVERIFY(proxy.exportOperation()); QVERIFY(proxy.exportResult().present); QVERIFY(!proxy.exportResult().saved);
     QVERIFY(!proxy.exportResult().errorText.isEmpty()); QCOMPARE(proxy.exportResult().errorText, proxy.exportOperation()->error());
     QCOMPARE(proxy.exportResult().operationId, proxy.exportOperation()->operationId()); QVERIFY(!proxy.exportResult().snapshotRevision.isEmpty());
-    proxy.closeAdmission(); env.drain(); env.publishAll(); QCOMPARE(effects, 0); QCOMPARE(env.scheduler->pending(), size_t{0});
+    proxy.close(); env.drain(); env.publishAll(); QCOMPARE(effects, 0); QCOMPARE(env.scheduler->pending(), size_t{0});
 }
 
 void ActivityFilterProxyModelTests::chooserCaptureKeepsTheOriginalSnapshotAndUnitAcrossLiveChanges()
@@ -528,7 +528,7 @@ void ActivityFilterProxyModelTests::chooserCaptureKeepsTheOriginalSnapshotAndUni
     env.drain(); env.publishAll(); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents();
     QCOMPARE(effects, 1); QCOMPARE(unit, 0); QCOMPARE(label, QStringLiteral("Original")); QVERIFY(!proxy.exportBusy()); QCOMPARE(proxy.exportedPath(), QStringLiteral("original.csv"));
     QCOMPARE(proxy.index(0).data(TransactionActivityModel::LabelRole).toString(), QStringLiteral("Successor"));
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 void ActivityFilterProxyModelTests::oldChooserCompletionCannotRetargetANewSourceOrCancelItsSuccessor()
 {
@@ -540,7 +540,7 @@ void ActivityFilterProxyModelTests::oldChooserCompletionCannotRetargetANewSource
     QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents(); const auto next = proxy.captureExport(); QVERIFY(!next.isEmpty()); QVERIFY(next != old);
     proxy.cancelExport(old); QVERIFY(proxy.exportChoosing()); QCOMPARE(proxy.requestCapturedExportCsv(old, "wrong.csv"), quint64{0}); QVERIFY(proxy.exportChoosing()); QCOMPARE(effects, 0);
     QVERIFY(proxy.requestCapturedExportCsv(next, "current.csv")); env.drain(); env.publishAll(); QCOMPARE(effects, 1); QCOMPARE(label, QStringLiteral("B")); QCOMPARE(proxy.exportedPath(), QStringLiteral("current.csv"));
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 void ActivityFilterProxyModelTests::chooserCaptureDoesNotKeepActionAdmissionOpenAfterRootClosure()
 {
@@ -550,7 +550,7 @@ void ActivityFilterProxyModelTests::chooserCaptureDoesNotKeepActionAdmissionOpen
     ActivityFilterProxyModel proxy{services}; proxy.setSourceModel(&source); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents();
     const auto intent = proxy.captureExport(); QVERIFY(!intent.isEmpty()); env.scheduler->closeOrdinaryAdmission();
     QCOMPARE(proxy.requestCapturedExportCsv(intent, "closed.csv"), quint64{0}); env.drain(); env.publishAll(); QCOMPARE(effects, 0); QVERIFY(proxy.exportRejected()); QVERIFY(!proxy.exportChoosing());
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 
 void ActivityFilterProxyModelTests::cancellingAnOldChooserCannotOverwriteAReentrantNewerSource()
@@ -657,7 +657,7 @@ void ActivityFilterProxyModelTests::manualPublicationAndStaleFilterDecisions()
     const QPersistentModelIndex retained{proxy.index(0)};
     source.setAmount(1, -321); QCoreApplication::processEvents(); env.drain(); env.publishAll(); QCoreApplication::processEvents();
     QVERIFY(retained.isValid()); QCOMPARE(retained.data(TransactionActivityModel::NetAmountSatRole).toLongLong(), -321);
-    proxy.closeAdmission(); env.drain(); env.publishAll();
+    proxy.close(); env.drain(); env.publishAll();
 }
 void ActivityFilterProxyModelTests::acceptedExportRetainsOriginalSnapshotAfterObserverLoss()
 {

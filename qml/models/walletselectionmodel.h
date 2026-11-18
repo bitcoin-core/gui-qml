@@ -41,7 +41,7 @@ public:
     // forget() after its row/retirement state is coherent. A newer select wins.
     void prepareForget(WalletQmlModel* wallet);
     void forget(WalletQmlModel* wallet, WalletQmlModel* successor = nullptr);
-    void closeAdmission();
+    void close();
 Q_SIGNALS:
     void selectedWalletChanged();
     void pendingChanged();

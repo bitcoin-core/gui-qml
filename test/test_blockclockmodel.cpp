@@ -140,7 +140,7 @@ void BlockClockModelTests::manualHistoryFencesHeldOldPeriodAndCoalescesNativeBur
     QCOMPARE(model.periodStart(), UtcTime(0).addDays(1).toSecsSinceEpoch());
     QCOMPARE(model.blockTimeFractions(), QList<qreal>{1.0 / 12.0});
     QCOMPARE(changes.count(), 1);
-    model.closeAdmission(); settle(); QVERIFY(env.quiescent());
+    model.close(); settle(); QVERIFY(env.quiescent());
 }
 void BlockClockModelTests::manualHistoryQuietCloseReleasesAcceptedProjection()
 {
@@ -150,7 +150,7 @@ void BlockClockModelTests::manualHistoryQuietCloseReleasesAcceptedProjection()
     auto model = std::make_unique<BlockClockModel>(history, execution::SnapshotServices{env.scheduler, [&](auto publish) { env.post(std::move(publish)); }}, false, [] { return UtcTime(15); });
     QSignalSpy changes{model.get(), &BlockClockModel::blockTimeFractionsChanged};
     env.drain(); QVERIFY(model->historyPending());
-    model->closeAdmission(); model.reset();
+    model->close(); model.reset();
     env.drain(); env.publishAll(); env.drain();
     QCOMPARE(changes.count(), 0); QVERIFY(env.quiescent());
     std::thread retire{[history = std::move(history)]() mutable { history.reset(); }}; retire.join();
@@ -167,7 +167,7 @@ void BlockClockModelTests::retentionRequestsDoNotWaitForNativeHistoryMutex()
     ManualExecutionEnvironment env;
     BlockClockModel model{history, {env.scheduler, [&](auto publish) { env.post(std::move(publish)); }}, false, [] { return UtcTime(15); }};
     model.updateCurrentTime(UtcTime(3).addDays(1));
-    model.closeAdmission(); // Neither atomic retention nor quiet destruction takes the held Native mutex.
+    model.close(); // Neither atomic retention nor quiet destruction takes the held Native mutex.
     QVERIFY(!timed_out.load());
     release.release(); native.join(); finish.dismiss();
     env.drain(); env.publishAll(); env.drain(); QVERIFY(env.quiescent());
@@ -183,14 +183,14 @@ void BlockClockModelTests::replacementObserverSurvivesOriginalNativeRetirement()
     auto history = std::make_shared<BlockClockHistory>(); history->initialize({{uint256{1}, UtcTime(13).toSecsSinceEpoch()}});
     BlockClockModel original{history, services, false, [] { return UtcTime(15); }};
     settle(); QCOMPARE(original.blockTimeFractions(), QList<qreal>{1.0 / 12.0});
-    original.closeAdmission(); // Original callback cleanup remains held on Cleanup.
+    original.close(); // Original callback cleanup remains held on Cleanup.
     BlockClockModel replacement{history, services, false, [] { return UtcTime(15); }};
     while (env.step(execution::Lane::Domain)) {} // Register the new original observer before retiring the old token.
     settle(); QCOMPARE(replacement.blockTimeFractions(), QList<qreal>{1.0 / 12.0});
     ConnectBlock(*history, 2, UtcTime(14).toSecsSinceEpoch());
     QCOMPARE(publications.size(), size_t{1});
     settle(); QCOMPARE(replacement.blockTimeFractions(), (QList<qreal>{1.0 / 12.0, 2.0 / 12.0}));
-    replacement.closeAdmission(); settle(); QVERIFY(env.quiescent());
+    replacement.close(); settle(); QVERIFY(env.quiescent());
 }
 
 void BlockClockModelTests::throwingPresentationPortCannotEscapeCoreOrStickWakeup()
@@ -208,7 +208,7 @@ void BlockClockModelTests::throwingPresentationPortCannotEscapeCoreOrStickWakeup
         settle(); QCOMPARE(model.blockTimeFractions().size(), qsizetype{id});
     }
     QVERIFY(rejected.load() >= 3);
-    model.closeAdmission(); settle(); QVERIFY(env.quiescent());
+    model.close(); settle(); QVERIFY(env.quiescent());
 }
 
 void BlockClockModelTests::currentTimeUsesNamedTwelveHourFraction()

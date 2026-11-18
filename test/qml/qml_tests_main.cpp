@@ -3521,7 +3521,7 @@ public:
     void setName(const QString& value) { if (m_name == value) return; m_name = value; refresh(); Q_EMIT inputChanged(); }
     void setXpub(const QString& value) { if (m_xpub == value) return; m_xpub = value; refresh(); Q_EMIT inputChanged(); }
     void setPath(const QString& value) { if (m_path == value) return; m_path = value; refresh(); Q_EMIT inputChanged(); }
-    Q_INVOKABLE void closeAdmission() { m_closed = true; ++m_revision; }
+    Q_INVOKABLE void close() { m_closed = true; ++m_revision; }
     Q_INVOKABLE void refresh() {
         if (m_closed) return;
         const auto revision = ++m_revision; m_pending = true; Q_EMIT changed();
@@ -3904,7 +3904,7 @@ public:
         connect(this, &MockWalletController::walletMigrationPassphraseRequired, this, [this](const QString& name) { m_migration_notice_path = name; });
         connect(this, &MockWalletController::walletMigrationFailed, this, [this] { Q_EMIT walletMigrationErrorNotice(m_migration_notice_path, ++m_notice_operation, m_wallet_migration_error.contains(QLatin1String("passphrase"), Qt::CaseInsensitive), m_wallet_migration_error.left(1024)); });
     }
-    ~MockWalletController() override { if (m_held_signer) m_signer_process.finishWork(*m_held_signer); m_signers->closeAdmission(); advanceSignerForTest(); delete m_signers; }
+    ~MockWalletController() override { if (m_held_signer) m_signer_process.finishWork(*m_held_signer); m_signers->close(); advanceSignerForTest(); delete m_signers; }
     SignerDiscoveryModel* signers() const { return m_signers; }
     int signerEnumerationCalls() const { return m_signer_facts->reads; }
     int signerConfigurationWrites() const { return m_signer_facts->writes; }
@@ -7917,7 +7917,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool endControlledPreferences() {
         if (!m_controlled_preferences) return true;
         auto& fixture = *m_controlled_preferences;
-        if (fixture.store) fixture.store->closeAdmission();
+        if (fixture.store) fixture.store->close();
         const bool closed = settleControlledPreferences();
         if (fixture.engine) fixture.engine->rootContext()->setContextProperty(QStringLiteral("uiPreferencesStore"), fixture.original.data());
         delete fixture.store.data(); fixture.store = nullptr;
@@ -7942,7 +7942,7 @@ public Q_SLOTS:
     void cleanupTestCase()
     {
         if (!endControlledPreferences()) m_had_warnings = true;
-        for(const auto& store:m_preferences_stores)if(store)store->closeAdmission();
+        for(const auto& store:m_preferences_stores)if(store)store->close();
         for (const auto& owner : MockFeeOwners()) if (owner) owner->close();
         for(const auto& editor:MockSettingsOwners())if(editor){editor->close();editor->deleteLater();}
         MockFeeServices() = {};

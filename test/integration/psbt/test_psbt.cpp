@@ -373,7 +373,7 @@ private Q_SLOTS:
             QVERIFY(standalone.saved());
             QFile saved{standalone_path}; QVERIFY(saved.open(QIODevice::ReadOnly));
             QCOMPARE(saved.readAll(), original.first);
-            standalone.closeAdmission();
+            standalone.close();
         }
         QCOMPARE(qmltest::SelectOpenWalletForSetup(m_app, wallet->name()), wallet);
         QVERIFY(qmltest::Click(m_app, "sendTabButton"));

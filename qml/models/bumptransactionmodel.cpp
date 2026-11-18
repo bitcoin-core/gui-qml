@@ -64,7 +64,7 @@ BumpTransactionModel::State BumpTransactionModel::ProjectState(transactionattemp
     }
     return Uncertain;
 }
-void BumpTransactionModel::closeAdmission()
+void BumpTransactionModel::close()
 {
     m_closed = true; m_state = Closed;
     // Accepted Native commands own their original effects and receipts. The

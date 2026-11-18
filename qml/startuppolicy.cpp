@@ -103,7 +103,7 @@ void FinishPreferences(UiPreferencesStore* store, QQuickWindow* window)
 {
     if (!store) return;
     if (window) window->contentItem()->setEnabled(false);
-    store->closeAdmission();
+    store->close();
     QEventLoop phase;
     bool drained{false};
     store->whenDrained([&] { drained = true; phase.quit(); });

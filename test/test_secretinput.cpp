@@ -77,7 +77,7 @@ private Q_SLOTS:
     }
     void closedAdmissionRefusesWithoutMaterialization() {
         ManualRoutedExecution commands;
-        commands.scheduler->closeAdmission();
+        commands.scheduler->close();
         const auto closed = secretinput::Capture(commands.scheduler, "password");
         QVERIFY(!closed); QCOMPARE(closed.error, secretinput::Error::Unavailable);
         commands.drain(); QVERIFY(commands.quiescent());

@@ -52,7 +52,7 @@ private Q_SLOTS:
                 QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             }
         };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle(); });
+        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
         if (initializing) {
             // More than one bounded initialization turn. Reentrant clear
             // replaces the original inventory while its first chunk is open.
@@ -64,7 +64,7 @@ private Q_SLOTS:
         }
         QPointer<SendRecipient> successor;
         auto trigger = scheduler->armCleanup(initializing ? 4 : 1, [&] {
-            if (outcome == 0) model->closeAdmission();
+            if (outcome == 0) model->close();
             else if (outcome == 1) model.reset();
             else {
                 model->clear(); successor = model->currentRecipient();
@@ -82,7 +82,7 @@ private Q_SLOTS:
             QCOMPARE(successor->amount()->unit(), BitcoinAmount::Unit::MicroBTC); QVERIFY(!model->validationPending());
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle();
+        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
         QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void cleanupAdmissionKeepsOriginalSetup_data()
@@ -111,9 +111,9 @@ private Q_SLOTS:
                 QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             }
         };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle(); });
+        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
         auto trigger = scheduler->armCleanup(reservation, [&] {
-            if (outcome == 0) model->closeAdmission();
+            if (outcome == 0) model->close();
             else if (outcome == 1) model.reset();
             else model->setOpening({}, {scheduler, [&](auto turn) { ++current_posted; current_posts.push_back(std::move(turn)); }});
         });
@@ -127,7 +127,7 @@ private Q_SLOTS:
             QVERIFY(!model->validationPending());
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle();
+        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
         QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void clearCleanupAdmissionKeepsNewerIntent_data()
@@ -150,13 +150,13 @@ private Q_SLOTS:
                 QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             }
         };
-        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle(); });
+        const auto cleanup = qScopeGuard([&] { scheduler->disarm(); if (model) model->close(); model.reset(); settle(); });
         model->setOpening({}, {scheduler, [&](auto turn) { posts.push_back(std::move(turn)); }}); settle();
         const QPointer<SendRecipient> original{model->currentRecipient()};
         const auto original_identity = original->identity();
         QPointer<SendRecipient> successor;
         auto trigger = scheduler->armCleanup(reservation, [&] {
-            if (outcome == 0) model->closeAdmission();
+            if (outcome == 0) model->close();
             else if (outcome == 1) model.reset();
             else {
                 model->clear(); successor = model->currentRecipient();
@@ -172,7 +172,7 @@ private Q_SLOTS:
             QCOMPARE(successor->label(), QStringLiteral("new clear intent")); QCOMPARE(model->count(), 1);
         } else if (outcome == 0) { QVERIFY(model); QCOMPARE(model->count(), 0); }
         else QVERIFY(!model);
-        scheduler->disarm(); if (model) model->closeAdmission(); model.reset(); settle();
+        scheduler->disarm(); if (model) model->close(); model.reset(); settle();
         QCOMPARE(env.scheduler->pending(), size_t{0});
     }
     void initTestCase() { m_executor = std::make_unique<BackendExecutor>(); }

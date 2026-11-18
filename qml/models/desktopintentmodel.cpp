@@ -35,7 +35,7 @@ DesktopIntentModel::DesktopIntentModel(execution::SnapshotServices services, boo
 DesktopIntentModel::~DesktopIntentModel()
 {
     if (QCoreApplication::instance()) QCoreApplication::instance()->removeEventFilter(this);
-    closeAdmission();
+    close();
 }
 bool DesktopIntentModel::hasInspection() const
 {
@@ -147,13 +147,13 @@ void DesktopIntentModel::setReady(bool ready)
     if (m_owner && m_readiness < std::numeric_limits<uint64_t>::max())
         m_owner->readiness(++m_readiness, m_ready && static_cast<bool>(m_sink));
 }
-void DesktopIntentModel::closeAdmission()
+void DesktopIntentModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     m_closed_gate->store(true);
     if (const auto owner = std::exchange(m_owner, {})) owner->stop();
 #ifdef ENABLE_WALLET
-    if (m_inspection) m_inspection->closeAdmission();
+    if (m_inspection) m_inspection->close();
 #endif
 }
 void DesktopIntentModel::inspectNext()

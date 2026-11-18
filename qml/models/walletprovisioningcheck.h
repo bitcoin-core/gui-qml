@@ -41,7 +41,7 @@ public:
     QString normalizedPath() const { return ready() ? m_normalized_path : QString{}; }
     QString error() const { return m_error; }
     Q_INVOKABLE void refresh();
-    Q_INVOKABLE void closeAdmission();
+    Q_INVOKABLE void close();
 Q_SIGNALS:
     void inputChanged();
     void changed();

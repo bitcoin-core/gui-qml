@@ -61,7 +61,7 @@ PsbtQmlModel::PsbtQmlModel(interfaces::Wallet* wallet, interfaces::Node* node, Q
 
 PsbtQmlModel::~PsbtQmlModel()
 {
-    closeAdmission();
+    close();
     releaseSnapshot();
     // The reserved Cleanup owner still retains each structural result when its
     // GUI alias is released; activation happens only after the GUI reference.
@@ -116,7 +116,7 @@ void PsbtQmlModel::setNode(interfaces::Node* node)
     retireSummaryQuery();
     if (!busy() && m_snapshot && !m_closed) refreshState();
 }
-void PsbtQmlModel::closeAdmission()
+void PsbtQmlModel::close()
 {
     m_closed = true;
     m_phase = Phase::Closed;
@@ -130,7 +130,7 @@ void PsbtQmlModel::closeAdmission()
 }
 void PsbtQmlModel::detachWallet()
 {
-    closeAdmission();
+    close();
     ++m_generation;
     Q_EMIT changed();
 }

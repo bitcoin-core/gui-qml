@@ -117,12 +117,12 @@ public:
     NodeModel(interfaces::Node& node, bool backend_ready, Services services);
     ~NodeModel() override;
     void beginShutdown();
-    void closeAdmission();
+    void close();
     // Internal lifecycle receipt; the scheduler capability is never a QML command.
     void handleLifecycleException(const QString& message, std::shared_ptr<execution::Scheduler> original_diagnostic_scope);
     std::shared_ptr<execution::Scheduler> queryScheduler() const { return m_query_scheduler; }
     // Value-only retirement shares the existing worker and its shutdown join.
-    // Admission stays open through closeAdmission(), until beginShutdown().
+    // Admission stays open through close(), until beginShutdown().
     // A false admission leaves ownership with the caller's retirement mailbox.
     bool retireValues(std::function<void()> release);
     bool isDrained() const { return m_drained; }

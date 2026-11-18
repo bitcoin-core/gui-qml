@@ -187,7 +187,7 @@ void PeerListModelTests::neutralPresentationObserversPreserveBoundedDeliveryAndL
     while (publish()) {}
     QCOMPARE(model.rowCount(), 0);
     for (const auto& observer : observers) if (observer) QCOMPARE(observer->removals, 1);
-    model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+    model.close(); transport.drain(); QVERIFY(transport.quiescent());
 }
 
 void PeerListModelTests::manualQuerySeparatesCoreOutcomeAndPresentation()
@@ -229,7 +229,7 @@ void PeerListModelTests::manualQuerySeparatesCoreOutcomeAndPresentation()
     QCOMPARE(details.nodeId(), qint64{2});
     QCOMPARE(disconnected.size(), 0);
     QCOMPARE(details.rawAddress(), QStringLiteral("10.0.0.2"));
-    model.closeAdmission();
+    model.close();
     model.refresh();
     original.reset();
     transport.drain();
@@ -584,7 +584,7 @@ void PeerListModelTests::manualProjectionBudgetsAndPersistentIndexes()
     QCOMPARE(model.data(persistent,PeerListModel::NetNodeId).toLongLong(),qint64{60});
     QCOMPARE(detail.address(),QStringLiteral("updated.example:8333")); QCOMPARE(changed.size(),1); QCOMPARE(reset.size(),0);
     QCOMPARE(model.rowForId(60),20);
-    model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+    model.close(); transport.drain(); QVERIFY(transport.quiescent());
 }
 
 void PeerListModelTests::manualFilterStaleAndQuietClose()
@@ -616,7 +616,7 @@ void PeerListModelTests::manualFilterStaleAndQuietClose()
     QCOMPARE(proxy.mapFromSource(model.index(model.rowForId(large_id))),proxy.index(0));
     proxy.setSearchText("alpha"); QVERIFY(transport.step(execution::Lane::Domain)); QVERIFY(transport.step(execution::Lane::Domain));
     QSignalSpy changes{&proxy,&QAbstractItemModel::rowsRemoved};
-    proxy.closeAdmission(); model.closeAdmission(); while(publish()) {}
+    proxy.close(); model.close(); while(publish()) {}
     QCOMPARE(changes.size(),0); QCOMPARE(details->nodeId(),large_id);
     transport.drain(); QVERIFY(transport.quiescent());
 }

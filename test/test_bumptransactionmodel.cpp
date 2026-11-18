@@ -64,7 +64,7 @@ struct Fixture {
         model = std::make_unique<BumpTransactionModel>(wallet.get());
         model->setOpening(opening, {commands.scheduler, [this](std::function<void()> turn) { publications.push_back(std::move(turn)); }}, std::move(bump_services));
     }
-    ~Fixture() { if (model) model->closeAdmission(); commands.drain(); model.reset(); opening->retire(); commands.drain(); retirement.drain(); }
+    ~Fixture() { if (model) model->close(); commands.drain(); model.reset(); opening->retire(); commands.drain(); retirement.drain(); }
     void publish() { while (!publications.empty()) { auto turn = std::move(publications.front()); publications.pop_front(); turn(); } }
     void admitCommitNative() {
         // M04 authorizes the exact review on Domain before admitting the
@@ -168,7 +168,7 @@ private Q_SLOTS:
         QVERIFY(fixture.model->requestConfirmFeeBump()); fixture.finish();
         QVERIFY(fixture.model->requestRecheckFeeBumpOutcome());
         auto observation = fixture.model->outcomeObservation(); QVERIFY(observation);
-        fixture.model->closeAdmission(); fixture.model.reset(); fixture.opening->retire();
+        fixture.model->close(); fixture.model.reset(); fixture.opening->retire();
         fixture.commands.drain(); fixture.retirement.drain(); fixture.commands.drain(); fixture.publish();
         QVERIFY(observation->result()); QVERIFY(observation->result()->value);
         QVERIFY(!observation->result()->value->committed);
@@ -279,7 +279,7 @@ private Q_SLOTS:
         if(stage==1)fixture.commands.drain();
         if(stage==2){fixture.finish();QCOMPARE(fixture.model->state(),BumpTransactionModel::NeedsConfirmation);}
         QSignalSpy notices{fixture.model.get(),&BumpTransactionModel::stateChanged};
-        fixture.model->closeAdmission();fixture.opening->retire();fixture.finish();fixture.commands.drain();fixture.retirement.drain();
+        fixture.model->close();fixture.opening->retire();fixture.finish();fixture.commands.drain();fixture.retirement.drain();
         QCOMPARE(fixture.model->state(),BumpTransactionModel::Closed);QVERIFY(!fixture.model->busy());QCOMPARE(notices.count(),0);
         QCOMPARE(wallet->calls.createBumpTransaction.load(),1);QCOMPARE(wallet->calls.commitBumpTransaction.load(),0);
         QCOMPARE(fixture.commands.scheduler->pending(),size_t{0});QVERIFY(fixture.commands.quiescent());
@@ -316,7 +316,7 @@ private Q_SLOTS:
         const auto ticket = fixture.model->requestConfirmFeeBumpWithPassphrase(password); QVERIFY(ticket);
         const auto owner = fixture.model->commitOperation(); password = "changed editor";
         QCOMPARE(wallet->unlocks, 0); QCOMPARE(wallet->calls.commitBumpTransaction.load(), 0);
-        if (close_first) fixture.model->closeAdmission();
+        if (close_first) fixture.model->close();
         fixture.admitCommitNative();
         QVERIFY(fixture.commands.step(execution::Lane::Core));
         QCOMPARE(wallet->unlocks, 1); QCOMPARE(wallet->locks, 1); QVERIFY(committed_locked);
@@ -378,9 +378,9 @@ private Q_SLOTS:
         fixture.model->reset();
         QCOMPARE(fixture.model->state(), BumpTransactionModel::Committing);
         QVERIFY(!fixture.model->requestPrepareFeeBump(TEST_TXID, 1));
-        fixture.model->closeAdmission();
+        fixture.model->close();
         fixture.model.reset();
-        fixture.opening->closeAdmission();
+        fixture.opening->close();
         fixture.admitCommitNative();
         QVERIFY(fixture.commands.step(execution::Lane::Core));
         QCOMPARE(wallet->calls.commitBumpTransaction.load(), 1);

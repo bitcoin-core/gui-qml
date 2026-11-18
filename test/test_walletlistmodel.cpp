@@ -79,7 +79,7 @@ bool AwaitCatalog(WalletListModel& model)
 struct CatalogExecution {
     ManualRoutedExecution work;
     std::deque<std::function<void()>> publications;
-    ~CatalogExecution() { work.scheduler->closeAdmission(); settle(); }
+    ~CatalogExecution() { work.scheduler->close(); settle(); }
     execution::SnapshotServices services()
     {
         return {work.scheduler, [this](auto turn) { publications.push_back(std::move(turn)); }};
@@ -698,7 +698,7 @@ void WalletListModelTests::manualCatalogOwnsPhasesAndRetainsPriorRows()
     QCOMPARE(loader.reads.load(), reads);
     environment.drain();
     if (scenario == 3) {
-        const auto notices = changed.size(); model.closeAdmission();
+        const auto notices = changed.size(); model.close();
         QCOMPARE(reset.size(), resets); QCOMPARE(changed.size(), notices);
         environment.publishAll(); QCOMPARE(reset.size(), resets); QCOMPARE(changed.size(), notices);
     } else {
@@ -708,7 +708,7 @@ void WalletListModelTests::manualCatalogOwnsPhasesAndRetainsPriorRows()
         if (scenario == 0) { QCOMPARE(changed.size(), 1); QCOMPARE(stable.data(WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{123}); }
         else { QVERIFY(!model.readError().isEmpty()); QCOMPARE(stable.data(WalletListModel::BalanceKnownRole).toBool(), false); }
     }
-    model.closeAdmission(); environment.drain(); environment.publishAll(); QVERIFY(environment.quiescent());
+    model.close(); environment.drain(); environment.publishAll(); QVERIFY(environment.quiescent());
 }
 
 
@@ -743,7 +743,7 @@ void WalletListModelTests::manualRefreshBurstReadsDirectoryOnce()
     QVERIFY(!model.projectionPending()); QVERIFY(model.fresh());
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{7});
     QCOMPARE(model.data(model.index(0), WalletListModel::OperationIdRole).toString(), QStringLiteral("operation-7"));
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualRejectedDiscoveryRetainsOrderedInputsForRetry()
@@ -769,7 +769,7 @@ void WalletListModelTests::manualRejectedDiscoveryRetainsOrderedInputsForRetry()
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QString{});
     QCOMPARE(model.data(model.index(0), WalletListModel::LoadStateRole).toInt(), int(WalletListModel::LoadState::Open));
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{21});
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
@@ -803,7 +803,7 @@ void WalletListModelTests::manualRefreshDuringOwnedReadRetainsEvents()
     QCOMPARE(model.data(model.index(1), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
     model.setWalletLoadState({}, WalletListModel::LoadState::Closed); environment.settle();
     QCOMPARE(model.rowCount(), 1); QCOMPARE(loader.reads.load(), 2);
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualReaderBackendIngressDuringGetterPreservesNewWork()
@@ -878,7 +878,7 @@ void WalletListModelTests::manualFailedDiscoveryRetainsStaleRowsAndRecovers()
     QCOMPARE(loader.reads.load(), 3); QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current);
     QVERIFY(model.fresh()); QVERIFY(model.readError().isEmpty()); QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualBackendAvailabilityPreventsDiscovery_data()
@@ -903,7 +903,7 @@ void WalletListModelTests::manualBackendAvailabilityPreventsDiscovery()
     model.setBackendAvailability(WalletListModel::BackendAvailability::Available); environment.settle();
     QCOMPARE(loader.reads.load(), 1); QVERIFY(model.walletDirLoaded()); QVERIFY(model.fresh());
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current); QCOMPARE(model.rowCount(), 0);
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualBackendAvailabilityDoesNotChangeRowLoadState()
@@ -921,7 +921,7 @@ void WalletListModelTests::manualBackendAvailabilityDoesNotChangeRowLoadState()
     model.setBackendAvailability(WalletListModel::BackendAvailability::Available); environment.settle();
     QCOMPARE(loader.reads.load(), 2); QVERIFY(model.fresh());
     QCOMPARE(model.data(model.index(0), WalletListModel::LoadStateRole).toInt(), int(WalletListModel::LoadState::Open));
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsence()
@@ -954,7 +954,7 @@ void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsenc
     QCOMPARE(model.data(row(), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{0});
     QCOMPARE(model.data(row(), WalletListModel::KeySchemeKindRole).toInt(), 2);
     QCOMPARE(loader.reads.load(), 1);
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualDefaultWalletObservationBeforeDiscovery()
@@ -973,7 +973,7 @@ void WalletListModelTests::manualDefaultWalletObservationBeforeDiscovery()
     model.setWalletLoadState({}, WalletListModel::LoadState::Closed); environment.settle();
     QCOMPARE(model.rowCount(), 1); QCOMPARE(loader.reads.load(), 1);
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("other"));
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualOlderFailureCannotReplaceNewerDiscovery()
@@ -992,7 +992,7 @@ void WalletListModelTests::manualOlderFailureCannotReplaceNewerDiscovery()
     environment.settle(); QCOMPARE(loader.reads.load(), 3);
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Current); QVERIFY(model.fresh()); QVERIFY(model.readError().isEmpty());
     QCOMPARE(model.data(model.index(0), WalletListModel::WalletIdRole).toString(), QStringLiteral("beta"));
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::manualStopFencesReadAndPublication_data()
@@ -1012,7 +1012,7 @@ void WalletListModelTests::manualStopFencesReadAndPublication()
     QSignalSpy reset{&model, &QAbstractItemModel::modelReset};
     model.refresh();
     if (read_finished) QVERIFY(environment.work.step(execution::Lane::Core));
-    model.closeAdmission();
+    model.close();
     QCOMPARE(model.phase(), WalletListModel::ReaderPhase::Stopping); QVERIFY(!model.fresh()); QVERIFY(!model.projectionPending());
     model.refresh(); model.setWalletLoadState({}, WalletListModel::LoadState::Open);
     environment.settle();
@@ -1041,7 +1041,7 @@ void WalletListModelTests::manualInterleavedPublicationRequiresExactDiffBase()
     QVERIFY(environment.work.step(execution::Lane::Domain)); environment.settle();
     QCOMPARE(model.data(model.index(0), WalletListModel::BalanceSatoshiRole).toLongLong(), qint64{1});
     QCOMPARE(reset.size(), 1); QCOMPARE(loader.reads.load(), 1); QVERIFY(!model.projectionPending());
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
@@ -1065,7 +1065,7 @@ void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
     new_facade.reset(); environment.settle();
     QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), nullptr);
     QCOMPARE(changed.size(), 2); QCOMPARE(loader.reads.load(), 1);
-    model.closeAdmission(); environment.settle(); QVERIFY(environment.work.quiescent());
+    model.close(); environment.settle(); QVERIFY(environment.work.quiescent());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

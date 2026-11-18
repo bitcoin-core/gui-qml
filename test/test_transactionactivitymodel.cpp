@@ -593,7 +593,7 @@ void TransactionActivityModelTests::oneChangedStatusReusesLargeNativeRowsAndFilt
     QCOMPARE(shared, size_t{511}); QVERIFY(proxy.lastWork().delta); QCOMPARE(proxy.lastWork().examined, size_t{1}); QCOMPARE(proxy.lastWork().prepared, size_t{1}); QVERIFY(proxy.lastWork().largestTurn <= size_t{128});
     QVERIFY(retained.isValid()); QCOMPARE(retained.data(Model::TxidRole).toString(), Id(values[10])); QCOMPARE(proxy.rowCount(), 512); QCOMPARE(proxy.pendingBalanceSat(), CAmount{0});
     previous.reset(); fixture.settle(); QVERIFY(retired.expired());
-    proxy.closeAdmission(); fixture.settle();
+    proxy.close(); fixture.settle();
 }
 void TransactionActivityModelTests::fullHiddenSearchChangesInvalidateTheDeltaWithoutAGuiPreviewChange()
 {
@@ -614,7 +614,7 @@ void TransactionActivityModelTests::fullHiddenSearchChangesInvalidateTheDeltaWit
     QCOMPARE(after->snapshot->rows.at("tx:" + Id(kept)), before->snapshot->rows.at("tx:" + Id(kept)));
     QCOMPARE(previews.count(), 0); QCOMPARE(proxy.rowCount(), 1); QCOMPARE(proxy.index(0).data(Model::TxidRole).toString(), Id(changed));
     QVERIFY(proxy.lastWork().delta); QCOMPARE(proxy.lastWork().examined, size_t{1});
-    proxy.closeAdmission(); fixture.settle();
+    proxy.close(); fixture.settle();
 }
 
 void TransactionActivityModelTests::manualProjectionWaitsForOutcomeAndGuiDelivery()

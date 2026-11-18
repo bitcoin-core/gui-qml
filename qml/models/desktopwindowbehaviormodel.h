@@ -43,7 +43,7 @@ public:
     };
     DesktopWindowBehaviorModel(bool desktop_platform, execution::SnapshotServices services, Store store = {}, QObject* parent = nullptr);
     ~DesktopWindowBehaviorModel() override;
-    void closeAdmission();
+    void close();
     Q_INVOKABLE void retryPersistence();
     Q_INVOKABLE void refreshSettings();
     bool settingsReady() const { return m_ready; }

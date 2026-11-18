@@ -192,7 +192,7 @@ private Q_SLOTS:
     }
     void closeRetainsPhysicalCompletionAndRejectsLatePublication() {
         Fixture f; f.model->refresh(); QVERIFY(f.process.step(Lane::Domain)); auto held = f.process.dispatchNext(Lane::Core); QVERIFY(held);
-        f.model->closeAdmission(); QVERIFY(!f.model->drained()); QSignalSpy finished{f.model.get(), &SignerDiscoveryModel::shutdownFinished};
+        f.model->close(); QVERIFY(!f.model->drained()); QSignalSpy finished{f.model.get(), &SignerDiscoveryModel::shutdownFinished};
         QVERIFY(f.process.finishWork(*held)); QVERIFY(f.settle()); QCOMPARE(f.reads, 1); QVERIFY(f.model->drained()); QCOMPARE(finished.count(), 1);
         QCOMPARE(f.model->rowCount(), 0); QVERIFY(!f.model->fresh());
     }
@@ -284,7 +284,7 @@ private Q_SLOTS:
     void closeWhileConfigurationIsHeldRetainsItsEffectAndDrain() {
         Fixture f; f.model->refresh(); QVERIFY(f.settle()); f.model->editPath(Executable() + " --new"); QVERIFY(f.model->apply());
         auto held = f.configuration.dispatchNext(Lane::Core); QVERIFY(held);
-        f.model->closeAdmission(); while (f.publish()) {} QVERIFY(!f.model->drained()); QCOMPARE(f.writes, 0);
+        f.model->close(); while (f.publish()) {} QVERIFY(!f.model->drained()); QCOMPARE(f.writes, 0);
         QVERIFY(f.configuration.finishWork(*held)); QVERIFY(f.settle());
         QCOMPARE(f.writes, 1); QVERIFY(f.model->drained()); QVERIFY(!f.model->pending());
     }
@@ -298,7 +298,7 @@ private Q_SLOTS:
         QVERIFY(request.signer.admitted_version);
         if (change == 0) f.model->refresh();
         else if (change == 1) { f.model->editPath(Executable() + " --changed"); QVERIFY(f.model->apply()); }
-        else f.model->closeAdmission();
+        else f.model->close();
         MockNode node; ManualRoutedExecution native; std::optional<walletcreation::NativeResult> result;
         walletcreation::Decision decision; decision.name = QStringLiteral("never-created");
         const auto admitted = execution::Submit(*native.scheduler, [&] { return walletcreation::Create(node, request, decision); }, [&](auto value) { result = std::move(value); }, [](std::exception_ptr) { QFAIL("Unexpected native guard exception"); });
@@ -312,7 +312,7 @@ private Q_SLOTS:
         services.ports.configuration = [&] { native_config = QThread::currentThread() != gui; return Healthy().configuration; };
         services.ports.enumerate = [&](const auto&) { native_process = QThread::currentThread() != gui; return Healthy().devices; };
         SignerDiscoveryModel model{std::move(services)}; model.refresh(); QTRY_VERIFY(model.fresh());
-        QVERIFY(native_config.load()); QVERIFY(native_process.load()); model.closeAdmission(); QTRY_VERIFY(model.drained());
+        QVERIFY(native_config.load()); QVERIFY(native_process.load()); model.close(); QTRY_VERIFY(model.drained());
     }
 };
 BITCOINQML_REGISTER_QT_TEST(SignerDiscoveryTests)

@@ -122,7 +122,7 @@ std::shared_ptr<interfaces::Wallet> Session::borrow() const
     return {std::move(owner), m_resources->wallet.get()};
 }
 
-void Session::closeAdmission()
+void Session::close()
 {
     std::lock_guard lock{m_mutex};
     m_admission_closed.store(true);

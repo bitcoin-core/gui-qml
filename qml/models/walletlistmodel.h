@@ -47,7 +47,7 @@ public:
     WalletListModel(interfaces::Node& node, QObject *parent = nullptr);
     WalletListModel(interfaces::Node& node, execution::SnapshotServices services, QObject* parent = nullptr);
     ~WalletListModel() override;
-    void closeAdmission();
+    void close();
     bool projectionPending() const { return m_pending; }
     QString readError() const { return m_error; }
     ReaderPhase phase() const { return m_phase; }

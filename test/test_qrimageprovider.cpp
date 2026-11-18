@@ -133,7 +133,7 @@ private Q_SLOTS:
             return false;
         };
         const auto close_preferences = qScopeGuard([&] {
-            preferences.closeAdmission(); QVERIFY(settle_preferences());
+            preferences.close(); QVERIFY(settle_preferences());
             QVERIFY(preferences_transport.quiescent());
         });
         preferences.start(); QVERIFY(settle_preferences()); QVERIFY(preferences.ready());

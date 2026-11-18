@@ -47,7 +47,7 @@ public:
     Q_ENUM(Outcome)
     ~PaymentImportOperation() override;
     // Synchronous admission/lifetime fence. Publication is a separate turn.
-    void closeAdmission();
+    void close();
     quint64 requestId() const { return m_identity; }
     State state() const { return static_cast<State>(m_snapshot.phase); }
     SourceKind sourceKind() const { return static_cast<SourceKind>(m_snapshot.kind); }

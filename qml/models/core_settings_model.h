@@ -103,7 +103,7 @@ public:
     CoreSettingsModel(QmlCoreSettings::Values values,QmlCoreSettings::StatusProjection statuses={},QObject* parent=nullptr);
     ~CoreSettingsModel() override;
     void configureServices(execution::SnapshotServices services);
-    void closeAdmission();
+    void close();
     void whenEffectsDrained(std::function<void()> done){if(m_work)m_work->close(std::move(done));else if(done)done();}
     bool presentationOpen() const {return !m_stopping;}
     void setAdmissionReady(bool ready);

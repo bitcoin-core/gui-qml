@@ -115,8 +115,8 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(Services services, QObject* p
     // No history scan, transformation, or blocking native call occurs here.
     m_date_timer.setInterval(1000);
 }
-ActivityFilterProxyModel::~ActivityFilterProxyModel() { closeAdmission(); finishClose(); }
-void ActivityFilterProxyModel::closeAdmission()
+ActivityFilterProxyModel::~ActivityFilterProxyModel() { close(); finishClose(); }
+void ActivityFilterProxyModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     m_start_timer.stop(); m_apply_timer.stop(); m_date_timer.stop(); m_scheduled = false;
@@ -162,7 +162,7 @@ QModelIndex ActivityFilterProxyModel::mapFromSource(const QModelIndex& source) c
 void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* model)
 {
     if (m_closed) return;
-    if (m_source_intent == std::numeric_limits<quint64>::max()) { closeAdmission(); return; }
+    if (m_source_intent == std::numeric_limits<quint64>::max()) { close(); return; }
     const auto source_intent = ++m_source_intent;
     const bool target_requested = model != nullptr;
     const QPointer<QAbstractItemModel> target{model};

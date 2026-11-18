@@ -397,7 +397,7 @@ public:
     quint64 signerApprovalId() const { return m_approval_id; }
     QString signerApprovalError() const;
     bool signerApprovalSignerNotFound() const;
-    void closeAdmission();
+    void close();
     void registerReview(WalletQmlModelTransaction* review) override;
     void setReviewRetirementPostForTesting(std::function<void(std::function<void()>)> post);
     void beginShutdown(bool remove_wallet = false);

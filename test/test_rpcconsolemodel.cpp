@@ -342,7 +342,7 @@ void RpcConsoleModelTests::sharedSchedulerClosureWaitsForActualNativeRetirement(
     RpcConsoleModel model{node, {env.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}};
     QSignalSpy drained{&model, &RpcConsoleModel::drained};
     QVERIFY(model.submitNodeCommand("getblockcount")); QCOMPARE(node.effects, 0);
-    env.scheduler->closeAdmission();
+    env.scheduler->close();
     model.beginShutdown();
     QVERIFY(!model.submitNodeCommand("getblockcount")); QCOMPARE(drained.size(), 0);
     QVERIFY(env.step(execution::Lane::Core)); QCOMPARE(node.effects, 1); QCOMPARE(drained.size(), 0);

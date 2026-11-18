@@ -232,7 +232,7 @@ void BanListModelTests::manualReadFailureAndRejection()
     QVERIFY(persistent.isValid());QCOMPARE(model.data(persistent,int(BanListModel::BanRoles::AddressRole)).toString(),address);
     QSignalSpy changes{&model,&QAbstractItemModel::rowsRemoved};
     fail=false;banned.clear();model.refresh();QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Domain));
-    model.closeAdmission();while(publish()){}QCOMPARE(changes.size(),0);transport.drain();QVERIFY(transport.quiescent());
+    model.close();while(publish()){}QCOMPARE(changes.size(),0);transport.drain();QVERIFY(transport.quiescent());
 }
 void BanListModelTests::manualUnbanKeepsOriginalSubnetAndAcceptedEffect()
 {
@@ -251,7 +251,7 @@ void BanListModelTests::manualUnbanKeepsOriginalSubnetAndAcceptedEffect()
     QSignalSpy finished{&model,&BanListModel::unbanFinished};
     QVERIFY(model.unbanAt(0));QVERIFY(!model.unbanAt(0));
     banned.clear();banned.emplace(ParseSubnet("192.0.2.0/24"),MakeBanEntry(2'000'000'000));
-    model.closeAdmission();QCOMPARE(node.calls.unban.load(),0);
+    model.close();QCOMPARE(node.calls.unban.load(),0);
     QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(actual,original.ToString());
     QVERIFY(transport.step(execution::Lane::Domain));
     while(!gui.empty()){auto publish=std::move(gui.front());gui.pop_front();publish();}

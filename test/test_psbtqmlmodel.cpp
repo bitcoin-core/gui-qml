@@ -257,7 +257,7 @@ private Q_SLOTS:
                 QVERIFY(model.loaded());
             }
         }
-        model.closeAdmission();
+        model.close();
         transport.drain();
         // The facade and its queued GUI callback are still alive. Neither may
         // retain the document owner's cleanup reservation or its Native value.
@@ -307,7 +307,7 @@ private Q_SLOTS:
         QVERIFY(!model->loaded());
         if (change == 1) model->clear();
         else if (change == 2) model->setError(QStringLiteral("A newer import was rejected"));
-        else if (change == 3) model->closeAdmission();
+        else if (change == 3) model->close();
         else if (change == 4) model->detachWallet();
         else if (change == 5) QVERIFY(model->requestLoadFromFile(replacement_path) > first);
         else if (change == 6) model->setNode(&node);
@@ -375,7 +375,7 @@ private Q_SLOTS:
         MockNode node;
         if (change == 1) model->clear();
         else if (change == 2) model->setError(QStringLiteral("A newer document error"));
-        else if (change == 3) model->closeAdmission();
+        else if (change == 3) model->close();
         else if (change == 4) model->detachWallet();
         else if (change == 5) model->setNode(&node);
         else if (change == 6) model.reset();
@@ -425,7 +425,7 @@ private Q_SLOTS:
         model.clear(); QVERIFY(model.summary().empty()); QCOMPARE(model.matchedTxid(), QString{});
         QVERIFY(!model.document()); QVERIFY(!model.psbt());
         model.refreshState(); model.retryPublication(); QVERIFY(!model.busy());
-        model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+        model.close(); transport.drain(); QVERIFY(transport.quiescent());
     }
     void summaryPageSupersedesNativeHeldOldWindow()
     {
@@ -451,7 +451,7 @@ private Q_SLOTS:
         QCOMPARE(model.summaryOffset(), 1);
         QCOMPARE(model.summary(), original.mid(1, 1));
         QVERIFY(!model.summaryPending()); QVERIFY(model.summaryError().isEmpty());
-        model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+        model.close(); transport.drain(); QVERIFY(transport.quiescent());
     }
     void summaryPageWithHeldGuiPublicationUsesLatestRequest()
     {
@@ -475,7 +475,7 @@ private Q_SLOTS:
         QCOMPARE(model.summaryOffset(), 2);
         QCOMPARE(model.summary(), original.mid(2, 1));
         QVERIFY(!model.summaryPending());
-        model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+        model.close(); transport.drain(); QVERIFY(transport.quiescent());
     }
     void busyNodeReplacementKeepsSummaryPagingLive_data()
     {
@@ -495,7 +495,7 @@ private Q_SLOTS:
         const auto publish_all = [&] {
             while (!publications.empty()) { auto callback = std::move(publications.front()); publications.pop_front(); callback(); }
         };
-        const auto cleanup = qScopeGuard([&] { model.closeAdmission(); transport.drain(); publish_all(); });
+        const auto cleanup = qScopeGuard([&] { model.close(); transport.drain(); publish_all(); });
         const auto path = directory.filePath("summary-node-context.psbt");
         QCOMPARE(PsbtQmlModel::SavePsbtToFile(MakeCompletePsbt(), path), QString{});
         QVERIFY(model.requestLoadFromFile(path)); transport.drain(); publish_all();
@@ -527,7 +527,7 @@ private Q_SLOTS:
         QCOMPARE(model.summary(), original.mid(1, 1));
         QVERIFY(model.summaryError().isEmpty());
         QCOMPARE(model.documentGeneration(), replacement_generation);
-        model.closeAdmission(); transport.drain(); publish_all();
+        model.close(); transport.drain(); publish_all();
         QVERIFY(transport.quiescent());
     }
     void sameGenerationRefreshRejectsRetiredSummaryPage()
@@ -569,7 +569,7 @@ private Q_SLOTS:
         QCOMPARE(model.summary(), original);
         QVERIFY(!model.summaryPending()); QVERIFY(model.summaryError().isEmpty());
         QVERIFY(publications.empty());
-        model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+        model.close(); transport.drain(); QVERIFY(transport.quiescent());
     }
     void closeWithSummaryOutcomeHeldDrainsWhileFacadeLives()
     {
@@ -589,7 +589,7 @@ private Q_SLOTS:
             return turn.lane == execution::Lane::Domain && turn.phase == execution::Phase::OutcomeReady;
         }) == 1);
 
-        model.closeAdmission(); // Keep the facade alive while its already-admitted page drains.
+        model.close(); // Keep the facade alive while its already-admitted page drains.
         QVERIFY(!model.loaded()); QVERIFY(model.summary().empty()); QVERIFY(!model.summaryPending());
         transport.drain(); publish_all();
         QVERIFY(publications.empty());
@@ -619,7 +619,7 @@ private Q_SLOTS:
         transport.drain(); publish_all();
         QVERIFY(!model.summaryPending()); QVERIFY(model.summaryError().isEmpty());
         QCOMPARE(model.summary(), expected);
-        model.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
+        model.close(); transport.drain(); QVERIFY(transport.quiescent());
     }
     void manualClipboardRequiresCurrentGuiInterest_data()
     {
@@ -659,7 +659,7 @@ private Q_SLOTS:
         QCOMPARE(publications.size(),size_t{1});
         if (change == 1) model->clear();
         else if (change == 2) model->setError(QStringLiteral("A newer error owns presentation"));
-        else if (change == 3) model->closeAdmission();
+        else if (change == 3) model->close();
         else if (change == 4) model->detachWallet();
         else if (change == 5) model->setNode(&node);
         else if (change == 6) model.reset();
@@ -735,7 +735,7 @@ private Q_SLOTS:
                 std::make_shared<std::atomic_bool>(false),[] {});
             QVERIFY(opening->start(wallet)); transport.drain(); opening->take();
             model->configureSession(opening,{transport.scheduler,{},post});
-            opening->closeAdmission();
+            opening->close();
         } else model->setFeeServices({transport.scheduler,{},post});
         const auto submissions_before = transport.coreSubmissions();
         const auto document = MakeCompletePsbt(); const auto path = directory.filePath("not-read.psbt");
@@ -745,7 +745,7 @@ private Q_SLOTS:
         QVERIFY(!model->requestSign()); QVERIFY(!model->requestBroadcast());
         QVERIFY(!model->requestCopyToClipboard()); QVERIFY(!model->requestSignWithPassphrase(QStringLiteral("unused")));
         QCOMPARE(model->documentGeneration(),generation);
-        if (mode == 1) model->closeAdmission();
+        if (mode == 1) model->close();
         if (mode == 2) transport.rejectLane(execution::Lane::Core);
         if (mode != 0) {
             const auto ticket = model->requestLoadFromFile(path);
@@ -882,7 +882,7 @@ private Q_SLOTS:
         QVERIFY(model->saved());
         QFile saved{saved_path}; QVERIFY(saved.open(QIODevice::ReadOnly)); QCOMPARE(saved.readAll(), raw);
         QVERIFY(model->requestBroadcast());
-        if (close_before_effect) { model->closeAdmission(); opening->retire(); }
+        if (close_before_effect) { model->close(); opening->retire(); }
         QVERIFY(transport.step(execution::Lane::Core));
         QCOMPARE(node.calls.broadcastTransaction.load(), 1);
         QVERIFY(submitted);
@@ -966,7 +966,7 @@ private Q_SLOTS:
         // must not depend on repeating that read at the submit boundary.
         wallet->on_inspect = [](PartiallySignedTransaction&) { throw std::runtime_error("metadata unavailable after review"); };
         QVERIFY(model->requestBroadcast());
-        if (close_before_effect) { model->closeAdmission(); opening->retire(); }
+        if (close_before_effect) { model->close(); opening->retire(); }
         QVERIFY(transport.step(execution::Lane::Core));
         QCOMPARE(node.calls.broadcastTransaction.load(), 1);
         QVERIFY(submitted);
