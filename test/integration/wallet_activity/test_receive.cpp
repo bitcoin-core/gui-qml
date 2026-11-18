@@ -17,6 +17,7 @@
 #include <key_io.h>
 #include <util/string.h>
 #include <QFile>
+#include <algorithm>
 #include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -419,6 +420,103 @@ private Q_SLOTS:
         });
         QVERIFY(stored.empty()); const auto address = qmltest::Rpc(m_app, "getaddressinfo", qmltest::Json("[\"" + original.toStdString() + "\"]"), name);
         QVERIFY(!address.find_value("iswitness").get_bool()); QVERIFY(address.find_value("solvable").get_bool());
+    }
+    // #1088: a wallet whose active descriptors cover only one output type,
+    // reloaded so the GUI has learned nothing from earlier generations, gets an
+    // address of that type on the first attempt, then stops offering any type
+    // Core has refused. interfaces::Wallet has no non-mutating per-type
+    // capability query, so types not yet tried stay listed until one exists.
+    void receiveOffersOnlyTypesTheActiveDescriptorsCanGenerate_data()
+    {
+        QTest::addColumn<QString>("script"); QTest::addColumn<QStringList>("expected");
+        QTest::newRow("legacy-only") << QStringLiteral("pkh(%1)") << QStringList{QStringLiteral("legacy")};
+        QTest::newRow("segwit-only") << QStringLiteral("wpkh(%1)") << QStringList{QStringLiteral("bech32")};
+        QTest::newRow("p2sh-segwit-only") << QStringLiteral("sh(wpkh(%1))") << QStringList{QStringLiteral("p2sh-segwit")};
+        QTest::newRow("taproot-only") << QStringLiteral("tr(%1)") << QStringList{QStringLiteral("bech32m")};
+    }
+    void receiveOffersOnlyTypesTheActiveDescriptorsCanGenerate()
+    {
+        QFETCH(QString, script); QFETCH(QStringList, expected);
+        const QString name{QStringLiteral("single-type-") + QString::fromLatin1(QTest::currentDataTag())};
+        UniValue create{UniValue::VOBJ}; create.pushKV("wallet_name", name.toStdString()); create.pushKV("blank", true); create.pushKV("disable_private_keys", true);
+        qmltest::Rpc(m_app, "createwallet", create);
+        const std::string key{"tprv8ZgxMBicQKsPdYeeZbPSKd2KYLmeVKtcFA7kqCxDvDR13MQ6us8HopUR2wLcS2ZKPhLyKsqpDL2FtL73LMHcgoCL7DXsciA8eX8nbjCR2eG"};
+        UniValue imports{UniValue::VARR};
+        for (const bool internal : {false, true}) {
+            // getdescriptorinfo returns the public form, which a wallet with
+            // private keys disabled accepts.
+            UniValue describe{UniValue::VARR}; describe.push_back(script.arg(QString::fromStdString(key) + (internal ? "/1/*" : "/0/*")).toStdString());
+            UniValue item{UniValue::VOBJ}; item.pushKV("desc", qmltest::Rpc(m_app, "getdescriptorinfo", describe).find_value("descriptor").get_str());
+            item.pushKV("timestamp", "now"); item.pushKV("active", true); item.pushKV("internal", internal); item.pushKV("range", qmltest::Json("[0,20]"));
+            imports.push_back(item);
+        }
+        UniValue parameters{UniValue::VARR}; parameters.push_back(imports);
+        const auto imported = qmltest::Rpc(m_app, "importdescriptors", parameters, name);
+        QVERIFY(imported[0].find_value("success").get_bool()); QVERIFY(imported[1].find_value("success").get_bool());
+        // The issue's path: unload and load again, so nothing the GUI saw while
+        // the descriptors were imported can stand in for a support check.
+        qmltest::Rpc(m_app, "unloadwallet", qmltest::Json("[\"" + name.toStdString() + "\"]"));
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
+        QTRY_VERIFY(!controller->walletForName(name) || !controller->walletForName(name)->available());
+        qmltest::Rpc(m_app, "loadwallet", qmltest::Json("[\"" + name.toStdString() + "\"]"));
+
+        // Core is the oracle for which types this wallet can generate.
+        QStringList supported;
+        for (const auto* type : {"bech32m", "bech32", "p2sh-segwit", "legacy"}) {
+            try { qmltest::Rpc(m_app, "getnewaddress", qmltest::Json(std::string{"[\"\",\""} + type + "\"]"), name); supported.append(QString::fromLatin1(type)); }
+            catch (const std::runtime_error&) {}
+        }
+        QCOMPARE(supported, expected);
+
+        auto* wallet = qmltest::SelectOpenWalletForSetup(m_app, name); QVERIFY(wallet);
+        QTRY_VERIFY(wallet->capabilitiesKnown() && wallet->property("receiveRequestsLoaded").toBool());
+        const auto offered = [wallet] {
+            QStringList ids; for (const auto& row : wallet->availableReceiveAddressTypes()) ids.append(row.toMap().value("id").toString()); return ids;
+        };
+        const auto proven = [wallet](const QString& id) {
+            for (const auto& row : wallet->availableReceiveAddressTypes()) {
+                const auto map = row.toMap();
+                if (map.value("id").toString() == id) return map.value("capability").toInt() == int(ReceiveTypeStatus::Support::Proven);
+            }
+            return false;
+        };
+        // Before any generation the GUI cannot tell, without a Core per-type
+        // capability query, which non-Taproot types the descriptors cover.
+        QEXPECT_FAIL("", "#1088 needs a Core per-type receive capability query", Continue);
+        QCOMPARE(offered(), expected);
+
+        // Opening Receive gets an address of the supported type on the first
+        // attempt, with no error and no manual switch.
+        auto* receive = wallet->receive(); QVERIFY(receive); QVERIFY(receive->ensureAddress());
+        QTRY_VERIFY(receive->reservation()->phase() == AddressReservationModel::Ready || receive->reservation()->phase() == AddressReservationModel::Failed);
+        QCOMPARE(receive->reservation()->phase(), AddressReservationModel::Ready);
+        QCOMPARE(receive->reservation()->lastGeneratedAddressType(), expected.front());
+        QTRY_VERIFY(receive->reservation()->available() && receive->editor()->canSave());
+        const auto address = receive->reservation()->address(); QVERIFY(!address.isEmpty());
+        const auto info = qmltest::Rpc(m_app, "getaddressinfo", qmltest::Json("[\"" + address.toStdString() + "\"]"), name);
+        QVERIFY(info.find_value("ismine").get_bool());
+        QCOMPARE(info.find_value("iswitness").get_bool(), expected.front() == QStringLiteral("bech32") || expected.front() == QStringLiteral("bech32m"));
+
+        // The working type is offered, proven and the default; anything else
+        // still offered is unsupported and must not be marked proven.
+        QTRY_VERIFY(proven(expected.front()));
+        QCOMPARE(wallet->defaultReceiveAddressType(), expected.front());
+        for (const auto& id : offered()) if (!supported.contains(id)) QVERIFY2(!proven(id), qPrintable(id));
+
+        // Choosing a still-listed unsupported type fails as unavailable, not
+        // as a generic retryable error, and the type is then no longer offered.
+        const auto remaining = offered();
+        const auto unsupported = std::find_if(remaining.begin(), remaining.end(), [&](const QString& id) { return !supported.contains(id); });
+        if (unsupported != remaining.end()) {
+            const QString& type{*unsupported};
+            QVERIFY(receive->chooseAddressType(type));
+            QTRY_VERIFY(receive->reservation()->phase() == AddressReservationModel::Ready || receive->reservation()->phase() == AddressReservationModel::Failed);
+            QCOMPARE(receive->reservation()->phase(), AddressReservationModel::Failed);
+            QCOMPARE(receive->reservation()->generationError(), ReceiveError::Code::TypeUnavailable);
+            QTRY_VERIFY(!offered().contains(type));
+            QVERIFY(offered().contains(expected.front()));
+            QCOMPARE(wallet->defaultReceiveAddressType(), expected.front());
+        }
     }
     void typedReceivePreferenceFailureRetainsTheGeneratedAddress()
     {

@@ -32,6 +32,7 @@ QString walletrequests::ErrorText(Error error, bool request_saved)
     case Error::AddressCreation: return QCoreApplication::translate("ReceiveRequestOperation", "A receiving address could not be generated. Please try again.");
     case Error::ReservationPersistence: return QCoreApplication::translate("ReceiveRequestOperation", "The receiving-address reservation could not be saved. Retry before creating a request.");
     case Error::PreferencePersistence: return QCoreApplication::translate("ReceiveRequestOperation", "The address is ready, but saving its receiving preference could not be confirmed.");
+    case Error::TypeUnavailable: return QCoreApplication::translate("ReceiveRequestOperation", "This wallet cannot generate this address type. Choose another type.");
     case Error::LockedAttemptFailed: return QCoreApplication::translate("ReceiveRequestOperation", "This address could not be created while the wallet was locked. It may need unlocking or may be unavailable for this address type. Unlock and try again, or cancel.");
     }
     return {};

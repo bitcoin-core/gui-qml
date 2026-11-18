@@ -8,6 +8,8 @@
 
 #include <key_io.h>
 #include <outputtype.h>
+#include <tinyformat.h>
+#include <util/result.h>
 #include <wallet/types.h>
 #include <QScopeGuard>
 #include <QSettings>
@@ -296,14 +298,14 @@ void Store::scanAddress(const std::shared_ptr<AddressWork>& work)
 
 void Store::allocateAddress(const std::shared_ptr<AddressWork>& work, bool reuse)
 {
-    struct Generated { std::optional<CTxDestination> destination; Error error{Error::None}; };
+    struct Generated { std::optional<CTxDestination> destination; Error error{Error::None}; OutputType type{OutputType::BECH32}; };
     const auto self = shared_from_this();
     const auto secret = std::exchange(work->queued.command.secret, {});
     auto captured_secret = std::exchange(work->queued.command.captured_secret, {});
     const std::string label = work->intent->create ? work->intent->draft.note.toStdString() : std::string{};
     const auto admitted = m_opening->perform(work->queued.action, [self, work, secret, captured_secret = std::move(captured_secret), reuse, label](interfaces::Wallet& wallet) mutable {
         const auto wipe = qScopeGuard([secret] { clearSecret(secret); });
-        Generated generated;
+        Generated generated; generated.type = work->type;
         if (!self->m_opening->available()) { generated.error = Error::Closed; return generated; }
         if (!self->currentAddressIntent(work->intent)) { generated.error = Error::Changed; return generated; }
         bool relock{false};
@@ -330,8 +332,27 @@ void Store::allocateAddress(const std::shared_ptr<AddressWork>& work, bool reuse
                 generated.error = Error::ReservationPersistence;
             } else if (reuse) generated.destination = work->candidate;
             else {
-                const auto destination = wallet.getNewDestination(work->type, label);
-                if (destination) generated.destination = *destination;
+                // #1088 (partial): Core reports a type with no active
+                // descriptor only through this message, and has no
+                // non-mutating per-type capability query. Record the type so
+                // Receive stops offering it, and let a request that did not
+                // name a type move on to the next one. Such a failure returns
+                // before Core reserves anything.
+                bool type_unavailable{false};
+                for (int attempt = 0; attempt < 4; ++attempt) {
+                    const auto destination = wallet.getNewDestination(generated.type, label);
+                    type_unavailable = false;
+                    if (destination) { generated.destination = *destination; break; }
+                    if (util::ErrorString(destination).original != strprintf("Error: No %s addresses available.", FormatOutputType(generated.type))) break;
+                    type_unavailable = true;
+                    self->m_opening->markReceiveTypeUnavailable(generated.type);
+                    if (work->requested_type) break;
+                    const OutputType next = self->m_opening->preferredReceiveType(wallet);
+                    if (next == generated.type) break;
+                    generated.type = next;
+                }
+                if (generated.destination) {}
+                else if (type_unavailable) generated.error = Error::TypeUnavailable;
                 // An already successful authorization cannot turn a later
                 // key/storage failure into another password requirement.
                 else generated.error = !has_secret && originally_locked ? Error::LockedAttemptFailed : Error::AddressCreation;
@@ -343,6 +364,7 @@ void Store::allocateAddress(const std::shared_ptr<AddressWork>& work, bool reuse
         }
         return generated;
     }, [self, work, reuse](Generated generated) {
+        work->type = generated.type;
         self->m_opening->refreshMetadata();
         if (!generated.destination || !IsValidDestination(*generated.destination)) { self->addressReady(work, {}, generated.error == Error::None ? Error::AddressCreation : generated.error); return; }
         auto address_type = QString::fromStdString(FormatOutputType(work->type));

@@ -11,7 +11,7 @@ class ReceiveError {
 public:
     enum class Code { None, Loading, Checking, Invalid, Missing, Changed, Paid, IdExhausted, NeedsUnlock,
                    Rejected, Closed, Persistence, LabelPersistence, Partial, Uncertain, Unsupported, AlreadySaved,
-                   IncorrectPassphrase, AddressCreation, ReservationPersistence, PreferencePersistence, LockedAttemptFailed };
+                   IncorrectPassphrase, AddressCreation, ReservationPersistence, PreferencePersistence, LockedAttemptFailed, TypeUnavailable };
     Q_ENUM(Code)
 };
 

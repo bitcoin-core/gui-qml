@@ -19,6 +19,7 @@
 #include <map>
 #include <limits>
 #include <mutex>
+#include <set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -74,6 +75,10 @@ struct Metadata {
     bool encrypted{false}, locked{false};
     bool can_get_addresses{false}, taproot{false};
     std::string receive_preference;
+    // Types Core reported it has no active descriptor for during this opening
+    // (#1088). Learned from failed generation only: interfaces::Wallet has no
+    // non-mutating per-type capability query, so untried types stay unknown.
+    std::vector<std::string> unavailable_receive_types;
 };
 struct Update {
     std::optional<Metadata> metadata;
@@ -176,7 +181,11 @@ public:
     void onTransactions(Transactions consumer);
     execution::SubmitResult setReceivePreference(std::string type, std::shared_ptr<const Action> original = {}, std::function<void(bool)> done = {});
     // Native-only preference read; selecting a template never writes it.
+    // Skips types already found unavailable in this opening.
     OutputType preferredReceiveType(interfaces::Wallet& wallet) const;
+    // Record that Core has no active descriptor for this receive type.
+    void markReceiveTypeUnavailable(OutputType type);
+    std::vector<std::string> unavailableReceiveTypes() const;
     uint64_t preferenceRevision() const { return m_preference_revision.load(); }
     void answerClose(Question question, bool accept);
     void retire(bool remove_wallet = false);
@@ -251,6 +260,8 @@ private:
     std::atomic_bool m_transactions_pending{false}, m_drained{false};
     bool m_started{false};
     mutable std::mutex m_mutex;
+    mutable std::mutex m_receive_types_mutex;
+    std::set<OutputType> m_unavailable_receive_types; // guarded by m_receive_types_mutex
     size_t m_work_references{0}; // Accepted actions and retained values.
     bool m_stop_requested{false};
     std::function<void(Notify)> m_stop_work;

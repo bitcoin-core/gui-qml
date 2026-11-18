@@ -29,7 +29,7 @@ struct Session::Resources {
 };
 
 namespace {
-Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& preferences)
+Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& preferences, std::vector<std::string> unavailable_receive_types)
 {
     auto name = wallet.getWalletName();
     if (name.size() > 32'768) throw std::length_error("Wallet name is too long");
@@ -38,7 +38,7 @@ Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& pr
     // the bounded metadata transport. Invalid values use the supported default.
     if (saved != "bech32m" && saved != "bech32" && saved != "p2sh-segwit" && saved != "legacy") saved.clear();
     return {std::move(name), wallet.privateKeysDisabled(), wallet.hasExternalSigner(), wallet.isCrypted(), wallet.isLocked(),
-            wallet.canGetAddresses(), wallet.taprootEnabled(), std::move(saved)};
+            wallet.canGetAddresses(), wallet.taprootEnabled(), std::move(saved), std::move(unavailable_receive_types)};
 }
 
 execution::SubmitResult PostUtility(execution::SerialQueue& queue, std::function<void()> work)
@@ -150,7 +150,7 @@ Session::Start Session::startWith(const std::function<void(Resources&)>& acquire
             self->ingress(3);
             throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
         }
-        return ReadMetadata(value, self->m_preferences);
+        return ReadMetadata(value, self->m_preferences, self->unavailableReceiveTypes());
     }, [self](Metadata metadata) { self->refreshed(std::move(metadata), {}); }, [self](std::exception_ptr) {
         { std::lock_guard lock{self->m_mutex}; self->m_refresh_pending = false; }
         Update failed; failed.failed = true; self->publish(std::move(failed));
@@ -486,7 +486,7 @@ void Session::scheduleRefresh()
     }
     const auto self = shared_from_this();
     const bool transactions = events.rescan || !events.transactions.empty();
-    const auto admitted = read([self](interfaces::Wallet& wallet) { return ReadMetadata(wallet, self->m_preferences); },
+    const auto admitted = read([self](interfaces::Wallet& wallet) { return ReadMetadata(wallet, self->m_preferences, self->unavailableReceiveTypes()); },
         [self, events = std::move(events)](Metadata metadata) mutable { self->refreshed(std::move(metadata), std::move(events)); },
         [self, transactions](std::exception_ptr) { self->refreshFailed(transactions); }, execution::WorkClass::Observation);
     if (!admitted) refreshFailed(transactions);
@@ -514,7 +514,31 @@ OutputType Session::preferredReceiveType(interfaces::Wallet& wallet) const
 {
     const auto saved = m_preferences.read ? m_preferences.read(wallet.getWalletName()) : std::string{};
     const auto parsed = ParseOutputType(saved);
-    return parsed ? *parsed : wallet.getDefaultAddressType();
+    const OutputType preferred = parsed ? *parsed : wallet.getDefaultAddressType();
+    std::lock_guard lock{m_receive_types_mutex};
+    if (!m_unavailable_receive_types.contains(preferred)) return preferred;
+    // #1088: fall back in the order Receive lists types. Without a Core
+    // capability query, a type is only known unavailable once it has failed.
+    for (const OutputType type : {OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+        if (type == OutputType::BECH32M && !wallet.taprootEnabled()) continue;
+        if (!m_unavailable_receive_types.contains(type)) return type;
+    }
+    return preferred;
+}
+
+void Session::markReceiveTypeUnavailable(OutputType type)
+{
+    std::lock_guard lock{m_receive_types_mutex};
+    m_unavailable_receive_types.insert(type);
+}
+
+std::vector<std::string> Session::unavailableReceiveTypes() const
+{
+    std::lock_guard lock{m_receive_types_mutex};
+    std::vector<std::string> ids;
+    ids.reserve(m_unavailable_receive_types.size());
+    for (const OutputType type : m_unavailable_receive_types) ids.push_back(FormatOutputType(type));
+    return ids;
 }
 
 execution::SubmitResult Session::setReceivePreference(std::string type, std::shared_ptr<const Action> original, std::function<void(bool)> done)
@@ -526,7 +550,7 @@ execution::SubmitResult Session::setReceivePreference(std::string type, std::sha
     const auto work = [self, type](interfaces::Wallet& wallet) {
         const bool supported = type != "bech32m" || wallet.taprootEnabled();
         const bool persisted = supported && self->m_preferences.write && self->m_preferences.write(wallet.getWalletName(), type);
-        auto metadata = ReadMetadata(wallet, self->m_preferences);
+        auto metadata = ReadMetadata(wallet, self->m_preferences, self->unavailableReceiveTypes());
         const bool saved = persisted && metadata.receive_preference == type;
         return std::pair{std::move(metadata), saved};
     };

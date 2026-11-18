@@ -632,6 +632,8 @@ void WalletModel::publishOpening()
         m_can_get_addresses = metadata.can_get_addresses;
         m_taproot = metadata.taproot;
         m_receive_preference = QString::fromStdString(metadata.receive_preference);
+        m_unavailable_receive_types.clear();
+        for (const auto& type : metadata.unavailable_receive_types) m_unavailable_receive_types.insert(QString::fromStdString(type));
         m_security->observe(metadata); if (!guard || m_stopping) return;
         if (name_changed) { Q_EMIT nameChanged(); if (!guard || m_stopping) return; }
         Q_EMIT openingMetadataChanged(); if (!guard || m_stopping) return;
@@ -1652,6 +1654,10 @@ QVariantList WalletModel::availableReceiveAddressTypes() const
         if (type == OutputType::BECH32M && !m_taproot) {
             continue;
         }
+        // #1088 (partial): drop types Core has reported it cannot generate.
+        // Types not yet tried stay listed as Unknown until Core offers a
+        // per-type capability query.
+        if (m_unavailable_receive_types.contains(OutputTypeId(type))) continue;
         QVariantMap item;
         item.insert(QStringLiteral("id"), OutputTypeId(type));
         item.insert(QStringLiteral("label"), OutputTypeLabel(type));
