@@ -137,6 +137,7 @@ if(ENABLE_WALLET)
     test_addresslistmodel.cpp
     test_bumptransactionmodel.cpp
     test_signverifymessagemodel.cpp
+    test_signertransaction.cpp
     test_signerdiscovery.cpp
     test_coinslistmodel.cpp
     test_psbtqmlmodel.cpp
