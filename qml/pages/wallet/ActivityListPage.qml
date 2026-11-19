@@ -376,6 +376,7 @@ Page {
                 id: listView
                 objectName: "activityListView"
                 function ensureFocusedItemVisible() {
+                    heldContentY = NaN // Keyboard navigation is the user's own scrolling.
                     const window = root.Window.window
                     const item = window ? window.activeFocusItem : null
                     let ancestor = item
@@ -389,6 +390,47 @@ Page {
                         y += position.y + item.height - listView.height + margin
                     listView.contentY = Math.max(listView.originY,
                         Math.min(y, listView.originY + listView.contentHeight - listView.height))
+                }
+                // A confirmation re-groups the list: rows move out of Pending into
+                // their dated groups. Qt keeps each visible row on screen as it moves,
+                // so the view follows the row up the list and jumps. The list stays
+                // where the user left it instead, at the top or further down. Only the
+                // position is held while the move is applied; the rows still move.
+                // The user always wins: a drag, a flick, the scroll bar or the wheel
+                // ends the hold.
+                property real heldContentY: NaN
+                readonly property bool userScrolling: moving || dragging || (ScrollBar.vertical && ScrollBar.vertical.pressed)
+                function holdPosition() {
+                    if (isNaN(heldContentY) && !userScrolling) heldContentY = contentY
+                    if (!isNaN(heldContentY)) holdPositionTimer.restart()
+                }
+                // While the list lays out the moved rows its content height is only an
+                // estimate, and Qt clamps the position to it and does not come back.
+                // So hold the exact position meanwhile and clamp only once settled.
+                function restorePosition(settled) {
+                    const held = heldContentY
+                    if (isNaN(held)) return
+                    if (userScrolling) { heldContentY = NaN; return }
+                    const highest = Math.max(originY, originY + contentHeight - height)
+                    const target = settled === true ? Math.max(originY, Math.min(held, highest)) : held
+                    if (contentY !== target) contentY = target
+                }
+                onContentYChanged: restorePosition(false)
+                onUserScrollingChanged: if (userScrolling) heldContentY = NaN
+                Timer {
+                    id: holdPositionTimer
+                    interval: 400
+                    onTriggered: { listView.restorePosition(true); listView.heldContentY = NaN }
+                }
+                Connections {
+                    target: activityFilterProxy
+                    function onRowsAboutToBeMoved() { listView.holdPosition() }
+                    function onModelAboutToBeReset() { listView.holdPosition() }
+                    function onLayoutAboutToBeChanged() { listView.holdPosition() }
+                    function onRowsMoved() { listView.restorePosition(false); listView.holdPosition() }
+                    function onModelReset() { listView.restorePosition(false); listView.holdPosition() }
+                    function onLayoutChanged() { listView.restorePosition(false); listView.holdPosition() }
+                    function onDataChanged() { if (!isNaN(listView.heldContentY)) listView.holdPosition() }
                 }
                 Timer {
                     id: focusScrollTimer
@@ -405,6 +447,12 @@ Page {
                 model: root.visible ? activityFilterProxy : null
                 reuseItems: false
                 boundsBehavior: Flickable.StopAtBounds
+                // Nothing on this page uses the current item. Left at its default it
+                // is the first row and is pushed down by every row inserted above
+                // it; when a confirmation re-groups the list, the view then jumps
+                // to that row instead of staying where the user left it.
+                currentIndex: -1
+                highlightFollowsCurrentItem: false
                 ScrollBar.vertical: ScrollBar {}
                 section.property: root.visible ? "sectionLabel" : ""
                 section.criteria: ViewSection.FullString
@@ -656,6 +704,7 @@ Page {
             onActivated: function(value) {
                 activitySettings.activityGrouping = value
                 moreMenu.close()
+                listView.heldContentY = NaN
                 listView.positionViewAtBeginning()
             }
         }
