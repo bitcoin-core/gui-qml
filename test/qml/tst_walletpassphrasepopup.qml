@@ -184,6 +184,17 @@ TestCase {
         return root.contentItem ? findByAccessibleName(root.contentItem, name) : null
     }
 
+    // #1132: the unlock prompt keeps exactly what was pasted, so a wallet
+    // encrypted with a pasted line ending still opens.
+    function test_unlock_prompt_keeps_a_pasted_line_ending() {
+        const popup = createPopup()
+        const field = findObjectByName(popup, "testPassphraseField")
+        field.insert(0, "Correct-Horse-7\n")
+        compare(field.text, "Correct-Horse-7\n")
+        findObjectByName(popup, "testPassphraseConfirmButton").clicked()
+        compare(submittedPassphrase, "Correct-Horse-7\n")
+    }
+
     // #1133: a reveal is for the passphrase being typed. The next opening of
     // the same prompt starts masked again.
     function test_reopen_starts_masked_after_a_reveal() {

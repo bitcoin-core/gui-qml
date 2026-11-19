@@ -777,6 +777,36 @@ TestCase {
         compare(field.echoMode, TextInput.Password)
     }
 
+    // #1132: a new passphrase drops pasted line endings; a field that unlocks
+    // an existing wallet keeps exactly what was pasted.
+    function test_passwordTextFieldDropsPastedLineEndingsOnlyForANewPassphrase_data() {
+        return [
+            { tag: "lf", pasted: "Correct-Horse-7\n", dropped: "Correct-Horse-7" },
+            { tag: "crlf", pasted: "Correct-Horse-7\r\n", dropped: "Correct-Horse-7" },
+            { tag: "cr", pasted: "Correct-Horse-7\r", dropped: "Correct-Horse-7" },
+            { tag: "leading", pasted: "\nCorrect-Horse-7", dropped: "Correct-Horse-7" },
+            { tag: "inner", pasted: "Correct\nHorse-7", dropped: "CorrectHorse-7" }
+        ]
+    }
+    function test_passwordTextFieldDropsPastedLineEndingsOnlyForANewPassphrase(data) {
+        const control = createTemporaryObject(passwordTextFieldComponent, host)
+        const field = findChild(control, "examplePasswordTextFieldInput")
+        field.insert(0, data.pasted)
+        compare(field.text, data.pasted)
+
+        control.dropsLineEndings = true
+        compare(field.text, data.dropped)
+        field.text = ""
+        field.insert(0, "x")
+        field.insert(1, data.pasted)
+        compare(field.text, "x" + data.dropped)
+        compare(field.cursorPosition, field.text.length)
+        // Spaces and tabs are not line endings and stay.
+        field.text = ""
+        field.insert(0, "a b\tc")
+        compare(field.text, "a b\tc")
+    }
+
     function test_formRowAcceptsFullWidthBodyContent() {
         const row = createTemporaryObject(bodyRowComponent, host)
         verify(row !== null)
