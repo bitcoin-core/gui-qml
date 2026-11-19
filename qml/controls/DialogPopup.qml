@@ -210,6 +210,15 @@ Popup {
         }
         exiting = false
     }
+    // Take the keyboard as soon as the popup is shown, not when its enter
+    // transition ends: keys typed during the fade-in otherwise went to the
+    // field behind it. Focus already inside the popup is left where it is.
+    onVisibleChanged: {
+        if (!visible || exiting) return
+        const window = contentItem ? contentItem.Window.window : null
+        const focused = window ? window.activeFocusItem : null
+        if (!focused || !contains(focused)) focusContent()
+    }
     onOpened: focusContent()
     onAboutToHide: exiting = true
     onClosed: {
