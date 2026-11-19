@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
+import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/wallet"
 
@@ -23,6 +24,11 @@ TestCase {
         width: 900
         height: 600
         visible: true
+    }
+
+    Component {
+        id: migrationPopupComponent
+        WalletMigrationPopup {}
     }
 
     Component {
@@ -67,6 +73,55 @@ TestCase {
         findChild(popup.contentItem, "walletLoadErrorPopupDismissButton").clicked()
         tryCompare(popup, "visible", false)
         compare(walletController.loadFailure, null)
+    }
+
+    // A popup shown by a binding or in a background window has no keyboard
+    // focus yet; give it what a user's click on the window would.
+    function focusPopup(popup) {
+        const host = popup.contentItem.Window.window
+        host.requestActivate()
+        tryCompare(host, "active", true)
+        popup.contentItem.forceActiveFocus(Qt.PopupFocusReason)
+        tryCompare(popup.contentItem, "activeFocus", true)
+    }
+
+    // #1139: Return outside a button must not close the wallet.
+    function test_return_key_in_the_close_prompt_keeps_the_wallet_open() {
+        const page = createDesktopWallets()
+        try {
+            testWalletModel.available = true
+            walletController.requestCloseWallet(testWalletModel)
+            const questions = findChild(page, "walletCloseQuestions")
+            tryCompare(questions, "count", 1)
+            const popup = questions.itemAt(0).confirmation
+            verify(popup !== null)
+            tryCompare(popup, "opened", true)
+            focusPopup(popup)
+            keyClick(Qt.Key_Return)
+            // Cancel answers the question, which retires the prompt.
+            tryCompare(questions, "count", 0)
+            compare(walletController.closeWalletCalls, 0)
+            compare(testWalletModel.available, true)
+        } finally {
+            walletController.reset()
+            testWalletModel.available = true
+            testWalletModel.clearCloseQuestionForTest()
+        }
+    }
+
+    // #1139: Return outside a button must not start a wallet update.
+    function test_return_key_in_the_update_prompt_does_not_confirm_it() {
+        const popup = createTemporaryObject(migrationPopupComponent, testWindow.contentItem,
+                                            {width: 420, descriptionText: "Legacy wallet"})
+        verify(popup !== null)
+        let confirmed = 0
+        popup.confirmed.connect(function() { ++confirmed })
+        popup.open()
+        tryCompare(popup, "opened", true)
+        focusPopup(popup)
+        keyClick(Qt.Key_Return)
+        tryCompare(popup, "visible", false)
+        compare(confirmed, 0)
     }
 
     function test_old_close_prompt_keeps_original_pair_after_same_name_reopen() {

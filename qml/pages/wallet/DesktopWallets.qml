@@ -566,7 +566,10 @@ WalletShellPage {
                 visible: true
                 message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)
                 onClosed: if (question) question.decline()
+                // Return outside a button keeps the wallet open.
+                returnAction: closeCancelAction
                 AlertAction {
+                    id: closeCancelAction
                     text: qsTr("Cancel")
                     role: AlertAction.Cancel
                     buttonObjectName: "walletCloseConfirmationCancelButton"

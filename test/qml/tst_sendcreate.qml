@@ -1635,6 +1635,27 @@ TestCase {
         compare(testWalletModel.sendTransactionCalls, calls + 1)
     }
 
+    // #1139: Return outside a button must not send the whole wallet.
+    function test_review_sweep_return_key_keeps_the_review_and_sends_nothing() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.currentTransactionSweepsWallet = true
+        const calls = testWalletModel.sendTransactionCalls
+        const discardCalls = testWalletModel.discardCurrentTransactionCalls
+        const alert = findChild(review, "sendSweepAlert")
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        tryCompare(alert, "opened", true)
+        keyClick(Qt.Key_Return)
+        tryCompare(alert, "visible", false)
+        keyClick(Qt.Key_Enter)
+        compare(testWalletModel.sendTransactionCalls, calls)
+        compare(testWalletModel.discardCurrentTransactionCalls, discardCalls)
+        // The review is still there and still sends when the user clicks.
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        tryCompare(alert, "opened", true)
+        findChild(alert.contentItem, "sendSweepConfirmButton").clicked()
+        compare(testWalletModel.sendTransactionCalls, calls + 1)
+    }
+
     function test_review_sweep_alert_closes_when_wallet_changes() {
         const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
         testWalletModel.currentTransactionSweepsWallet = true

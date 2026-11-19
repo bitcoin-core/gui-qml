@@ -539,7 +539,10 @@ Page {
         //: Warns that a full-wallet send cannot be undone after confirmation on the network.
         //: %1 is the prepared transaction's recipient amount with its unit, excluding the fee.
         message: qsTr("This will send all available funds (%1) from this wallet. Once confirmed, the transaction cannot be undone.").arg(root.transaction ? root.transaction.amountAmount.displayWithUnit : "—")
+        // Return outside a button keeps the review instead of sending everything.
+        returnAction: sweepCancelAction
         AlertAction {
+            id: sweepCancelAction
             //: Dismiss the full-wallet send confirmation and keep the prepared transaction open for review.
             text: qsTr("Back to review")
             role: AlertAction.Cancel

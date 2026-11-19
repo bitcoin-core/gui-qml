@@ -518,6 +518,27 @@ TestCase {
         compare(ready.encryptedWallet, false)
     }
 
+    // #1139: Return outside a button must not create a wallet that can never
+    // be encrypted.
+    function test_return_key_in_the_unencrypted_warning_does_not_create_the_wallet() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeRegular").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        const warning = findChild(form, "createWalletUnencryptedWarning")
+        testSetup.replaceText(findChild(form, "createWalletNameInput"), "Regular wallet")
+        findChild(form, "createWalletEncryptCheckBox").checked = false
+        findChild(form, "createWalletUnencryptedConfirmToggle").toggle()
+        tryCompare(form, "canCreate", true)
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryCompare(warning, "opened", true)
+        keyClick(Qt.Key_Return)
+        tryCompare(warning, "visible", false)
+        wait(100)
+        compare(findChild(flow, "walletCreationReadyPage"), null)
+        compare(findChild(form, "createWalletFormCreateButton") !== null, true)
+    }
+
     function test_encrypted_ready_keeps_password_backup_guidance() {
         const flow = createFlow()
         findChild(flow, "walletTypeRegular").clicked()
