@@ -1141,8 +1141,10 @@ private Q_SLOTS:
             QVERIFY(result.error.isEmpty());
             QVERIFY(MatchesUnsignedTransaction(approved, *result.document->GetUnsignedTx()));
             if (mode == 2) {
-                const PartiallySignedTransaction unsigned_document{approved, 2};
+                // #1112: a document the app creates is version 0.
+                const PartiallySignedTransaction unsigned_document{approved, 0};
                 QCOMPARE(Bytes(*result.document), Bytes(unsigned_document));
+                QCOMPARE(result.document->GetVersion(), uint32_t{0});
                 QVERIFY(result.document->inputs[0].final_script_sig.empty());
             } else QCOMPARE(Bytes(*result.document), original);
         } else {
