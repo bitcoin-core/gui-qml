@@ -632,6 +632,7 @@ void WalletModel::publishOpening()
         m_can_get_addresses = metadata.can_get_addresses;
         m_taproot = metadata.taproot;
         m_receive_preference = QString::fromStdString(metadata.receive_preference);
+        m_configured_receive_type = QString::fromStdString(metadata.configured_receive_type);
         m_unavailable_receive_types.clear();
         for (const auto& type : metadata.unavailable_receive_types) m_unavailable_receive_types.insert(QString::fromStdString(type));
         m_security->observe(metadata); if (!guard || m_stopping) return;
@@ -1674,11 +1675,11 @@ QVariantList WalletModel::availableReceiveAddressTypes() const
 QString WalletModel::defaultReceiveAddressType() const
 {
     const QVariantList available_types = availableReceiveAddressTypes();
-    const QString& saved_type = m_receive_preference;
-    for (const QVariant& item : available_types) {
-        const QVariantMap type{item.toMap()};
-        if (type.value(QStringLiteral("id")).toString() == saved_type) {
-            return saved_type;
+    // A type the user chose wins; until then an explicit -addresstype does.
+    for (const QString& wanted : {m_receive_preference, m_configured_receive_type}) {
+        if (wanted.isEmpty()) continue;
+        for (const QVariant& item : available_types) {
+            if (item.toMap().value(QStringLiteral("id")).toString() == wanted) return wanted;
         }
     }
 
@@ -1734,73 +1735,6 @@ ReceiveRequestOperation* WalletModel::submitRequest(walletrequests::Command comm
             else Q_EMIT observer->addressInventoryChanged();
             if (!observer || !observer->observationsAllowed() || observer->m_opening.get() != original_opening) return;
             Q_EMIT observer->addressListChanged();
-            if (!observer || !observer->observationsAllowed()) return;
-        }
-        if (!result.paid_address.isEmpty() && observer->m_receiving_address->address() == result.paid_address) {
-            observer->m_receiving_address_ready = false;
-            observer->m_receiving_address->setPaymentReceived(true);
-            if (!observer || observer->m_stopping) return;
-            Q_EMIT observer->receivingAddressStateChanged();
-            if (!observer || observer->m_stopping) return;
-        }
-        if (intent && !intent->create && observer->m_receiving_intent != intent) return;
-        const bool apply = target && target->revision() == revision;
-        if (apply && intent && intent->select && (result.address || result.request_loaded)) {
-            target->clear();
-            if (!observer || !target || observer->m_stopping) return;
-        }
-        if (apply && result.address) {
-            const auto& address = *result.address;
-            target->setPreparedDestination(address.destination, address.address);
-            if (!observer || !target || observer->m_stopping) return;
-            target->setAddressType(address.address_type);
-            if (!observer || !target || observer->m_stopping) return;
-            target->setPaymentReceived(false);
-            if (!observer || !target || observer->m_stopping) return;
-            if (intent && intent->select) {
-                target->setNoteSelfBaseline(address.label, true);
-                if (!observer || !target || observer->m_stopping) return;
-                target->setIsEditing(true);
-                if (!observer || !target || observer->m_stopping) return;
-                if (observer->m_receiving_address->revision() == address_revision) {
-                    observer->m_receiving_address->clear();
-                    if (!observer || observer->m_stopping) return;
-                    observer->m_receiving_address->setPreparedDestination(address.destination, address.address);
-                    if (!observer || observer->m_stopping) return;
-                    observer->m_receiving_address->setAddressType(address.address_type);
-                    if (!observer || observer->m_stopping) return;
-                }
-            }
-        }
-        if (apply && intent) {
-            target->setNeedsUnlock(result.error == walletrequests::Error::NeedsUnlock || result.error == walletrequests::Error::LockedAttemptFailed || result.error == walletrequests::Error::IncorrectPassphrase);
-            if (!observer || !target || observer->m_stopping) return;
-            target->setUnlockError(result.error == walletrequests::Error::IncorrectPassphrase ? error_text : QString{});
-            if (!observer || !target || observer->m_stopping) return;
-        }
-        if ((result.request_saved || result.request_loaded) && result.record && apply) {
-            observer->applyRequest(target, result.record->display);
-            if (!observer || !target || observer->m_stopping) return;
-            if (result.request_loaded) {
-                target->setIsEditing(true);
-                if (!observer || observer->m_stopping) return;
-            }
-        }
-        if (intent && !intent->create) {
-            observer->m_receiving_address_pending = false;
-            observer->m_receiving_address_ready = ready && apply;
-            if (ready && result.address) observer->setDefaultReceiveAddressType(result.address->address_type);
-            if (!observer || observer->m_stopping) return;
-            Q_EMIT observer->receivingAddressStateChanged();
-            if (!observer || observer->m_stopping) return;
-            Q_EMIT observer->receiveRequestReconciliationPendingChanged();
-            if (!observer || observer->m_stopping) return;
-        }
-        if (consume_address && result.request_saved && result.reservation_released &&
-            observer->m_receiving_intent == consumed_intent && observer->m_receiving_address->revision() == address_revision) {
-            observer->m_receiving_address_ready = false;
-            observer->m_receiving_address->clear();
-            if (observer && observer->observationsAllowed()) Q_EMIT observer->receivingAddressStateChanged();
         }
     });
     operation->start(available() ? m_request_store : nullptr, std::move(command), m_notification_bridge);

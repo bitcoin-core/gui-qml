@@ -919,6 +919,37 @@ private Q_SLOTS:
         QVERIFY(controller->selectWallet(reopened));
         QCOMPARE(reopened->defaultReceiveAddressType(), QString{"legacy"});
     }
+    // #1137: Receive starts from an explicit -addresstype, and the starting
+    // type is not saved as the wallet's choice on the first visit. Without the
+    // option it starts from Taproot.
+    void receiveStartsFromTheConfiguredAddressType_data()
+    {
+        QTest::addColumn<QString>("expected"); QTest::addColumn<QString>("rpc_type");
+        QTest::newRow("legacy") << "legacy" << "legacy";
+        QTest::newRow("bech32") << "bech32" << "bech32";
+        QTest::newRow("p2sh-segwit") << "p2sh-segwit" << "p2sh-segwit";
+        QTest::newRow("unset") << "bech32m" << "bech32";
+    }
+    void receiveStartsFromTheConfiguredAddressType()
+    {
+        QFETCH(QString, expected); QFETCH(QString, rpc_type);
+        auto* wallet = qmltest::CreateWallet(m_app, "configured-type"); QVERIFY(wallet); QTRY_VERIFY(wallet->capabilitiesKnown());
+        auto* receive = wallet->receive(); QVERIFY(receive);
+        QCOMPARE(wallet->defaultReceiveAddressType(), expected);
+        QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
+        QVERIFY(qmltest::WaitForVisible(m_app, "receivePage"));
+        QTRY_VERIFY_WITH_TIMEOUT(receive->reservation()->available() && !receive->reservation()->address().isEmpty(), 30'000);
+        QCOMPARE(receive->reservation()->addressType(), expected);
+        Q_UNUSED(rpc_type);
+        QTRY_VERIFY(!wallet->property("receivePreferencePending").toBool());
+        // Nothing was chosen, so nothing is saved for this wallet.
+        fs::path path; QVERIFY(gArgs.GetSettingsPath(&path));
+        QFile file{QString::fromStdString(fs::PathToString(path))};
+        if (file.open(QIODevice::ReadOnly)) {
+            UniValue persisted; QVERIFY(persisted.read(file.readAll().toStdString()));
+            QVERIFY(!persisted["qml_receive_address_types"]["configured-type"].isStr());
+        }
+    }
     // #972: two wallets saving their receive-type defaults at the same time each keep their own persisted default.
     void concurrentReceiveDefaultsStayPerWallet()
     {
@@ -2018,6 +2049,8 @@ std::unique_ptr<QObject> CreateReceiveTests(BitcoinQmlApplication& app, WalletMo
 QStringList ReceiveTestArguments(const QString& selector)
 {
     if (selector == "sendOutcomeReportsObservationOrRejectsStaleReview:broadcast-disabled") return {"-walletbroadcast=0"};
+    for (const auto* type : {"legacy", "bech32", "p2sh-segwit"})
+        if (selector == QStringLiteral("receiveStartsFromTheConfiguredAddressType:%1").arg(type)) return {QStringLiteral("-addresstype=%1").arg(type)};
     if (selector == "addressPreferenceWriteReportsDisabledSettings" || selector == "typedReceivePreferenceFailureRetainsTheGeneratedAddress") return {"-nosettings"};
     if (selector == "receivingUnlockCanBeCancelledRetriedAndRelocks" ||
         selector == "typedReceiveKeepsCanonicalAmountAndExportsTheExactSavedPayload:encrypted-wallet") return {"-keypool=1"};

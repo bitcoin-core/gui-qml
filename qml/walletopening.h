@@ -75,6 +75,9 @@ struct Metadata {
     bool encrypted{false}, locked{false};
     bool can_get_addresses{false}, taproot{false};
     std::string receive_preference;
+    // The wallet's default type when -addresstype was set explicitly, else
+    // empty. Receive starts from it while no type has been chosen (#1137).
+    std::string configured_receive_type;
     // Types Core reported it has no active descriptor for during this opening
     // (#1088). Learned from failed generation only: interfaces::Wallet has no
     // non-mutating per-type capability query, so untried types stay unknown.
