@@ -142,6 +142,19 @@ class ActivityIntegrationTests : public QObject
                                   Q_ARG(qreal, list->property("contentY").toReal() + 1));
         return row;
     }
+    // The first model row at or below the viewport's top edge. A section
+    // header can cover the very top, so look a little further down.
+    static int firstRowShown(QQuickItem* list)
+    {
+        if (!list || !qmltest::WaitForPolish(list)) return -1;
+        for (qreal offset{1}; offset < 160; offset += 4) {
+            int row{-1};
+            QMetaObject::invokeMethod(list, "indexAt", Q_RETURN_ARG(int, row), Q_ARG(qreal, list->width() / 2),
+                                      Q_ARG(qreal, list->property("contentY").toReal() + offset));
+            if (row >= 0) return row;
+        }
+        return -1;
+    }
     QString addressLabel(const QString& address)
     {
         const auto labels = qmltest::Rpc(m_app, "getaddressinfo", qmltest::Json("[\"" + address.toStdString() + "\"]"), m_wallet->name()).find_value("labels");
@@ -702,6 +715,70 @@ private Q_SLOTS:
         QCOMPARE(detail_model->selectedTransactionDetails().value("txid").toString(), m_reward_txid);
         QVERIFY(detail_model->detailOutputs()->rowCount() > 0);
         QTRY_COMPARE(details->property("amount").toString(), amount);
+    }
+
+    // #1120: a block that confirms pending payments moves their rows out of
+    // Pending, but the list stays where the user left it. A list at the top
+    // keeps showing the newest rows; a list scrolled down keeps the row the
+    // user was reading at the top of the view.
+    bool receivePendingPayments(int count)
+    {
+        for (int i{0}; i < count; ++i) pay("0.00" + QString::number(100 + i).toStdString());
+        return QTest::qWaitFor([&] {
+            return m_filter->rowCount() == count &&
+                   m_filter->index(0, 0).data(ActivityFilterProxyModel::SectionLabelRole).toString() == QStringLiteral("Pending");
+        }, 60'000);
+    }
+    bool confirmPendingPayments(const QString& payer)
+    {
+        mineBlockToAddress(payer);
+        return QTest::qWaitFor([&] {
+            return m_filter->rowCount() > 0 && !m_filter->busy() &&
+                   m_filter->index(0, 0).data(ActivityFilterProxyModel::SectionLabelRole).toString() != QStringLiteral("Pending");
+        }, 60'000);
+    }
+
+    void listAtTheTopStaysAtTheTopWhenAConfirmationArrives()
+    {
+        const auto payer = fundPayer();
+        constexpr int count{12};
+        QVERIFY(receivePendingPayments(count));
+        auto* list = qobject_cast<QQuickItem*>(qmltest::Find(m_app, "activityListView")); QVERIFY(list);
+        QVERIFY(qmltest::WaitForPolish(list));
+        QCOMPARE(list->property("contentY").toReal(), list->property("originY").toReal());
+        QCOMPARE(firstRowShown(list), 0);
+        QVERIFY(confirmPendingPayments(payer));
+        QVERIFY(qmltest::WaitForPolish(list));
+        QCOMPARE(m_filter->rowCount(), count);
+        QCOMPARE(list->property("contentY").toReal(), list->property("originY").toReal());
+        QCOMPARE(firstRowShown(list), 0);
+    }
+
+    void scrolledListStaysWhereTheUserLeftItWhenAConfirmationArrives()
+    {
+        const auto payer = fundPayer();
+        constexpr int count{12};
+        auto* list = qobject_cast<QQuickItem*>(qmltest::Find(m_app, "activityListView")); QVERIFY(list);
+        // Whether Qt moves the view depends on how it estimates the rows it has
+        // not laid out, so repeat the scenario with a growing history.
+        for (int round{0}; round < 3; ++round) {
+            const int total = (round + 1) * count;
+            for (int i{0}; i < count; ++i) pay("0.00" + QString::number(100 + round * count + i).toStdString());
+            QTRY_VERIFY_WITH_TIMEOUT(m_filter->rowCount() == total, 60'000);
+            QTest::qWait(1'000); // Let the new rows settle before the user scrolls.
+            QVERIFY(QMetaObject::invokeMethod(list, "positionViewAtIndex", Q_ARG(int, total / 2), Q_ARG(int, 0)));
+            QVERIFY(qmltest::WaitForPolish(list));
+            const auto before = list->property("contentY").toReal();
+            QVERIFY(before > list->property("originY").toReal() + 100);
+            mineBlockToAddress(payer);
+            QTRY_VERIFY_WITH_TIMEOUT(m_filter->index(0, 0).data(ActivityFilterProxyModel::SectionLabelRole).toString() != QStringLiteral("Pending"), 60'000);
+            // The confirmation moves rows out of Pending. Give any late jump time
+            // to happen before looking at the view.
+            QTest::qWait(1'000);
+            QVERIFY(qmltest::WaitForPolish(list));
+            QCOMPARE(m_filter->rowCount(), total);
+            QCOMPARE(list->property("contentY").toReal(), before);
+        }
     }
 
     void clearingFiltersPreservesSearchAndRestoresRows()
