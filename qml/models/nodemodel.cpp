@@ -954,6 +954,8 @@ void NodeModel::requestShutdown()
     }
     const QPointer<NodeModel> observer{this};
     m_shutdown_requested = true;
+    Q_EMIT shutdownRequestedChanged();
+    if (!observer) return;
     if(m_status_query)m_status_query->close();
     if(m_mempool_query)m_mempool_query->close();
     m_ready_initialization.reset();

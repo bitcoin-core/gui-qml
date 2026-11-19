@@ -9,6 +9,7 @@
 #include <qml/models/desktopwindowbehaviormodel.h>
 #include <qml/models/options_model.h>
 #include <qml/models/settings_keys.h>
+#include <qml/models/nodemodel.h>
 #include <node/caches.h>
 #include <common/args.h>
 #include <common/settings.h>
@@ -19,6 +20,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+#include <QSignalSpy>
+#include <QQuickItem>
 #include <QDesktopServices>
 #include <QScopeGuard>
 #include <QPointer>
@@ -62,6 +65,15 @@ class SettingsIntegrationTests : public QObject
         return value.isStr() ? QString::fromStdString(value.get_str()) : QString{};
     }
 
+    // Closes the window and waits until shutdown has visibly started.
+    void quitAndWaitForShutdownPage()
+    {
+        QSignalSpy requested{&m_app.nodeModel(),&NodeModel::requestedShutdown};
+        m_app.window()->close();
+        QTRY_COMPARE(requested.count(),1);
+        QVERIFY(qmltest::WaitForVisible(m_app,"shutdownPage"));
+        QTest::qWait(500); // A write admitted by the focus change would land here.
+    }
 public:
     explicit SettingsIntegrationTests(BitcoinQmlApplication& app) : m_app{app} {}
 
@@ -97,6 +109,33 @@ private Q_SLOTS:
         }
     }
 
+
+    // #1114: quitting with a settings edit nobody confirmed drops it; nothing
+    // is written during shutdown. A number field's unsaved draft (the editor
+    // asks before its section can be left, so it cannot sit hidden) and a
+    // text field that still has the focus when the window closes.
+    void quitDropsAnUnsavedNumberSettingDraft()
+    {
+        auto* options=qmltest::Model<OptionsQmlModel>(m_app,"optionsModel");QVERIFY(options);QTRY_VERIFY(options->settingsReady());QTRY_VERIFY(!options->settingsPending());
+        QVERIFY(savedSetting("dbcache").isNull());
+        QVERIFY(qmltest::SelectSettings(m_app,"storage"));auto* editor=settingsEditor();QVERIFY(editor);QTRY_VERIFY(editor->fresh());
+        QVERIFY(qmltest::SetText(m_app,"dbcacheSettingInput","450"));QTRY_VERIFY(editor->canSave());
+        quitAndWaitForShutdownPage();
+        QVERIFY(savedSetting("dbcache").isNull());
+    }
+    void quitDropsAFocusedTextSettingEdit()
+    {
+        auto* options=qmltest::Model<OptionsQmlModel>(m_app,"optionsModel");QVERIFY(options);QTRY_VERIFY(options->settingsReady());QTRY_VERIFY(!options->settingsPending());
+        const auto urls_before=QSettings{}.value(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS);
+        QVERIFY(qmltest::SelectSettings(m_app,"display"));QVERIFY(qmltest::WaitForVisible(m_app,"displaySettingsPage"));
+        QVERIFY(qmltest::Click(m_app,"displayTransactionUrlsRow"));
+        auto* urls=qobject_cast<QQuickItem*>(qmltest::WaitForVisible(m_app,"thirdPartyTransactionUrlsInput"));QVERIFY(urls);
+        QVERIFY(qmltest::SetText(m_app,"thirdPartyTransactionUrlsInput","https://typed.example/tx/%s"));
+        QVERIFY(urls->hasActiveFocus());
+        quitAndWaitForShutdownPage();
+        QCOMPARE(QSettings{}.value(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS),urls_before);
+        QCOMPARE(options->thirdPartyTransactionUrls(),urls_before.toString());
+    }
 
     void databaseCacheUsesCoreDefaultAndKeepsExplicitOverride()
     {
