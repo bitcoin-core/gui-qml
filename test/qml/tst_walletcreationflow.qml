@@ -542,6 +542,21 @@ TestCase {
         compare(findChild(form, "createWalletFormCreateButton") !== null, true)
     }
 
+    // #1132: a pasted line ending does not become part of a new wallet's
+    // passphrase.
+    function test_create_form_drops_pasted_line_endings_from_the_passphrase() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeRegular").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        const password = findChild(form, "createWalletPasswordInput")
+        const confirm = findChild(form, "createWalletPasswordRepeatInput")
+        password.insert(0, "Correct-Horse-7\n")
+        confirm.insert(0, "Correct-Horse-7\r\n")
+        compare(password.text, "Correct-Horse-7")
+        compare(confirm.text, "Correct-Horse-7")
+    }
+
     function test_encrypted_ready_keeps_password_backup_guidance() {
         const flow = createFlow()
         findChild(flow, "walletTypeRegular").clicked()

@@ -90,6 +90,7 @@ ColumnLayout {
 
     PasswordTextField {
         id: passwordEntry
+        dropsLineEndings: true
         objectName: "createWalletPasswordEntry"
         visible: !fields.watchOnly && encryptCheck.checked
         Layout.fillWidth: true
@@ -104,6 +105,7 @@ ColumnLayout {
     }
     PasswordTextField {
         id: confirmEntry
+        dropsLineEndings: true
         objectName: "createWalletConfirmPasswordEntry"
         visible: !fields.watchOnly && encryptCheck.checked
         Layout.fillWidth: true

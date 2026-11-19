@@ -12,6 +12,27 @@ LabeledTextField {
         ? root.objectName + "VisibilityToggle"
         : ""
 
+    // For a new passphrase only. A line ending cannot be typed into this
+    // field, so one that arrives by paste is dropped instead of becoming a
+    // character the user cannot see or type again. Fields that unlock an
+    // existing wallet leave this off: a wallet encrypted with a pasted line
+    // ending must still open with exactly that text.
+    property bool dropsLineEndings: false
+
+    function dropLineEndings() {
+        const text = root.field.text
+        if (!root.dropsLineEndings || !/[\r\n]/.test(text)) return
+        const caret = text.slice(0, root.field.cursorPosition).replace(/[\r\n]/g, "").length
+        root.field.text = text.replace(/[\r\n]/g, "")
+        root.field.cursorPosition = caret
+    }
+
+    Connections {
+        target: root.field
+        function onTextChanged() { root.dropLineEndings() }
+    }
+    onDropsLineEndingsChanged: dropLineEndings()
+
     echoMode: passwordVisible ? TextInput.Normal : TextInput.Password
     // Qt never exposes a name for a password field, so the label also goes
     // into the description, which VoiceOver still reads.

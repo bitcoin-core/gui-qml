@@ -133,6 +133,7 @@ SettingsPage {
 
             PasswordTextField {
                 id: newPassword
+                dropsLineEndings: true
                 objectName: "walletPasswordNewEntry"
                 width: parent.width
                 label: root.updating ? qsTr("New password") : qsTr("Choose a password")
@@ -147,6 +148,7 @@ SettingsPage {
 
             PasswordTextField {
                 id: confirmPassword
+                dropsLineEndings: true
                 objectName: "walletPasswordConfirmEntry"
                 width: parent.width
                 label: root.updating ? qsTr("Confirm new password") : qsTr("Confirm password")

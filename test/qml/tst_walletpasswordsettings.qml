@@ -224,6 +224,21 @@ TestCase {
         }
     }
 
+    // #1132: the new passphrase drops a pasted line ending; the current one,
+    // which must match what the wallet was encrypted with, keeps it.
+    function test_update_password_drops_pasted_line_endings_only_from_the_new_passphrase() {
+        const page = createWalletPasswordSettingsPage(updatePasswordComponent)
+        const current = findChild(page, "walletPasswordCurrentField")
+        const fresh = findChild(page, "walletPasswordNewField")
+        const confirm = findChild(page, "walletPasswordConfirmField")
+        current.insert(0, "old secret\n")
+        fresh.insert(0, "new secret\n")
+        confirm.insert(0, "new secret\r\n")
+        compare(current.text, "old secret\n")
+        compare(fresh.text, "new secret")
+        compare(confirm.text, "new secret")
+    }
+
     function test_update_password_focuses_current_password_field() {
         const page = createWalletPasswordSettingsPage(updatePasswordComponent)
         const currentPassword = findChild(page, "walletPasswordCurrentField")
