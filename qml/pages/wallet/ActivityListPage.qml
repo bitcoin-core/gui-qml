@@ -137,13 +137,14 @@ Page {
     }
 
     // A QDate read back from the model reaches QML as a JS Date at UTC
-    // midnight; rebuild it at local midnight on the same calendar day so
+    // midnight; rebuild it at local noon on the same calendar day (local
+    // midnight is skipped in some zones on a clock change) so
     // seeding the calendar does not read it a day early west of UTC (the
     // read-side mirror of the Apply path, which hands the model ISO
     // strings for the same reason).
     function modelDateToLocal(date) {
         return (date && !isNaN(date.getTime()))
-            ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+            ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12)
             : null
     }
 
