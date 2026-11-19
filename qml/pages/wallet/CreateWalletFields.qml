@@ -207,7 +207,10 @@ ColumnLayout {
         parent: Overlay.overlay
         title: qsTr("Create without encryption?")
         message: qsTr("This wallet file will be unencrypted. Anyone with access to it may be able to spend your bitcoin. You won't be able to set a password later.")
+        // Return outside a button must not create a wallet that can never be encrypted.
+        returnAction: warningCancelAction
         AlertAction {
+            id: warningCancelAction
             text: qsTr("Cancel")
             role: AlertAction.Cancel
             buttonObjectName: "createWalletWarningCancelButton"

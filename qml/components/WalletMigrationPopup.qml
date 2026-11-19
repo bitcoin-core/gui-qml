@@ -23,7 +23,11 @@ AlertPopup {
     title: titleText
     message: descriptionText
 
+    // Return outside a button must not start an update that cannot be undone.
+    returnAction: cancelAction
+
     AlertAction {
+        id: cancelAction
         text: qsTr("Cancel")
         role: AlertAction.Cancel
         enabled: !root.busy
