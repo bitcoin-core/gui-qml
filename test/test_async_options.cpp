@@ -558,6 +558,32 @@ private Q_SLOTS:
         transport.drain();while(publish()){}QCOMPARE(changed.size(),0);QVERIFY(links->rowCount()==0);QVERIFY(transport.quiescent());
     }
 
+    // #1136: a links view that is already open follows the setting. The view is
+    // rebuilt from the new value, so an old host cannot stay offered.
+    void manualTransactionLinksFollowTheSettingWhileAViewIsOpen()
+    {
+        ManualRoutedExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;
+        QSettings settings;settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS,"https://one.example/tx/%s");settings.sync();
+        OptionsQmlModel model{fixture.node,fixture.args,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+        QVERIFY(SettleManualOptions(transport,gui));QVERIFY(model.settingsReady());
+        std::unique_ptr<OptionsTransactionLinks> links{model.createTransactionLinks()};QVERIFY(links);
+        const auto settle=[&]{QVERIFY(SettleManualOptions(transport,gui));};
+        const auto url=[&](int row){return links->data(links->index(row),OptionsTransactionLinks::UrlRole).toString();};
+        links->setTxid("tx");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://one.example/tx/tx"));
+
+        model.setThirdPartyTransactionUrls("https://two.example/tx/%s");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://two.example/tx/tx"));
+
+        model.setThirdPartyTransactionUrls("");settle();
+        QCOMPARE(links->rowCount(),0);
+
+        model.setThirdPartyTransactionUrls("https://three.example/tx/%s");settle();
+        QCOMPARE(links->rowCount(),1);QCOMPARE(url(0),QStringLiteral("https://three.example/tx/tx"));
+        model.closeAdmission();transport.drain();while(!gui.empty()){auto turn=std::move(gui.front());gui.pop_front();turn();}
+        QVERIFY(transport.quiescent());
+    }
+
     void manualTransactionLinkPresentationUsesBoundedTurns()
     {
         ManualRoutedExecution transport;std::deque<std::function<void()>> gui;Fixture fixture;

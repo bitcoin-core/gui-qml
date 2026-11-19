@@ -5118,9 +5118,13 @@ public:
     QVariantList preparedTransactionLinks(const QString& txid) const {
         QVariantList result;
         if (m_third_party_transaction_urls.isEmpty()) return result;
+        // Build the link from the configured template, like the real model does,
+        // so a test sees the setting change rather than a fixed host.
+        QString url = m_third_party_transaction_urls.section(QLatin1Char('|'), 0, 0).trimmed();
+        url.replace(QStringLiteral("%s"), txid);
         QVariantMap link;
-        link.insert("host", "example.com");
-        link.insert("url", QString("https://example.com/tx/%1").arg(txid));
+        link.insert("host", QUrl(url).host());
+        link.insert("url", url);
         result.push_back(link);
         return result;
     }

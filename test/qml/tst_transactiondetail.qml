@@ -460,6 +460,42 @@ TestCase {
         tryCompare(popup, "visible", false)
     }
 
+    // #1136: a transaction page that stays open on the Activity stack must
+    // follow the setting, not the value it saw when it was opened.
+    function test_thirdPartyTransactionLinks_follow_the_setting_while_the_page_is_open() {
+        optionsModel.thirdPartyTransactionUrls = "https://one.example/tx/%s"
+        const page = createDetail(transaction())
+        const button = findChild(page, "transactionDetailMoreButton")
+        const menu = findChild(page, "transactionDetailMoreMenu")
+        function openMenu() { mouseClick(button); tryCompare(menu, "opened", true) }
+        function closeMenu() { menu.close(); tryCompare(menu, "opened", false) }
+        function link() { return findChild(menu.contentItem, "transactionExplorerLink_0") }
+        function expectLink(text) {
+            tryVerify(function() { return link() !== null && link().text === text },
+                      5000, "explorer link should read: " + text)
+        }
+
+        openMenu()
+        expectLink("Show in one.example")
+        closeMenu()
+
+        optionsModel.thirdPartyTransactionUrls = "https://two.example/tx/%s"
+        openMenu()
+        expectLink("Show in two.example")
+        closeMenu()
+
+        optionsModel.thirdPartyTransactionUrls = ""
+        openMenu()
+        tryVerify(function() { return link() === null }, 5000, "cleared setting should remove the entry")
+        closeMenu()
+
+        // An entry that appears after the page was opened is offered too.
+        optionsModel.thirdPartyTransactionUrls = "https://three.example/tx/%s"
+        openMenu()
+        expectLink("Show in three.example")
+        closeMenu()
+    }
+
     function test_details_toggle_reveals_raw_transaction() {
         const raw = "02000000" + "abcdef0123456789".repeat(1000)
         const page = createDetail(transaction({rawTransaction: raw}))
