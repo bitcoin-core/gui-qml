@@ -2318,11 +2318,17 @@ void TransactionActivityModelTests::usesPrivateRequestNotesWithoutChangingStored
     WaitProxy(proxy);
     QCOMPARE(proxy.rowCount(), 1); // Public metadata remains searchable.
 
+    // #1135: with no request for the address, a payment received there shows
+    // the address label, the wallet's private note since #932, on the row,
+    // in the details and on the wallet's own output.
     Fixture unnamed;
     unnamed.state->put(tx);
-    unnamed.state->locked()->labels[Address(tx).toStdString()] = "Public address name";
-    WaitProxy(proxy);
-    QVERIFY(unnamed.model()->transactionDetails(Id(tx)).value("label").toString().isEmpty());
+    unnamed.state->locked()->labels[Address(tx).toStdString()] = "Rent Alice";
+    auto* plain = unnamed.model();
+    Wait(plain);
+    QCOMPARE(plain->index(0).data(Model::LabelRole).toString(), QString("Rent Alice"));
+    QCOMPARE(plain->transactionDetails(Id(tx)).value("label").toString(), QString("Rent Alice"));
+    QVERIFY(!plain->index(0).data(Model::HasPaymentRequestRole).toBool());
 }
 
 void TransactionActivityModelTests::restoresRequestsOnConflictAbandonmentReplacementAndDeletion()
@@ -2518,7 +2524,7 @@ void TransactionActivityModelTests::queuesWalletNotificationsAndRetainsStableInd
     f.state->locked()->labels[Address(tx).toStdString()] = "Updated label";
     Q_EMIT f.wallet->addressListChanged();
     Wait(f.wallet->transactionActivityModel());
-    QVERIFY(row.data(Model::LabelRole).toString().isEmpty());
+    QCOMPARE(row.data(Model::LabelRole).toString(), QString("Updated label"));
     QVERIFY(row.data(Model::SearchTextRole).toString().contains("Updated label"));
     QVERIFY(changes.count() > 0);
     QCOMPARE(row.data(Model::IdRole), id);
