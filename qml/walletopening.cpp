@@ -4,6 +4,7 @@
 
 #include <qml/walletopening.h>
 
+#include <common/args.h>
 #include <interfaces/chain.h>
 #include <addresstype.h>
 #include <outputtype.h>
@@ -31,8 +32,11 @@ Metadata ReadMetadata(interfaces::Wallet& wallet, const Session::Preferences& pr
     // IDs are a closed vocabulary; never copy arbitrary persistent input into
     // the bounded metadata transport. Invalid values use the supported default.
     if (saved != "bech32m" && saved != "bech32" && saved != "p2sh-segwit" && saved != "legacy") saved.clear();
+    // Core resolves -addresstype into the wallet's default type; only an
+    // explicit setting overrides the app's own Taproot default.
+    std::string configured{gArgs.IsArgSet("-addresstype") ? FormatOutputType(wallet.getDefaultAddressType()) : std::string{}};
     return {std::move(name), wallet.privateKeysDisabled(), wallet.hasExternalSigner(), wallet.isCrypted(), wallet.isLocked(),
-            wallet.canGetAddresses(), wallet.taprootEnabled(), std::move(saved), std::move(unavailable_receive_types)};
+            wallet.canGetAddresses(), wallet.taprootEnabled(), std::move(saved), std::move(configured), std::move(unavailable_receive_types)};
 }
 }
 
@@ -379,7 +383,11 @@ OutputType Session::preferredReceiveType(interfaces::Wallet& wallet) const
 {
     const auto saved = m_preferences.read ? m_preferences.read(wallet.getWalletName()) : std::string{};
     const auto parsed = ParseOutputType(saved);
-    const OutputType preferred = parsed ? *parsed : wallet.getDefaultAddressType();
+    // A saved choice wins, then an explicit -addresstype, then Taproot, the
+    // app's own default (#932, #1137). Core's implicit default is not used.
+    const OutputType preferred = parsed ? *parsed
+        : gArgs.IsArgSet("-addresstype") ? wallet.getDefaultAddressType()
+        : wallet.taprootEnabled() ? OutputType::BECH32M : wallet.getDefaultAddressType();
     std::lock_guard lock{m_receive_types_mutex};
     if (!m_unavailable_receive_types.contains(preferred)) return preferred;
     // #1088: fall back in the order Receive lists types. Without a Core

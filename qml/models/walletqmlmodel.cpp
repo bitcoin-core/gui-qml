@@ -646,6 +646,7 @@ void WalletQmlModel::publishOpening()
         m_can_get_addresses = metadata.can_get_addresses;
         m_taproot = metadata.taproot;
         m_receive_preference = QString::fromStdString(metadata.receive_preference);
+        m_configured_receive_type = QString::fromStdString(metadata.configured_receive_type);
         m_unavailable_receive_types.clear();
         for (const auto& type : metadata.unavailable_receive_types) m_unavailable_receive_types.insert(QString::fromStdString(type));
         m_security->observe(metadata); if (!guard || m_stopping) return;
@@ -1616,11 +1617,11 @@ QVariantList WalletQmlModel::availableReceiveAddressTypes() const
 QString WalletQmlModel::defaultReceiveAddressType() const
 {
     const QVariantList available_types = availableReceiveAddressTypes();
-    const QString& saved_type = m_receive_preference;
-    for (const QVariant& item : available_types) {
-        const QVariantMap type{item.toMap()};
-        if (type.value(QStringLiteral("id")).toString() == saved_type) {
-            return saved_type;
+    // A type the user chose wins; until then an explicit -addresstype does.
+    for (const QString& wanted : {m_receive_preference, m_configured_receive_type}) {
+        if (wanted.isEmpty()) continue;
+        for (const QVariant& item : available_types) {
+            if (item.toMap().value(QStringLiteral("id")).toString() == wanted) return wanted;
         }
     }
 
@@ -1789,7 +1790,9 @@ ReceiveRequestOperation* WalletQmlModel::submitRequest(walletrequests::Command c
         if (intent && !intent->create) {
             observer->m_receiving_address_pending = false;
             observer->m_receiving_address_ready = ready && apply;
-            if (ready && result.address) observer->setDefaultReceiveAddressType(result.address->address_type);
+            // Only a type the user chose is remembered. The starting default
+            // (Taproot, or -addresstype) is not written on the first visit.
+            if (ready && result.address && intent->explicit_type) observer->setDefaultReceiveAddressType(result.address->address_type);
             if (!observer || observer->m_stopping) return;
             Q_EMIT observer->receivingAddressStateChanged();
             if (!observer || observer->m_stopping) return;
