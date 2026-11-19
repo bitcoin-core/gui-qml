@@ -1420,6 +1420,8 @@ private Q_SLOTS:
         QFile psbt{path};
         QVERIFY(psbt.open(QIODevice::ReadOnly));
         const auto decoded = qmltest::Rpc(m_app, "decodepsbt", qmltest::Json("[\"" + psbt.readAll().toBase64().toStdString() + "\"]"));
+        // #1112: a file the app creates is version 0, which Core before v32 reads.
+        QCOMPARE(decoded.find_value("psbt_version").getInt<int>(), 0);
         CAmount exported_amount{0};
         const bool has_transaction = !decoded.find_value("tx").isNull();
         const auto& outputs = has_transaction ? decoded.find_value("tx").find_value("vout") : decoded.find_value("outputs");

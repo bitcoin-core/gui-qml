@@ -513,7 +513,10 @@ DocumentResult ExportReview(interfaces::Wallet& wallet, std::shared_ptr<const Pa
             tx = CMutableTransaction{*reviewed};
             for (auto& input : tx.vin) { input.scriptSig.clear(); input.scriptWitness.SetNull(); }
         }
-        PartiallySignedTransaction document = source ? *source : PartiallySignedTransaction{tx, 2};
+        // A file this app creates is version 0, as Bitcoin-Qt writes since
+        // bitcoin/bitcoin#36539: Core before v32 cannot read version 2 (#1112).
+        // An imported PSBT is saved back in the version it arrived with.
+        PartiallySignedTransaction document = source ? *source : PartiallySignedTransaction{tx, /*version=*/0};
         const auto approved = document.GetUnsignedTx();
         if (!approved || (reviewed && !MatchesUnsignedTransaction(tx, *approved))) return {{}, Tr("The reviewed transaction changed.")};
         if (proof && approved_fee && !psbtfee::MatchesReview(document, *proof, approved_fee)) return {{}, Tr("The transaction fee changed after review.")};
