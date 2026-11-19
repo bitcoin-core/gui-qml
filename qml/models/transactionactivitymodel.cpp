@@ -829,9 +829,11 @@ std::pair<QString, TransactionActivityModel::Row> TransactionActivityModel::buil
                 ? requests_by_address.value(action.address) : QVariantList{};
             // A request's public Name is not a private activity note. An
             // associated request owns the note, including an intentionally
-            // empty one; never fall back to its name/address-book label.
+            // empty one; never fall back to its name. Without a request the
+            // address label, which is the private note since #932, is shown
+            // for payments received as well as sent (#1135).
             const QString label = !matches.isEmpty() ? matches.first().toMap().value("noteSelf").toString()
-                : action.direction == Direction::Send ? record.labels.at(i) : QString{};
+                : record.labels.at(i);
             for (const auto& match : matches) {
                 const auto request = match.toMap();
                 const QString id = request.value("requestId").toString();
@@ -1044,7 +1046,7 @@ QVariantMap TransactionActivityModel::buildDetails(const QString& txid, const Ro
                     ? RequestsForAddress(history, address) : QVariantList{};
                 entry.insert("paymentRequests", requests);
                 entry.insert("label", !requests.isEmpty() ? requests.first().toMap().value("noteSelf").toString()
-                    : !output || !mine ? snapshot.detail_labels.value(address) : QString{});
+                    : snapshot.detail_labels.value(address));
                 entry.insert("amount", entry.value("amountKnown").toBool()
                     ? formatAmount(entry.value("amountSat").toLongLong(), false, unit) : QString{});
                 entries.append(entry);
