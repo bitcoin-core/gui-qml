@@ -84,6 +84,15 @@ private Q_SLOTS:
         QTest::newRow("fraction") << QStringLiteral("17.125") << qint64{17125};
         QTest::newRow("empty") << QStringLiteral("") << qint64{-1};
         QTest::newRow("zero") << QStringLiteral("0") << qint64{-1};
+        // #1130: an empty whole part is the same rate as a leading zero, never a different one.
+        QTest::newRow("leading-period") << QStringLiteral(".5") << qint64{500};
+        QTest::newRow("leading-period-three-digits") << QStringLiteral(".125") << qint64{125};
+        QTest::newRow("leading-period-padded") << QStringLiteral(" .5 ") << qint64{500};
+        QTest::newRow("lone-period") << QStringLiteral(".") << qint64{-1};
+        QTest::newRow("leading-period-excess-precision") << QStringLiteral(".1001") << qint64{-1};
+        QTest::newRow("leading-period-below-minimum") << QStringLiteral(".099") << qint64{-1};
+        QTest::newRow("leading-period-junk") << QStringLiteral(".5x") << qint64{-1};
+        QTest::newRow("two-periods") << QStringLiteral("..5") << qint64{-1};
         QTest::newRow("below-minimum") << QStringLiteral("0.099") << qint64{-1};
         QTest::newRow("negative") << QStringLiteral("-1") << qint64{-1};
         QTest::newRow("original265-wrap-window") << QStringLiteral("18446744073709552") << qint64{-1};

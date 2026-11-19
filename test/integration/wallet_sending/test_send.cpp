@@ -1548,6 +1548,31 @@ private Q_SLOTS:
         QVERIFY2(after.empty(), "Core persisted a temporary-lock upgrade but did not erase it on successful unlock; this needs an upstream Core disposition.");
     }
 
+    // #1130: keys typed into the Custom fee-rate field must not turn one valid
+    // rate into another. Each key goes through the window's key path, as typing
+    // does; a committed string would not exercise a per-key filter.
+    void customRateTypedWithLeadingPeriodKeepsItsValue()
+    {
+        auto* wallet = qmltest::LoadFundedWallet(m_app, "sender"); QVERIFY(wallet);
+        const auto address = qmltest::NewAddress(m_app, wallet->name());
+        QVERIFY(qmltest::Click(m_app, "sendTabButton")); QVERIFY(qmltest::SetText(m_app, "sendAddressInput", address));
+        QVERIFY(qmltest::SetText(m_app, "sendAmountInput", "0.01"));
+        QVERIFY(qmltest::Click(m_app, "feeSelectionPickerButton")); QVERIFY(qmltest::Click(m_app, "feeSelectionOption3"));
+        QTRY_VERIFY(!wallet->fees()->policyPending() && !wallet->customFeeTargetPending());
+        QPointer<QQuickItem> field{qobject_cast<QQuickItem*>(qmltest::WaitForVisible(m_app, "feeSelectionCustomRateInput"))};
+        QVERIFY(field); field->forceActiveFocus(); QVERIFY(field->hasActiveFocus());
+        QVERIFY(QMetaObject::invokeMethod(field, "selectAll"));
+        QTest::keyClick(field->window(), Qt::Key_Backspace, Qt::NoModifier, 1);
+        QTest::keyClick(field->window(), Qt::Key_Period, Qt::NoModifier, 1);
+        QTest::keyClick(field->window(), Qt::Key_5, Qt::NoModifier, 1);
+        QTRY_COMPARE(field->property("text").toString(), QStringLiteral(".5"));
+        QTRY_COMPARE(wallet->customFeeRate(), QStringLiteral(".5"));
+        QTRY_VERIFY(!wallet->fees()->policyPending() && !wallet->feeEstimatePending() && wallet->customFeeRateValid());
+        const auto ticket = wallet->requestPrepareTransaction(); QVERIFY(ticket); QTRY_VERIFY(!wallet->preparationBusy());
+        QCOMPARE(wallet->preparationState(), WalletQmlModel::PreparationState::PreparationReady);
+        auto* review = wallet->currentTransaction(); QVERIFY(review);
+        QCOMPARE(review->reviewFeeRate(), QStringLiteral("0.500"));
+    }
     void emptyManualSelectionCannotBroadenToWalletInputs()
     {
         auto* destination = qmltest::CreateWallet(m_app, "empty_manual_destination");
@@ -1767,7 +1792,8 @@ QString SendPreparedWallet(const QString& selector)
     const auto function = selector.section(':', 0, 0);
     if (function == "customFeesRespectRelayMinimum") return "custom_fee";
     if (function == "coinSelectionCancelApplyAndLockReachTheWallet") return "integration";
-    for (const auto* name : {"localizedTypedSendPreparesExactOutput",
+    for (const auto* name : {"customRateTypedWithLeadingPeriodKeepsItsValue",
+                             "localizedTypedSendPreparesExactOutput",
                              "uppercaseBech32RecipientRemainsRecipientOutput",
                              "feePreviewLimitationKeepsCoreReviewAuthoritative",
                              "explicitPublicChangePolicyMatchesThePreview",
@@ -1795,6 +1821,8 @@ QStringList SendTestArguments(const QString& selector)
     if (selector.endsWith(":respect-relay-minimum")) arguments = {"-mintxfee=0.00000100", "-minrelaytxfee=0.00001000"};
     if (selector.startsWith("presetFeesHonorRaisedCoreRequirements:wallet-min-")) arguments = {"-mintxfee=0.00002000", "-minrelaytxfee=0.00000100"};
     if (selector.startsWith("presetFeesHonorRaisedCoreRequirements:relay-min-")) arguments = {"-mintxfee=0.00000100", "-minrelaytxfee=0.00002000"};
+    // 0.5 sat/vB must be a valid custom rate, so both minimums sit below it.
+    if (selector.startsWith("customRateTypedWithLeadingPeriodKeepsItsValue")) arguments = {"-mintxfee=0.00000100", "-minrelaytxfee=0.00000100"};
     if (selector == "explicitPublicChangePolicyMatchesThePreview:overrides-configured-legacy") arguments.append("-changetype=legacy");
     // One cached change key is enough to exercise exhaustion and recovery.
     if (selector == "lockedHardenedDescriptorWalletRebuildsReviewAfterUnlock") arguments.append("-keypool=1");
