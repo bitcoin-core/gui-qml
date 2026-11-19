@@ -339,6 +339,38 @@ private Q_SLOTS:
         QCOMPARE(fixture.model->selectedCoinsCount(), 1);
     }
 
+    // #1119: wallet notifications arrive back to back. Each one must update the
+    // rows it changes in place. A whole-model reset deletes every row delegate,
+    // and on macOS a reset that follows closely on another destroyed a delegate
+    // that was still being created, which crashed the app.
+    void backToBackRefreshesUpdateRowsInPlaceWithoutResettingTheModel()
+    {
+        ManualCoins fixture{40};
+        QCOMPARE(fixture.model->rowCount(), 40);
+        const QPersistentModelIndex first{fixture.model->index(0)}, last{fixture.model->index(39)};
+        const auto first_id = first.data(CoinsListModel::CoinIdRole), last_id = last.data(CoinsListModel::CoinIdRole);
+        QSignalSpy resets{fixture.model.get(), &QAbstractItemModel::modelAboutToBeReset};
+        QSignalSpy layouts{fixture.model.get(), &QAbstractItemModel::layoutAboutToBeChanged};
+        QSignalSpy inserted{fixture.model.get(), &QAbstractItemModel::rowsInserted};
+
+        // Two payments arrive while earlier refreshes are still being applied.
+        fixture.model->update(); fixture.model->update();
+        { std::lock_guard lock{fixture.wallet->mutex}; fixture.wallet->add(40, 5000, 1700000100, 1, "arrival one"); }
+        fixture.model->update();
+        { std::lock_guard lock{fixture.wallet->mutex}; fixture.wallet->add(41, 6000, 1700000101, 2, "arrival two"); }
+        fixture.model->update(); fixture.model->update();
+        fixture.finish();
+
+        QCOMPARE(fixture.model->rowCount(), 42);
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(layouts.size(), 0);
+        QVERIFY(inserted.size() >= 1);
+        // The rows that were already shown are the same rows, not rebuilt ones.
+        QVERIFY(first.isValid()); QVERIFY(last.isValid());
+        QCOMPARE(first.data(CoinsListModel::CoinIdRole), first_id);
+        QCOMPARE(last.data(CoinsListModel::CoinIdRole), last_id);
+    }
+
     void cleanupAdmissionKeepsOriginalCoinOwner_data() {
         QTest::addColumn<int>("reservation"); QTest::addColumn<int>("outcome");
         for (int reservation : {1, 2, 3}) for (int outcome : {0, 1, 2})
