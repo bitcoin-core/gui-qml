@@ -26,13 +26,13 @@ std::optional<CAmount> ParseRate(const QString& original, QChar decimal)
     const auto text = original.trimmed(); if (text.isEmpty()) return {};
     CAmount whole{0}, fraction{0}; int digits{0}; bool point{false}, integer{false};
     for (const QChar c : text) {
-        if ((c == decimal || c == QLatin1Char{'.'}) && !point && integer) { point = true; continue; }
+        if ((c == decimal || c == QLatin1Char{'.'}) && !point) { point = true; continue; }
         if (c < QLatin1Char{'0'} || c > QLatin1Char{'9'}) return {};
         const int digit = c.unicode() - ushort{'0'};
         if (point) { if (++digits > 3) return {}; fraction = fraction * 10 + digit; }
         else { integer = true; if (whole > (std::numeric_limits<CAmount>::max() - digit) / 10) return {}; whole = whole * 10 + digit; }
     }
-    if (!integer) return {};
+    if (!integer && digits == 0) return {};
     while (digits++ < 3) fraction *= 10;
     if (whole > (std::numeric_limits<CAmount>::max() - fraction) / 1000) return {};
     return whole * 1000 + fraction;
