@@ -30,7 +30,10 @@ AlertPopup {
     initialFocusItem: passphraseField.field
     implicitWidth: Math.max(420, horizontalActionsWidth + 40)
 
+    // Each opening starts masked: a reveal is for the passphrase being typed,
+    // not for every later prompt this object answers.
     function clearPassphraseField() {
+        passphraseField.passwordVisible = false
         if (passphraseField.text.length > 0) {
             passphraseField.text = Array(passphraseField.text.length + 1).join(" ")
             passphraseField.text = ""
