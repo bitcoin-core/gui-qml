@@ -80,6 +80,9 @@ class NodeModel : public QObject
     Q_PROPERTY(QAbstractItemModel* runtimeDialogDiagnostics READ runtimeDialogDiagnostics NOTIFY runtimeDialogChanged)
     Q_PROPERTY(bool startupDiagnosticsPending READ startupDiagnosticsPending NOTIFY startupDiagnosticsChanged)
     Q_PROPERTY(bool fatalException READ fatalException NOTIFY fatalExceptionChanged)
+    // True from the first moment a quit is asked for, before any page reacts
+    // to it, so a field losing focus because of the quit can tell (#1114).
+    Q_PROPERTY(bool shutdownRequested READ shutdownRequested NOTIFY shutdownRequestedChanged)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QVariantList informationRows READ nodeInformationRows NOTIFY nodeInformationChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
@@ -166,6 +169,7 @@ public:
     void setErrorState(bool new_error);
     QString startupError() const { return m_startup_error; }
     bool fatalException() const { return m_fatal_exception; }
+    bool shutdownRequested() const { return m_shutdown_requested; }
     void setStartupError(const QString& error);
     void addStartupWarnings(const QStringList& warnings);
     void addStartupWarnings(std::shared_ptr<const startupdiagnostics::Collection> warnings);
@@ -230,6 +234,7 @@ Q_SIGNALS:
     void errorStateChanged(bool new_error_state);
     void startupErrorChanged();
     void fatalExceptionChanged();
+    void shutdownRequestedChanged();
     void warningsChanged();
     void runtimeDialogChanged();
 

@@ -313,7 +313,9 @@ SettingsPage {
                 fieldTextStyle: Theme.text.monoDescription
                 text: ApplicationModels.optionsModel.thirdPartyTransactionUrls
                 placeholderText: "https://example.com/tx/%s"
-                onEditingFinished: ApplicationModels.optionsModel.thirdPartyTransactionUrls = text
+                // A quit takes the focus away too; an edit nobody confirmed is
+                // dropped then, not saved during shutdown (#1114).
+                onEditingFinished: if (!ApplicationModels.nodeModel.shutdownRequested) ApplicationModels.optionsModel.thirdPartyTransactionUrls = text
             }
         }
     }
