@@ -206,6 +206,7 @@ private Q_SLOTS:
     void labelReservationsKeepOriginalViewDuringReentrancy();
     void closeInsideStructuralChangeKeepsBalancedOriginalRows_data();
     void closeInsideStructuralChangeKeepsBalancedOriginalRows();
+    void backToBackRefreshesUpdateRowsInPlaceWithoutResettingTheModel();
 };
 
 void AddressListModelTests::initTestCase()
@@ -988,6 +989,37 @@ void AddressListModelTests::closeInsideStructuralChangeKeepsBalancedOriginalRows
     QCOMPARE(counts.size(), count_notices);
     QCOMPARE(changes.size(), 0);
     QCOMPARE(resets.size(), 0);
+    QVERIFY(f.finish());
+}
+
+void AddressListModelTests::backToBackRefreshesUpdateRowsInPlaceWithoutResettingTheModel()
+{
+    ManualAddressFixture f;
+    QVERIFY(f.admitted);
+    f.settle();
+    const int initial_count = f.model->count();
+    QVERIFY(initial_count > 0);
+    const auto target_address = f.model->addressAt(0);
+    QSignalSpy resets{f.model.get(), &QAbstractItemModel::modelReset};
+    QSignalSpy changes{f.model.get(), &QAbstractItemModel::dataChanged};
+    for (const auto* updated_label : {"First label update", "Second label update"}) {
+        {
+            std::lock_guard lock{f.wallet->m_mutex};
+            for (auto& entry : f.wallet->m_addresses) {
+                if (QString::fromStdString(EncodeDestination(entry.dest)) == target_address) {
+                    entry.name = updated_label;
+                    f.wallet->m_labels[entry.dest] = updated_label;
+                }
+            }
+        }
+        f.model->refresh();
+        f.model->refresh();
+        f.settle();
+        QCOMPARE(f.model->count(), initial_count);
+        QCOMPARE(f.model->data(f.model->index(0), AddressListModel::LabelRole).toString(), QString::fromLatin1(updated_label));
+    }
+    QCOMPARE(resets.size(), 0);
+    QVERIFY(changes.size() >= 2);
     QVERIFY(f.finish());
 }
 
