@@ -1323,4 +1323,40 @@ TestCase {
         Theme.paletteId = "core-dark"
         tryCompare(Theme, "dark", true)
     }
+
+    Component {
+        id: standaloneCalendarComponent
+        ActivityCalendar {}
+    }
+
+    // #1128: in a zone whose clocks go forward at local midnight that midnight
+    // does not exist, and a day built at it became the day before: the
+    // calendar drew one day twice and skipped the change day. Every month must
+    // draw each of its days once, in order. The bitcoinqml_calendar_midnight_dst
+    // CTest entry runs this in such a zone.
+    function test_calendar_draws_every_day_of_every_month_once() {
+        const calendar = createTemporaryObject(standaloneCalendarComponent, this)
+        verify(calendar !== null)
+        for (let year = 2018; year <= 2030; ++year) {
+            for (let month = 0; month < 12; ++month) {
+                calendar.calYear = year
+                calendar.calMonth = month
+                const days = calendar.calendarCells().filter(function(cell) { return cell !== null })
+                const expected = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+                compare(days.length, expected, year + "-" + (month + 1))
+                for (let i = 0; i < days.length; ++i) {
+                    compare(days[i].getFullYear(), year)
+                    compare(days[i].getMonth(), month, year + "-" + (month + 1) + "-" + (i + 1))
+                    compare(days[i].getDate(), i + 1, year + "-" + (month + 1) + "-" + (i + 1))
+                }
+            }
+        }
+        // Arrow keys step one real day at a time across the change day too.
+        calendar.calYear = 2026; calendar.calMonth = 3
+        calendar.calendarFocusDate = new Date(2026, 3, 20, 12)
+        for (let day = 21; day <= 28; ++day) {
+            calendar.moveCalendarFocus(1)
+            compare(calendar.calendarFocusDate.getDate(), day)
+        }
+    }
 }

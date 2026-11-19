@@ -434,6 +434,10 @@ endforeach()
 if(NOT qml_test_names)
   message(FATAL_ERROR "QML test manifest selected no component test files")
 endif()
+# Africa/Cairo moved its clocks from 00:00 to 01:00 on 2026-04-24, so that
+# local midnight does not exist. The calendar must still draw that day (#1128).
+add_test(NAME bitcoinqml_calendar_midnight_dst COMMAND ${qml_test_launcher} $<TARGET_FILE:bitcoinqml_qmltests> -platform ${qml_test_platform}
+  -input "${qml_test_input_dir}/tst_activitylist.qml" "ActivityList::test_calendar_draws_every_day_of_every_month_once")
 # Seed the longest suites so clean builds do not need timing history to schedule
 # them first. These are relative scheduling hints, not timeouts or assertions.
 set_tests_properties(bitcoinqml_qml_sendcreate PROPERTIES COST 20)
@@ -469,6 +473,18 @@ set_property(TEST ${qml_test_names} PROPERTY ENVIRONMENT
 # console.warn() from console.log() during QML loading and teardown.
 set_property(TEST ${qml_test_names} APPEND PROPERTY ENVIRONMENT
   "QT_MESSAGE_PATTERN=[%{type}] %{category}: %{message}")
+# The DST entry runs one component case like the others, in a fixed zone. It is
+# kept out of qml_test_names and the bitcoinqml_qml_ prefix, whose warning
+# policy must be identical with no extra environment, and copies
+# that policy here.
+list(GET qml_test_names 0 qml_policy_source)
+foreach(property IN ITEMS ENVIRONMENT FAIL_REGULAR_EXPRESSION LABELS TIMEOUT)
+  get_property(value TEST ${qml_policy_source} PROPERTY ${property})
+  if(value)
+    set_property(TEST bitcoinqml_calendar_midnight_dst PROPERTY ${property} "${value}")
+  endif()
+endforeach()
+set_property(TEST bitcoinqml_calendar_midnight_dst APPEND PROPERTY ENVIRONMENT "TZ=Africa/Cairo")
 
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")

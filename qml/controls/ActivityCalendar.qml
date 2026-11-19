@@ -135,18 +135,25 @@ ColumnLayout {
         return b !== null && date >= b[0] && date <= b[1]
     }
 
+    // A calendar day as a Date at local noon. Some zones skip local midnight on
+    // the day their clocks go forward, and new Date(y, m, d) then lands on the
+    // previous day; noon always exists.
+    function dayDate(year, month, day) {
+        return new Date(year, month, day, 12)
+    }
+
     // Cells for the displayed month: leading blanks (null) so the first day
     // lands under its weekday for the locale, then one Date per day.
     function calendarCells() {
         var cells = []
-        var firstDow = new Date(root.calYear, root.calMonth, 1).getDay()
+        var firstDow = root.dayDate(root.calYear, root.calMonth, 1).getDay()
         var lead = (firstDow - root.weekStart + 7) % 7
         for (var i = 0; i < lead; ++i) {
             cells.push(null)
         }
-        var days = new Date(root.calYear, root.calMonth + 1, 0).getDate()
+        var days = root.dayDate(root.calYear, root.calMonth + 1, 0).getDate()
         for (var d = 1; d <= days; ++d) {
-            cells.push(new Date(root.calYear, root.calMonth, d))
+            cells.push(root.dayDate(root.calYear, root.calMonth, d))
         }
         return cells
     }
@@ -176,16 +183,16 @@ ColumnLayout {
         }
         var seed = root.customFrom || root.todayDate
         if (seed.getMonth() === root.calMonth && seed.getFullYear() === root.calYear) {
-            root.calendarFocusDate = new Date(seed.getFullYear(), seed.getMonth(), seed.getDate())
+            root.calendarFocusDate = root.dayDate(seed.getFullYear(), seed.getMonth(), seed.getDate())
         } else {
-            root.calendarFocusDate = new Date(root.calYear, root.calMonth, 1)
+            root.calendarFocusDate = root.dayDate(root.calYear, root.calMonth, 1)
         }
     }
 
     function moveCalendarFocus(deltaDays) {
         root.ensureCalendarFocusDate()
         var f = root.calendarFocusDate
-        var d = new Date(f.getFullYear(), f.getMonth(), f.getDate() + deltaDays)
+        var d = root.dayDate(f.getFullYear(), f.getMonth(), f.getDate() + deltaDays)
         root.calendarFocusDate = d
         root.showCalendarMonth(d)
     }
@@ -199,8 +206,8 @@ ColumnLayout {
         var y = f.getFullYear()
         while (m < 0) { m += 12; y -= 1 }
         while (m > 11) { m -= 12; y += 1 }
-        var days = new Date(y, m + 1, 0).getDate()
-        root.calendarFocusDate = new Date(y, m, Math.min(f.getDate(), days))
+        var days = root.dayDate(y, m + 1, 0).getDate()
+        root.calendarFocusDate = root.dayDate(y, m, Math.min(f.getDate(), days))
         root.showCalendarMonth(root.calendarFocusDate)
     }
 
@@ -309,7 +316,7 @@ ColumnLayout {
             // format to ask for. toLocaleDateString still localizes the month name
             // here (a Qt.formatDate format string would render C-locale English),
             // so only the field order is fixed.
-            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
+            text: root.dayDate(root.calYear, root.calMonth, 1).toLocaleDateString(Qt.locale(), "MMMM yyyy")
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
             textStyle: Theme.text.subheading
