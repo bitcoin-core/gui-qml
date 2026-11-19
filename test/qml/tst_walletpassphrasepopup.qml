@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 
 TestCase {
     id: testCase
@@ -172,6 +173,34 @@ TestCase {
         compare(field.text, "")
     }
 
+    // #1134: keys typed while the prompt fades in go into its field, not into
+    // the field that had the caret before it opened.
+    function test_keys_typed_during_the_fade_in_reach_the_passphrase_field() {
+        const behind = createTemporaryObject(behindFieldComponent, this)
+        behind.forceActiveFocus()
+        tryCompare(behind, "activeFocus", true)
+        // Tests run with motion off; this needs the real 300 ms fade-in.
+        const motion = Theme.motion.mode
+        Theme.motion.mode = "full"
+        try {
+        submittedPassphrase = ""
+        const popup = createTemporaryObject(popupComponent, this)
+        verify(popup !== null)
+        const field = findObjectByName(popup, "testPassphraseField")
+        popup.open()
+        wait(0)
+        // Still fading in; this is the window the issue describes.
+        verify(!popup.opened)
+        keyClick("5")
+        keyClick("x")
+        compare(behind.text, "")
+        tryCompare(popup, "opened", true)
+        compare(field.text, "5x")
+        } finally {
+            Theme.motion.mode = motion
+        }
+    }
+
     function test_editing_password_clears_shown_error() {
         const popup = createPopup()
         const field = findObjectByName(popup, "testPassphraseField")
@@ -205,5 +234,10 @@ TestCase {
         promptError = "Wallet password required."
         tryCompare(error, "visible", true)
         compare(error.text, promptError)
+    }
+
+    Component {
+        id: behindFieldComponent
+        TextInput { width: 100; height: 20 }
     }
 }

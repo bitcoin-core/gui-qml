@@ -167,6 +167,34 @@ TestCase {
         }
     }
 
+    Component {
+        id: enterTransitionComponent
+        DialogPopup {
+            title: "Fields"
+            implicitWidth: 400
+            // Tests run with motion off; give this popup its own fade-in.
+            enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 400 } }
+            initialFocusItem: firstField
+            contentItem: Column {
+                TextField { id: firstField; objectName: "enterFirstField" }
+                TextField { objectName: "enterSecondField" }
+            }
+        }
+    }
+
+    function test_focus_moved_during_the_enter_transition_stays() {
+        const popup = createTemporaryObject(enterTransitionComponent, testCase)
+        const first = findChild(popup.contentItem, "enterFirstField")
+        const second = findChild(popup.contentItem, "enterSecondField")
+        popup.open()
+        tryCompare(first, "activeFocus", true)
+        verify(!popup.opened, "the enter transition is still running")
+        keyClick(Qt.Key_Tab)
+        compare(second.activeFocus, true)
+        tryCompare(popup, "opened", true)
+        compare(second.activeFocus, true)
+    }
+
     function test_initial_focus_item() {
         const popup = createTemporaryObject(dialogComponent, testCase)
         popup.initialFocusItem = findChild(popup.contentItem, "dialogFirstButton")
