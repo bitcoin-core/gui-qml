@@ -1221,21 +1221,31 @@ void WalletQmlModelTests::customFeeRateValid_data()
 {
     QTest::addColumn<QString>("rate");
     QTest::addColumn<bool>("valid");
-    QTest::newRow("empty") << QString{} << false;
-    QTest::newRow("zero") << QStringLiteral("0.000") << false;
-    QTest::newRow("negative") << QStringLiteral("-0.1") << false;
-    QTest::newRow("below-minimum") << QStringLiteral("0.099") << false;
-    QTest::newRow("minimum") << QStringLiteral("0.1") << true;
-    QTest::newRow("minimum-padded") << QStringLiteral(" 0.100 ") << true;
-    QTest::newRow("fractional") << QStringLiteral("0.123") << true;
-    QTest::newRow("whole") << QStringLiteral("2") << true;
-    QTest::newRow("excess-precision") << QStringLiteral("0.1001") << false;
+    QTest::addColumn<QString>("locale");
+    QTest::newRow("empty") << QString{} << false << QString{};
+    QTest::newRow("zero") << QStringLiteral("0.000") << false << QString{};
+    QTest::newRow("negative") << QStringLiteral("-0.1") << false << QString{};
+    QTest::newRow("below-minimum") << QStringLiteral("0.099") << false << QString{};
+    QTest::newRow("minimum") << QStringLiteral("0.1") << true << QString{};
+    QTest::newRow("minimum-padded") << QStringLiteral(" 0.100 ") << true << QString{};
+    QTest::newRow("fractional") << QStringLiteral("0.123") << true << QString{};
+    QTest::newRow("whole") << QStringLiteral("2") << true << QString{};
+    QTest::newRow("no-whole-part") << QStringLiteral(".5") << true << QString{};
+    QTest::newRow("period-only") << QStringLiteral(".") << false << QString{};
+    QTest::newRow("excess-precision") << QStringLiteral("0.1001") << false << QString{};
+    QTest::newRow("decimal-comma") << QStringLiteral("1,5") << true << QStringLiteral("de_DE");
+    QTest::newRow("decimal-comma-no-whole-part") << QStringLiteral(",5") << true << QStringLiteral("de_DE");
+    QTest::newRow("grouping-comma") << QStringLiteral("1,5") << false << QStringLiteral("en_US");
 }
 
 void WalletQmlModelTests::customFeeRateValid()
 {
     QFETCH(QString, rate);
     QFETCH(bool, valid);
+    QFETCH(QString, locale);
+    const QLocale previous_locale;
+    const auto restore_locale = qScopeGuard([previous_locale] { QLocale::setDefault(previous_locale); });
+    if (!locale.isEmpty()) QLocale::setDefault(QLocale{locale});
     auto [wallet, model] = MakeWalletModel();
     model->setCustomFeeRate(rate);
     QCOMPARE(model->customFeeRateValid(), valid);
@@ -1299,9 +1309,12 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled_data
     QTest::addColumn<QString>("rate");
     QTest::addColumn<qlonglong>("per_kvb");
     QTest::addColumn<QString>("formatted_fee");
-    QTest::newRow("whole") << QStringLiteral("2") << qlonglong{2000} << QStringLiteral("0.00000500 BTC");
-    QTest::newRow("minimum") << QStringLiteral("0.1") << qlonglong{100} << QStringLiteral("0.00000025 BTC");
-    QTest::newRow("fractional") << QStringLiteral("0.123") << qlonglong{123} << QStringLiteral("0.00000031 BTC");
+    QTest::addColumn<QString>("locale");
+    QTest::newRow("whole") << QStringLiteral("2") << qlonglong{2000} << QStringLiteral("0.00000500 BTC") << QString{};
+    QTest::newRow("minimum") << QStringLiteral("0.1") << qlonglong{100} << QStringLiteral("0.00000025 BTC") << QString{};
+    QTest::newRow("fractional") << QStringLiteral("0.123") << qlonglong{123} << QStringLiteral("0.00000031 BTC") << QString{};
+    QTest::newRow("no-whole-part") << QStringLiteral(".5") << qlonglong{500} << QStringLiteral("0.00000125 BTC") << QString{};
+    QTest::newRow("decimal-comma") << QStringLiteral("1,5") << qlonglong{1500} << QStringLiteral("0.00000375 BTC") << QStringLiteral("de_DE");
 }
 
 void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
@@ -1309,6 +1322,10 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
     QFETCH(QString, rate);
     QFETCH(qlonglong, per_kvb);
     QFETCH(QString, formatted_fee);
+    QFETCH(QString, locale);
+    const QLocale previous_locale;
+    const auto restore_locale = qScopeGuard([previous_locale] { QLocale::setDefault(previous_locale); });
+    if (!locale.isEmpty()) QLocale::setDefault(QLocale{locale});
     auto [wallet, model] = MakeWalletModel();
     SetValidRecipient(*model);
 
@@ -1555,6 +1572,10 @@ void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOver
 {
     QFETCH(QString, rate);
     QFETCH(qlonglong, per_kvb);
+    QFETCH(QString, locale);
+    const QLocale previous_locale;
+    const auto restore_locale = qScopeGuard([previous_locale] { QLocale::setDefault(previous_locale); });
+    if (!locale.isEmpty()) QLocale::setDefault(QLocale{locale});
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
     auto [wallet, model] = MakeWalletModel();
     SetValidRecipient(*model, VALID_REGTEST_ADDRESS);
