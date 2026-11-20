@@ -109,6 +109,31 @@ TestCase {
         }
     }
 
+    // #1127: on a pruned node the Close wallet question says a wallet left
+    // closed for too long needs the whole chain again; otherwise it does not.
+    function test_close_prompt_warns_about_pruning_only_on_a_pruned_node_data() {
+        return [{ tag: "pruned", pruned: true }, { tag: "not-pruned", pruned: false }]
+    }
+    function test_close_prompt_warns_about_pruning_only_on_a_pruned_node(data) {
+        const page = createDesktopWallets()
+        try {
+            nodeModel.pruneMode = data.pruned
+            testWalletModel.available = true
+            walletController.requestCloseWallet(testWalletModel)
+            const questions = findChild(page, "walletCloseQuestions")
+            tryCompare(questions, "count", 1)
+            const popup = questions.itemAt(0).confirmation
+            tryCompare(popup, "opened", true)
+            verify(popup.message.indexOf("Do you want to close the wallet") === 0)
+            compare(popup.message.indexOf("downloading the entire blockchain again") !== -1, data.pruned)
+        } finally {
+            nodeModel.pruneMode = false
+            walletController.reset()
+            testWalletModel.available = true
+            testWalletModel.clearCloseQuestionForTest()
+        }
+    }
+
     // #1139: Return outside a button must not start a wallet update.
     function test_return_key_in_the_update_prompt_does_not_confirm_it() {
         const popup = createTemporaryObject(migrationPopupComponent, testWindow.contentItem,

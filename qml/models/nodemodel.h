@@ -22,6 +22,8 @@
 #include <chrono>
 
 #include <qml/models/startupdiagnosticsmodel.h>
+#include <common/args.h>
+
 #include <QObject>
 #include <QStringList>
 #include <QString>
@@ -83,6 +85,9 @@ class NodeModel : public QObject
     // True from the first moment a quit is asked for, before any page reacts
     // to it, so a field losing focus because of the quit can tell (#1114).
     Q_PROPERTY(bool shutdownRequested READ shutdownRequested NOTIFY shutdownRequestedChanged)
+    // Whether this node runs with pruning. A change needs a restart, so the
+    // value read at start holds for the session (#1127).
+    Q_PROPERTY(bool pruneMode READ pruneMode CONSTANT)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QVariantList informationRows READ nodeInformationRows NOTIFY nodeInformationChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
@@ -170,6 +175,7 @@ public:
     QString startupError() const { return m_startup_error; }
     bool fatalException() const { return m_fatal_exception; }
     bool shutdownRequested() const { return m_shutdown_requested; }
+    bool pruneMode() const { return m_prune_mode; }
     void setStartupError(const QString& error);
     void addStartupWarnings(const QStringList& warnings);
     void addStartupWarnings(std::shared_ptr<const startupdiagnostics::Collection> warnings);
@@ -357,6 +363,7 @@ private:
     bool m_applying_sync_snapshot{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
+    const bool m_prune_mode{gArgs.GetIntArg("-prune", 0) != 0};
     bool m_fatal_exception{false};
     bool m_runtime_dialogs_enabled{false};
     bool m_startup_failure_dialog_shown{false};
