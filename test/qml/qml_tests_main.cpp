@@ -5320,6 +5320,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString startupError MEMBER m_startup_error NOTIFY startupErrorChanged)
     Q_PROPERTY(bool fatalException MEMBER m_fatal_exception NOTIFY fatalExceptionChanged)
     Q_PROPERTY(bool shutdownRequested MEMBER m_shutdown_requested NOTIFY shutdownRequestedChanged)
+    Q_PROPERTY(bool pruneMode MEMBER m_prune_mode NOTIFY pruneModeChanged)
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
@@ -5379,6 +5380,7 @@ public:
     QString m_startup_error;
     bool m_fatal_exception{false};
     bool m_shutdown_requested{false};
+    bool m_prune_mode{false};
     QString m_warnings;
     QStringList m_warning_list;
     bool m_runtime_dialog_visible{false};
@@ -5647,6 +5649,7 @@ Q_SIGNALS:
     void startupErrorChanged();
     void fatalExceptionChanged();
     void shutdownRequestedChanged();
+    void pruneModeChanged();
     void warningsChanged();
     void runtimeDialogChanged();
     void blockTipHeightChanged();

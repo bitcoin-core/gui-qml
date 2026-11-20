@@ -563,6 +563,10 @@ WalletShellPage {
                 title: qsTr("Close wallet")
                 visible: true
                 message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)
+                    + (ApplicationModels.nodeModel.pruneMode
+                        //: Added to the Close wallet question when the node prunes old blocks.
+                        ? "\n\n" + qsTr("Pruning is on. If this wallet stays closed for too long, opening it again will require downloading the entire blockchain again.")
+                        : "")
                 onClosed: if (targetWallet) targetWallet.answerClose(questionToken, false)
                 // Return outside a button keeps the wallet open.
                 returnAction: closeCancelAction
