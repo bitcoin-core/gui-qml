@@ -69,6 +69,32 @@ private Q_SLOTS:
         }
     }
 
+    // #1126: a quit that arrives while the window is hidden or minimized
+    // brings it into view, so its Saving page, the only shutdown notice, is
+    // seen.
+    void quitWhileHiddenOrMinimizedShowsTheShutdownPage_data()
+    {
+        QTest::addColumn<bool>("minimized");
+        QTest::newRow("hidden") << false;
+        QTest::newRow("minimized") << true;
+    }
+    void quitWhileHiddenOrMinimizedShowsTheShutdownPage()
+    {
+        QFETCH(bool, minimized);
+        auto* window = m_app.window();
+        QVERIFY(window);
+        if (minimized) window->showMinimized(); else window->hide();
+        QTRY_VERIFY(minimized ? (window->windowStates() & Qt::WindowMinimized) : !window->isVisible());
+        QSignalSpy requested{&m_app.nodeModel(), &NodeModel::requestedShutdown};
+        m_app.nodeModel().requestShutdown();
+        QTRY_COMPARE(requested.count(), 1);
+        QTRY_VERIFY(window->isVisible());
+        QTRY_VERIFY(!(window->windowStates() & Qt::WindowMinimized));
+        auto* shutdown_page = qobject_cast<QQuickItem*>(qmltest::Find(m_app, "shutdownPage"));
+        QVERIFY(shutdown_page);
+        QTRY_VERIFY(shutdown_page->isVisible());
+    }
+
     void closingWindowShutsDownApplication()
     {
         auto* model = &m_app.nodeModel();
