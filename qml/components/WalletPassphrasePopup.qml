@@ -48,7 +48,9 @@ AlertPopup {
 
     // Closing can change the state the check depends on; defer it so the
     // change notification can finish.
-    onContextValidChanged: if (!contextValid) Qt.callLater(function() { if (!root.contextValid) root.close() })
+    // The prompt can be destroyed before the deferred call runs, for example
+    // when its wallet view goes away; then there is nothing left to close.
+    onContextValidChanged: if (!contextValid) Qt.callLater(function() { if (root && !root.contextValid) root.close() })
     onAboutToShow: clearPassphraseField()
     onAboutToHide: clearPassphraseField()
     onClosed: clearPassphraseField()
