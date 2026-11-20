@@ -425,6 +425,14 @@ ApplicationWindow {
         function onRequestedShutdown() {
             appWindow.onboardingWalletPresentationPending = false
             appWindow.shutdownInProgress = true
+            // The Saving page is the only shutdown notice; a quit from the tray,
+            // the Dock or a signal can arrive with the window hidden or
+            // minimized, so bring it into view (#1126).
+            if (!appWindow.visible && ApplicationModels.desktopTrayIconController) {
+                ApplicationModels.desktopTrayIconController.showMainWindow()
+            }
+            if (!appWindow.visible || appWindow.visibility === Window.Minimized) appWindow.showNormal()
+            appWindow.raise()
         }
     }
 
