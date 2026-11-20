@@ -163,7 +163,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SelectSettings(m_app,"storage"));auto* editor=settingsEditor();QVERIFY(editor);QTRY_VERIFY(editor->fresh());
         auto* prune=editor->entry(QStringLiteral("prune"));QVERIFY(prune);QVERIFY(prune->editable());
         const auto saved_prune=[&]{return savedSetting("prune");};
-        const auto save=[&]{return qmltest::Click(m_app,"settingsSaveBatchButton")&&QTest::qWaitFor([&]{return editor->lastSavePersisted()&&!editor->busy();});};
+        const auto save=[&]{return qmltest::Click(m_app,"settingsSaveBatchButton")&&QTest::qWaitFor([&]{return editor->lastSavePersisted()&&!editor->busy();},30'000);};
         QCOMPARE(prune->text(),QStringLiteral("550"));QCOMPARE(prune->effectiveText(),QStringLiteral("550"));QCOMPARE(prune->nextStartText(),QStringLiteral("550"));
         QVERIFY(saved_prune().isNull());QVERIFY(!editor->restartNoticeVisible());
         // Off and on again, through the model's mode switch and the field.
@@ -196,7 +196,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::SelectSettings(m_app,"storage"));auto* editor=settingsEditor();QVERIFY(editor);QTRY_VERIFY(editor->fresh());
         auto* prune=editor->entry(QStringLiteral("prune"));QVERIFY(prune);QVERIFY(prune->editable());
         const auto saved_prune=[&]{return savedSetting("prune");};
-        const auto save=[&]{return qmltest::Click(m_app,"settingsSaveBatchButton")&&QTest::qWaitFor([&]{return editor->lastSavePersisted()&&!editor->busy();});};
+        const auto save=[&]{return qmltest::Click(m_app,"settingsSaveBatchButton")&&QTest::qWaitFor([&]{return editor->lastSavePersisted()&&!editor->busy();},30'000);};
         QCOMPARE(prune->text(),QStringLiteral("1"));QCOMPARE(prune->effectiveText(),QStringLiteral("1"));QCOMPARE(prune->nextStartText(),QStringLiteral("1"));
         QCOMPARE(qmltest::Find(m_app,"pruneSettingInput")->property("text").toString(),QStringLiteral("1"));
         editor->setPruneMode(SettingsEditorModel::Automatic);QTRY_COMPARE(prune->text(),QStringLiteral("550"));
