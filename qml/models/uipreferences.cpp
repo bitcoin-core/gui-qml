@@ -20,7 +20,9 @@ namespace {
 const QStringList& Allowed(const QString& group){
     static const QStringList direction{QStringLiteral("inbound"),QStringLiteral("outbound")};
     static const QStringList connection{QStringLiteral("full-relay"),QStringLiteral("block-relay"),QStringLiteral("manual")};
-    static const QStringList network{QStringLiteral("ipv4"),QStringLiteral("ipv6"),QStringLiteral("onion"),QStringLiteral("i2p")};
+    // Every network a peer can be on has a choice, so ticking networks never
+    // hides a peer that matches none of them (#1113).
+    static const QStringList network{QStringLiteral("ipv4"),QStringLiteral("ipv6"),QStringLiteral("onion"),QStringLiteral("i2p"),QStringLiteral("cjdns"),QStringLiteral("unroutable")};
     static const QStringList transport{QStringLiteral("v1"),QStringLiteral("v2")},none;
     if(group=="direction")return direction;
     if(group=="connectionType")return connection;

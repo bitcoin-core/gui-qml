@@ -57,6 +57,7 @@ private Q_SLOTS:
     void failedStorageRetainsTheLastConfirmedValues();
     void filterCommandsPreserveCanonicalSelectionAndIntentKeys_data();
     void filterCommandsPreserveCanonicalSelectionAndIntentKeys();
+    void localAndCjdnsPeersHaveANetworkChoice();
     void parserContextAndUnconfiguredValues_data();
     void parserContextAndUnconfiguredValues();
     void capturedNamespaceKeepsItsNativeStorageIdentity();
@@ -403,17 +404,35 @@ void UiPreferencesTests::failedStorageRetainsTheLastConfirmedValues()
     store.closeAdmission(); transport.drain(); QVERIFY(transport.quiescent());
 }
 
+// #1113: local-network (unroutable) and CJDNS peers have network choices of
+// their own, and the filter clears only once every network is ticked.
+void UiPreferencesTests::localAndCjdnsPeersHaveANetworkChoice()
+{
+    QTemporaryDir directory; QVERIFY(directory.isValid());
+    ManualRoutedExecution transport; std::deque<std::function<void()>> gui;
+    UiPreferencesStore store{{transport.scheduler, [&](auto turn) { gui.push_back(std::move(turn)); }}, File(directory.filePath("networks.ini"))};
+    const auto cleanup = qScopeGuard([&] { store.closeAdmission(); transport.drain(); Settle(transport, gui); });
+    AppPreferences view; view.configure(&store); store.start(); QVERIFY(Settle(transport, gui));
+    QVERIFY(view.togglePeerFilter("network", "unroutable")); QVERIFY(Settle(transport, gui));
+    QVERIFY(view.togglePeerFilter("network", "cjdns")); QVERIFY(Settle(transport, gui));
+    QCOMPARE(view.peerNetworkFilters(), (QStringList{"unroutable", "cjdns"}));
+    for (const auto* network : {"ipv4", "ipv6", "onion"}) { QVERIFY(view.togglePeerFilter("network", network)); QVERIFY(Settle(transport, gui)); }
+    QCOMPARE(view.peerNetworkFilters().size(), 5);
+    QVERIFY(view.togglePeerFilter("network", "i2p")); QVERIFY(Settle(transport, gui));
+    QVERIFY(view.peerNetworkFilters().isEmpty()); // All six ticked is no filter.
+}
+
 void UiPreferencesTests::filterCommandsPreserveCanonicalSelectionAndIntentKeys_data()
 {
     QTest::addColumn<QString>("group"); QTest::addColumn<QStringList>("choices");
     QTest::addColumn<QByteArray>("key"); QTest::addColumn<int>("fault");
     QTest::newRow("direction") << QString{"direction"} << QStringList{"inbound", "outbound"} << QByteArray{"peerDirectionFilters"} << 0;
     QTest::newRow("connection") << QString{"connectionType"} << QStringList{"full-relay", "block-relay", "manual"} << QByteArray{"peerConnectionTypeFilters"} << 0;
-    QTest::newRow("network") << QString{"network"} << QStringList{"ipv4", "ipv6", "onion", "i2p"} << QByteArray{"peerNetworkFilters"} << 0;
+    QTest::newRow("network") << QString{"network"} << QStringList{"ipv4", "ipv6", "onion", "i2p", "cjdns", "unroutable"} << QByteArray{"peerNetworkFilters"} << 0;
     QTest::newRow("transport") << QString{"transport"} << QStringList{"v1", "v2"} << QByteArray{"peerTransportFilters"} << 0;
     for (int fault = 1; fault <= 6; ++fault) {
         const QByteArray name = QByteArray{"invalid-"} + QByteArray::number(fault);
-        QTest::newRow(name.constData()) << QString{"network"} << QStringList{"ipv4", "ipv6", "onion", "i2p"} << QByteArray{"peerNetworkFilters"} << fault;
+        QTest::newRow(name.constData()) << QString{"network"} << QStringList{"ipv4", "ipv6", "onion", "i2p", "cjdns", "unroutable"} << QByteArray{"peerNetworkFilters"} << fault;
     }
 }
 
