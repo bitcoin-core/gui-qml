@@ -43,7 +43,10 @@ Page {
         { text: qsTr("IPv4"), value: "ipv4" },
         { text: qsTr("IPv6"), value: "ipv6" },
         { text: qsTr("Onion"), value: "onion" },
-        { text: qsTr("I2P"), value: "i2p" }
+        { text: qsTr("I2P"), value: "i2p" },
+        { text: qsTr("CJDNS"), value: "cjdns" },
+        //: Peer network filter choice for peers on a local or private network, such as a LAN node or regtest.
+        { text: qsTr("Local network"), value: "unroutable" }
     ]
     readonly property var transportOptions: [
         { text: qsTr("v1"), value: "v1" },

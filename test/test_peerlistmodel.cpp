@@ -76,6 +76,7 @@ private Q_SLOTS:
     void neutralPresentationObserversPreserveBoundedDeliveryAndLifetime();
     void displayedPeerIdSearchPreservesOrdinaryText_data();
     void displayedPeerIdSearchPreservesOrdinaryText();
+    void networkFilterMatchesCjdnsAndLocalPeers();
     void copiedDetailsRejectReplacementConnection_data();
     void copiedDetailsRejectReplacementConnection();
 };
@@ -117,6 +118,44 @@ void PeerListModelTests::displayedPeerIdSearchPreservesOrdinaryText()
     proxy->setSearchText(query); QVERIFY(settle()); QCOMPARE(proxy->rowCount(),count);
     if (count) QCOMPARE(proxy->data(proxy->index(0),PeerListModel::NetNodeId).toLongLong(),expected_id);
     QCOMPARE(node.calls.getNodesStats.load(),1); // Search is a Domain projection over the original public read.
+}
+
+void PeerListModelTests::networkFilterMatchesCjdnsAndLocalPeers()
+{
+    ManualStartupExecution transport; std::deque<std::function<void()>> gui;
+    const auto stats = MakeStats({
+        MakeNodeStats(1, "10.0.0.1:8333", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_IPV4),
+        MakeNodeStats(2, "[fc00::1]:8333", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_CJDNS),
+        MakeNodeStats(3, "127.0.0.1:8333", true, ConnectionType::INBOUND, NET_UNROUTABLE),
+    });
+    MockNode node; node.get_nodes_stats_fn = [&](auto& out) { out = stats; return true; };
+    std::unique_ptr<PeerListModel> model; std::unique_ptr<PeerListProxyModel> proxy;
+    const auto cleanup = qScopeGuard([&] {
+        proxy.reset(); model.reset(); transport.drain();
+        while (!gui.empty()) { auto callback = std::move(gui.front()); gui.pop_front(); callback(); }
+        transport.drain();
+    });
+    model = std::make_unique<PeerListModel>(node, nullptr, true, [&](auto callback) { gui.push_back(std::move(callback)); },
+        [] { return NodeClock::now(); }, NativeListQueues(transport.executor()));
+    proxy = std::make_unique<PeerListProxyModel>(nullptr); proxy->setSourceModel(model.get());
+    const auto settle = [&] {
+        for (int turn = 0; turn < 20; ++turn) {
+            transport.drain(); while (!gui.empty()) { auto callback = std::move(gui.front()); gui.pop_front(); callback(); }
+            if (transport.quiescent()) return true;
+        }
+        return false;
+    };
+    QVERIFY(settle()); QCOMPARE(proxy->rowCount(), 3);
+    proxy->setNetworkFilters({QStringLiteral("cjdns")}); QVERIFY(settle());
+    QCOMPARE(proxy->rowCount(), 1);
+    QCOMPARE(proxy->data(proxy->index(0), PeerListModel::NetNodeId).toLongLong(), qint64{2});
+    proxy->setNetworkFilters({QStringLiteral("unroutable")}); QVERIFY(settle());
+    QCOMPARE(proxy->rowCount(), 1);
+    QCOMPARE(proxy->data(proxy->index(0), PeerListModel::NetNodeId).toLongLong(), qint64{3});
+    proxy->setNetworkFilters({QStringLiteral("cjdns"), QStringLiteral("unroutable")}); QVERIFY(settle());
+    QCOMPARE(proxy->rowCount(), 2);
+    proxy->setNetworkFilters({}); QVERIFY(settle());
+    QCOMPARE(proxy->rowCount(), 3);
 }
 void PeerListModelTests::copiedDetailsRejectReplacementConnection_data()
 {
