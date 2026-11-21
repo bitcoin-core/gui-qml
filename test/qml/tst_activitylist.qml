@@ -816,8 +816,26 @@ TestCase {
         mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
         compare(dialog.openCalls, 1)
 
+        compare(dialog.title, "Export activity to CSV")
+        compare(dialog.fileMode, AppFileDialog.SaveFile)
         compare(dialog.currentFolder.toString(), "file:///tmp/a%23b%25c")
         verify(/^file:\/\/\/tmp\/a%23b%25c\/activity-\d{4}-\d{2}-\d{2}-\d{4}\.csv$/
+            .test(dialog.currentFile.toString()), dialog.currentFile.toString())
+    }
+
+    function test_export_dialog_suggests_a_fresh_file_on_each_open() {
+        const page = createPage()
+        const dialog = findChild(page, "activityExportDialog")
+        openMore(page)
+        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        compare(dialog.openCalls, 1)
+        dialog.currentFile = "file:///tmp/typed-by-user.csv"
+        dialog.close()
+
+        openMore(page)
+        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        compare(dialog.openCalls, 2)
+        verify(/^file:\/\/\/tmp\/activity-\d{4}-\d{2}-\d{2}-\d{4}\.csv$/
             .test(dialog.currentFile.toString()), dialog.currentFile.toString())
     }
 
