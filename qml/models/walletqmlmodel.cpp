@@ -170,6 +170,27 @@ void ApplySelectedInputsPolicy(wallet::CCoinControl& coin_control)
     coin_control.m_allow_other_inputs = !coin_control.HasSelected();
 }
 
+// When no recipient matches a change descriptor, Core picks Taproot, then SegWit,
+// then the default address type. A wallet that only watches nested SegWit or
+// legacy addresses has none of those, so use a change type it has.
+void ApplyChangeTypeFallback(interfaces::Wallet& wallet, wallet::CCoinControl& coin_control)
+{
+    const wallet::CWallet* raw_wallet{wallet.wallet()};
+    if (coin_control.m_change_type || !raw_wallet || raw_wallet->m_default_change_type) return;
+    const auto has_change = [&](OutputType type) { return raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true) != nullptr; };
+    const OutputType core_choice{raw_wallet->m_default_address_type == OutputType::LEGACY ? OutputType::LEGACY
+                                 : has_change(OutputType::BECH32M)                     ? OutputType::BECH32M
+                                 : has_change(OutputType::BECH32)                      ? OutputType::BECH32
+                                                                                       : raw_wallet->m_default_address_type};
+    if (has_change(core_choice)) return;
+    for (const OutputType type : {OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+        if (has_change(type)) {
+            coin_control.m_change_type = type;
+            return;
+        }
+    }
+}
+
 CAmount MinimumCustomFeeRatePerKvB(interfaces::Wallet* wallet)
 {
     const auto* raw_wallet = wallet ? wallet->wallet() : nullptr;
@@ -1091,8 +1112,11 @@ QVariantList WalletQmlModel::availableReceiveAddressTypes() const
         OutputType::LEGACY,
     };
 
+    const wallet::CWallet* raw_wallet{m_wallet->wallet()};
     for (const OutputType type : ordered_types) {
-        if (type == OutputType::BECH32M && (!m_wallet || !m_wallet->taprootEnabled())) {
+        // Only a type with an active receive descriptor can give out addresses.
+        if (raw_wallet ? !raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false)
+                       : type == OutputType::BECH32M && !m_wallet->taprootEnabled()) {
             continue;
         }
         QVariantMap item;
@@ -2147,7 +2171,8 @@ void WalletQmlModel::requestFeeEstimatesNow()
 
     const int remainder_index = m_send_recipients->recipients().indexOf(m_maximum_recipient);
     const quint64 request_id = ++m_fee_estimate_request_id;
-    const wallet::CCoinControl base_coin_control{m_coin_control};
+    wallet::CCoinControl base_coin_control{m_coin_control};
+    ApplyChangeTypeFallback(*m_wallet, base_coin_control);
     const OutputType preview_change_type{base_coin_control.m_change_type.value_or(m_wallet->getDefaultAddressType())};
     const bool custom_fee_enabled{m_custom_fee_enabled};
     const std::optional<CAmount> custom_fee_rate_per_kvb{
@@ -2340,6 +2365,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
 
     wallet::CCoinControl coin_control{m_coin_control};
     ApplySelectedInputsPolicy(coin_control);
+    ApplyChangeTypeFallback(*m_wallet, coin_control);
     if (m_custom_fee_enabled) {
         const auto custom_fee_rate_per_kvb = ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get()));
         if (!custom_fee_rate_per_kvb.has_value()) {
