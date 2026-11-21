@@ -164,12 +164,15 @@ private:
     void retireWallet(WalletQmlModel* wallet_model, bool remove);
     void checkShutdownFinished();
     using WalletSetupFn = std::function<QString(interfaces::Wallet& wallet)>;
+    //! Runs on the worker before the wallet is created. An error stops creation.
+    using WalletCheckFn = std::function<QString()>;
     void createWalletAsync(const QString& name,
                            SecureString passphrase,
                            uint64_t wallet_creation_flags,
                            WalletLoadAction load_action,
                            bool report_create_error,
-                           WalletSetupFn setup_wallet = {});
+                           WalletSetupFn setup_wallet = {},
+                           WalletCheckFn check_before_create = {});
     void startWalletImport(const QString& path);
     void startWalletLoad(const QString& path, const QString& wallet_format = QString());
     void startWalletMigration(const QString& path, SecureString passphrase);

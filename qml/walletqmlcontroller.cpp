@@ -19,6 +19,7 @@
 #include <univalue.h>
 #include <util/fs.h>
 #include <util/result.h>
+#include <wallet/context.h>
 #include <wallet/imports.h>
 #include <wallet/walletutil.h>
 #include <wallet/wallet.h>
@@ -86,11 +87,8 @@ bool ErrorContains(const QString& error, const QString& needle)
 }
 
 // The import rescans from the oldest timestamp, which a pruned node may no longer have.
-bool ScanBlocksPruned(interfaces::Wallet& wallet, const std::vector<wallet::ImportDescriptorRequest>& requests)
+bool ScanBlocksPruned(interfaces::Chain& chain, const std::vector<wallet::ImportDescriptorRequest>& requests)
 {
-    wallet::CWallet* raw_wallet{wallet.wallet()};
-    if (!raw_wallet) return false;
-    interfaces::Chain& chain{raw_wallet->chain()};
     if (!chain.havePruned()) return false;
     std::optional<int64_t> oldest;
     for (const auto& request : requests) {
@@ -100,8 +98,8 @@ bool ScanBlocksPruned(interfaces::Wallet& wallet, const std::vector<wallet::Impo
     if (!oldest || !chain.findFirstBlockWithTimeAndHeight(*oldest - TIMESTAMP_WINDOW, 0, interfaces::FoundBlock().height(height))) {
         return false;
     }
-    const uint256 tip{WITH_LOCK(raw_wallet->cs_wallet, return raw_wallet->GetLastBlockHash())};
-    return !chain.hasBlocks(tip, height);
+    const std::optional<int> prune_height{chain.getPruneHeight()};
+    return prune_height && height <= *prune_height;
 }
 
 // remove() only unloads the wallet. Its files are deleted too, so the name can be used again.
@@ -547,7 +545,8 @@ void WalletQmlController::createWalletAsync(const QString& name,
                                             uint64_t wallet_creation_flags,
                                             WalletLoadAction load_action,
                                             bool report_create_error,
-                                            WalletSetupFn setup_wallet)
+                                            WalletSetupFn setup_wallet,
+                                            WalletCheckFn check_before_create)
 {
     const QString wallet_name = name.trimmed();
     if (setup_wallet) {
@@ -556,8 +555,13 @@ void WalletQmlController::createWalletAsync(const QString& name,
     setWalletLoadInProgress(true);
 
     m_wallet_command_executor->submit(this, [node = &m_node, wallet_name, passphrase = std::move(passphrase),
-                            wallet_creation_flags, setup_wallet = std::move(setup_wallet)]() mutable {
+                            wallet_creation_flags, setup_wallet = std::move(setup_wallet),
+                            check_before_create = std::move(check_before_create)]() mutable {
         WalletCommandResult out;
+        if (check_before_create && !(out.error = check_before_create()).isEmpty()) {
+            QmlUtil::ClearSecureString(passphrase);
+            return out;
+        }
         std::vector<bilingual_str> warnings;
         auto wallet = node->walletLoader().createWallet(wallet_name.toStdString(), passphrase, wallet_creation_flags, warnings);
         QmlUtil::ClearSecureString(passphrase);
@@ -707,21 +711,26 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
     const uint64_t creation_flags = wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS |
                                     wallet::WALLET_FLAG_DESCRIPTORS |
                                     wallet::WALLET_FLAG_BLANK_WALLET;
+    std::vector<wallet::ImportDescriptorRequest> requests{std::move(input.requests)};
     createWalletAsync(name.trimmed(),
                       SecureString{},
                       creation_flags,
                       WalletLoadAction::Create,
                       /*report_create_error=*/false,
-                      [node = &m_node, requests = std::move(input.requests)](interfaces::Wallet& wallet) mutable {
-        if (ScanBlocksPruned(wallet, requests)) {
-            return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
-        }
+                      [node = &m_node, requests](interfaces::Wallet& wallet) mutable {
         // Imports the descriptors, then rescans from the oldest timestamp.
         const std::vector<wallet::ImportResult> results{wallet.importDescriptors(requests)};
         // Shutdown stops the rescan early without an error, which would keep a wallet missing history.
         if (node->shutdownRequested()) return WalletQmlController::tr("The import was interrupted before it found all transactions.");
         for (const wallet::ImportResult& result : results) {
             if (result.has_error()) return ImportErrorText(*result.error);
+        }
+        return QString{};
+    }, [node = &m_node, requests] {
+        // Checked before the wallet file exists, so another date can be tried with the same name.
+        wallet::WalletContext* context{node->walletLoader().context()};
+        if (context && context->chain && ScanBlocksPruned(*context->chain, requests)) {
+            return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
         }
         return QString{};
     });

@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import time
 
 from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
@@ -211,6 +212,45 @@ def case_keys_keep_their_address_type(harness):
     print("  vpub watches SegWit addresses and finds the earlier payment")
 
 
+def case_pruned_blocks_are_checked_before_creating(harness):
+    """A date before the pruned blocks is refused before the wallet file exists, so a later date can reuse the name."""
+    harness.start_gui(extra_args=["-prune=1", "-fastprune"])
+    gui = harness.driver
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    address = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "setmocktime", [int(time.time()) - 400 * 24 * 60 * 60])
+    rpc_call(port, "generatetoaddress", [700, address])
+    rpc_call(port, "setmocktime", [0])
+    rpc_call(port, "generatetoaddress", [400, address])
+    assert rpc_call(port, "pruneblockchain", [600]) > 0
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+    lines = "\n".join(item["desc"] for item in listed if item["active"] and item["desc"].startswith("wpkh("))
+
+    open_type_selector(gui)
+    gui.click("walletTypeViewOnly")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
+    gui.set_text("createWalletNameInput", "watch_pruned")
+    gui.set_text("watchOnlyXpubInput", lines)
+    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+    gui.click("watchOnlyBirth_unknown")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletFormErrorText", "text", lambda text: "Choose a later date" in text, timeout_ms=15000)
+    names = [entry["name"] for entry in rpc_call(port, "listwalletdir")["wallets"]]
+    assert "watch_pruned" not in names, names
+    print("  Pruned start refused before the wallet was created")
+
+    gui.click("watchOnlyBirth_month")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=30000)
+    assert rpc_call(port, "getwalletinfo", wallet="watch_pruned")["private_keys_enabled"] is False
+    print("  A later date reuses the name")
+
+
 def case_type_selector_regular_flow(harness):
     """Test that regular wallet flow still works through type selector."""
     harness.start_gui()
@@ -313,6 +353,12 @@ def run_tests():
         "extended_keys",
         port_offset=140,
         case_body=case_keys_keep_their_address_type,
+    )
+
+    failures += run_case(
+        "pruned_blocks",
+        port_offset=150,
+        case_body=case_pruned_blocks_are_checked_before_creating,
     )
 
     failures += run_case(
