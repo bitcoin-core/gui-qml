@@ -51,6 +51,8 @@ public:
     void commitTransaction(CTransactionRef, const std::vector<std::string>&) override {}
     bool transactionCanBeAbandoned(const Txid&) override { return false; }
     bool abandonTransaction(const Txid&) override { return false; }
+    bool transactionCanBeBroadcast(const Txid&) override { return false; }
+    util::Expected<void, wallet::WalletError> rebroadcastTransaction(const Txid&) override { return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated("not implemented")}}; }
     bool transactionCanBeBumped(const Txid&) override { return false; }
     bool createBumpTransaction(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&) override { return false; }
     bool signBumpTransaction(CMutableTransaction&) override { return false; }
@@ -160,6 +162,7 @@ public:
     std::function<CoinsList()> list_coins_fn;
     std::function<OutputType()> get_default_address_type_fn;
     std::function<std::unique_ptr<interfaces::Handler>(TransactionChangedFn)> handle_transaction_changed_fn;
+    std::function<util::Expected<void, wallet::WalletError>(const Txid&)> rebroadcast_transaction_fn;
     std::function<bool(const Txid&)> transaction_can_be_bumped_fn;
     std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&)> create_bump_transaction_fn;
     std::function<bool(CMutableTransaction&)> sign_bump_transaction_fn;
@@ -177,6 +180,7 @@ public:
         CallCounter listCoins{"listCoins"};
         CallCounter getDefaultAddressType{"getDefaultAddressType"};
         CallCounter handleTransactionChanged{"handleTransactionChanged"};
+        CallCounter rebroadcastTransaction{"rebroadcastTransaction"};
         CallCounter transactionCanBeBumped{"transactionCanBeBumped"};
         CallCounter createBumpTransaction{"createBumpTransaction"};
         CallCounter signBumpTransaction{"signBumpTransaction"};
@@ -269,6 +273,13 @@ public:
     {
         ++calls.handleTransactionChanged;
         return handle_transaction_changed_fn ? handle_transaction_changed_fn(std::move(fn)) : nullptr;
+    }
+
+    util::Expected<void, wallet::WalletError> rebroadcastTransaction(const Txid& txid) override
+    {
+        ++calls.rebroadcastTransaction;
+        if (rebroadcast_transaction_fn) return rebroadcast_transaction_fn(txid);
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated("not implemented")}};
     }
 
     bool transactionCanBeBumped(const Txid& txid) override

@@ -113,6 +113,9 @@ TestCase {
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
         testWalletModel.receiveRequestReconciliationPending = false
+        testWalletModel.rebroadcastResponse = ""
+        testWalletModel.lastRebroadcastTxid = ""
+        testWalletModel.rebroadcastTransactionCalls = 0
     }
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
@@ -196,6 +199,36 @@ TestCase {
         }
         tryCompare(menu, "visible", false)
         compare(page.depth, 1)
+    }
+
+    function _test_rebroadcast(test_broadcast_ok) {
+        if (!test_broadcast_ok) {
+            testWalletModel.rebroadcastResponse = "Broadcast failure xyz."
+        }
+        const page = createPage()
+        const item = findRow(page, "single")
+        mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
+        const menu = findChild(page, "activityRowContextMenu")
+        tryCompare(menu, "opened", true)
+        mouseClick(findChild(menu.contentItem, "activityRebroadcastTransaction"))
+        compare(testWalletModel.lastRebroadcastTxid, "single")
+        compare(testWalletModel.rebroadcastTransactionCalls, 1)
+        tryCompare(menu, "visible", true)
+        const stat = findChild(menu.contentItem, "activityRebroadcastTransactionStatus")
+        tryCompare(stat, "visible", true)
+        if (test_broadcast_ok) {
+            compare(stat.text, "Rebroadcast scheduled.")
+        } else {
+            compare(stat.text, testWalletModel.rebroadcastResponse)
+        }
+    }
+
+    function test_rebroadcast_action_success() {
+        _test_rebroadcast(true)
+    }
+
+    function test_rebroadcast_action_failure() {
+        _test_rebroadcast(false)
     }
 
     function test_request_copy_waits_for_payment_scan() {

@@ -211,6 +211,7 @@ public:
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);
     Q_INVOKABLE void discardCurrentTransaction();
+    Q_INVOKABLE QString rebroadcastTransaction(const QString& txid);
     PsbtQmlModel* importedPsbt() const { return m_imported_psbt_model; }
     interfaces::Wallet* wallet() const { return m_wallet.get(); }
     // Background readers retain the interface until their current read finishes.
@@ -321,6 +322,7 @@ Q_SIGNALS:
     // Forwarded on the GUI thread; models must not read wallet state from the
     // Core callback while it holds the wallet lock.
     void transactionChanged(const QString& txid, int change);
+    void transactionRebroadcastFinished(const QString& txid, const QString& error);
 
 private:
     enum class CurrentTransactionSource {
