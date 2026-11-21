@@ -67,6 +67,8 @@ public:
 
     /** Role values of @p row keyed by role name, as QML's ListModel::get(). */
     Q_INVOKABLE QVariantMap get(int row) const;
+    /** The plainContent role of @p row, without building the whole get() map. */
+    Q_INVOKABLE QString plainTextAt(int row) const;
 
     /** Append a block of lines as one batch; only its first row is stamped. */
     void appendLines(const QString& timestamp, const QVector<OutputLine>& lines, int category,

@@ -40,6 +40,8 @@ Item {
     // Role holding the plain-text rendering of contentRole, if the model has
     // one. Search offsets are in the rendered document's coordinates, so
     // without it the view has to strip the markup itself (see _plainTextOf).
+    // A model can also offer plainTextAt(row) for that role: search reads
+    // every row, and get() builds all of a row's roles.
     property string plainContentRole: ""
     property string leftColumnRole: ""
     property string rightColumnRole: ""
@@ -353,7 +355,10 @@ Item {
     // Plain text of row `index`, in the coordinates the delegate's TextEdit
     // reports. Falls back to undoing the markup when the model has no plain role.
     function _plainTextOf(index) {
-        if (!root.listModel || typeof root.listModel.get !== "function") return ""
+        if (!root.listModel) return ""
+        if (root.plainContentRole !== "" && typeof root.listModel.plainTextAt === "function")
+            return root.listModel.plainTextAt(index)
+        if (typeof root.listModel.get !== "function") return ""
         const data = root.listModel.get(index)
         if (!data) return ""
         if (root.plainContentRole !== "" && data[root.plainContentRole] !== undefined)

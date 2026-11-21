@@ -4417,6 +4417,11 @@ public:
         return m_rows.at(row);
     }
 
+    Q_INVOKABLE QString plainTextAt(int row) const
+    {
+        return get(row).value(QStringLiteral("plainContent")).toString();
+    }
+
     void appendEntry(int category, const QString& text, const QString& command, bool redacted)
     {
         const QStringList lines = text.split(QLatin1Char('\n'));

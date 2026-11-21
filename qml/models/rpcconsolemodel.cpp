@@ -75,6 +75,12 @@ QVariantMap RpcOutputListModel::get(int row) const
     };
 }
 
+QString RpcOutputListModel::plainTextAt(int row) const
+{
+    if (row < 0 || row >= m_rows.size()) return {};
+    return m_rows.at(row).contentPlain;
+}
+
 void RpcOutputListModel::appendLines(const QString& timestamp,
                                      const QVector<OutputLine>& lines,
                                      int category,

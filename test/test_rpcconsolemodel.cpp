@@ -206,6 +206,7 @@ private Q_SLOTS:
     void commandRowsCarryTheRunnableCommand();
     void trimmingDropsWholeEntries();
     void oversizedBlockKeepsItsTimestamp();
+    void plainTextAtReadsThePlainContentRole();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -633,6 +634,16 @@ void RpcConsoleModelTests::oversizedBlockKeepsItsTimestamp()
     QCOMPARE(value(0, plain_role).toString(), QStringLiteral("line 5"));
     QCOMPARE(value(0, timestamp_role).toString(), QStringLiteral("10:00:00"));
     QCOMPARE(value(1, timestamp_role).toString(), QString{});
+}
+
+void RpcConsoleModelTests::plainTextAtReadsThePlainContentRole()
+{
+    RpcOutputListModel out;
+    out.appendLines("10:00:00", {{"<b>a&amp;b</b>", "a&b"}, {"c", "c"}}, RpcConsoleModel::CMD_REPLY);
+    QCOMPARE(out.plainTextAt(0), QStringLiteral("a&b"));
+    QCOMPARE(out.plainTextAt(1), out.get(1).value("plainContent").toString());
+    QCOMPARE(out.plainTextAt(-1), QString{});
+    QCOMPARE(out.plainTextAt(2), QString{});
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
