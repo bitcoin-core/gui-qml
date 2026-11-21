@@ -233,6 +233,14 @@ def case_pruned_blocks_are_checked_before_creating(harness):
     gui.click("walletTypeViewOnly")
     gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", "watch_pruned")
+    gui.set_text("watchOnlyXpubInput", json.dumps([dict(item, timestamp=0) for item in listed]))
+    assert gui.get_property("watchOnlyBirthDate", "visible") is False
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletFormErrorText", "text",
+                          lambda text: "Import them on a node that keeps all blocks" in text, timeout_ms=15000)
+    print("  Dated descriptors before the pruned blocks are refused without asking for a date")
+
     gui.set_text("watchOnlyXpubInput", lines)
     gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
     gui.click("watchOnlyBirth_unknown")

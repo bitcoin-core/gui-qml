@@ -711,6 +711,7 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
     const uint64_t creation_flags = wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS |
                                     wallet::WALLET_FLAG_DESCRIPTORS |
                                     wallet::WALLET_FLAG_BLANK_WALLET;
+    const bool date_chosen{!input.undated.empty()};
     std::vector<wallet::ImportDescriptorRequest> requests{std::move(input.requests)};
     createWalletAsync(name.trimmed(),
                       SecureString{},
@@ -726,13 +727,14 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
             if (result.has_error()) return ImportErrorText(*result.error);
         }
         return QString{};
-    }, [node = &m_node, requests] {
+    }, [node = &m_node, requests, date_chosen] {
         // Checked before the wallet file exists, so another date can be tried with the same name.
         wallet::WalletContext* context{node->walletLoader().context()};
-        if (context && context->chain && ScanBlocksPruned(*context->chain, requests)) {
-            return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
+        if (!context || !context->chain || !ScanBlocksPruned(*context->chain, requests)) return QString{};
+        if (!date_chosen) {
+            return WalletQmlController::tr("This node no longer has the blocks from when these descriptors were created, so it can't find their older transactions. Import them on a node that keeps all blocks.");
         }
-        return QString{};
+        return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
     });
 }
 
