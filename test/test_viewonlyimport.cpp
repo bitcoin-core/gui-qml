@@ -137,6 +137,12 @@ void ViewOnlyImportTests::keyOriginKeepsFingerprintAndPath()
              WithChecksum(QStringLiteral("wpkh([d34db33f/44'/0'/0']%1/<0;1>/*)").arg(XPUB)));
 
     QVERIFY(ParseViewOnlyImport("[d34db33f/0h]" + XPUB).needs_address_type);
+
+    QString mistyped{XPUB};
+    mistyped[mistyped.size() - 1] = QLatin1Char{'9'};
+    const ViewOnlyImport typo{ParseViewOnlyImport("[d34db33f/84h/0h/0h]" + mistyped)};
+    QCOMPARE(typo.kind, ViewOnlyImport::Kind::ExtendedKey);
+    QCOMPARE(typo.error, QStringLiteral("This extended public key is not valid."));
 }
 
 void ViewOnlyImportTests::privateKeysAreRejected()

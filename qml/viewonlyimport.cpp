@@ -405,6 +405,10 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
         const QString origin_text{origin.hasMatch() ? QStringLiteral("[%1%2]").arg(origin.captured(1), origin.captured(2)) : QString{}};
         return ParseExtendedKey(key, origin_text, origin.captured(2), address_type);
     }
+    // Only a key fits after a key origin, so this is a mistyped key rather than JSON.
+    if (origin.hasMatch()) {
+        return Failed(ViewOnlyImport::Kind::ExtendedKey, QObject::tr("This extended public key is not valid."));
+    }
     if (trimmed.startsWith(QLatin1Char('[')) || trimmed.startsWith(QLatin1Char('{'))) {
         return ParseJson(trimmed.toStdString());
     }
