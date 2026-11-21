@@ -109,7 +109,9 @@ def test_language_direction(gui):
         assert gui.get_property("displayLanguageRow", "mirrored") is False
         select_language(gui, "arabic", "language_ar")
         gui.wait_for_property("displayLanguageRow", "mirrored", True, timeout_ms=3000)
-        print("  Arabic mirrors the layout  PASSED")
+        language_title = gui.get_property("displayLanguageRow", "title")
+        assert language_title == "اللغة", language_title
+        print("  Arabic mirrors and translates the layout  PASSED")
 
         select_language(gui, "español", "language_es")
         gui.wait_for_property("displayLanguageRow", "mirrored", False, timeout_ms=3000)
