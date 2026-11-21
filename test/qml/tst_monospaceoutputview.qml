@@ -67,7 +67,8 @@ TestCase {
     }
 
     function init() {
-        failOnWarning(/MonospaceOutputView\.qml/)
+        // failOnWarning() exists from Qt 6.3.
+        if (typeof failOnWarning === "function") failOnWarning(/MonospaceOutputView\.qml/)
     }
 
     function createOutput() {

@@ -37,7 +37,8 @@ TestCase {
     readonly property int replyCategory: 1
 
     function init() {
-        failOnWarning(/MonospaceOutputView\.qml|CommandConsole\.qml/)
+        // failOnWarning() exists from Qt 6.3.
+        if (typeof failOnWarning === "function") failOnWarning(/MonospaceOutputView\.qml|CommandConsole\.qml/)
         rpcConsoleModel.resetForTest()
         Clipboard.currentText = ""
     }
