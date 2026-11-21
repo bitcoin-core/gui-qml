@@ -38,6 +38,11 @@ TestCase {
         visible: true
     }
 
+    SignalSpy {
+        id: tooltipOpenedSpy
+        signalName: "opened"
+    }
+
     Component {
         id: containerComponent
 
@@ -967,6 +972,96 @@ TestCase {
             })
         } finally {
             settingsWindow.height = originalHeight
+        }
+    }
+
+    // Issue #862: the RPC console's tool icons gave no hint of what they do.
+    // #877 replaced the old input-row icons with the search carets and the font
+    // stepper; each now shows its accessible name on hover.
+    function test_rpcConsoleToolIconsHaveTooltips() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+        verify(findChild(view, "rpcConsole") !== null)
+
+        const expected = {
+            "consoleFontDecreaseButtonTooltip": "Decrease console text size",
+            "consoleFontIncreaseButtonTooltip": "Increase console text size",
+            "rpcConsoleSearchPreviousButtonTooltip": "Previous search result",
+            "rpcConsoleSearchNextButtonTooltip": "Next search result"
+        }
+        for (const name in expected) {
+            const tooltip = findChild(view, name)
+            verify(tooltip !== null, name + " is missing")
+            compare(tooltip.text, expected[name])
+            verify(!tooltip.visible, name + " must stay hidden until hovered")
+        }
+    }
+
+    // The font stepper sits against the right edge of the clipped settings
+    // page; the popup must open below it and stay inside the window.
+    function test_rpcConsoleToolTooltipOpensBelowItsButton() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+        settingsWindow.requestActivate()
+        tryCompare(settingsWindow, "active", true)
+
+        const button = findChild(view, "consoleFontIncreaseButton")
+        const tooltip = findChild(view, "consoleFontIncreaseButtonTooltip")
+        verify(button !== null)
+        verify(tooltip !== null)
+        waitForRendering(view)
+
+        mouseMove(button, button.width / 2, button.height / 2)
+        tryCompare(button, "hovered", true)
+        tryCompare(tooltip, "opened", true)
+
+        const buttonBottom = button.mapToItem(null, 0, button.height).y
+        const bubble = tooltip.contentItem
+        verify(bubble.mapToItem(null, 0, 0).y >= buttonBottom)
+        verify(bubble.mapToItem(null, bubble.width, 0).x <= settingsWindow.width)
+
+        mouseMove(view, 10, 10)
+        tryCompare(button, "hovered", false)
+        tryCompare(tooltip, "visible", false)
+    }
+
+    // A pointer that only crosses the button must not flash the bubble.
+    function test_rpcConsoleToolTooltipWaitsForTheHoverDelay() {
+        const motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("rpc-console")
+            settingsWindow.requestActivate()
+            tryCompare(settingsWindow, "active", true)
+
+            const button = findChild(view, "consoleFontDecreaseButton")
+            const tooltip = findChild(view, "consoleFontDecreaseButtonTooltip")
+            verify(button !== null)
+            verify(tooltip !== null)
+            waitForRendering(view)
+            verify(tooltip.delay > 0)
+
+            tooltipOpenedSpy.target = tooltip
+            tooltipOpenedSpy.clear()
+            mouseMove(button, button.width / 2, button.height / 2)
+            tryCompare(button, "hovered", true)
+            mouseMove(view, 10, 10)
+            tryCompare(button, "hovered", false)
+            wait(tooltip.delay + 100)
+            compare(tooltipOpenedSpy.count, 0)
+
+            mouseMove(button, button.width / 2, button.height / 2)
+            tryCompare(button, "hovered", true)
+            verify(!tooltip.opened)
+            tryCompare(tooltip, "opened", true)
+            mouseMove(view, 10, 10)
+            tryCompare(tooltip, "visible", false)
+        } finally {
+            Theme.motion.mode = motionMode
         }
     }
 

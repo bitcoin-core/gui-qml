@@ -281,6 +281,15 @@ Control {
         HoverHandler {
             cursorShape: navigationButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
+
+        HoverToolTip {
+            objectName: navigationButton.objectName.length > 0
+                ? navigationButton.objectName + "Tooltip"
+                : ""
+            y: navigationButton.height + Theme.space.m
+            visible: navigationButton.hovered
+            text: navigationButton.accessibleName
+        }
     }
 
     component SearchNavigationCaret: Canvas {

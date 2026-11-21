@@ -67,6 +67,13 @@ SettingsPage {
         HoverHandler {
             cursorShape: fontSizeButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
+
+        HoverToolTip {
+            objectName: fontSizeButton.objectName + "Tooltip"
+            y: fontSizeButton.height + Theme.space.m
+            visible: fontSizeButton.hovered
+            text: fontSizeButton.accessibleName
+        }
     }
 
     PageHeading {

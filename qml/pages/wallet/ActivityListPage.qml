@@ -95,6 +95,14 @@ Page {
         return value
     }
 
+    // Folder of the last accepted export, so the next one starts there.
+    property url exportFolder: walletController.homeFolderUrl()
+
+    function defaultExportFileUrl() {
+        const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
+        return walletController.fileUrlInFolder(root.exportFolder, "activity-" + stamp + ".csv")
+    }
+
     function exportActivity(path) {
         const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
         exportSucceeded = ok
@@ -168,10 +176,19 @@ Page {
     AppFileDialog {
         id: exportDialog
         objectName: "activityExportDialog"
+        //: Title of the file save dialog opened by the Export CSV entry in the Activity page's overflow menu.
+        //: The dialog writes the list of transactions currently shown in Activity to a CSV file.
+        title: qsTr("Export activity to CSV")
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
+        currentFolder: root.exportFolder
+        currentFile: root.defaultExportFileUrl()
         nameFilters: [qsTr("Comma separated file (*.csv)")]
-        onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
+        onAccepted: {
+            const folder = walletController.folderUrlOfFile(exportDialog.selectedFile)
+            if (folder.toString().length > 0) root.exportFolder = folder
+            root.exportActivity(exportDialog.selectedFile.toString())
+        }
     }
     TextField {
         id: automationExportPathField
@@ -258,6 +275,13 @@ Page {
                 objectName: "activityMoreButton"
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
+
+                HoverToolTip {
+                    objectName: "activityMoreButtonTooltip"
+                    y: moreButton.height + Theme.space.m
+                    visible: moreButton.hovered && !moreMenu.opened
+                    text: moreButton.Accessible.name
+                }
             }
         }
 
@@ -301,6 +325,13 @@ Page {
                     iconSize: 20
                     text: count === 1 ? qsTr("1 active filter") : qsTr("%1 active filters").arg(count)
                     onClicked: clearFiltersMenu.opened ? clearFiltersMenu.close() : clearFiltersMenu.open()
+
+                    HoverToolTip {
+                        objectName: "activityActiveFiltersButtonTooltip"
+                        y: activeFiltersButton.height + Theme.space.m
+                        visible: activeFiltersButton.hovered && !clearFiltersMenu.opened
+                        text: activeFiltersButton.Accessible.name
+                    }
                 }
             }
             DropdownButton {
@@ -590,7 +621,10 @@ Page {
                     const path = automationExportPathField.text
                     automationExportPathField.text = ""
                     root.exportActivity(path)
-                } else exportDialog.open()
+                } else {
+                    exportDialog.currentFile = root.defaultExportFileUrl()
+                    exportDialog.open()
+                }
             }
         }
     }

@@ -11,6 +11,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QEvent>
+#include <QFileInfo>
 #include <QEventLoop>
 #include <QFont>
 #include <QHash>
@@ -1832,6 +1833,7 @@ class MockWalletController : public QObject
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
     Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
+    Q_PROPERTY(QString homeDirectory MEMBER m_home_directory)
 
 public:
     bool m_initialized{true};
@@ -1876,7 +1878,18 @@ public:
     QString walletImportErrorTitle() const { return m_wallet_load_error.isEmpty() ? QString{} : QStringLiteral("Failed to load wallet"); }
     QString walletImportErrorDescription() const { return m_wallet_load_error; }
     QString walletImportErrorHelpText() const { return QString{}; }
-    Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
+    QString m_home_directory{QStringLiteral("/tmp")};
+    Q_INVOKABLE QString homePath() const { return m_home_directory; }
+    Q_INVOKABLE QUrl homeFolderUrl() const { return QUrl::fromLocalFile(m_home_directory); }
+    Q_INVOKABLE QUrl fileUrlInFolder(const QUrl& folder, const QString& file_name) const
+    {
+        return QUrl::fromLocalFile(QDir(folder.toLocalFile()).filePath(file_name));
+    }
+    Q_INVOKABLE QUrl folderUrlOfFile(const QUrl& file) const
+    {
+        if (!file.isLocalFile()) return {};
+        return QUrl::fromLocalFile(QFileInfo(file.toLocalFile()).absolutePath());
+    }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
@@ -1998,6 +2011,7 @@ public:
         m_open_wallet_location_calls = 0;
         m_open_wallet_location_result = true;
         m_open_wallet_location_error.clear();
+        m_home_directory = QStringLiteral("/tmp");
         clearWalletLocationOpenError();
         clearWalletLoadStatus();
         clearWalletCreateStatus();
