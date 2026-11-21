@@ -268,6 +268,13 @@ SettingsPage {
     onWalletChanged: {
         root.errorText = ""
         root.resultText = ""
+        // Save would refuse a sheet opened for another wallet, so don't leave it open.
+        if (backupPopup.targetWallet !== null && backupPopup.targetWallet !== root.wallet) {
+            replaceAlert.close()
+            backupLocationDialog.close()
+            backupPopup.close()
+            backupPopup.targetWallet = null
+        }
     }
 
     PageHeading {

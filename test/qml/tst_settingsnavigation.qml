@@ -569,6 +569,24 @@ TestCase {
         compare(stack.currentItem, addressPage)
     }
 
+    function test_walletSettingsStackClosesBackupWhenWalletChanges() {
+        testWalletModel.resetWalletSettingsTestState()
+        walletController.clearTestWalletFileDestinations()
+        const stack = createTemporaryObject(walletSettingsStackComponent, settingsWindow.contentItem)
+        verify(stack !== null)
+        const popup = findChild(stack, "backupWalletPopup")
+        const dialog = findChild(stack, "walletSettingsBackupDialog")
+        findChild(stack, "walletBackupRow").clicked()
+        tryCompare(popup, "opened", true)
+        findChild(popup, "backupChangeLocation").clicked()
+        compare(dialog.visible, true)
+
+        stack.wallet = testSecondWalletModel
+        tryCompare(popup, "visible", false)
+        compare(dialog.visible, false)
+        testWalletModel.resetWalletSettingsTestState()
+    }
+
     function test_walletSettingsStackPasswordPageFollowsEncryption() {
         const stack = createTemporaryObject(walletSettingsStackComponent, settingsWindow.contentItem)
         verify(stack !== null)
