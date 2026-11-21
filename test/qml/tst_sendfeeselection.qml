@@ -81,6 +81,25 @@ TestCase {
         compare(control.customSelected, false)
         compare(rate.visible, false)
     }
+    function test_custom_rate_keeps_a_leading_decimal_point_data() {
+        return [
+            { tag: "period", decimalPoint: ".", keys: [".", "5"], text: ".5" },
+            { tag: "comma", decimalPoint: ",", keys: [",", "5"], text: ",5" },
+        ]
+    }
+    function test_custom_rate_keeps_a_leading_decimal_point(data) {
+        const control = createTemporaryObject(factory, this)
+        selectOption(control, 3)
+        findChild(control, "feeSelectionCustomRateRow").decimalPoint = data.decimalPoint
+        const rate = findChild(control, "feeSelectionCustomRateInput")
+        rate.forceActiveFocus()
+        rate.selectAll()
+        for (const key of data.keys) keyClick(key)
+        compare(rate.text, data.text)
+        compare(testWalletModel.customFeeRate, data.text)
+        verify(testWalletModel.customFeeRateValid)
+        verify(rate.canUndo)
+    }
     function test_custom_selection_uses_nearest_target() {
         testWalletModel.targetBlocks = 25
         const control = createTemporaryObject(factory, this)

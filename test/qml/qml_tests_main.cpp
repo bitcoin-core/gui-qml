@@ -1375,9 +1375,10 @@ public:
     bool customFeeRateValid() const
     {
         static const QRegularExpression pattern{
-            QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")
+            QStringLiteral(R"(^(?:[0-9]+(?:\.[0-9]{0,3})?|\.[0-9]{1,3})$)")
         };
-        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate.toDouble() >= m_minimum_custom_fee_rate;
+        const QString rate = QString{m_custom_fee_rate}.replace(QLatin1Char(','), QLatin1Char('.'));
+        return pattern.match(rate).hasMatch() && rate.toDouble() >= m_minimum_custom_fee_rate;
     }
     double m_minimum_custom_fee_rate{0.1};
     int prepareTransactionCalls() const { return m_prepare_transaction_calls; }

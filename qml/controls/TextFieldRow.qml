@@ -16,6 +16,7 @@ FormRow {
     property var validator: null
     property int maximumLength: 32767
     property int inputMethodHints: Qt.ImhNone
+    property string decimalPoint: Qt.locale().decimalPoint
     property int echoMode: TextInput.Normal
     property int fieldWidth: 180
     property int fieldHeight: 32

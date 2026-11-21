@@ -54,6 +54,7 @@
 #include <wallet/wallet.h>
 
 #include <QDateTime>
+#include <QLocale>
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QScopedValueRollback>
@@ -79,7 +80,7 @@ constexpr int FEE_ESTIMATE_DEBOUNCE_MS{250};
 constexpr unsigned int FEE_RATE_BASIS_VBYTES{1000};
 constexpr std::array<unsigned int, 3> STANDARD_FEE_TARGETS{2, DEFAULT_STANDARD_FEE_TARGET, 10};
 constexpr std::array<unsigned int, 7> CUSTOM_FEE_TARGETS{2, 3, 4, 6, 10, 25, 50};
-const QRegularExpression CUSTOM_FEE_RATE_PATTERN{QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")};
+const QRegularExpression CUSTOM_FEE_RATE_PATTERN{QStringLiteral(R"(^(?:[0-9]+(?:\.[0-9]{0,3})?|\.[0-9]{1,3})$)")};
 
 struct ReceiveRequestPaymentScan {
     std::map<Txid, std::map<QString, CAmount>> payments;
@@ -177,14 +178,15 @@ CAmount MinimumCustomFeeRatePerKvB(interfaces::Wallet* wallet)
 
 std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate, CAmount minimum_fee_rate_per_kvb)
 {
-    const QString trimmed = custom_fee_rate.trimmed();
+    QString trimmed = custom_fee_rate.trimmed();
+    if (QLocale().decimalPoint() == QLatin1String(",")) trimmed.replace(QLatin1Char(','), QLatin1Char('.'));
     if (trimmed.isEmpty() || !CUSTOM_FEE_RATE_PATTERN.match(trimmed).hasMatch()) {
         return std::nullopt;
     }
 
     const QStringList parts = trimmed.split('.');
-    bool whole_ok{false};
-    const CAmount whole_part{parts.at(0).toLongLong(&whole_ok)};
+    bool whole_ok{parts.at(0).isEmpty()};
+    const CAmount whole_part{whole_ok ? 0 : parts.at(0).toLongLong(&whole_ok)};
     if (!whole_ok) {
         return std::nullopt;
     }

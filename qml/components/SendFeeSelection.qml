@@ -6,6 +6,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
+import "../controls/utils.js" as Utils
 
 ColumnLayout {
     id: root
@@ -110,6 +111,7 @@ ColumnLayout {
     }
 
     TextFieldRow {
+        id: customRateRow
         visible: root.customSelected
         objectName: "feeSelectionCustomRateRow"
         fieldObjectName: "feeSelectionCustomRateInput"
@@ -119,10 +121,13 @@ ColumnLayout {
         text: root.walletModel ? root.walletModel.customFeeRate : ""
         //: Placeholder for the empty custom fee rate field, in sat/vB.
         placeholderText: qsTr("Enter custom fee")
-        validator: RegularExpressionValidator { regularExpression: /^(|[0-9]+(\.[0-9]{0,3})?)$/ }
+        validator: RegularExpressionValidator {
+            regularExpression: new RegExp("^[0-9]*(" + Utils.decimalSeparatorPattern(customRateRow.decimalPoint) + "[0-9]{0,3})?$")
+        }
         //: Validation error for the custom transaction fee rate. sat/vB means satoshis per virtual byte.
         errorText: root.walletModel && !root.walletModel.customFeeRateValid
             ? qsTr("Enter a fee rate of at least %1 sat/vB.").arg(root.walletModel.minimumCustomFeeRate) : ""
+        // Stored as typed: a normalized rate would rewrite the field through its text binding.
         onTextEdited: function(text) { if (root.walletModel) root.walletModel.customFeeRate = text }
     }
 

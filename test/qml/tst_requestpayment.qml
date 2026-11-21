@@ -570,6 +570,19 @@ TestCase {
         verify(!update.visible)
     }
 
+    function test_typed_decimal_comma_keeps_the_amount() {
+        optionsModel.displayUnit = 0
+        const page = createPage()
+        const card = page.draftCard
+        findChild(card, "requestPaymentAmountField").decimalPoint = ","
+        const input = findChild(card, "requestPaymentAmountInput")
+        input.forceActiveFocus()
+        for (const key of ["0", ",", "0", "2"]) keyClick(key)
+        compare(input.text, "0,02")
+        input.editingFinished()
+        compare(card.request.amount.satoshi, 2000000)
+    }
+
     function test_request_amount_survives_note_only_update_data() {
         return [
             {tag: "BTC", unit: 0, amount: "0.00000001", label: "BTC"},

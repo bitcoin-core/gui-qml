@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
 import "../pages/wallet"
+import "../controls/utils.js" as Utils
 
 Pane {
     id: root
@@ -97,7 +98,8 @@ Pane {
     }
     Component.onCompleted: resetFields()
 
-    function amountInSatoshis(text) {
+    function amountInSatoshis(input) {
+        const text = Utils.normalizeDecimalInput(input, amountInput.decimalPoint)
         if (text === "") return 0
         if (!/^\d*(\.\d*)?$/.test(text) || text === ".") return -1
         const decimals = amountUnit === BitcoinAmount.SAT ? 0
@@ -512,7 +514,9 @@ Pane {
                         fieldTextStyle: Theme.text.monoDescription
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
                         maximumLength: 32
-                        validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
+                        validator: RegularExpressionValidator {
+                            regularExpression: new RegExp("^0*\\d{0,16}(" + Utils.decimalSeparatorPattern(amountInput.decimalPoint) + "\\d{0,8})?$")
+                        }
                         onTextChanged: if (root.amountInSatoshis(text) >= 0) root.amountErrorText = ""
                         onEditingFinished: if (!root.saved) root.saveField("amount", this)
                         unitControl: AmountUnitButton {
