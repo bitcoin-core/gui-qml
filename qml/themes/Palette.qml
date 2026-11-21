@@ -95,9 +95,8 @@ QtObject {
     // QR codes stay dark on light in every palette, so scanners read them.
     property color qrBackground: "#FFFFFF"
     property color qrForeground: "#000000"
-    // Onboarding illustration: the signal pulse and the newest block.
+    // Onboarding illustration: the signal pulse.
     property color illustrationSignal: "#F9D63C"
-    property color illustrationLatestBlock: confirmationColors[1]
 
     // Tints: a role at one alpha, for pills, banners and icon discs.
     // Text on a tint uses the matching *Text role.

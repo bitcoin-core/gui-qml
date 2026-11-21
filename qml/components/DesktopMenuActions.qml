@@ -198,7 +198,7 @@ QtObject {
         onTriggered: root.receiveRequested()
     }
     readonly property MenuCommand information: MenuCommand {
-        text: qsTr("Information")
+        text: qsTr("Node Details")
         shortcut: qsTr("Ctrl+I")
         enabled: root.routeEnabled
         onTriggered: root.informationRequested()

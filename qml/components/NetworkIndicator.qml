@@ -12,41 +12,62 @@ import org.bitcoincore.qt 1.0
 Control {
     id: root
     property string text: ""
-    property color bgColor
-    property color textColor: Theme.color.accentForeground
-    property bool shorten: false
+    property color chainColor: Theme.color.controlBorder
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
-    property var textStyle: Theme.text.description
-    topPadding: Theme.space.xxs
-    bottomPadding: Theme.space.xxs
-    leftPadding: Theme.space.m
-    rightPadding: Theme.space.m
+    property var textStyle: Theme.text.captionStrong
+    topPadding: Theme.space.xs
+    bottomPadding: Theme.space.xs
+    leftPadding: Theme.space.ml
+    rightPadding: Theme.space.ml
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+    implicitHeight: Math.max(Theme.size.controlSmall,
                              implicitContentHeight + topPadding + bottomPadding)
+    hoverEnabled: AppMode.isDesktop
     Accessible.role: Accessible.StaticText
     Accessible.name: text
+    Accessible.description: tooltip.text
     state: show && root.chainModelRef !== null ? root.chainModelRef.networkName : "MAIN"
-    contentItem: CoreText {
-        text: root.text
-        textStyle: root.textStyle
-        color: root.textColor
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        Accessible.ignored: true
+    contentItem: Row {
+        spacing: Theme.space.s
+        Rectangle {
+            objectName: "networkIndicatorDot"
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.space.m
+            height: Theme.space.m
+            radius: height / 2
+            color: root.chainColor
+        }
+        CoreText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.text
+            textStyle: root.textStyle
+            wrap: false
+            Accessible.ignored: true
+        }
     }
     background: Rectangle {
-        id: bg
-        color: root.bgColor
-        radius: 2
+        color: "transparent"
+        radius: height / 2
+        border.width: 1
+        border.color: root.chainColor
 
-        Behavior on color {
+        Behavior on border.color {
             enabled: Theme.motion.animated
             ColorAnimation { duration: Theme.motion.normal }
         }
     }
+
+    Tooltip {
+        id: tooltip
+        anchors.top: root.bottom
+        anchors.topMargin: Theme.space.m
+        anchors.horizontalCenter: root.horizontalCenter
+        shown: root.hovered
+        text: qsTr("This node is not on the main Bitcoin network")
+    }
+
     states: [
         State {
             name: "MAIN"
@@ -60,8 +81,8 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet") : qsTr("Test network")
-                bgColor: Theme.color.success
+                text: qsTr("Testnet")
+                chainColor: Theme.color.success
             }
         },
         State {
@@ -69,8 +90,8 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet4") : qsTr("Test network (v4)")
-                bgColor: Theme.color.success
+                text: qsTr("Testnet4")
+                chainColor: Theme.color.success
             }
         },
         State {
@@ -78,9 +99,8 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Signet") : qsTr("Signet network")
-                bgColor: Theme.color.warning
-                textColor: Theme.color.warningForeground
+                text: qsTr("Signet")
+                chainColor: Theme.color.warning
             }
         },
         State {
@@ -88,8 +108,8 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Regtest") : qsTr("Regtest mode")
-                bgColor: Theme.color.info
+                text: qsTr("Regtest")
+                chainColor: Theme.color.info
             }
         }
     ]

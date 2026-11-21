@@ -75,7 +75,8 @@ TestCase {
         const reasons = {
             "singleton": ["Theme", "SizeClass"],
             "not drawn by itself": ["AlertAction", "AppSettings", "MenuCommand", "AppFolderDialog",
-                "DesktopMenuActions", "DesktopNativeMenuBar"],
+                "DesktopMenuActions", "DesktopNativeMenuBar", "NodeStatus"],
+            "part of a node component": ["NodeActionButton"],
             "base type or part of a shown control": ["BitcoinAmountDigit", "BitcoinAmountDigitBase",
                 "BitcoinAmountDisplayLabelBase", "LabeledField", "FieldBorderRings", "SurfaceGradientBorder",
                 "TransactionFlowRibbon"],
@@ -86,10 +87,11 @@ TestCase {
                 "SettingsView", "OnboardingView", "OnboardingFooter", "OnboardingNavigationBar", "DeveloperOptions",
                 "StorageLocations", "StorageOptions", "TransactionDetailsSection"],
             "needs a live wallet or node model": ["BlockClock", "MiniBlockClock", "CoinsList", "NetworkTrafficGraph",
-                "NodeStatusActions", "PaymentRequestCard", "PaymentRequestModal", "PaymentRequestDeleteConfirmation",
+                "NewBlockToast", "NodeBanner", "NodeDetailsPopup", "NodeStatusBar", "WarningsLink",
+                "PaymentRequestCard", "PaymentRequestModal", "PaymentRequestDeleteConfirmation",
                 "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
-                "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
+                "BannedPeersPopup", "NodeFatalErrorPopup", "NodeRuntimeDialog",
                 "NodeWarningsPopup", "OnboardingSettingsPopup"]
         }
         const exemptions = {}
