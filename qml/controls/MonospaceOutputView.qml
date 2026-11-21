@@ -487,10 +487,13 @@ Item {
         Qt.callLater(root._updateHover)
     }
 
-    // Row indices held by the selection no longer point at the same lines.
+    // Row indices held by the selection and the hover no longer point at the
+    // same lines. The hover is dropped even under a resting pointer, so its
+    // actions cannot act on whatever entry moved into its row.
     function _onRowsShifted() {
         root.clearSelection()
         root._activeRow = -1
+        root._hoveredRow = -1
         root._onRowsChanged()
     }
 

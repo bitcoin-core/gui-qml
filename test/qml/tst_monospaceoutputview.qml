@@ -542,6 +542,28 @@ TestCase {
         verify(!highlight.visible)
     }
 
+    function test_removing_rows_drops_the_hover_under_a_resting_pointer() {
+        const output = createSelectionOutput(threeLineRows(), { hoverActions: hoverActionsComponent })
+        const point = charPoint(output, 1, 2)
+        mouseMove(output, point.x, point.y)
+        tryCompare(output, "hoveredRow", 1)
+        const loader = findChild(output, "searchOutput_hoverActions")
+        // The actions sit at the entry's top, over row 0, yet keep row 1.
+        mouseMove(loader.item, 5, 2)
+        wait(50)
+        compare(output.hoveredRow, 1)
+
+        // The hover may pick up whatever row is now under the pointer, but it
+        // must not keep pointing at the old index.
+        output.listModel.remove(0, 1)
+        tryCompare(output, "count", 2)
+        wait(50)
+        if (output.hoveredRow >= 0)
+            compare(output.hoveredEntry, output.roleValueAt(output.hoveredRow, "entry"))
+        else
+            compare(loader.item, null)
+    }
+
     function test_hover_highlight_tracks_rows_in_a_scrolled_view() {
         const rows = []
         for (let i = 0; i < 100; ++i) rows.push({ content: "line " + i, entry: Math.floor(i / 3) })
