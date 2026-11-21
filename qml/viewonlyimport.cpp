@@ -390,6 +390,7 @@ ViewOnlyImport ParseExtendedKey(const ExtendedKey& key, const QString& origin, c
     if (type) result = ParseLines({WrapKey(*type, origin + QString::fromStdString(key.key) + QStringLiteral("/<0;1>/*"))});
     result.kind = Kind::ExtendedKey;
     result.needs_address_type = needs_address_type;
+    result.key_id = origin + QString::fromStdString(key.key);
     if (key.type && path_type && *key.type != *path_type) {
         //: %1 and %2 are address types, such as "Bech32 (SegWit)".
         result.warning = QObject::tr("The key's prefix says %1, but its origin path says %2. It is imported as %1. Check the wallet it came from.")
@@ -503,6 +504,9 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
         }
         *row_it = row;
     }
+    QStringList descriptors;
+    for (const ImportDescriptorRequest& request : parsed.requests) descriptors.append(QString::fromStdString(request.descriptor));
+    result.insert(QStringLiteral("importId"), parsed.kind == Kind::ExtendedKey ? parsed.key_id : descriptors.join(QLatin1Char('\n')));
     result.insert(QStringLiteral("status"), QStringLiteral("valid"));
     result.insert(QStringLiteral("descriptorCount"), qulonglong(parsed.descriptor_count));
     result.insert(QStringLiteral("addressTypes"), address_types);

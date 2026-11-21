@@ -129,6 +129,18 @@ TestCase {
         verify(xpubEntry.supportingText.indexOf("Bech32m (Taproot)") >= 0)
         compare(form.canCreate, true)
 
+        xpub.text = " " + validXpub + "\n"
+        compare(form.canCreate, true)
+        const otherXpub = "xpub" + validXpub.slice(5) + "A"
+        xpub.text = otherXpub
+        compare(form.canCreate, false)
+        verify(!findChild(form, "watchOnlyAddressType_bech32m").checked)
+        verify(!findChild(form, "watchOnlyBirth_year").checked)
+        xpub.text = validXpub
+        findChild(form, "watchOnlyBirth_year").clicked()
+        findChild(form, "watchOnlyAddressType_bech32m").clicked()
+        compare(form.canCreate, true)
+
         const before = Math.floor(Date.now() / 1000)
         findChild(form, "createWalletFormCreateButton").clicked()
         compare(walletController.lastWatchOnlyImport(), validXpub)

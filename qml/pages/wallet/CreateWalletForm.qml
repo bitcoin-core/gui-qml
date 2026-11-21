@@ -23,6 +23,8 @@ OnboardingView {
     readonly property var keyInfo: watchOnly && loadedChildView
         ? walletController.describeViewOnlyImport(loadedChildView.importText) : ({ "status": "empty" })
     readonly property bool needsAddressType: keyInfo.status === "valid" && keyInfo.needsAddressType === true
+    readonly property string importId: keyInfo.status === "valid" && keyInfo.importId ? keyInfo.importId : ""
+    property string previousImportId: ""
     readonly property var importInfo: needsAddressType && loadedChildView.addressTypeChoice.length > 0
         ? walletController.describeViewOnlyImport(loadedChildView.importText, loadedChildView.addressTypeChoice) : keyInfo
     readonly property bool needsBirthDate: importInfo.status === "valid" && importInfo.needsBirthDate === true
@@ -111,6 +113,16 @@ OnboardingView {
         if (!root.canCreate) return
         if (root.watchOnly || root.loadedChildView.encryptWallet) root.submit()
         else root.loadedChildView.openUnencryptedWarning()
+    }
+
+    // Choices made for one key or set of descriptors do not carry over to another.
+    onImportIdChanged: {
+        if (importId.length === 0) return
+        if (previousImportId.length > 0 && importId !== previousImportId && loadedChildView) {
+            loadedChildView.addressTypeChoice = ""
+            loadedChildView.birthChoice = ""
+        }
+        previousImportId = importId
     }
 
     Component.onCompleted: {

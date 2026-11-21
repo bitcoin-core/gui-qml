@@ -2063,6 +2063,7 @@ public:
         result.insert("needsBirthDate", !json);
         result.insert("createdTime", json ? 1700000000LL : -1LL);
         result.insert("needsAddressType", key);
+        result.insert("importId", text);
         if (json) {
             const QVariantMap segwit{{"addressType", "Bech32 (SegWit)"}, {"key", "[d34db33f/84h/0h/0h]"}, {"receive", true},
                                      {"change", true}, {"active", true}, {"ranged", true}, {"createdTime", 1700000000LL}};
