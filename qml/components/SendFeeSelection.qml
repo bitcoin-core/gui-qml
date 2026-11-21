@@ -48,8 +48,11 @@ ColumnLayout {
             onActivated: function(index) {
                 if (!root.walletModel) return
                 const option = root.speedOptions[index]
-                if (option.blocks < 0) root.walletModel.setCustomFeeTarget(root.nearestBlockTarget(root.currentTarget))
-                else {
+                if (option.blocks < 0) {
+                    if (!root.walletModel.customFeeEnabled) {
+                        root.walletModel.setCustomFeeTarget(root.nearestBlockTarget(root.currentTarget))
+                    }
+                } else {
                     root.walletModel.customFeeEnabled = false
                     root.walletModel.targetBlocks = option.blocks
                     root.feeChanged(option.blocks)

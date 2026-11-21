@@ -157,6 +157,7 @@ public:
     std::function<CAmount(const wallet::CCoinControl&)> get_available_balance_fn;
     std::function<CAmount(unsigned int)> get_required_fee_fn;
     std::function<CAmount(const wallet::CCoinControl&)> get_minimum_fee_fn;
+    std::function<FeeReason(const wallet::CCoinControl&)> get_fee_reason_fn;
     std::function<CoinsList()> list_coins_fn;
     std::function<OutputType()> get_default_address_type_fn;
     std::function<std::unique_ptr<interfaces::Handler>(TransactionChangedFn)> handle_transaction_changed_fn;
@@ -248,8 +249,9 @@ public:
         return get_required_fee_fn ? get_required_fee_fn(tx_bytes) : 0;
     }
 
-    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl& control, std::optional<int>*, FeeReason*) override
+    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl& control, std::optional<int>*, FeeReason* reason) override
     {
+        if (reason && get_fee_reason_fn) *reason = get_fee_reason_fn(control);
         return get_minimum_fee_fn ? get_minimum_fee_fn(control) : 0;
     }
 
