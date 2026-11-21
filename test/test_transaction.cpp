@@ -12,6 +12,7 @@
 #include <uint256.h>
 #include <wallet/types.h>
 
+#include <QScopeGuard>
 #include <QtTest/QtTest>
 
 namespace {
@@ -72,6 +73,7 @@ private Q_SLOTS:
     void updateStatus_setsCountsForBalance();
     void dateTimeString_localizesMonthNames();
     void gregorianLocale_keepsScriptAndTerritory();
+    void gregorianLocale_followsTheTimeLocale();
 };
 
 void TransactionTests::initTestCase()
@@ -207,6 +209,40 @@ void TransactionTests::gregorianLocale_keepsScriptAndTerritory()
     QCOMPARE(serbian_latin.script(), QLocale::LatinScript);
     QCOMPARE(serbian_latin.toString(date, "MMMM yyyy"), QStringLiteral("novembar 2026"));
     QCOMPARE(QmlUtil::GregorianLocale(QLocale::c()).toString(date, "MMMM d, yyyy"), QStringLiteral("November 10, 2026"));
+}
+
+void TransactionTests::gregorianLocale_followsTheTimeLocale()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && !defined(Q_OS_ANDROID)
+    const QLocale previous;
+    QLocale::setDefault(QLocale::system());
+    QHash<QByteArray, QByteArray> saved;
+    for (const char* variable : {"LC_ALL", "LC_TIME", "LANG"}) saved.insert(variable, qgetenv(variable));
+    const auto restore = qScopeGuard([&] {
+        for (auto it = saved.cbegin(); it != saved.cend(); ++it) {
+            if (it.value().isNull()) {
+                qunsetenv(it.key().constData());
+            } else {
+                qputenv(it.key().constData(), it.value());
+            }
+        }
+        QLocale::setDefault(previous);
+    });
+    const QDate date{2026, 11, 10};
+    const auto month = [&](const char* lc_time) {
+        qputenv("LC_ALL", "");
+        qputenv("LC_TIME", lc_time);
+        qputenv("LANG", "en_US.UTF-8");
+        return QmlUtil::GregorianLocale().toString(date, "MMMM");
+    };
+
+    QCOMPARE(month("es_ES.UTF-8"), QStringLiteral("noviembre"));
+    QCOMPARE(month("sr_RS.UTF-8@latin"), QStringLiteral("novembar"));
+    QCOMPARE(month("sr_Latn_RS.UTF-8"), QStringLiteral("novembar"));
+    QCOMPARE(month(""), QStringLiteral("November"));
+#else
+    QSKIP("Only Linux takes month names from LC_TIME.");
+#endif
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
