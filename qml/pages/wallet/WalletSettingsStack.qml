@@ -37,8 +37,9 @@ PageStack {
     function openDescriptors() {
         if (!root.wallet) return
         const exports = root.wallet.descriptorExports()
-        if (exports.length === 0) return
-        if (exports.length === 1 && root.wallet.inactiveDescriptorExports().length === 0) {
+        const inactive = root.wallet.inactiveDescriptorExports()
+        if (exports.length === 0 && inactive.length === 0) return
+        if (exports.length === 1 && inactive.length === 0) {
             root.push(descriptorDetailPage, { "addressType": exports[0].id })
         } else {
             root.push(descriptorsPage)

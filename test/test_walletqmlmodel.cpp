@@ -861,6 +861,7 @@ private Q_SLOTS:
     void descriptorExportsSkipMultiKeyDescriptors();
     void descriptorExportsIncludeUsedInactiveDescriptors();
     void canShowDescriptorsFollowsActiveDescriptors();
+    void canShowDescriptorsWithOnlyPreviousKeys();
     void descriptorImportJsonListsEveryPublicDescriptor();
     void exportWatchOnlyWalletWritesFile();
     void exportWatchOnlyWalletReplacesFileOnlyAfterSuccess();
@@ -1189,6 +1190,27 @@ void WalletQmlModelTests::canShowDescriptorsFollowsActiveDescriptors()
     master.SetSeed(std::array<std::byte, 32>{});
     LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(master, 84) + "/0/*)", OutputType::BECH32);
     QTRY_VERIFY(changed.count() > 0);
+    QVERIFY(model->canShowDescriptors());
+}
+
+void WalletQmlModelTests::canShowDescriptorsWithOnlyPreviousKeys()
+{
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "watch-only-previous-keys-test", nullptr};
+    QVERIFY(raw_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+
+    CExtKey master;
+    master.SetSeed(std::array<std::byte, 32>{});
+    LoadDescriptor(raw_wallet, "pkh(" + OriginDescriptor(master, 44) + "/0/*)");
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    QVERIFY(!model->canShowDescriptors());
+
+    // No active descriptor is left, as after deactivating one over RPC.
+    LoadDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(master, 84) + "/0/*)", {}, /*next_index=*/2);
+    QVERIFY(model->descriptorExports().isEmpty());
+    QCOMPARE(model->inactiveDescriptorExports().size(), 1);
     QVERIFY(model->canShowDescriptors());
 }
 

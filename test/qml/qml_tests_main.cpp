@@ -1355,7 +1355,7 @@ public:
         m_inactive_descriptor_exports = inactive;
         Q_EMIT descriptorExportsChanged();
     }
-    bool canShowDescriptors() const { return !m_descriptor_exports.isEmpty(); }
+    bool canShowDescriptors() const { return !m_descriptor_exports.isEmpty() || !m_inactive_descriptor_exports.isEmpty(); }
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }

@@ -1341,7 +1341,7 @@ QString WalletQmlModel::receiveAddressTypeLabel(const QString& address_type) con
 
 bool WalletQmlModel::canShowDescriptors() const
 {
-    return !descriptorExports().isEmpty();
+    return !descriptorExports().isEmpty() || !inactiveDescriptorExports().isEmpty();
 }
 
 QVariantList WalletQmlModel::descriptorExports() const

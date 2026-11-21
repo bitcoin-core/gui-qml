@@ -523,6 +523,23 @@ TestCase {
         testWalletModel.resetWalletSettingsTestState()
     }
 
+    function test_descriptors_row_lists_previous_keys_without_an_active_descriptor() {
+        testWalletModel.resetWalletSettingsTestState()
+        testWalletModel.setDescriptorExportsForTest([], [descriptorExport("bech32", "SegWit")])
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        openWalletSettings(page, first)
+        const stack = first.settingsStack
+        const row = findChild(stack, "walletDescriptorsRow")
+        tryCompare(row, "visible", true)
+        row.clicked()
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.objectName, "walletDescriptorsPage")
+        verify(findChild(stack.currentItem, "descriptorsType_inactive0") !== null)
+        stack.resetToRoot()
+        testWalletModel.resetWalletSettingsTestState()
+    }
+
     function test_settings_stack_follows_active_wallet() {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)
