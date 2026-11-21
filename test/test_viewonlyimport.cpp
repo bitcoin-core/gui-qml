@@ -297,6 +297,14 @@ void ViewOnlyImportTests::rowsGroupReceiveAndChangeOfOneKey()
     QVERIFY(split[0].toMap().value("receive").toBool() && !split[0].toMap().value("change").toBool());
     QVERIFY(!split[1].toMap().value("receive").toBool() && split[1].toMap().value("change").toBool());
 
+    // Only the last receive descriptor of a type gives out addresses.
+    const QVariantList replaced = DescribeViewOnlyImport(Desc("wpkh", "0/*") + "\n" + QStringLiteral("wpkh(%1/0/*)").arg(XPUB2) + "\n" +
+                                                         Desc("wpkh", "1/*")).value("rows").toList();
+    QCOMPARE(replaced.size(), 3);
+    QVERIFY(!replaced[0].toMap().value("active").toBool() && replaced[0].toMap().value("receive").toBool());
+    QVERIFY(replaced[1].toMap().value("active").toBool());
+    QVERIFY(replaced[2].toMap().value("active").toBool() && replaced[2].toMap().value("change").toBool());
+
     const QVariantList lines = DescribeViewOnlyImport(Desc("sh(wpkh", "<0;1>/*") + ")\n" + QStringLiteral("pkh(%1)").arg(PUBKEY))
                                  .value("rows").toList();
     QCOMPARE(lines.size(), 2);

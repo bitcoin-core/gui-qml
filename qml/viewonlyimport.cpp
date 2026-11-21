@@ -24,6 +24,7 @@
 #include <array>
 #include <exception>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -434,6 +435,23 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     for (const OutputType type : parsed.output_types) address_types.append(QmlUtil::OutputTypeLabel(type));
     const int64_t now{QDateTime::currentSecsSinceEpoch()};
     std::optional<int64_t> created;
+    // An address type has one active receive and one active change descriptor.
+    // The wallet activates requests in order, so a later one replaces an earlier one.
+    std::map<std::pair<OutputType, bool>, size_t> active_slots;
+    for (size_t i = 0; i < parsed.requests.size(); ++i) {
+        const ImportDescriptorRequest& request{parsed.requests[i]};
+        if (!request.active) continue;
+        const OutputType type{parsed.sources[i].type};
+        if (parsed.sources[i].multipath) {
+            active_slots[{type, false}] = i;
+            active_slots[{type, true}] = i;
+        } else {
+            active_slots[{type, request.internal.value_or(false)}] = i;
+        }
+    }
+    std::vector<bool> active(parsed.requests.size(), false);
+    for (const auto& [slot, index] : active_slots) active[index] = true;
+
     // Receive and change of one key share a row.
     QVariantList rows;
     QStringList row_keys;
@@ -450,7 +468,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
         for (; row_it != rows.end(); ++row_it) {
             const QVariantMap map{row_it->toMap()};
             if (map.value(QStringLiteral("addressType")) == type && row_keys[std::distance(rows.begin(), row_it)] == source.key_id &&
-                map.value(QStringLiteral("active")) == request.active && map.value(QStringLiteral("ranged")) == source.ranged) {
+                map.value(QStringLiteral("active")) == bool(active[i]) && map.value(QStringLiteral("ranged")) == source.ranged) {
                 break;
             }
         }
@@ -460,7 +478,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
                                     {QStringLiteral("key"), source.key},
                                     {QStringLiteral("receive"), false},
                                     {QStringLiteral("change"), false},
-                                    {QStringLiteral("active"), request.active},
+                                    {QStringLiteral("active"), bool(active[i])},
                                     {QStringLiteral("ranged"), source.ranged},
                                     {QStringLiteral("createdTime"), qlonglong(-1)}});
             row_it = std::prev(rows.end());
