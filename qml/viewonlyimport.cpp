@@ -54,6 +54,12 @@ QString KeyLabel(const std::string& descriptor)
     return match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
 }
 
+QString KeyId(const std::string& descriptor)
+{
+    const QRegularExpressionMatch match{SCRIPT_KEY.match(QString::fromStdString(descriptor))};
+    return match.captured(1) + match.captured(2);
+}
+
 // Parse derives public keys from private ones, which needs the signing
 // context, so private keys are found before parsing.
 bool HasPrivateKey(const std::string& descriptor)
@@ -109,7 +115,7 @@ DescriptorCheck CheckDescriptor(const std::string& descriptor)
     check.ranged = parsed.front()->IsRange();
     check.change_chain = parsed.size() == 1 &&
                          CHANGE_CHAIN.match(QString::fromStdString(parsed.front()->ToString())).hasMatch();
-    check.source = {check.types.front(), KeyLabel(descriptor), check.ranged, parsed.size() > 1};
+    check.source = {check.types.front(), KeyLabel(descriptor), KeyId(descriptor), check.ranged, parsed.size() > 1};
     // The wallet's importer requires a checksum.
     check.descriptor = descriptor.find('#') == std::string::npos
         ? descriptor + "#" + GetDescriptorChecksum(descriptor)
@@ -430,6 +436,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     std::optional<int64_t> created;
     // Receive and change of one key share a row.
     QVariantList rows;
+    QStringList row_keys;
     for (size_t i = 0; i < parsed.requests.size(); ++i) {
         const ImportDescriptorRequest& request{parsed.requests[i]};
         const ViewOnlyImport::Source& source{parsed.sources[i]};
@@ -439,13 +446,16 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
         if (time) created = std::min(created.value_or(*time), *time);
 
         const QString type{QmlUtil::OutputTypeLabel(source.type)};
-        const auto same_row = [&](const QVariant& row) {
-            const QVariantMap map{row.toMap()};
-            return map.value(QStringLiteral("addressType")) == type && map.value(QStringLiteral("key")) == source.key &&
-                   map.value(QStringLiteral("active")) == request.active && map.value(QStringLiteral("ranged")) == source.ranged;
-        };
-        auto row_it{std::ranges::find_if(rows, same_row)};
+        auto row_it{rows.begin()};
+        for (; row_it != rows.end(); ++row_it) {
+            const QVariantMap map{row_it->toMap()};
+            if (map.value(QStringLiteral("addressType")) == type && row_keys[std::distance(rows.begin(), row_it)] == source.key_id &&
+                map.value(QStringLiteral("active")) == request.active && map.value(QStringLiteral("ranged")) == source.ranged) {
+                break;
+            }
+        }
         if (row_it == rows.end()) {
+            row_keys.append(source.key_id);
             rows.append(QVariantMap{{QStringLiteral("addressType"), type},
                                     {QStringLiteral("key"), source.key},
                                     {QStringLiteral("receive"), false},

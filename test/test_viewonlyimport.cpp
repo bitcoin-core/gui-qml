@@ -13,8 +13,9 @@
 
 namespace {
 
-// BIP32 test vector 1.
+// BIP32 test vectors 1 and 2.
 const QString XPUB{"xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"};
+const QString XPUB2{"xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB"};
 const QString XPRV{"xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"};
 // The same key with SLIP-132 versions.
 const QString YPUB{"ypub6QqdH2c5z7967BioGSfAWFHM1EHzHPBZK7wrND3ZpEWFtzmCqvsD1bgpaE6pSAPkiSKhkuWPCJV6mZTSNMd2tK8xYTcJ48585pZecmSUzWp"};
@@ -287,6 +288,14 @@ void ViewOnlyImportTests::rowsGroupReceiveAndChangeOfOneKey()
     QCOMPARE(taproot.value("key").toString(), XPUB);
     QVERIFY(taproot.value("receive").toBool() && !taproot.value("change").toBool());
     QVERIFY(!taproot.value("active").toBool());
+
+    // Another key with the same origin is not the change of the first.
+    const QString mismatched{Desc("wpkh", "0/*").replace(XPUB, origin + XPUB) + "\n" +
+                             QStringLiteral("wpkh(%1%2/1/*)").arg(origin, XPUB2)};
+    const QVariantList split = DescribeViewOnlyImport(mismatched).value("rows").toList();
+    QCOMPARE(split.size(), 2);
+    QVERIFY(split[0].toMap().value("receive").toBool() && !split[0].toMap().value("change").toBool());
+    QVERIFY(!split[1].toMap().value("receive").toBool() && split[1].toMap().value("change").toBool());
 
     const QVariantList lines = DescribeViewOnlyImport(Desc("sh(wpkh", "<0;1>/*") + ")\n" + QStringLiteral("pkh(%1)").arg(PUBKEY))
                                  .value("rows").toList();

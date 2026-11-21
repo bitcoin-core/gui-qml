@@ -22,6 +22,8 @@ struct ViewOnlyImport {
         OutputType type{OutputType::UNKNOWN};
         //! The key origin, or the key when there is none.
         QString key;
+        //! The origin and the key, so keys that claim the same origin stay apart.
+        QString key_id;
         bool ranged{false};
         //! A <0;1> descriptor covers receive and change.
         bool multipath{false};
