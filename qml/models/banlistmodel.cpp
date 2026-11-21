@@ -4,7 +4,7 @@
 
 #include <qml/models/banlistmodel.h>
 
-#include <qml/util.h>
+#include <qml/datelocale.h>
 
 #include <interfaces/node.h>
 #include <net_types.h>
@@ -39,7 +39,7 @@ QVariant BanListModel::data(const QModelIndex& index, int role) const
         return QString::fromStdString(entry.subnet.ToString());
     case BanRoles::BanUntilRole: {
         QDateTime dt = QDateTime::fromSecsSinceEpoch(entry.ban_entry.nBanUntil);
-        return QmlUtil::GregorianLocale(QLocale::system()).toString(dt, QStringLiteral("MMMM d, yyyy h:mm AP"));
+        return QmlUtil::GregorianLocale().toString(dt, QStringLiteral("MMMM d, yyyy h:mm AP"));
     }
     }
     return {};

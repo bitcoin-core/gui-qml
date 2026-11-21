@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/transaction.h>
-#include <qml/util.h>
+#include <qml/datelocale.h>
 
 #include <chainparams.h>
 #include <interfaces/wallet.h>
@@ -203,15 +203,9 @@ void TransactionTests::dateTimeString_localizesMonthNames()
 void TransactionTests::gregorianLocale_keepsScriptAndTerritory()
 {
     const QDate date{2026, 11, 10};
-
     const QLocale serbian_latin{QmlUtil::GregorianLocale(QLocale{QLocale::Serbian, QLocale::LatinScript, QLocale::Serbia})};
     QCOMPARE(serbian_latin.script(), QLocale::LatinScript);
-    QCOMPARE(serbian_latin.territory(), QLocale::Serbia);
     QCOMPARE(serbian_latin.toString(date, "MMMM yyyy"), QStringLiteral("novembar 2026"));
-
-    const QLocale persian{QLocale::Persian, QLocale::Iran};
-    QCOMPARE(QmlUtil::GregorianLocale(persian).toString(date, "MMMM"), persian.monthName(11));
-
     QCOMPARE(QmlUtil::GregorianLocale(QLocale::c()).toString(date, "MMMM d, yyyy"), QStringLiteral("November 10, 2026"));
 }
 

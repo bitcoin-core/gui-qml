@@ -7,7 +7,7 @@
 #include <qml/bitcoinunits.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
-#include <qml/util.h>
+#include <qml/datelocale.h>
 
 #include <algorithm>
 
