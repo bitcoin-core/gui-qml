@@ -92,6 +92,13 @@ DescriptorCheck CheckDescriptor(const std::string& descriptor)
             return check;
         }
         if (std::ranges::find(check.types, *type) == check.types.end()) check.types.push_back(*type);
+        // The wallet derives the first address on import.
+        FlatSigningProvider derived;
+        std::vector<CScript> scripts;
+        if (!desc->Expand(0, keys, scripts, derived)) {
+            check.error = QObject::tr("This derives hardened keys after a public key, which needs the private key. Use the key from after the hardened steps.");
+            return check;
+        }
     }
     check.count = parsed.size();
     check.ranged = parsed.front()->IsRange();
@@ -178,6 +185,27 @@ ViewOnlyImport ParseJson(const std::string& text)
             const UniValue& next_index{entry.find_value("next_index")};
             const UniValue& next{next_index.isNull() ? entry.find_value("next") : next_index};
             if (!next.isNull()) request.next_index = next.getInt<int64_t>();
+
+            // The same checks the wallet makes, before the wallet file is created.
+            const bool multipath{check.count > 1};
+            if (request.active && !check.ranged) {
+                return Failed(Kind::DescriptorJson, QObject::tr("%1 is active, but only a ranged descriptor can be.").arg(position));
+            }
+            if (request.range && !check.ranged) {
+                return Failed(Kind::DescriptorJson, QObject::tr("%1 has a range, but it is not ranged.").arg(position));
+            }
+            if (request.internal && multipath) {
+                return Failed(Kind::DescriptorJson, QObject::tr("%1 has receive and change paths, so it can't also set \"internal\".").arg(position));
+            }
+            if (!request.label.empty() && (check.ranged || multipath || request.internal.value_or(false))) {
+                return Failed(Kind::DescriptorJson, QObject::tr("%1 has a label, but only a single receive address can have one.").arg(position));
+            }
+            if (check.ranged && request.next_index) {
+                const int64_t first{request.range ? request.range->first : 0};
+                if (*request.next_index < first || (request.range && *request.next_index > request.range->second)) {
+                    return Failed(Kind::DescriptorJson, QObject::tr("%1 has a next index outside its range.").arg(position));
+                }
+            }
 
             result.requests.push_back(std::move(request));
             result.sources.push_back(check.source);

@@ -187,6 +187,8 @@ void ViewOnlyImportTests::onlySingleKeyDescriptorsAreAccepted()
 
 void ViewOnlyImportTests::linesNeedARangedDescriptor()
 {
+    QVERIFY(ParseViewOnlyImport(Desc("wpkh", "0h/*")).error.contains("hardened"));
+    QVERIFY(ParseViewOnlyImport(QStringLiteral("wpkh([d34db33f/84h/0h/0h]%1/0/*)").arg(XPUB)).error.isEmpty());
     QVERIFY(ParseViewOnlyImport(QStringLiteral("wpkh(%1)").arg(PUBKEY)).error.contains("ranged"));
     const ViewOnlyImport mixed{ParseViewOnlyImport(QStringLiteral("wpkh(%1)\n").arg(PUBKEY) + Desc("wpkh", "0/*"))};
     QVERIFY(mixed.error.isEmpty());
@@ -249,6 +251,13 @@ void ViewOnlyImportTests::malformedJsonIsRejected()
         {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true, "range": "all"}])").arg(desc), QStringLiteral("invalid range")},
         {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": "yes"}])").arg(desc), QStringLiteral("wrong type")},
         {QStringLiteral(R"([{"desc": "%1", "timestamp": 0}])").arg(desc), QStringLiteral("None of these descriptors is active")},
+        {QStringLiteral(R"j([{"desc": "wpkh(%1)", "timestamp": 0, "active": true}])j").arg(PUBKEY), QStringLiteral("only a ranged descriptor")},
+        {QStringLiteral(R"j([{"desc": "wpkh(%1)", "timestamp": 0, "range": 5}, {"desc": "%2", "active": true}])j").arg(PUBKEY, desc), QStringLiteral("not ranged")},
+        {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true, "internal": false}])").arg(Desc("wpkh", "<0;1>/*")), QStringLiteral("\"internal\"")},
+        {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true, "label": "savings"}])").arg(desc), QStringLiteral("label")},
+        {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true, "range": [0, 9], "next_index": 10}])").arg(desc), QStringLiteral("next index")},
+        {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true, "range": [5, 9], "next_index": 4}])").arg(desc), QStringLiteral("next index")},
+        {QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true}])").arg(Desc("wpkh", "1h/*")), QStringLiteral("hardened")},
     };
     for (const auto& [json, expected] : cases) {
         const QString error{ParseViewOnlyImport(json).error};
