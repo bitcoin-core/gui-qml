@@ -508,7 +508,7 @@ Item {
             }
             CoreText {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Last block 4 min ago")
+                text: qsTr("Last block mined 4 min ago")
                 wrap: false
                 font.pixelSize: 11
                 color: Theme.color.neutral7

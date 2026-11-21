@@ -142,19 +142,14 @@ QtObject {
         return Number(height).toLocaleString(Qt.locale(), 'f', 0)
     }
 
-    function formatLastBlockAge(seconds) {
-        const minutes = Math.floor(seconds / 60)
-        if (minutes < 1) return qsTr("just now")
-        if (minutes < 60) return qsTr("%1 min ago").arg(minutes)
-        return qsTr("%1h %2m ago").arg(Math.floor(minutes / 60)).arg(minutes % 60)
-    }
-
+    // The age comes from the block's own timestamp, set by its miner, not
+    // from when this node received it.
     function formatLastBlock(seconds) {
         if (seconds < 0) return qsTr("Block height")
         const minutes = Math.floor(seconds / 60)
-        if (minutes < 1) return qsTr("Last block just now")
-        if (minutes < 60) return qsTr("Last block %1 min ago").arg(minutes)
-        return qsTr("Last block %1h %2m ago").arg(Math.floor(minutes / 60)).arg(minutes % 60)
+        if (minutes < 1) return qsTr("Last block mined just now")
+        if (minutes < 60) return qsTr("Last block mined %1 min ago").arg(minutes)
+        return qsTr("Last block mined %1h %2m ago").arg(Math.floor(minutes / 60)).arg(minutes % 60)
     }
 
     // Never 100% while initial sync is pending.

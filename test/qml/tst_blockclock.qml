@@ -455,11 +455,11 @@ TestCase {
         const clock = createClock()
 
         blockClockModelMock.lastBlockAge = 30
-        compare(clock.subText, "Last block just now")
+        compare(clock.subText, "Last block mined just now")
         blockClockModelMock.lastBlockAge = 125
-        compare(clock.subText, "Last block 2 min ago")
+        compare(clock.subText, "Last block mined 2 min ago")
         blockClockModelMock.lastBlockAge = 3725
-        compare(clock.subText, "Last block 1h 2m ago")
+        compare(clock.subText, "Last block mined 1h 2m ago")
     }
 
     function test_synced_status_reports_warnings() {
