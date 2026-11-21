@@ -122,6 +122,7 @@ def assert_console_entry_geometry(gui, index, row_width):
     content_name = f"consoleOutputArea_content_{index}"
 
     gui.wait_for_property(row_name, "visible", True, timeout_ms=3000)
+    assert_close(gui.get_property(row_name, "x"), 16, f"console entry {index} row x")
     assert_close(gui.get_property(row_name, "width"), row_width, f"console entry {index} row width")
     assert_close(gui.get_property(left_name, "x"), 0, f"console entry {index} time x")
     text_width = gui.get_property(left_name, "contentWidth")
@@ -142,9 +143,8 @@ def test_console_output_rows_match_design(gui):
     root_width = gui.get_property("rpcConsole", "width")
     column_width = root_width - 32
 
-    assert_close(gui.get_property("consoleOutputArea_contentColumn", "x"), 16, "console output column x")
-    assert_close(gui.get_property("consoleOutputArea_contentColumn", "width"), column_width, "console output column width")
-    assert_close(gui.get_property("consoleOutputArea_contentColumn", "topPadding"), 16, "console output top padding")
+    assert_close(gui.get_property("consoleOutputArea_list", "topMargin"), 16, "console output top padding")
+    assert_close(gui.get_property("consoleOutputArea_list", "bottomMargin"), 16, "console output bottom padding")
     help_text = gui.get_text("rpcConsoleHelpFooter")
     assert help_text == (
         "Use ↑↓ arrows to navigate history. Type help for an overview of available commands. "
