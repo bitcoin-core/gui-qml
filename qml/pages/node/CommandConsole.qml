@@ -45,9 +45,13 @@ Page {
     // child, the console is never destroyed on tab changes, and its autocomplete
     // Popup renders in the window overlay layer, so it is not hidden along with
     // the view. The embedder binds this to its tab's checked state; when the tab
-    // is left, dismiss the popup so it cannot linger over the newly selected tab.
+    // is left, dismiss the popups so they cannot linger over the newly selected tab.
     property bool tabActive: true
-    onTabActiveChanged: if (!tabActive) autocompletePopup.close()
+    onTabActiveChanged: {
+        if (tabActive) return
+        autocompletePopup.close()
+        root.closeOutputMenu()
+    }
 
     function _pushPalette() {
         rpcConsoleModel.requestColor = consoleRequestColor

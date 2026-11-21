@@ -119,6 +119,14 @@ TestCase {
         tryCompare(menu, "opened", false)
     }
 
+    function test_leaving_the_tab_closes_the_menu() {
+        const page = createPage()
+        const menu = openMenuAt(page, 1)
+        page.tabActive = false
+        tryCompare(menu, "opened", false)
+        compare(menu.row, -1)
+    }
+
     function test_redacted_commands_cannot_be_run_again() {
         const page = createPage()
         const menu = openMenuAt(page, 5)
