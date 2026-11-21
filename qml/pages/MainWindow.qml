@@ -18,6 +18,8 @@ ApplicationWindow {
     minimumWidth: SizeClass.windowMinimumWidth
     minimumHeight: 665
     color: Theme.color.background
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
     palette.window: Theme.color.surface1 // Context menu background
     palette.windowText: Theme.color.neutral8 // Menu item text and icons
     palette.dark: Theme.color.menuBorder // Menu border

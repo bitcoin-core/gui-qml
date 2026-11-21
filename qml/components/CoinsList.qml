@@ -216,7 +216,8 @@ ColumnLayout {
                     const point = coinRow.mapToItem(Overlay.overlay, mouse.x, mouse.y)
                     root.contextCoinId = coinRow.coinId
                     root.contextCoinLocked = coinRow.locked
-                    coinContextMenu.x = Math.max(12, Math.min(point.x, Overlay.overlay.width - coinContextMenu.width - 12))
+                    const menuX = coinRow.LayoutMirroring.enabled ? point.x - coinContextMenu.width : point.x
+                    coinContextMenu.x = Math.max(12, Math.min(menuX, Overlay.overlay.width - coinContextMenu.width - 12))
                     coinContextMenu.y = Math.max(12, Math.min(point.y, Overlay.overlay.height - coinContextMenu.height - 12))
                     coinContextMenu.open()
                 }
@@ -258,7 +259,8 @@ ColumnLayout {
                         width: 24
                         height: 28
                         anchors.verticalCenter: parent.verticalCenter
-                        x: checkboxSlot.shown ? 0 : -width
+                        x: mirrored ? (checkboxSlot.shown ? parent.width - width : parent.width)
+                            : (checkboxSlot.shown ? 0 : -width)
                         opacity: checkboxSlot.shown ? 1 : 0
                         checkable: false
                         enabled: checkboxSlot.shown && coinRow.enabled

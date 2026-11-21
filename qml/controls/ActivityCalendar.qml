@@ -383,8 +383,8 @@ ColumnLayout {
         }
         Keys.onPressed: function(event) {
             switch (event.key) {
-            case Qt.Key_Left: root.moveCalendarFocus(-1); break
-            case Qt.Key_Right: root.moveCalendarFocus(1); break
+            case Qt.Key_Left: root.moveCalendarFocus(dayGrid.effectiveLayoutDirection === Qt.RightToLeft ? 1 : -1); break
+            case Qt.Key_Right: root.moveCalendarFocus(dayGrid.effectiveLayoutDirection === Qt.RightToLeft ? -1 : 1); break
             case Qt.Key_Up: root.moveCalendarFocus(-7); break
             case Qt.Key_Down: root.moveCalendarFocus(7); break
             case Qt.Key_PageUp:

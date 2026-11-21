@@ -70,8 +70,11 @@ SettingsPage {
                     }
 
                     onClicked: {
-                        optionsModel.language = delegate.modelData
+                        // Retranslating rebuilds this list and destroys the delegate,
+                        // so leave the page before changing the language.
+                        const language = delegate.modelData
                         root.back()
+                        optionsModel.language = language
                     }
                 }
             }

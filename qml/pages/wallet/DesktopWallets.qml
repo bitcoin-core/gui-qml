@@ -283,7 +283,7 @@ Page {
                 model: walletListModel
                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
                 width: Math.max(360, parent.width)
-                x: 0
+                x: parent.LayoutMirroring.enabled ? parent.width - width : 0
                 y: parent.height + 2 + verticalOffset
 
                 onAddWallet: {

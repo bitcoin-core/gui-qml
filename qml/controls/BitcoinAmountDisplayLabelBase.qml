@@ -25,6 +25,7 @@ Item {
     property alias font: label.font
     property alias color: label.color
     property alias horizontalAlignment: label.horizontalAlignment
+    readonly property alias effectiveHorizontalAlignment: label.effectiveHorizontalAlignment
     property alias elide: label.elide
     property alias wrap: label.wrap
     property alias fontSizeMode: label.fontSizeMode

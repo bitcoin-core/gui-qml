@@ -117,6 +117,7 @@ ColumnLayout {
             Accessible.description: root.errorText
             Component.onCompleted: syncFromAddress()
             wrapMode: Text.WrapAnywhere
+            horizontalAlignment: TextEdit.AlignLeft
             verticalAlignment: TextEdit.AlignVCenter
             leftPadding: root.embedded ? 16 : 0
             topPadding: root.embedded ? 14 : 0

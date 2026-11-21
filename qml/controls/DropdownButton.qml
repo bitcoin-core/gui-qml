@@ -43,8 +43,8 @@ NeutralButton {
     scale: 1
 
     implicitHeight: Math.max(30, caretSize + topPadding + bottomPadding)
-    leftPadding: 10
-    rightPadding: Theme.space.xs
+    leftPadding: mirrored ? Theme.space.xs : 10
+    rightPadding: mirrored ? 10 : Theme.space.xs
     topPadding: Theme.space.xxs
     bottomPadding: Theme.space.xxs
     hoverEnabled: AppMode.isDesktop

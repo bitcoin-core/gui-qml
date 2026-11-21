@@ -39,6 +39,7 @@ LabeledField {
         font: root.fieldTextStyle.font
         selectByMouse: true
         wrapMode: TextEdit.Wrap
+        horizontalAlignment: TextEdit.AlignLeft
         leftPadding: root.fieldPadding
         rightPadding: root.fieldPadding
         topPadding: root.fieldPadding

@@ -166,6 +166,7 @@ Item {
                     CoreText {
                         id: parentLabel
                         objectName: "activityRowLabel"
+                        anchors.left: parent.left
                         width: Math.min(implicitWidth, Math.max(0, parent.width - (requestBadge.visible ? 26 : 0)))
                         text: root.displayLabel
                         textStyle: Theme.text.subheading
@@ -181,7 +182,8 @@ Item {
                         visible: root.hasPaymentRequest && !root.isPendingRequest
                         inactive: root.isInactive || !root.statusKnown
                         surfaceColor: rowSurface.color
-                        x: (root.hasLabel ? parentLabel.width : addressText.width) + 8
+                        readonly property real leadingWidth: (root.hasLabel ? parentLabel.width : addressText.width) + 8
+                        x: LayoutMirroring.enabled ? parent.width - leadingWidth - width : leadingWidth
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -193,6 +195,7 @@ Item {
                     ActivityAddress {
                         id: addressText
                         objectName: "activityRowAddress"
+                        anchors.left: parent.left
                         width: Math.min(displayWidth, Math.max(0, parent.width - (!root.hasLabel && requestBadge.visible ? 26 : 0)))
                         address: root.address
                         compact: root.compact
@@ -274,7 +277,8 @@ Item {
                             rotation: internal ? -90 : 0
                             size: 24
                             // Offset the asset's transparent padding to align the glyph with the child inset.
-                            x: incoming || internal ? -7 : -6.23
+                            readonly property real glyphOffset: incoming || internal ? -7 : -6.23
+                            x: mirrored ? parent.width - width - glyphOffset : glyphOffset
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -290,6 +294,7 @@ Item {
                             CoreText {
                                 id: childLabel
                                 objectName: "activityActionLabel"
+                                anchors.left: parent.left
                                 width: Math.min(implicitWidth, Math.max(0, parent.width - (childBadge.visible ? 26 : 0)))
                                 text: childRow.actionLabel
                                 textStyle: Theme.text.caption
@@ -305,7 +310,8 @@ Item {
                                 visible: childRow.modelData.hasPaymentRequest
                                 inactive: root.isInactive || !root.statusKnown
                                 surfaceColor: rowSurface.color
-                                x: (childRow.actionLabel.length > 0 ? childLabel.width : childAddressText.width) + 8
+                                readonly property real leadingWidth: (childRow.actionLabel.length > 0 ? childLabel.width : childAddressText.width) + 8
+                                x: LayoutMirroring.enabled ? parent.width - leadingWidth - width : leadingWidth
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
@@ -317,6 +323,7 @@ Item {
                             ActivityAddress {
                                 id: childAddressText
                                 objectName: "activityActionAddress"
+                                anchors.left: parent.left
                                 width: Math.min(displayWidth, Math.max(0, parent.width - (childRow.actionLabel.length === 0 && childBadge.visible ? 26 : 0)))
                                 address: childRow.modelData.address
                                 compact: root.compact

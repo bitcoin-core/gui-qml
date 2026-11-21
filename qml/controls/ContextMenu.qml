@@ -34,12 +34,13 @@ Popup {
     // Keep the menu inside the window.
     margins: Theme.space.ml
 
-    // Open below `trigger`, right edges aligned. Margins keep it on screen.
+    // Open below `trigger`, trailing edges aligned. Margins keep it on screen.
     function openBelow(trigger, gap) {
         const host = root.parent ? root.parent : trigger
         const offset = gap === undefined ? Theme.space.xs : gap
-        const point = trigger.mapToItem(host, trigger.width, trigger.height + offset)
-        root.x = point.x - root.width
+        const mirrored = trigger.LayoutMirroring.enabled
+        const point = trigger.mapToItem(host, mirrored ? 0 : trigger.width, trigger.height + offset)
+        root.x = mirrored ? point.x : point.x - root.width
         root.y = point.y
         root.open()
     }

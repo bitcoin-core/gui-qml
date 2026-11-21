@@ -165,7 +165,7 @@ Page {
         id: autocompletePopup
         objectName: "consoleAutocompletePopup"
         parent: inputArea
-        x: inputContent.x + inputField.x
+        x: inputContent.x + inputField.x + (inputArea.LayoutMirroring.enabled ? inputField.width - width : 0)
         y: -height - 4
         z: 10
         width: Math.min(inputField.width, 360)
@@ -276,6 +276,7 @@ Page {
                 rightPadding: 12
                 topPadding: 0
                 bottomPadding: 0
+                horizontalAlignment: TextInput.AlignLeft
                 verticalAlignment: TextInput.AlignVCenter
                 background: Rectangle {
                     color: Theme.color.surface2

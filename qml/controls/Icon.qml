@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import "utils.js" as Utils
 
 Button {
     id: root
@@ -12,6 +13,7 @@ Button {
     required property color color
     required property url source
     property int size: 32
+    property bool mirrorInRightToLeft: Utils.isDirectionalIcon(root.source)
     focusPolicy: Qt.NoFocus
     padding: 0
     icon.source: root.source
@@ -22,6 +24,10 @@ Button {
     background: null
     // Decorative: the control that shows the icon carries the name.
     Accessible.ignored: true
+    transform: Scale {
+        origin.x: root.width / 2
+        xScale: root.mirrorInRightToLeft && root.mirrored ? -1 : 1
+    }
 
     Behavior on icon.color {
         enabled: Theme.motion.animated

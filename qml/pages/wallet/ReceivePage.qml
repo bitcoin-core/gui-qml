@@ -100,7 +100,7 @@ Page {
                     ContextMenu {
                         id: receiveAddressTypeMenu
                         objectName: "receiveAddressTypeMenu"
-                        x: receiveAddressSettingsButton.width - width
+                        x: receiveAddressSettingsButton.mirrored ? 0 : receiveAddressSettingsButton.width - width
                         y: receiveAddressSettingsButton.height + 8
                         minMenuWidth: 320
                         modal: true
@@ -141,7 +141,7 @@ Page {
                     ContextMenu {
                         id: receiveMoreMenu
                         objectName: "receiveMoreMenu"
-                        x: receiveMoreButton.width - width
+                        x: receiveMoreButton.mirrored ? 0 : receiveMoreButton.width - width
                         y: receiveMoreButton.height + 8
                         modal: true
                         dim: false

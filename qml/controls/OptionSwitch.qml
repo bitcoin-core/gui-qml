@@ -32,7 +32,7 @@ Switch {
     indicator: Rectangle {
         property real _margin: Math.round((parent.height - height) / 2)
         y: Math.round(parent.height - height) / 2
-        x: root.checked ? parent.width - width - _margin : _margin
+        x: _margin + root.visualPosition * (parent.width - width - 2 * _margin)
         radius: height / 2
         width: 20
         height: 20

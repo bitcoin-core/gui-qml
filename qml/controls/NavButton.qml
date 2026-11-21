@@ -24,8 +24,8 @@ AbstractButton {
     // An icon-only button is a square Theme.size.iconButton target.
     topPadding: text_background.active ? 7 : iconOnly ? (Theme.size.iconButton - iconHeight) / 2 : 14
     bottomPadding: topPadding
-    rightPadding: text_background.active ? 22 : iconOnly ? (Theme.size.iconButton - iconWidth) / 2 : 14
-    leftPadding: text_background.active ? 2 : iconOnly ? rightPadding : 14
+    rightPadding: text_background.active ? (mirrored ? 2 : 22) : iconOnly ? (Theme.size.iconButton - iconWidth) / 2 : 14
+    leftPadding: text_background.active ? (mirrored ? 22 : 2) : iconOnly ? rightPadding : 14
 
     HoverHandler {
         enabled: root.enabled && root.hoverEnabled
@@ -78,7 +78,8 @@ AbstractButton {
             sourceComponent: CoreText {
                 topPadding: button_background.active ? 0 : 4
                 bottomPadding: button_background.active ? 0 : 4
-                leftPadding: button_background.active ? 0 : 20
+                leftPadding: button_background.active || root.mirrored ? 0 : 20
+                rightPadding: !button_background.active && root.mirrored ? 20 : 0
                 textStyle: root.textStyle
                 text: root.text
                 Accessible.ignored: true

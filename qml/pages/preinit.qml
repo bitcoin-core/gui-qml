@@ -16,6 +16,8 @@ ApplicationWindow {
     minimumWidth: 800
     minimumHeight: 665
     color: Theme.color.background
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
     palette.highlight: Theme.color.selection
     palette.highlightedText: Theme.color.selectedText
     visible: true

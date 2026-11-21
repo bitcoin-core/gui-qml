@@ -117,7 +117,7 @@ SettingsPage {
             id: messageFilterMenu
             objectName: "debugLogFilterMenu"
             parent: messageFilterButton
-            x: parent.width - width
+            x: parent.mirrored ? 0 : parent.width - width
             y: parent.height + 2
             modal: true
             dim: false
@@ -160,7 +160,7 @@ SettingsPage {
             id: logOptionsMenu
             objectName: "debugLogOptionsMenu"
             parent: logOptionsButton
-            x: parent.width - width
+            x: parent.mirrored ? 0 : parent.width - width
             y: parent.height + 2
             modal: true
             dim: false

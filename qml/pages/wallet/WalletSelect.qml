@@ -22,7 +22,7 @@ Popup {
     padding: 6
     focus: true
     dim: true
-    transformOrigin: Popup.TopLeft
+    transformOrigin: parent && parent.LayoutMirroring.enabled ? Popup.TopRight : Popup.TopLeft
     y: verticalOffset
 
     // Keep the trigger clickable while dimming the rest of the window.
@@ -144,6 +144,7 @@ Popup {
                 width: listView.width
                 height: 34
                 leftPadding: 10
+                rightPadding: 10
                 text: section === "open" ? qsTr("Open wallets") : qsTr("Closed wallets")
                 horizontalAlignment: Text.AlignLeft
                 textStyle: Theme.text.caption
@@ -348,7 +349,7 @@ Popup {
                                 exit: null
                                 objectName: "walletSelectActionsMenu_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                                 y: actionsButton.height
-                                x: actionsButton.width - width
+                                x: actionsButton.mirrored ? 0 : actionsButton.width - width
                                 ContextMenuButton {
                                     objectName: "walletSelectOpen_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                                     visible: delegate.loadState === WalletListModel.Closed || delegate.loadState === WalletListModel.LoadError

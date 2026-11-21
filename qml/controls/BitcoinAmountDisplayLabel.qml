@@ -28,8 +28,8 @@ BitcoinAmountDisplayLabelBase {
     property var displayParts: null
     property var transitionUnits: []
     property real unitProgress: 0
-    readonly property real alignmentFactor: horizontalAlignment === Text.AlignRight ? 1
-        : horizontalAlignment === Text.AlignHCenter ? 0.5 : 0
+    readonly property real alignmentFactor: effectiveHorizontalAlignment === Text.AlignRight ? 1
+        : effectiveHorizontalAlignment === Text.AlignHCenter ? 0.5 : 0
     property var transitionCells: []
     property var pendingLayout: null
     property bool pendingClipped: false

@@ -60,8 +60,8 @@ DialogPopup {
                     required property int index
                     width: bannedPeersList.width
                     height: 72
-                    leftPadding: Theme.space.l
-                    rightPadding: Theme.space.ml
+                    leftPadding: mirrored ? Theme.space.ml : Theme.space.l
+                    rightPadding: mirrored ? Theme.space.l : Theme.space.ml
                     topPadding: 10
                     bottomPadding: 10
                     hoverEnabled: AppMode.isDesktop

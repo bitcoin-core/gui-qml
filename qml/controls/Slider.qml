@@ -78,7 +78,8 @@ Controls.Slider {
         color: root.trackColor
 
         Rectangle {
-            width: root.visualPosition * parent.width
+            anchors.left: parent.left
+            width: root.position * parent.width
             height: parent.height
             radius: parent.radius
             color: root.trackHighlightColor

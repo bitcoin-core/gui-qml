@@ -89,7 +89,8 @@ ColumnLayout {
                         required property var modelData
                         objectName: "feeTargetBlocksTick" + index
                         width: 32
-                        x: index / (root.blockTargets.length - 1) * (parent.width - width)
+                        readonly property real fraction: index / (root.blockTargets.length - 1)
+                        x: (LayoutMirroring.enabled ? 1 - fraction : fraction) * (parent.width - width)
                         text: index === root.blockTargets.length - 1 ? qsTr("50+") : modelData
                         textStyle: Theme.text.caption
                         color: Theme.color.neutral6

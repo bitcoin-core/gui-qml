@@ -76,13 +76,16 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumWidth: 64
-            leftPadding: root.showsSearchIcon ? 32 : 10
-            rightPadding: clearButton.visible ? root.cancelButtonSize + 14 : 10
+            readonly property real leadingPadding: root.showsSearchIcon ? 32 : 10
+            readonly property real trailingPadding: clearButton.visible ? root.cancelButtonSize + 14 : 10
+            leftPadding: root.mirrored ? trailingPadding : leadingPadding
+            rightPadding: root.mirrored ? leadingPadding : trailingPadding
             topPadding: 0
             bottomPadding: 0
             placeholderTextColor: Theme.color.placeholder
             color: Theme.color.neutral9
             font: Theme.text.caption.font
+            horizontalAlignment: TextInput.AlignLeft
             verticalAlignment: TextInput.AlignVCenter
             selectByMouse: true
             Accessible.name: root.accessibleName

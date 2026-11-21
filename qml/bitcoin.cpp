@@ -106,6 +106,7 @@
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QJSEngine>
+#include <QLocale>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -577,6 +578,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
                 { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
         }
+        const bool rtl = !lang.isEmpty() && QLocale(lang).textDirection() == Qt::RightToLeft;
+        const bool reverse = gArgs.GetBoolArg("-reverselayout", false);
+        QGuiApplication::setLayoutDirection(rtl != reverse ? Qt::RightToLeft : Qt::LeftToRight);
     };
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.

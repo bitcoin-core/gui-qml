@@ -880,7 +880,7 @@ PageStack {
                             onClicked: sendOptionsPopup.opened ? sendOptionsPopup.close() : sendOptionsPopup.open()
                             SendCreateOptionsPopup {
                                 id: sendOptionsPopup
-                                x: menuButton.width - width; y: menuButton.height + 6
+                                x: menuButton.mirrored ? 0 : menuButton.width - width; y: menuButton.height + 6
                                 onClearFormRequested: root.resetSendForm()
                                 onImportPsbtFromFileRequested: {
                                     if (psbtAutomationPathField.text.length > 0) {

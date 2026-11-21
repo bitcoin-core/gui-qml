@@ -91,7 +91,7 @@ Control {
         dim: false
         backgroundColor: Theme.color.surface(root.surfaceLevel + 1)
         minMenuWidth: Math.max(root.minimumMenuWidth, root.width)
-        x: button.width - width
+        x: root.mirrored ? 0 : button.width - width
         y: button.height + 2
 
         ContextMenuPicker {

@@ -101,8 +101,8 @@ Page {
         exportResultPopup.open()
     }
 
-    // A filter popup right-aligns to its button, but a wide popup on a
-    // button near the left edge (the date preset menu, sized for the
+    // A filter popup aligns to its button's trailing edge, but a wide popup
+    // on a button near the leading edge (the date preset menu, sized for the
     // calendar) would spill past the page. Clamp x so the popup stays
     // within the page horizontally instead of overflowing the list area.
     // Callers assign this from onAboutToShow rather than binding x to
@@ -110,10 +110,10 @@ Page {
     // a clamp computed from stale geometry.
     function filterPopupX(button, popup) {
         const anchorX = button.mapToItem(root, 0, 0).x
-        const rightAligned = button.width - popup.width
+        const trailingAligned = button.mirrored ? 0 : button.width - popup.width
         const minX = -anchorX
         const maxX = root.width - popup.width - anchorX
-        return Math.max(minX, Math.min(rightAligned, maxX))
+        return Math.max(minX, Math.min(trailingAligned, maxX))
     }
 
     // A QDate read back from the model reaches QML as a JS Date at UTC
@@ -294,7 +294,7 @@ Page {
                     enabled: root.activeFilterCount > 0
                     opacity: activeFiltersSlot.reveal
                     scale: 0.8 + 0.2 * activeFiltersSlot.reveal
-                    transformOrigin: Item.Left
+                    transformOrigin: mirrored ? Item.Right : Item.Left
                     active: true
                     count: activeFiltersSlot.displayedCount
                     size: typeFilterButton.height
@@ -438,7 +438,7 @@ Page {
                             const point = activityRow.mapToItem(menu.parent, x, y)
                             if (activityRow.isPendingRequest) activityRequestMenu.requestId = activityRow.requestId
                             else activityRowMenu.txid = activityRow.txid
-                            menu.x = point.x
+                            menu.x = activityRow.LayoutMirroring.enabled ? point.x - menu.width : point.x
                             menu.y = point.y
                             menu.open()
                         }

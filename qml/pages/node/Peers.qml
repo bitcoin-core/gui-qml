@@ -130,7 +130,7 @@ Page {
     }
     function filterPopupX(button, popup) {
         const anchorX = button.mapToItem(root, 0, 0).x
-        return Math.max(12 - anchorX, Math.min(button.width - popup.width,
+        return Math.max(12 - anchorX, Math.min(button.mirrored ? 0 : button.width - popup.width,
             root.width - popup.width - anchorX - 12))
     }
     function storeFilters() {
@@ -160,7 +160,7 @@ Page {
             localPosition.x,
             localPosition.y)
         peerRowActionsMenu.x = Math.max(12, Math.min(
-            position.x,
+            sourceItem.LayoutMirroring.enabled ? position.x - peerRowActionsMenu.width : position.x,
             root.width - peerRowActionsMenu.width - 12))
         peerRowActionsMenu.y = Math.max(12, Math.min(
             position.y,
@@ -286,7 +286,7 @@ Page {
                         id: sortMenu
                         objectName: "peerSortMenu"
                         y: sortButton.height + 6
-                        x: sortButton.width - width
+                        x: sortButton.mirrored ? 0 : sortButton.width - width
                         minMenuWidth: 250
                         ContextMenuPicker {
                             title: qsTr("Sort by")
