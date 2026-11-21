@@ -11,6 +11,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QEvent>
+#include <QFileInfo>
 #include <QEventLoop>
 #include <QFont>
 #include <QHash>
@@ -1880,9 +1881,14 @@ public:
     QString m_home_directory{QStringLiteral("/tmp")};
     Q_INVOKABLE QString homePath() const { return m_home_directory; }
     Q_INVOKABLE QUrl homeFolderUrl() const { return QUrl::fromLocalFile(m_home_directory); }
-    Q_INVOKABLE QUrl homeFileUrl(const QString& file_name) const
+    Q_INVOKABLE QUrl fileUrlInFolder(const QUrl& folder, const QString& file_name) const
     {
-        return QUrl::fromLocalFile(m_home_directory + QLatin1Char('/') + file_name);
+        return QUrl::fromLocalFile(QDir(folder.toLocalFile()).filePath(file_name));
+    }
+    Q_INVOKABLE QUrl folderUrlOfFile(const QUrl& file) const
+    {
+        if (!file.isLocalFile()) return {};
+        return QUrl::fromLocalFile(QFileInfo(file.toLocalFile()).absolutePath());
     }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }

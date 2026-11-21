@@ -839,6 +839,28 @@ TestCase {
             .test(dialog.currentFile.toString()), dialog.currentFile.toString())
     }
 
+    function test_export_dialog_remembers_the_last_export_folder() {
+        walletController.homeDirectory = "/tmp/a#b%c"
+        const page = createPage()
+        const dialog = findChild(page, "activityExportDialog")
+        openMore(page)
+        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        compare(dialog.currentFolder.toString(), "file:///tmp/a%23b%25c")
+
+        dialog.selectAndAccept("file:///tmp/activity-folder-test.csv")
+        const result = findChild(page, "activityExportResultPopup")
+        tryCompare(result, "opened", true)
+        result.close()
+        tryCompare(result, "visible", false)
+
+        openMore(page)
+        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        compare(dialog.openCalls, 2)
+        compare(dialog.currentFolder.toString(), "file:///tmp")
+        verify(/^file:\/\/\/tmp\/activity-\d{4}-\d{2}-\d{2}-\d{4}\.csv$/
+            .test(dialog.currentFile.toString()), dialog.currentFile.toString())
+    }
+
     function test_filter_menus_export_and_wallet_switch() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")

@@ -197,9 +197,15 @@ QUrl WalletQmlController::homeFolderUrl() const
     return localFileUrl(QDir::homePath());
 }
 
-QUrl WalletQmlController::homeFileUrl(const QString& file_name) const
+QUrl WalletQmlController::fileUrlInFolder(const QUrl& folder, const QString& file_name) const
 {
-    return localFileUrl(QDir::homePath(), file_name);
+    return localFileUrl(folder.toLocalFile(), file_name);
+}
+
+QUrl WalletQmlController::folderUrlOfFile(const QUrl& file) const
+{
+    if (!file.isLocalFile()) return {};
+    return localFileUrl(QFileInfo(file.toLocalFile()).absolutePath());
 }
 
 QUrl WalletQmlController::localFileUrl(const QString& folder, const QString& file_name)

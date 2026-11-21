@@ -74,7 +74,8 @@ public:
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE QString homePath() const;
     Q_INVOKABLE QUrl homeFolderUrl() const;
-    Q_INVOKABLE QUrl homeFileUrl(const QString& file_name) const;
+    Q_INVOKABLE QUrl fileUrlInFolder(const QUrl& folder, const QString& file_name) const;
+    Q_INVOKABLE QUrl folderUrlOfFile(const QUrl& file) const;
     Q_INVOKABLE QString walletNameAvailabilityError(const QString& name) const;
     Q_INVOKABLE bool openWalletLocation(WalletQmlModel* wallet);
     Q_INVOKABLE void clearWalletLocationOpenError();

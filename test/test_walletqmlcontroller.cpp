@@ -367,6 +367,7 @@ private Q_SLOTS:
     void localFileUrlEncodesThePath_data();
     void localFileUrlEncodesThePath();
     void homeUrlsPointIntoTheHomeDirectory();
+    void folderUrlsRoundTripThroughFiles();
 };
 
 void WalletQmlControllerTests::initTestCase()
@@ -1745,7 +1746,19 @@ void WalletQmlControllerTests::homeUrlsPointIntoTheHomeDirectory()
     DrainingWalletController controller(node);
 
     QCOMPARE(controller.homeFolderUrl().toLocalFile(), QDir::homePath());
-    QCOMPARE(controller.homeFileUrl("activity.csv").toLocalFile(), QDir(QDir::homePath()).filePath("activity.csv"));
+}
+
+void WalletQmlControllerTests::folderUrlsRoundTripThroughFiles()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    DrainingWalletController controller(node);
+
+    const QUrl folder{QUrl::fromLocalFile("/home/a#b")};
+    const QUrl file{controller.fileUrlInFolder(folder, "activity.csv")};
+    QCOMPARE(file.toString(QUrl::FullyEncoded), QString{"file:///home/a%23b/activity.csv"});
+    QCOMPARE(controller.folderUrlOfFile(file), folder);
+    QVERIFY(controller.folderUrlOfFile(QUrl{"https://example.com/activity.csv"}).isEmpty());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

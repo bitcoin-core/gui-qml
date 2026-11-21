@@ -95,9 +95,12 @@ Page {
         return value
     }
 
+    // Folder of the last accepted export, so the next one starts there.
+    property url exportFolder: walletController.homeFolderUrl()
+
     function defaultExportFileUrl() {
         const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
-        return walletController.homeFileUrl("activity-" + stamp + ".csv")
+        return walletController.fileUrlInFolder(root.exportFolder, "activity-" + stamp + ".csv")
     }
 
     function exportActivity(path) {
@@ -178,10 +181,14 @@ Page {
         title: qsTr("Export activity to CSV")
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
-        currentFolder: walletController.homeFolderUrl()
+        currentFolder: root.exportFolder
         currentFile: root.defaultExportFileUrl()
         nameFilters: [qsTr("Comma separated file (*.csv)")]
-        onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
+        onAccepted: {
+            const folder = walletController.folderUrlOfFile(exportDialog.selectedFile)
+            if (folder.toString().length > 0) root.exportFolder = folder
+            root.exportActivity(exportDialog.selectedFile.toString())
+        }
     }
     TextField {
         id: automationExportPathField
