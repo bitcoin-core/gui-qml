@@ -1178,6 +1178,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool ensureReceivingAddressResult MEMBER m_ensure_receiving_address_result)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
+    Q_PROPERTY(QVariantList availableReceiveAddressTypes READ availableReceiveAddressTypes CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending MEMBER m_receive_request_reconciliation_pending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(MockAddressListModel* addressListModel READ addressListModel CONSTANT)
     Q_PROPERTY(bool hasExternalSigner MEMBER m_has_external_signer NOTIFY walletInfoChanged)
@@ -1308,7 +1309,7 @@ public:
     QObject* detailPaymentRequest() { return &m_detail_payment_request; }
     QObject* receiveRequests() { return &m_receive_requests; }
     MockAddressListModel* addressListModel() { return &m_address_list_model; }
-    Q_INVOKABLE QVariantList availableReceiveAddressTypes() const
+    QVariantList availableReceiveAddressTypes() const
     {
         return {
             QVariantMap{

@@ -113,7 +113,7 @@ Page {
                             subtitleRole: "description"
                             objectNameRole: "objectName"
                             subtitleObjectNameRole: "subtitleObjectName"
-                            model: root.wallet ? root.wallet.availableReceiveAddressTypes().map(function(type) {
+                            model: root.wallet ? root.wallet.availableReceiveAddressTypes.map(function(type) {
                                 return {
                                     id: type.id,
                                     label: type.label,

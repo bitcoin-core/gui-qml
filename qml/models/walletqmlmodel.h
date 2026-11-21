@@ -131,6 +131,7 @@ private:
     Q_PROPERTY(QString currentTransactionReviewMessage READ currentTransactionReviewMessage NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsErrorChanged)
     Q_PROPERTY(PsbtQmlModel* importedPsbt READ importedPsbt CONSTANT)
+    Q_PROPERTY(QVariantList availableReceiveAddressTypes READ availableReceiveAddressTypes NOTIFY availableReceiveAddressTypesChanged)
 
 public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node = nullptr, QObject* parent = nullptr);
@@ -196,7 +197,7 @@ public:
     Q_INVOKABLE bool sendTransaction();
     Q_INVOKABLE bool sendTransactionWithPassphrase(const QString& passphrase);
     Q_INVOKABLE bool broadcastCurrentTransaction();
-    Q_INVOKABLE QVariantList availableReceiveAddressTypes() const;
+    QVariantList availableReceiveAddressTypes() const;
     Q_INVOKABLE QString defaultReceiveAddressType() const;
     Q_INVOKABLE QString estimatedFeeForTarget(unsigned int target_blocks) const;
     Q_INVOKABLE int feeTargetIndex(unsigned int target_blocks) const;
@@ -318,6 +319,7 @@ Q_SIGNALS:
     void walletUnloaded();
     void settingsErrorChanged();
     void addressListChanged();
+    void availableReceiveAddressTypesChanged();
     // Forwarded on the GUI thread; models must not read wallet state from the
     // Core callback while it holds the wallet lock.
     void transactionChanged(const QString& txid, int change);
@@ -425,6 +427,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
+    std::unique_ptr<interfaces::Handler> m_handler_can_get_addresses_changed;
     std::shared_ptr<std::atomic<bool>> m_unload_requested{std::make_shared<std::atomic<bool>>(false)};
     int m_display_unit{0};
     PsbtQmlModel* m_imported_psbt_model{nullptr};
