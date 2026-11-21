@@ -44,6 +44,7 @@
 #include <qml/controls/linegraph.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
+#include <qml/paymenturihandler.h>
 
 class MockAppMode : public QObject
 {
@@ -4259,6 +4260,19 @@ public:
     }
 };
 
+//! The production queue, filled from QML because tests have no command line.
+class TestPaymentUriHandler : public PaymentUriHandler
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void queueForTest(const QString& uri) { queueRequest(uri); }
+    Q_INVOKABLE void clearForTest()
+    {
+        while (hasPendingRequest()) completePendingRequest();
+    }
+};
+
 //! Stands in for the real UrlOpener so the popup's success and failure paths
 //! can be driven without launching a browser. Mirrors the production scheme
 //! allowlist so a test cannot pass on a URL the real opener would reject.
@@ -4441,6 +4455,7 @@ public Q_SLOTS:
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
         static MockUrlOpener url_opener;
+        static TestPaymentUriHandler payment_uri_handler;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
@@ -4540,6 +4555,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
         engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
         engine->rootContext()->setContextProperty(QStringLiteral("testResources"), &test_resources);
+        engine->rootContext()->setContextProperty(QStringLiteral("paymentUriHandler"), &payment_uri_handler);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
