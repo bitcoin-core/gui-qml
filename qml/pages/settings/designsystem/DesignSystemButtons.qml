@@ -117,6 +117,33 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
+        objectName: "designSystemLinkText"
+        Layout.fillWidth: true
+        name: "LinkText"
+        note: "An external link inside a sentence: text color with the export icon like LinkRow, underlined, one Tab stop, Enter or Space opens it."
+
+        DesignSystemState {
+            label: "rest"
+            LinkText {
+                Layout.preferredWidth: 280
+                sentence: "Read the %1 before you start."
+                linkText: "setup guide"
+                link: "https://example.com/guide"
+            }
+        }
+        DesignSystemState {
+            label: "enabled: false"
+            LinkText {
+                Layout.preferredWidth: 280
+                enabled: false
+                sentence: "Read the %1 before you start."
+                linkText: "setup guide"
+                link: "https://example.com/guide"
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
         objectName: "designSystemIconButton"
         shows: ["Icon"]
         Layout.fillWidth: true

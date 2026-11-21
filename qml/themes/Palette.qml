@@ -71,6 +71,9 @@ QtObject {
     property color infoText: info
     required property color warning
     property color warningText: warning
+    // Warning icons beside text, such as a status row's alert. An icon needs
+    // 3:1 against its surface, not text's 4.5:1, so it can be lighter.
+    property color warningIcon: warning
     property color warningForeground: neutral0
     // Network traffic and peer byte counts.
     required property color trafficSent

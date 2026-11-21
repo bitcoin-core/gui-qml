@@ -87,7 +87,7 @@ TestCase {
                 "StorageLocations", "StorageOptions", "TransactionDetailsSection"],
             "needs a live wallet or node model": ["BlockClock", "MiniBlockClock", "CoinsList", "NetworkTrafficGraph",
                 "NodeStatusActions", "PaymentRequestCard", "PaymentRequestModal", "PaymentRequestDeleteConfirmation",
-                "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
+                "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerPathSection", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
                 "NodeWarningsPopup", "OnboardingSettingsPopup"]

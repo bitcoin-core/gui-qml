@@ -16,15 +16,21 @@ OnboardingView {
     property bool modalView: false
     property string defaultWalletName: ""
     property string nameError: ""
+    property bool nameEdited: false
     property bool submitted: false
+    // Whether the form offers to go back to the setup step, which it does
+    // when that step was skipped on the way here.
+    property bool canChangeSigner: false
+    readonly property bool checking: externalSignerModel.checking
     readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
     readonly property bool canCreate: walletController.initialized
-        && walletController.canCreateExternalSignerWallet
-        && !creatingWallet && loadedChildView
+        && externalSignerModel.deviceReady
+        && !creatingWallet && !checking && loadedChildView
         && loadedChildView.walletName.trim().length > 0
 
     signal cancel()
     signal created(var wallet)
+    signal changeSignerRequested()
 
     function submit() {
         if (!canCreate) return
@@ -37,23 +43,41 @@ OnboardingView {
 
     title: ""
     heading: qsTr("External signer wallet")
-    subheading: walletController.externalSignerError.length > 0
-        ? walletController.externalSignerError
-        : walletController.externalSignerName.length > 0
-          ? qsTr("Connected signer: %1").arg(walletController.externalSignerName)
-          : qsTr("Connect one external signer to continue.")
+    subheading: externalSignerModel.error.length > 0
+        ? externalSignerModel.error
+        : externalSignerModel.deviceName.length > 0
+          ? qsTr("Connected signer: %1").arg(externalSignerModel.deviceName)
+          //: Shown on external signer wallet creation while HWI responds but no device is found.
+          : qsTr("Connect and unlock your device, then check again.")
     maximumContentWidth: 800
     showBackButton: !creatingWallet && navigationStack && navigationStack.depth > 1
     showCloseButton: modalView && !creatingWallet
     primaryButtonText: creatingWallet ? qsTr("Creating…") : qsTr("Create wallet")
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
+    // Only needed until a usable device is found.
+    secondaryButtonText: externalSignerModel.deviceReady ? ""
+        //: Check again button while the hardware wallet is being looked for.
+        : checking ? qsTr("Checking…")
+        //: Looks for the connected hardware wallet again during external signer wallet creation.
+        : qsTr("Check again")
+    secondaryButtonObjectName: "externalWalletCheckAgainButton"
+    secondaryButtonEnabled: !creatingWallet && !checking
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
+    onSecondaryClicked: externalSignerModel.check()
 
-    Component.onCompleted: {
-        walletController.clearWalletLoadStatus()
-        walletController.refreshExternalSignerStatus()
+    // The flow checked the signer just before showing this form.
+    Component.onCompleted: walletController.clearWalletLoadStatus()
+
+    // A device found by checking again names the wallet, unless the name
+    // was already typed.
+    Connections {
+        target: externalSignerModel
+        function onCheckFinished() {
+            if (root.nameEdited || root.creatingWallet || !root.loadedChildView) return
+            root.loadedChildView.walletName = externalSignerModel.suggestedWalletName
+        }
     }
 
     Connections {
@@ -83,6 +107,19 @@ OnboardingView {
             horizontalAlignment: Text.AlignLeft
         }
 
+        // A working signer skips the setup step on the way here; this goes
+        // back to it to pick another executable. Coming from setup, Back
+        // does that already.
+        LinkButton {
+            objectName: "externalWalletChangeSignerButton"
+            Layout.alignment: Qt.AlignLeft
+            visible: root.canChangeSigner
+            //: Opens the external signer setup step from wallet naming, to choose another signer executable.
+            text: qsTr("Change signer executable")
+            enabled: !root.creatingWallet && !root.checking
+            onClicked: root.changeSignerRequested()
+        }
+
         LabeledTextField {
             id: nameEntry
             objectName: "externalWalletNameEntry"
@@ -96,6 +133,7 @@ OnboardingView {
             fieldBackgroundColor: Theme.color.surface2
             enabled: !root.creatingWallet
             onTextEdited: {
+                root.nameEdited = true
                 root.nameError = ""
                 walletController.clearWalletLoadStatus()
             }

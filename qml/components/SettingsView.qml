@@ -59,7 +59,7 @@ Page {
             id: "external-signer",
             label: qsTr("External signer"),
             group: "wallet",
-            visible: AppMode.walletEnabled,
+            visible: AppMode.walletEnabled && BuildInfo.externalSignerSupported,
             pageComponent: externalSignerPage
         },
         {

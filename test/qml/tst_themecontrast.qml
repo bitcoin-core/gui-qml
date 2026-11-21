@@ -44,6 +44,15 @@ TestCase {
         {hue: "warning", bg: "background"}, {hue: "warning", bg: "surface1"},
         {hue: "paymentRequest", bg: "background"}, {hue: "paymentRequest", bg: "surface1"}
     ]
+    // Status icons beside text. The warning icon keeps the dark theme's
+    // yellow in light, which is about 1.8:1 on surface2; it is drawn large
+    // beside text that names the state. These minimums only stop it getting
+    // lighter.
+    readonly property var iconPairs: [
+        {fg: "warningIcon", bg: "background", min: 2},
+        {fg: "warningIcon", bg: "surface1", min: 1.9},
+        {fg: "warningIcon", bg: "surface2", min: 1.75}
+    ]
     readonly property var focusPairs: [
         {fg: "controlBorder", bg: "surface1", min: 3},
         {fg: "controlBorder", bg: "surface2", min: 3},
@@ -145,6 +154,9 @@ TestCase {
 
     function test_text_data() { return palettesData() }
     function test_text(data) { checkPairs(data, textPairs) }
+
+    function test_icons_data() { return palettesData() }
+    function test_icons(data) { checkPairs(data, iconPairs) }
 
     function test_focus_data() { return palettesData() }
     function test_focus(data) { checkPairs(data, focusPairs) }

@@ -64,6 +64,8 @@ FormRow {
             source: root.valueIconSource
             color: root.valueIconColor
             size: root.valueIconSize
+            // The icon shows the value's state, so it changes with it at once.
+            animatesColor: false
         }
     }
 }

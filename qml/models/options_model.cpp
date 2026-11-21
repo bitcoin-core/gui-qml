@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -547,7 +547,15 @@ namespace {
 QString SignerPathError(const QString& normalized_path)
 {
     if (normalized_path.isEmpty()) return {};
+    // Core splits the signer command at every space or tab and does not
+    // handle quotes, so an executable whose path contains one never starts.
+    static const QRegularExpression SPACE_RE(QStringLiteral(R"(\s)"));
     const QString token = FirstCommandToken(normalized_path);
+    if (token.contains(SPACE_RE) ||
+        (normalized_path.contains(SPACE_RE) && QFileInfo(ExpandUserPath(normalized_path)).isFile())) {
+        //: Error under the external signer path field. Bitcoin Core cannot run a signer from a path that contains spaces.
+        return OptionsQmlModel::tr("The signer path can't contain spaces. Move the signer to a folder whose path has no spaces.");
+    }
     if (token.isEmpty() || !TokenLooksLikePath(token)) return {};
     const QFileInfo info(ExpandUserPath(token));
     if (!info.exists()) return OptionsQmlModel::tr("The configured signer path does not exist.");
@@ -593,6 +601,11 @@ void OptionsQmlModel::setExternalSignerPath(const QString& path)
     });
 }
 
+QString OptionsQmlModel::normalizeSignerPath(const QString& path)
+{
+    return NormalizeCommandPath(path);
+}
+
 QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) const
 {
     return NormalizeCommandPath(path) == m_validated_signer_path ? m_signer_validation_error : QString{};
@@ -628,6 +641,18 @@ void OptionsQmlModel::startSignerValidation()
         m_signer_validation_pending = false;
         Q_EMIT signerPathValidationChanged();
     });
+}
+
+QUrl OptionsQmlModel::externalSignerPathFolder(const QString& path) const
+{
+    // Start the file dialog next to the current signer executable, or in the
+    // home folder rather than wherever the app happened to be started from.
+    const QString token = FirstCommandToken(NormalizeCommandPath(path));
+    if (!token.isEmpty() && TokenLooksLikePath(token)) {
+        const QDir folder = QFileInfo(ExpandUserPath(token)).absoluteDir();
+        if (folder.exists()) return QUrl::fromLocalFile(folder.absolutePath());
+    }
+    return QUrl::fromLocalFile(QDir::homePath());
 }
 
 QString OptionsQmlModel::getDefaultDataDirString()

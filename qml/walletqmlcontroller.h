@@ -18,11 +18,14 @@
 #include <memory>
 
 #include <QMutex>
+#include <QPointer>
 #include <QObject>
 #include <QThread>
 #include <QSet>
 
 struct WalletLoadNotifications;
+
+class ExternalSignerModel;
 
 class WalletQmlController : public QObject
 {
@@ -43,10 +46,6 @@ class WalletQmlController : public QObject
     Q_PROPERTY(QString walletMigrationError READ walletMigrationError NOTIFY walletMigrationErrorChanged)
     Q_PROPERTY(QString lastImportedWalletName READ lastImportedWalletName NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme READ lastImportedWalletKeyScheme NOTIFY lastImportedWalletInfoChanged)
-    Q_PROPERTY(bool canCreateExternalSignerWallet READ canCreateExternalSignerWallet NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString externalSignerName READ externalSignerName NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString externalSignerError READ externalSignerError NOTIFY externalSignerStatusChanged)
-    Q_PROPERTY(QString suggestedExternalSignerWalletName READ suggestedExternalSignerWalletName NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
 
 public:
@@ -76,7 +75,6 @@ public:
     Q_INVOKABLE bool openWalletLocation(WalletQmlModel* wallet);
     Q_INVOKABLE void clearWalletLocationOpenError();
     Q_INVOKABLE void requestOpenWalletSettings(WalletQmlModel* wallet);
-    Q_INVOKABLE void refreshExternalSignerStatus();
     Q_INVOKABLE void requestOpenReceive(WalletQmlModel* wallet);
     Q_INVOKABLE void requestClosePaymentRequestDetail(WalletQmlModel* wallet);
 
@@ -100,12 +98,10 @@ public:
     QString walletMigrationError() const { return m_wallet_migration_error; }
     QString lastImportedWalletName() const { return m_last_imported_wallet_name; }
     QString lastImportedWalletKeyScheme() const { return m_last_imported_wallet_key_scheme; }
-    bool canCreateExternalSignerWallet() const { return m_external_signer_path_configured && m_external_signer_count == 1; }
-    QString externalSignerName() const { return m_external_signer_name; }
-    QString externalSignerError() const { return m_external_signer_error; }
-    QString suggestedExternalSignerWalletName() const { return m_suggested_external_signer_wallet_name; }
     QString walletLocationOpenError() const { return m_wallet_location_open_error; }
     void setOpenLocalPathFnForTesting(OpenLocalPathFn fn);
+    // The signer checks that external signer wallet creation relies on.
+    void setExternalSignerModel(ExternalSignerModel* model);
 
 Q_SIGNALS:
     void walletsDrained();
@@ -136,7 +132,6 @@ Q_SIGNALS:
     void walletMigrationFailed();
     void lastImportedWalletInfoChanged();
     void openWalletSettingsRequested(WalletQmlModel* wallet);
-    void externalSignerStatusChanged();
     void walletDisplayNamesChanged();
     void openReceiveRequested(WalletQmlModel* wallet);
     void closePaymentRequestDetailRequested(WalletQmlModel* wallet);
@@ -185,8 +180,6 @@ private:
     void setWalletMigrationError(const QString& error);
     void setLastImportedWalletInfo(const QString& wallet_name, const QString& key_scheme);
     void clearLastImportedWalletInfo();
-    QString makeSuggestedExternalSignerWalletName(const QString& signer_name) const;
-    void setExternalSignerStatus(bool path_configured, int signer_count, const QString& signer_name, const QString& error);
     void publishWalletInfo(WalletQmlModel* wallet_model);
     void subscribeWalletInfo(WalletQmlModel* wallet_model);
     void setWalletLocationOpenError(const QString& error);
@@ -218,12 +211,8 @@ private:
     QString m_wallet_migration_error;
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
-    bool m_external_signer_path_configured{false};
-    int m_external_signer_count{0};
-    QString m_external_signer_name;
-    QString m_external_signer_error;
-    QString m_suggested_external_signer_wallet_name;
     QString m_wallet_location_open_error;
+    QPointer<ExternalSignerModel> m_external_signer;
     OpenLocalPathFn m_open_local_path_fn;
 
     // Suppress the global wallet-loaded notification while a multi-step create

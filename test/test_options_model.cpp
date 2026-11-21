@@ -13,6 +13,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <qml/backendexecutor.h>
 #include <test/mocks/mocknode.h>
 #include <chainparams.h>
@@ -87,6 +88,8 @@ private Q_SLOTS:
     void signerDirtyResetWhenReverted();
     void externalSignerPathValidationRejectsMissingPath();
     void externalSignerPathValidationAcceptsExecutablePath();
+    void externalSignerPathValidationRejectsSpaces();
+    void externalSignerPathFolderStartsNextToSigner();
     void connectionDirtyTracksRestartSettings();
     void natpmpAppliesLiveWithoutRestartDirty();
     void storageDirtyIgnoresDisabledPruneSize();
@@ -804,6 +807,66 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
     model.requestExternalSignerPathValidation(script_path);
     QTRY_VERIFY(!model.signerPathValidationPending());
     QVERIFY(model.externalSignerPathValidationError(script_path).isEmpty());
+}
+
+void OptionsModelTests::externalSignerPathValidationRejectsSpaces()
+{
+    MockNode node;
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    QVERIFY(QDir(temp_dir.path()).mkpath("signer tools"));
+
+    const QString script_path = temp_dir.filePath("signer tools/fake-signer");
+    QFile script(script_path);
+    QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Text));
+    script.write("#!/bin/sh\nexit 0\n");
+    script.close();
+    QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    const auto validation_error = [&](const QString& path) {
+        model.requestExternalSignerPathValidation(path);
+        [&] { QTRY_VERIFY(!model.signerPathValidationPending()); }();
+        return model.externalSignerPathValidationError(path);
+    };
+    const QString spaces_error{"The signer path can't contain spaces. Move the signer to a folder whose path has no spaces."};
+    // As picked in a file dialog, as a plain path, and quoted.
+    QCOMPARE(validation_error(QUrl::fromLocalFile(script_path).toString()), spaces_error);
+    QCOMPARE(validation_error(script_path), spaces_error);
+    QCOMPARE(validation_error("\"" + script_path + "\""), spaces_error);
+    // Arguments after an executable without spaces are still allowed.
+    QVERIFY(validation_error("hwi --emulators").isEmpty());
+}
+
+void OptionsModelTests::externalSignerPathFolderStartsNextToSigner()
+{
+    MockNode node;
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString signer_path = temp_dir.filePath("hwi");
+
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    const QUrl home{QUrl::fromLocalFile(QDir::homePath())};
+    QCOMPARE(model.externalSignerPathFolder(signer_path), QUrl::fromLocalFile(QDir(temp_dir.path()).absolutePath()));
+    QCOMPARE(model.externalSignerPathFolder(QUrl::fromLocalFile(signer_path).toString()),
+        QUrl::fromLocalFile(QDir(temp_dir.path()).absolutePath()));
+    // No path, a command found on PATH, or a folder that is gone: start at home.
+    QCOMPARE(model.externalSignerPathFolder(""), home);
+    QCOMPARE(model.externalSignerPathFolder("hwi"), home);
+    QCOMPARE(model.externalSignerPathFolder("/definitely/not/a/real/folder/hwi"), home);
 }
 
 void OptionsModelTests::connectionDirtyTracksRestartSettings()

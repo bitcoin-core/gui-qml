@@ -40,6 +40,10 @@ Palette {
     successText: "#1A7440"
     infoText: "#1A6B99"
     warningText: "#6D6200"
+    // The dark theme's yellow, so a warning looks the same in both themes.
+    // About 1.8:1 on surface2, under the 3:1 for glyphs: the icon is drawn
+    // large and always sits beside text that names the state.
+    warningIcon: "#C9B500"
     paymentRequestText: "#364AFC"
     // neutral6 is under 3:1 on surface2 in light.
     placeholder: neutral7

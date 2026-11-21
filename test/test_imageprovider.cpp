@@ -20,6 +20,8 @@ private Q_SLOTS:
     void requestPixmap_appId_setsRequestedOutputSize();
     void requestPixmap_iconResource_setsRequestedOutputSize();
     void requestPixmap_unknownId_returnsNullPixmap();
+    void requestPixmap_colorQuery_drawsIconInThatColor();
+    void requestPixmap_badColorQuery_returnsNullPixmap();
 };
 
 void ImageProviderTests::initTestCase()
@@ -86,6 +88,50 @@ void ImageProviderTests::requestPixmap_unknownId_returnsNullPixmap()
     const QPixmap pixmap = provider.requestPixmap(QStringLiteral("definitely_missing_icon"), &size, QSize(32, 32));
     QVERIFY(pixmap.isNull());
     QCOMPARE(size, QSize(3, 5));
+}
+
+void ImageProviderTests::requestPixmap_colorQuery_drawsIconInThatColor()
+{
+    const std::unique_ptr<const NetworkStyle> style{NetworkStyle::instantiate(ChainType::MAIN)};
+    QVERIFY(style != nullptr);
+    ImageProvider provider(style.get());
+
+    QSize size;
+    const QPixmap pixmap = provider.requestPixmap(QStringLiteral("export?color=12ab34"), &size, QSize(24, 24));
+    QVERIFY(!pixmap.isNull());
+    QCOMPARE(size, QSize(24, 24));
+    // The glyph's pixels take the color (within rounding of their partial
+    // alpha); the transparent background stays transparent.
+    const QImage image = pixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+    int drawn = 0;
+    int transparent = 0;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QColor pixel = image.pixelColor(x, y);
+            if (pixel.alpha() == 0) {
+                ++transparent;
+                continue;
+            }
+            if (pixel.alpha() < 128) continue;
+            ++drawn;
+            QVERIFY(qAbs(pixel.red() - 0x12) <= 3);
+            QVERIFY(qAbs(pixel.green() - 0xab) <= 3);
+            QVERIFY(qAbs(pixel.blue() - 0x34) <= 3);
+        }
+    }
+    QVERIFY(drawn > 0);
+    QVERIFY(transparent > 0);
+}
+
+void ImageProviderTests::requestPixmap_badColorQuery_returnsNullPixmap()
+{
+    const std::unique_ptr<const NetworkStyle> style{NetworkStyle::instantiate(ChainType::MAIN)};
+    QVERIFY(style != nullptr);
+    ImageProvider provider(style.get());
+
+    QSize size;
+    QVERIFY(provider.requestPixmap(QStringLiteral("export?color=red"), &size, QSize(24, 24)).isNull());
+    QVERIFY(provider.requestPixmap(QStringLiteral("export?colour=12ab34"), &size, QSize(24, 24)).isNull());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

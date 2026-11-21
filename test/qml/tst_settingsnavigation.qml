@@ -137,6 +137,7 @@ TestCase {
         secondDestroyed = 0
         AppMode.walletEnabled = true
         AppMode.isDesktop = true
+        BuildInfo.externalSignerSupported = true
         nodeModel.mempoolInformationAvailable = true
         Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
@@ -155,6 +156,7 @@ TestCase {
         nodeModel.resetMempoolInfoPollingTestState()
         optionsModel.clearCoreSettingStatusesForTest()
         walletController.reset()
+        externalSignerModel.reset()
         walletController.setWalletLoaded(true)
         walletController.selectedWallet.isEncrypted = false
         const proxySetting = optionsModel.coreSettings.entry("proxy")
@@ -302,64 +304,44 @@ TestCase {
         }
     }
 
-    function test_signerPendingDoesNotShowStaleConnectedDevice() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "Old device"
+    // Validating and saving the path, and the check itself, run in the
+    // model. While they do, the page claims nothing about the path and
+    // offers no second check; a path error shows under the field.
+    function test_signerSectionShowsTheModelsPendingState() {
+        externalSignerModel.draftPath = "/opt/hwi/hwi"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        externalSignerModel.deviceName = "Old device"
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         view.selectSection("external-signer")
         const page = view.pageContainer.currentItem
+        const section = findChild(page, "externalSignerPathSection")
         const input = findChild(page, "externalSignerPathInput")
-        const indicator = findChild(page, "externalSignerStatusIndicator")
+        const commandRow = findChild(page, "externalSignerCommandRow")
+        const deviceRow = findChild(page, "externalSignerDeviceRow")
         const check = findChild(page, "externalSignerCheckDeviceButton")
-        verify(page.signerConnected)
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "new-hwi"
-        verify(optionsModel.signerPathValidationPending)
-        compare(page.signerConnected, false)
-        compare(page.signerStatusText, "Checking signer path…")
-        tryCompare(indicator, "color", Theme.color.neutral7)
-        compare(check.enabled, false)
-        input.editingFinished()
-        input.editingFinished()
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        // Validation completes, then saving the new command completes.
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        compare(optionsModel.externalSignerPath, "new-hwi")
-        compare(page.signerConnected, false)
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        optionsModel.settingsPending = false
-        compare(walletController.externalSignerRefreshCalls, initialScans + 1)
-        compare(page.checkAfterSave, false)
-    }
+        compare(input.text, "/opt/hwi/hwi")
+        verify(section.deviceReady)
+        compare(check.enabled, true)
 
-    function test_invalidSignerValidationAndFailedSaveDoNotRescan() {
-        optionsModel.externalSignerPath = "old-hwi"
-        walletController.canCreateExternalSignerWallet = true
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        view.selectSection("external-signer")
-        const page = view.pageContainer.currentItem
-        const input = findChild(page, "externalSignerPathInput")
-        const initialScans = walletController.externalSignerRefreshCalls
-        optionsModel.holdSignerPathValidationForTest = true
-        input.text = "/missing/hwi"
-        input.editingFinished()
-        optionsModel.finishSignerPathValidationForTest("Signer does not exist.")
-        compare(page.signerConnected, false)
-        compare(page.signerStatusText, "Signer does not exist.")
-        compare(optionsModel.externalSignerPath, "old-hwi")
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        input.text = "new-hwi"
-        input.editingFinished()
-        optionsModel.settingsPending = true
-        optionsModel.finishSignerPathValidationForTest("")
-        optionsModel.settingsError = "Save failed."
-        optionsModel.settingsPending = false
-        compare(walletController.externalSignerRefreshCalls, initialScans)
-        compare(page.checkAfterSave, false)
+        externalSignerModel.holdChecks = true
+        check.clicked()
+        compare(externalSignerModel.checkCalls, 1)
+        compare(section.deviceReady, false)
+        compare(commandRow.value, "Checking…")
+        compare(deviceRow.visible, false)
+        compare(check.enabled, false)
+        // Another request while one runs is not forwarded twice.
+        input.accepted()
+        compare(externalSignerModel.checkCalls, 1)
+        externalSignerModel.status = ExternalSignerModel.NotChecked
+        externalSignerModel.finishCheckForTest()
+        compare(commandRow.value, "Not checked")
+        compare(check.enabled, true)
+
+        externalSignerModel.pathError = "Signer does not exist."
+        compare(section.pathError, "Signer does not exist.")
+        compare(input.Accessible.description, "Signer does not exist.")
+        compare(check.enabled, false)
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {
@@ -410,6 +392,225 @@ TestCase {
         compare(view.sectionIsVisible("display"), true)
         compare(view.selectedSectionId, "display")
         verify(findChild(view, "settingsSidebar_display") !== null)
+    }
+
+    // A build without signer support can't run a signer command, so a path
+    // saved by another build must not bring back any signer settings.
+    // Whether the signer command works and whether a device was found are
+    // reported separately, each with text and an icon, not color alone.
+    function test_externalSignerSettingsSeparateCommandFromDevice() {
+        externalSignerModel.draftPath = "/usr/local/bin/hwi"
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        const commandRow = findChild(view, "externalSignerCommandRow")
+        const deviceRow = findChild(view, "externalSignerDeviceRow")
+        verify(commandRow !== null)
+        verify(deviceRow !== null)
+
+        externalSignerModel.error = "The signer command did not return valid output. Check that the path is correct."
+        externalSignerModel.status = ExternalSignerModel.NotResponding
+        compare(commandRow.value, "Not responding")
+        compare(commandRow.valueIconSource, "image://images/cross-circle-filled")
+        compare(commandRow.errorText, externalSignerModel.error)
+        compare(deviceRow.visible, false)
+
+        externalSignerModel.error = ""
+        externalSignerModel.status = ExternalSignerModel.NoDevice
+        compare(commandRow.value, "Responding")
+        compare(commandRow.valueIconSource, "image://images/check")
+        compare(commandRow.errorText, "")
+        compare(deviceRow.visible, true)
+        // Device states are fixed at the device: guidance and a warning,
+        // never error styling.
+        compare(deviceRow.value, "None found")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+        compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
+        compare(deviceRow.errorText, "")
+
+        externalSignerModel.error = "Your device isn't ready: Device is locked"
+        externalSignerModel.status = ExternalSignerModel.DeviceNotReady
+        compare(commandRow.value, "Responding")
+        compare(deviceRow.value, "Not ready")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+        compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
+        compare(deviceRow.errorText, "")
+
+        // Two connected devices are not "not ready"; the value says what is wrong.
+        externalSignerModel.error = "More than one external signer was found. Connect only one device."
+        externalSignerModel.status = ExternalSignerModel.MultipleDevices
+        compare(deviceRow.value, "More than one")
+        compare(deviceRow.valueIconSource, "image://images/alert-filled")
+        compare(deviceRow.supportingText, externalSignerModel.error)
+
+        externalSignerModel.error = ""
+        externalSignerModel.deviceName = "trezor_t"
+        externalSignerModel.status = ExternalSignerModel.Ready
+        compare(deviceRow.value, "trezor_t")
+        compare(deviceRow.valueIconSource, "image://images/check")
+        compare(deviceRow.errorText, "")
+        compare(deviceRow.supportingText, "")
+
+        // A path without a result claims nothing.
+        externalSignerModel.status = ExternalSignerModel.NotChecked
+        compare(commandRow.value, "Not checked")
+        compare(commandRow.valueIconSource, "")
+        compare(deviceRow.visible, false)
+
+        externalSignerModel.draftPath = ""
+        externalSignerModel.status = ExternalSignerModel.NotSet
+        compare(commandRow.value, "Not set")
+        compare(commandRow.valueIconSource, "")
+    }
+
+    // Browse and leaving the field only fill in a path; checking it, and
+    // opening the page, take the Check device button or Return.
+    function test_externalSignerChecksOnlyWhenAsked() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(externalSignerModel.checkCalls, 0)
+        const browseButton = findChild(view, "externalSignerBrowseButton")
+        const dialog = findChild(view, "externalSignerPathDialog")
+        const pathField = findChild(view, "externalSignerPathInput")
+        const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+        verify(browseButton !== null)
+        verify(dialog !== null)
+        compare(browseButton.text, "Browse…")
+        compare(dialog.title, "Select signer executable")
+        compare(dialog.fileMode, 0)
+
+        browseButton.clicked()
+        compare(dialog.openCalls, 1)
+        // Starts next to the current signer, or at home, never the launch folder.
+        compare(dialog.currentFolder.toString(), "file:///signer/folder")
+        dialog.selectAndAccept("/opt/hwi/hwi")
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi")
+        compare(pathField.text, "/opt/hwi/hwi")
+        // A path that isn't being edited is shown from its start.
+        compare(pathField.cursorPosition, 0)
+        pathField.editingFinished()
+        compare(externalSignerModel.checkCalls, 0)
+
+        checkButton.clicked()
+        compare(externalSignerModel.checkCalls, 1)
+        compare(checkButton.text, "Check device")
+
+        // Return in the field checks too, with what was typed.
+        pathField.text = "/opt/hwi/hwi2"
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi2")
+        pathField.accepted()
+        compare(externalSignerModel.checkCalls, 2)
+
+        dialog.rejected()
+        compare(externalSignerModel.draftPath, "/opt/hwi/hwi2")
+    }
+
+    // A path set on the command line can't be changed here, but can still be
+    // checked, for example after connecting a device.
+    function test_externalSignerCommandLinePathCanStillBeChecked() {
+        externalSignerModel.setCommandLinePathForTest("/opt/hwi/hwi")
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        const section = findChild(view, "externalSignerPathSection")
+        const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+        compare(findChild(view, "externalSignerPathInput").text, "/opt/hwi/hwi")
+        compare(section.editable, false)
+        compare(findChild(view, "externalSignerPathRow").enabled, false)
+        compare(findChild(view, "externalSignerBrowseButton").enabled, false)
+        compare(checkButton.enabled, true)
+
+        externalSignerModel.holdChecks = true
+        checkButton.clicked()
+        compare(checkButton.text, "Checking…")
+        compare(externalSignerModel.checkCalls, 1)
+        externalSignerModel.finishCheckForTest()
+        compare(checkButton.text, "Check device")
+    }
+
+    // A check belongs to the shared model, not the page that asked for it:
+    // closing the page leaves it running, and the next page shows it.
+    function test_externalSignerCheckOutlivesItsPage() {
+        externalSignerModel.draftPath = "/opt/hwi/hwi"
+        externalSignerModel.holdChecks = true
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer", true)
+        tryCompare(view.pageContainer, "depth", 1)
+        findChild(view, "externalSignerCheckDeviceButton").clicked()
+        compare(externalSignerModel.checking, true)
+        view.destroy()
+        wait(0)
+        compare(externalSignerModel.checking, true)
+        compare(externalSignerModel.checkCalls, 1)
+
+        const next = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        next.selectSection("external-signer", true)
+        tryCompare(next.pageContainer, "depth", 1)
+        compare(findChild(next, "externalSignerCommandRow").value, "Checking…")
+        externalSignerModel.status = ExternalSignerModel.NoDevice
+        externalSignerModel.finishCheckForTest()
+        compare(findChild(next, "externalSignerCommandRow").value, "Responding")
+    }
+
+    Component {
+        id: compactSignerSectionComponent
+        ExternalSignerPathSection { width: 900; title: "Signer executable" }
+    }
+
+    // Browse sits beside the field at the field's height at any width,
+    // including after an existing page is narrowed.
+    function test_externalSignerBrowseSitsBesideTheField() {
+        const section = createTemporaryObject(compactSignerSectionComponent, settingsWindow.contentItem)
+        verify(section !== null)
+        const field = findChild(section, "externalSignerPathInput")
+        const browse = findChild(section, "externalSignerBrowseButton")
+        const besideField = function() {
+            const fieldTop = field.mapToItem(section, 0, 0)
+            const browseTop = browse.mapToItem(section, 0, 0)
+            return browseTop.y === fieldTop.y && browse.height === field.height
+                && browseTop.x >= fieldTop.x + field.width
+                && browseTop.x + browse.width <= section.width
+        }
+        tryVerify(besideField)
+
+        section.width = 300
+        tryVerify(function() { return field.width > 0 && besideField() })
+    }
+
+    function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        try {
+            const supported = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+                { "wallet": testWalletModel })
+            verify(supported !== null)
+            compare(supported.sectionIsVisible("external-signer"), true)
+            supported.selectSection("wallet", true)
+            tryCompare(supported.pageContainer, "depth", 1)
+            compare(findChild(findChild(supported, "walletSettingsStack"), "walletExternalSignerRow").visible, true)
+            supported.destroy()
+
+            BuildInfo.externalSignerSupported = false
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+                { "wallet": testWalletModel })
+            verify(view !== null)
+            compare(view.sectionIsVisible("wallet"), true)
+            compare(view.sectionIsVisible("external-signer"), false)
+            verify(findChild(view, "settingsSidebar_wallet") !== null)
+            verify(findChild(view, "settingsSidebar_external-signer") === null)
+            view.selectSection("wallet", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const signerRow = findChild(findChild(view, "walletSettingsStack"), "walletExternalSignerRow")
+            verify(signerRow !== null)
+            compare(signerRow.visible, false)
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
     }
 
     function test_containerLazilyCachesAndRestoresEachSectionStack() {
@@ -1281,39 +1482,42 @@ TestCase {
                 const introduction = findChild(view, "externalSignerIntroduction")
                 const signerSection = findChild(view, "externalSignerPathSection")
                 const signerPathRow = findChild(view, "externalSignerPathRow")
-                const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
                 const signerPathFocusBorder = findChild(view, "externalSignerPathInputFocusRing")
-                const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
-                const signerStatusText = findChild(view, "externalSignerStatusText")
+                const signerCommandRow = findChild(view, "externalSignerCommandRow")
+                const signerDeviceRow = findChild(view, "externalSignerDeviceRow")
                 const checkDeviceButton = findChild(view, "externalSignerCheckDeviceButton")
                 verify(signerPage !== null)
                 verify(introduction !== null)
                 verify(signerSection !== null)
                 verify(signerPathRow !== null)
-                verify(signerFooter !== null)
                 verify(signerPathInput !== null)
                 verify(signerPathFocusBorder !== null)
-                verify(signerStatusIndicator !== null)
-                verify(signerStatusText !== null)
+                verify(signerCommandRow !== null)
+                verify(signerDeviceRow !== null)
                 verify(checkDeviceButton !== null)
                 compare(introduction.title, "")
-                compare(introduction.description, "Connect a hardware wallet or another external signing tool.")
+                compare(introduction.description,
+                    "Connect a hardware wallet or another external signing tool. Creating an external signer wallet needs exactly one connected device.")
                 compare(signerPage.maximumContentWidth, 840)
-                compare(signerSection.title, "Signer path")
-                compare(signerPathRow.topPadding, 16)
-                compare(signerPathRow.bottomPadding, 16)
-                compare(signerFooter.text,
-                    "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-                compare(signerStatusIndicator.color, Theme.color.danger)
+                compare(signerSection.title, "Signer executable")
+                compare(signerCommandRow.title, "Signer command")
+                compare(signerCommandRow.value, "Not set")
+                compare(signerDeviceRow.visible, false)
                 compare(checkDeviceButton.text, "Check device")
+                // Outside the card, under it and on its right edge.
+                const sectionBottom = signerSection.mapToItem(signerPage, 0, signerSection.height).y
+                const sectionRight = signerSection.mapToItem(signerPage, signerSection.width, 0).x
+                tryVerify(function() {
+                    const buttonTop = checkDeviceButton.mapToItem(signerPage, 0, 0)
+                    return buttonTop.y >= sectionBottom
+                        && Math.abs(buttonTop.x + checkDeviceButton.width - sectionRight) < 1
+                })
                 compare(signerPathInput.height, Theme.size.control)
-                compare(signerPathInput.Accessible.name, "Signer path")
+                compare(signerPathInput.Accessible.name, "Signer executable")
                 compare(signerPathInput.background.color, Theme.color.surface2)
                 compare(signerPathInput.background.radius, Theme.radius.field)
                 compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)
-                compare(signerStatusIndicator.width, 10)
-                compare(signerStatusIndicator.height, 10)
             }
             if (destination.id === "about") {
                 const versionRow = findChild(view, "aboutVersionRow")

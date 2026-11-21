@@ -22,6 +22,8 @@ Item {
     property bool completedWatchOnly: false
     property bool completedEncrypted: false
     property bool readyPending: false
+    // External signer was chosen and its check is still running.
+    property bool externalSignerRoutePending: false
     // The wallet just created or imported. The completion pages act on it,
     // even if another wallet is selected meanwhile.
     property QtObject completedWallet: null
@@ -88,6 +90,16 @@ Item {
         walletController.importWallet(walletController.normalizeWalletPath(path))
     }
 
+    // setupSkipped: the form opens straight from the wallet types, so it is
+    // the only way back to setup. After setup, Back already goes there.
+    function showExternalSignerForm(setupSkipped) {
+        walletController.clearWalletLoadStatus()
+        root.push(externalWallet, {
+            "defaultWalletName": externalSignerModel.suggestedWalletName,
+            "canChangeSigner": setupSkipped
+        })
+    }
+
     function showImportResult() {
         if (root.busy || root.pendingImportResult.length === 0) return
         const result = root.pendingImportResult
@@ -99,7 +111,6 @@ Item {
 
     Component.onCompleted: {
         if (!walletController.initialized) nodeModel.startNodeInitializionThread()
-        walletController.refreshExternalSignerStatus()
     }
 
     AppFileDialog {
@@ -116,6 +127,18 @@ Item {
         id: automationPathField
         objectName: "importWalletPathField"
         visible: false
+    }
+
+    // A responding command goes straight to device detection and naming; a
+    // missing or broken one is set up or corrected first.
+    Connections {
+        target: externalSignerModel
+        function onCheckFinished() {
+            if (!root.externalSignerRoutePending) return
+            root.externalSignerRoutePending = false
+            if (externalSignerModel.commandResponding) root.showExternalSignerForm(true)
+            else root.push(externalSetup, { "modalView": root.modalView })
+        }
     }
 
     Connections {
@@ -240,11 +263,12 @@ Item {
             onWatchOnlySelected: root.push(formPage, { "watchOnly": true,
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
-                walletController.clearWalletLoadStatus()
-                walletController.refreshExternalSignerStatus()
-                root.push(externalWallet, {
-                    "defaultWalletName": walletController.suggestedExternalSignerWalletName
-                })
+                if (root.externalSignerRoutePending) return
+                // The saved path is the one to check; an unsaved edit left on
+                // the settings page doesn't decide where this goes.
+                root.externalSignerRoutePending = true
+                externalSignerModel.revertDraft()
+                externalSignerModel.check()
             }
             onImportSelected: root.chooseImportFile()
         }
@@ -286,6 +310,19 @@ Item {
         }
     }
     Component {
+        id: externalSetup
+        ExternalSignerSetupPage {
+            // Opened from the naming form to change the executable, the step
+            // returns to that form rather than opening a second one.
+            property bool returnsToForm: false
+            onCancel: root.finished(false, null)
+            onReady: {
+                if (returnsToForm) root.pop()
+                else root.showExternalSignerForm(false)
+            }
+        }
+    }
+    Component {
         id: externalWallet
         ExternalSignerWalletForm {
             modalView: root.modalView
@@ -294,6 +331,8 @@ Item {
                 root.completedWallet = wallet
                 root.push(externalConfirm, {}, StackView.Immediate)
             }
+            onChangeSignerRequested: root.push(externalSetup, { "modalView": root.modalView,
+                                                                "returnsToForm": true })
         }
     }
     Component {
