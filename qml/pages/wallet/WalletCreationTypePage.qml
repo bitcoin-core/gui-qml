@@ -25,12 +25,15 @@ OnboardingView {
     title: ""
     heading: onboardingEntry ? qsTr("Add a wallet to your node")
         : qsTr("Choose a wallet type")
-    subheading: importingWallet ? qsTr("Importing your wallet file…")
+    subheading: importingWallet
+        //: Subheading of the add wallet dialog while a wallet file is being imported.
+        //: The import continues if the dialog is closed, but quitting the app cancels it.
+        ? qsTr("Importing your wallet file. Scanning the blockchain for its transactions can take several minutes. You can close this window and keep using the app while the import continues. Quitting the app cancels the import.")
         : onboardingEntry
             ? qsTr("Add a wallet to start using Bitcoin Core. You can create a new wallet now or import from wallet file.")
             : qsTr("You can create a new wallet or import from a wallet file.")
     maximumContentWidth: 700
-    showCloseButton: modalView && !importingWallet
+    showCloseButton: modalView
     showBackButton: !importingWallet && navigationStack && navigationStack.depth > 1
     primaryButtonText: ""
     onCloseClicked: root.cancel()

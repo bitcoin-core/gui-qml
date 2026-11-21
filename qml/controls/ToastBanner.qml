@@ -29,6 +29,7 @@ Rectangle {
     property color backgroundColor: Theme.color.tint(tintColor)
     property bool showsCloseButton: false
     property string actionText: ""
+    property bool actionEnabled: true
     // When > 0, auto-emits dismissed() after this many seconds while visible.
     property int dismissAfter: 0
     // Bind shown rather than visible, so the banner fades out instead of snapping.
@@ -180,10 +181,11 @@ Rectangle {
             id: actionButton
             objectName: root.objectName !== "" ? root.objectName + "ActionButton" : ""
             visible: root.actionText !== ""
+            enabled: root.actionEnabled
             text: root.actionText
             textStyle: Theme.text.menuItemStrong
             textColor: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b,
-                actionButton.down ? 0.6 : actionButton.hovered ? 0.75 : 1)
+                !actionButton.enabled ? 0.4 : actionButton.down ? 0.6 : actionButton.hovered ? 0.75 : 1)
             onClicked: root.actionTriggered()
         }
 

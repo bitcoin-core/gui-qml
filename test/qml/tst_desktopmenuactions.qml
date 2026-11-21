@@ -109,6 +109,16 @@ TestCase {
         compare(actionsUnderTest.sendView.enabled, true)
         compare(actionsUnderTest.receiveView.enabled, true)
 
+        actionsUnderTest.walletImportBusy = true
+        compare(actionsUnderTest.createWallet.enabled, false)
+        compare(actionsUnderTest.closeWallet.enabled, true)
+        compare(actionsUnderTest.sendView.enabled, true)
+        actionsUnderTest.selectedWalletImporting = true
+        compare(actionsUnderTest.closeWallet.enabled, false)
+        compare(actionsUnderTest.sendView.enabled, true)
+        actionsUnderTest.selectedWalletImporting = false
+        actionsUnderTest.walletImportBusy = false
+
         actionsUnderTest.walletBusy = true
         compare(actionsUnderTest.createWallet.enabled, false)
         compare(actionsUnderTest.closeWallet.enabled, false)

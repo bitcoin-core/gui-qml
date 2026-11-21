@@ -11,6 +11,8 @@ QtObject {
     property bool walletInitialized: false
     property bool walletLoaded: false
     property bool walletBusy: false
+    property bool walletImportBusy: false
+    property bool selectedWalletImporting: false
     property bool canUndo: false
     property bool canRedo: false
     property bool canCopy: false
@@ -64,13 +66,13 @@ QtObject {
     readonly property MenuCommand createWallet: MenuCommand {
         text: qsTr("&Add Wallet…")
         visible: root.walletMode
-        enabled: root.walletManagementEnabled
+        enabled: root.walletManagementEnabled && !root.walletImportBusy
         onTriggered: root.createWalletRequested()
     }
     readonly property MenuCommand closeWallet: MenuCommand {
         text: qsTr("Close Wallet…")
         visible: root.walletMode
-        enabled: root.loadedWalletEnabled
+        enabled: root.loadedWalletEnabled && !root.selectedWalletImporting
         onTriggered: root.closeWalletRequested()
     }
     readonly property MenuCommand backupWallet: MenuCommand {
