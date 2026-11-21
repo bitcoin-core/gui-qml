@@ -181,6 +181,7 @@ public:
         void notifyUnload() { interfaces::Wallet::UnloadFn fn; { std::lock_guard lock(mutex); fn = unload_fn; } if (fn) fn(); }
         std::atomic<bool> import_succeeds{false};
         std::vector<wallet::ImportDescriptorRequest> imported;
+        std::function<void()> on_import;
     };
 
     explicit FakeWallet(std::string wallet_name, State* state)
@@ -249,6 +250,7 @@ public:
     std::vector<wallet::ImportResult> importDescriptors(std::vector<wallet::ImportDescriptorRequest>& requests) override
     {
         if (!m_state || !m_state->import_succeeds) return {wallet::ImportResult{wallet::WalletErrorCode::GenericError, "not implemented", /*warnings=*/{}, /*general_error=*/true}};
+        if (m_state->on_import) m_state->on_import();
         std::lock_guard lock(m_state->mutex);
         m_state->imported = requests;
         return std::vector<wallet::ImportResult>(requests.size());
@@ -307,6 +309,7 @@ void ConfigureExpectedControllerInitialization(MockNode& node, FakeWalletLoader&
     node.get_persistent_setting_fn = [](const std::string&) { return common::SettingsValue{}; };
     node.force_setting_fn = [](const std::string&, const common::SettingsValue&) {};
     node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
+    node.shutdown_requested_fn = [] { return false; };
     node.ExpectAtLeast(node.calls.walletLoader, 2);
     node.ExpectAtLeast(node.calls.getPersistentSetting, 1);
     node.get_dust_relay_fee_fn = [] { return CFeeRate{3000}; };
@@ -335,6 +338,7 @@ private Q_SLOTS:
     void createWatchOnlyNeedsBirthTimeForUndatedInput();
     void createWatchOnlyImportsFromBirthTime();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
+    void createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport();
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
@@ -734,6 +738,41 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
     QCOMPARE(create_spy.count(), 0);
     QVERIFY(!controller.isWalletLoaded());
     QVERIFY(!controller.walletLoadInProgress());
+}
+
+void WalletQmlControllerTests::createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport()
+{
+    FakeWallet::State wallet_state;
+    wallet_state.import_succeeds = true;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+
+    std::atomic_bool shutdown{false};
+    node.shutdown_requested_fn = [&] { return shutdown.load(); };
+    loader.create_wallet_fn = [&](const std::string& name,
+                                  const SecureString&,
+                                  uint64_t,
+                                  std::vector<bilingual_str>&) {
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>(name, &wallet_state)};
+    };
+    // The rescan returns without an error when shutdown interrupts it.
+    wallet_state.on_import = [&] { shutdown = true; };
+
+    QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
+    QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
+
+    QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
+    QVERIFY(controller.walletLoadError().contains("interrupted"));
+    QCOMPARE(wallet_state.remove_calls.load(), 1);
+    QCOMPARE(create_spy.count(), 0);
+    QVERIFY(!controller.isWalletLoaded());
 }
 
 void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()

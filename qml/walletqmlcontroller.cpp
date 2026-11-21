@@ -14,8 +14,10 @@
 #include <common/settings.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
+#include <interfaces/wallet.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
+#include <util/fs.h>
 #include <util/result.h>
 #include <wallet/imports.h>
 #include <wallet/walletutil.h>
@@ -25,10 +27,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 #include <QDir>
 #include <QDesktopServices>
@@ -97,6 +102,24 @@ bool ScanBlocksPruned(interfaces::Wallet& wallet, const std::vector<wallet::Impo
     }
     const uint256 tip{WITH_LOCK(raw_wallet->cs_wallet, return raw_wallet->GetLastBlockHash())};
     return !chain.hasBlocks(tip, height);
+}
+
+// remove() only unloads the wallet. Its files are deleted too, so the name can be used again.
+void DiscardCreatedWallet(interfaces::WalletLoader& loader, std::unique_ptr<interfaces::Wallet> wallet)
+{
+    const std::string name{wallet->getWalletName()};
+    wallet::WalletContext* context{loader.context()};
+    std::shared_ptr<wallet::CWallet> shared{context ? wallet::GetWallet(*context, name) : nullptr};
+    wallet->remove();
+    wallet.reset();
+    if (!shared) return;
+    std::vector<fs::path> paths{shared->GetDatabase().Files()};
+    if (!name.empty() && !paths.empty()) paths.push_back(paths.front().parent_path());
+    // The database closes once the last reference is gone.
+    wallet::WaitForDeleteWallet(std::move(shared));
+    std::error_code error;
+    // A directory is only removed when empty.
+    for (const fs::path& path : paths) fs::remove(path, error);
 }
 
 QString ImportErrorText(const wallet::ImportError& error)
@@ -544,7 +567,7 @@ void WalletQmlController::createWalletAsync(const QString& name,
             out.error = QString::fromStdString(error.translated.empty() ? error.original : error.translated);
             if (out.error.isEmpty()) out.error = tr("Wallet creation failed.");
         } else if (setup_wallet && !(out.error = setup_wallet(**wallet)).isEmpty()) {
-            (*wallet)->remove();
+            DiscardCreatedWallet(node->walletLoader(), std::move(*wallet));
         } else {
             out.wallet = std::move(*wallet);
         }
@@ -689,12 +712,15 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
                       creation_flags,
                       WalletLoadAction::Create,
                       /*report_create_error=*/false,
-                      [requests = std::move(input.requests)](interfaces::Wallet& wallet) mutable {
+                      [node = &m_node, requests = std::move(input.requests)](interfaces::Wallet& wallet) mutable {
         if (ScanBlocksPruned(wallet, requests)) {
             return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
         }
         // Imports the descriptors, then rescans from the oldest timestamp.
-        for (const wallet::ImportResult& result : wallet.importDescriptors(requests)) {
+        const std::vector<wallet::ImportResult> results{wallet.importDescriptors(requests)};
+        // Shutdown stops the rescan early without an error, which would keep a wallet missing history.
+        if (node->shutdownRequested()) return WalletQmlController::tr("The import was interrupted before it found all transactions.");
+        for (const wallet::ImportResult& result : results) {
             if (result.has_error()) return ImportErrorText(*result.error);
         }
         return QString{};
