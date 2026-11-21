@@ -135,6 +135,10 @@ void ViewOnlyImportTests::keyOriginKeepsFingerprintAndPath()
     const ViewOnlyImport zpub{ParseViewOnlyImport("[d34db33f/44'/0'/0']" + ZPUB)};
     QCOMPARE(QString::fromStdString(zpub.requests[0].descriptor),
              WithChecksum(QStringLiteral("wpkh([d34db33f/44'/0'/0']%1/<0;1>/*)").arg(XPUB)));
+    QVERIFY(zpub.warning.contains("origin path says Base58 (Legacy)"));
+    QCOMPARE(DescribeViewOnlyImport("[d34db33f/44'/0'/0']" + ZPUB).value("warning").toString(), zpub.warning);
+    QVERIFY(ParseViewOnlyImport("[d34db33f/84'/0'/0']" + ZPUB).warning.isEmpty());
+    QVERIFY(taproot.warning.isEmpty());
 
     QVERIFY(ParseViewOnlyImport("[d34db33f/0h]" + XPUB).needs_address_type);
 

@@ -379,7 +379,8 @@ ViewOnlyImport ParseExtendedKey(const ExtendedKey& key, const QString& origin, c
     using Kind = ViewOnlyImport::Kind;
     if (!key.error.isEmpty()) return Failed(Kind::ExtendedKey, key.error);
     // The key's prefix wins, then a BIP44, 49, 84 or 86 path.
-    std::optional<OutputType> type{key.type ? key.type : PurposeType(path)};
+    const std::optional<OutputType> path_type{PurposeType(path)};
+    std::optional<OutputType> type{key.type ? key.type : path_type};
     const bool needs_address_type{!type};
     if (!type && !address_type.isEmpty()) {
         type = ParseOutputType(address_type.toStdString());
@@ -389,6 +390,11 @@ ViewOnlyImport ParseExtendedKey(const ExtendedKey& key, const QString& origin, c
     if (type) result = ParseLines({WrapKey(*type, origin + QString::fromStdString(key.key) + QStringLiteral("/<0;1>/*"))});
     result.kind = Kind::ExtendedKey;
     result.needs_address_type = needs_address_type;
+    if (key.type && path_type && *key.type != *path_type) {
+        //: %1 and %2 are address types, such as "Bech32 (SegWit)".
+        result.warning = QObject::tr("The key's prefix says %1, but its origin path says %2. It is imported as %1. Check the wallet it came from.")
+                             .arg(QmlUtil::OutputTypeLabel(*key.type), QmlUtil::OutputTypeLabel(*path_type));
+    }
     return result;
 }
 
@@ -504,6 +510,7 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     result.insert(QStringLiteral("needsBirthDate"), !parsed.undated.empty() || (parsed.needs_address_type && parsed.requests.empty()));
     result.insert(QStringLiteral("createdTime"), qlonglong(created.value_or(-1)));
     result.insert(QStringLiteral("needsAddressType"), parsed.needs_address_type);
+    result.insert(QStringLiteral("warning"), parsed.warning);
     result.insert(QStringLiteral("rows"), rows);
     if (parsed.needs_address_type) {
         QVariantList options;

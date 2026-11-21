@@ -61,7 +61,8 @@ OnboardingView {
         }
         if (importInfo.kind === "extendedKey") {
             //: %1 is an address type, such as "Bech32 (SegWit)".
-            return qsTr("Extended key. Imported as %1 receive and change addresses.").arg(types)
+            const summary = qsTr("Extended key. Imported as %1 receive and change addresses.").arg(types)
+            return importInfo.warning ? summary + " " + importInfo.warning : summary
         }
         let summary = importInfo.descriptorCount === 1
             //: %1 is an address type, such as "Bech32 (SegWit)".
