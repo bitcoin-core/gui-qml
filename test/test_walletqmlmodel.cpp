@@ -27,9 +27,12 @@
 #include <script/solver.h>
 #include <test/mocks/mocknode.h>
 #include <test/mocks/mockwallet.h>
+#include <script/descriptor.h>
 #include <txmempool.h>
 #include <wallet/coincontrol.h>
 #include <wallet/types.h>
+#include <wallet/wallet.h>
+#include <wallet/sqlite.h>
 
 #include <QFile>
 #include <QElapsedTimer>
@@ -168,6 +171,7 @@ class ReviewMockWallet : public MockWallet
 public:
     explicit ReviewMockWallet(wallet::CWallet* raw_wallet = nullptr) : m_raw_wallet{raw_wallet} {}
     wallet::CWallet* wallet() override { return m_raw_wallet; }
+    bool canGetAddresses() override { return m_raw_wallet ? m_raw_wallet->CanGetAddresses() : MockWallet::canGetAddresses(); }
     util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>& recipients,
         const wallet::CCoinControl& coin_control, bool sign, std::optional<unsigned int> change_pos) override
     {
@@ -212,6 +216,20 @@ WalletModelHarness<MockWallet> MakeWalletModel(interfaces::Node* node = nullptr,
     };
 
     return {wallet_view, std::unique_ptr<WalletQmlModel, DrainWalletModel>{new WalletQmlModel(std::move(wallet), node)}};
+}
+
+void AddActiveDescriptor(wallet::CWallet& wallet, const std::string& descriptor, bool internal)
+{
+    FlatSigningProvider keys;
+    std::string error;
+    auto parsed{Parse(descriptor, keys, error, /*require_checksum=*/false)};
+    QVERIFY2(parsed.size() == 1, error.c_str());
+    const OutputType type{*parsed.front()->GetOutputType()};
+    LOCK(wallet.cs_wallet);
+    wallet::WalletDescriptor w_desc{std::move(parsed.front()), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/10, /*next_index=*/0};
+    const auto spk_manager{wallet.AddWalletDescriptor(w_desc, keys, /*label=*/"", internal)};
+    QVERIFY(spk_manager);
+    wallet.AddActiveScriptPubKeyMan(spk_manager->get().GetID(), type, internal);
 }
 
 void SetValidRecipient(WalletQmlModel& model,
@@ -736,6 +754,8 @@ private Q_SLOTS:
     void commitPaymentRequestWithPassphraseUnlocksRetriesAndRelocks();
     void commitPaymentRequestWithPassphraseWrongPasswordSurfacesError();
     void availableReceiveAddressTypesHideUnavailableTaproot();
+    void importedAddressTypeIsUsedForReceiveAndChange_data();
+    void importedAddressTypeIsUsedForReceiveAndChange();
     void receiveAddressTypeDefaultPersistsPerWallet();
     void receivingAddressIsStableUntilRotatedOrPaid();
     void receivingAddressCreationAndRequestPersistenceAreSeparate_data();
@@ -890,6 +910,51 @@ void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()
     for (const QVariant& type : types) {
         QVERIFY(type.toMap().value("id").toString() != QString("bech32m"));
     }
+}
+
+void WalletQmlModelTests::importedAddressTypeIsUsedForReceiveAndChange_data()
+{
+    QTest::addColumn<QString>("script");
+    QTest::addColumn<QString>("type");
+    QTest::addColumn<bool>("change_type_set");
+    QTest::newRow("nested segwit") << QStringLiteral("sh(wpkh(%1))") << QStringLiteral("p2sh-segwit") << true;
+    QTest::newRow("legacy") << QStringLiteral("pkh(%1)") << QStringLiteral("legacy") << true;
+    QTest::newRow("segwit") << QStringLiteral("wpkh(%1)") << QStringLiteral("bech32") << false;
+}
+
+void WalletQmlModelTests::importedAddressTypeIsUsedForReceiveAndChange()
+{
+    QFETCH(QString, script);
+    QFETCH(QString, type);
+    QFETCH(bool, change_type_set);
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "imported", wallet::MakeInMemoryWalletDatabase()};
+    raw_wallet.SetWalletFlag(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    const QString tpub{"tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp"};
+    AddActiveDescriptor(raw_wallet, script.arg(tpub + "/0/*").toStdString(), /*internal=*/false);
+    AddActiveDescriptor(raw_wallet, script.arg(tpub + "/1/*").toStdString(), /*internal=*/true);
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+
+    const QVariantList types = model->availableReceiveAddressTypes();
+    QCOMPARE(types.size(), 1);
+    QCOMPARE(types.front().toMap().value("id").toString(), type);
+    QCOMPARE(model->defaultReceiveAddressType(), type);
+
+    std::optional<std::optional<OutputType>> change_type;
+    wallet->create_transaction_fn = [&](const std::vector<wallet::CRecipient>&, const wallet::CCoinControl& coin_control,
+                                        bool, int& change_pos, CAmount& fee) -> util::Result<CTransactionRef> {
+        change_type = coin_control.m_change_type;
+        change_pos = -1;
+        fee = 250;
+        return MakeTransactionRef(CMutableTransaction{});
+    };
+    SetValidRecipient(*model, VALID_REGTEST_ADDRESS);
+    QVERIFY(model->prepareTransaction());
+    QVERIFY(change_type.has_value());
+    QCOMPARE(change_type->has_value(), change_type_set);
+    if (change_type_set) QCOMPARE(QString::fromStdString(FormatOutputType(**change_type)), type);
 }
 
 void WalletQmlModelTests::receiveAddressTypeDefaultPersistsPerWallet()

@@ -15,9 +15,12 @@ LabeledField {
     property alias inputObjectName: input.objectName
     property alias readOnly: input.readOnly
     readonly property alias inputActiveFocus: input.activeFocus
+    readonly property alias textDocument: input.textDocument
     property var textStyle: Theme.text.description
     property bool interceptPaste: false
     property string paymentUriRestoreText: ""
+    // Above this height the text scrolls inside the field. 0 grows with the text.
+    property real maximumInputHeight: 0
     fieldFocused: input.activeFocus
 
     signal textEdited()
@@ -45,65 +48,74 @@ LabeledField {
 
     onPaymentUriRestoreTextChanged: if (interceptPaste) input.syncFromModel()
 
-    TextArea {
-        id: input
-        property bool syncingFromModel: false
-
-        function syncFromModel() {
-            if (text === root.paymentUriRestoreText) return
-            syncingFromModel = true
-            text = root.paymentUriRestoreText
-            syncingFromModel = false
-        }
-
-        function handlePaymentUriInput() {
-            const uri = root.pastedPaymentUri(root.paymentUriRestoreText, text)
-            if (!uri.length) return false
-            syncFromModel()
-            root.pasteRequested()
-            syncFromModel()
-            return true
-        }
-
+    ScrollView {
+        objectName: root.objectName.length > 0 ? root.objectName + "Scroll" : ""
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.max(56, contentHeight + topPadding + bottomPadding)
-        topPadding: 14
-        bottomPadding: 14
-        leftPadding: 0
-        rightPadding: 0
-        wrapMode: TextEdit.WrapAnywhere
-        verticalAlignment: TextEdit.AlignVCenter
-        textFormat: TextEdit.PlainText
-        font: root.textStyle.font
-        color: Theme.color.neutral9
-        placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
-        background: Item {}
-        selectByMouse: true
-        Accessible.name: root.label
-        Accessible.description: root.errorText.length ? root.errorText : root.supportingText
+        Layout.preferredHeight: {
+            const natural = Math.max(56, input.contentHeight + input.topPadding + input.bottomPadding)
+            return root.maximumInputHeight > 0 ? Math.min(root.maximumInputHeight, natural) : natural
+        }
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-        Keys.onPressed: (event) => {
-            if (root.interceptPaste && event.matches(StandardKey.Paste)) {
-                root.pasteRequested()
-                event.accepted = true
+        TextArea {
+            id: input
+            property bool syncingFromModel: false
+
+            function syncFromModel() {
+                if (text === root.paymentUriRestoreText) return
+                syncingFromModel = true
+                text = root.paymentUriRestoreText
+                syncingFromModel = false
             }
-        }
-        Keys.onTabPressed: (event) => {
-            const next = input.nextItemInFocusChain(true)
-            if (next && next !== input) next.forceActiveFocus(Qt.TabFocusReason)
-        }
-        Keys.onBacktabPressed: (event) => {
-            const previous = input.nextItemInFocusChain(false)
-            if (previous && previous !== input) previous.forceActiveFocus(Qt.BacktabFocusReason)
-        }
 
-        Component.onCompleted: if (root.interceptPaste) syncFromModel()
-        // TextEdit.textEdited was added in Qt 6.9. Treat changes made while
-        // focused as edits, excluding updates restored from the model.
-        onTextChanged: {
-            if (syncingFromModel || !activeFocus) return
-            if (!handlePaymentUriInput()) root.textEdited()
+            function handlePaymentUriInput() {
+                const uri = root.pastedPaymentUri(root.paymentUriRestoreText, text)
+                if (!uri.length) return false
+                syncFromModel()
+                root.pasteRequested()
+                syncFromModel()
+                return true
+            }
+
+            topPadding: 14
+            bottomPadding: 14
+            leftPadding: 0
+            rightPadding: 0
+            wrapMode: TextEdit.WrapAnywhere
+            verticalAlignment: TextEdit.AlignVCenter
+            textFormat: TextEdit.PlainText
+            font: root.textStyle.font
+            color: Theme.color.neutral9
+            placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
+            background: Item {}
+            selectByMouse: true
+            Accessible.name: root.label
+            Accessible.description: root.errorText.length ? root.errorText : root.supportingText
+
+            Keys.onPressed: (event) => {
+                if (root.interceptPaste && event.matches(StandardKey.Paste)) {
+                    root.pasteRequested()
+                    event.accepted = true
+                }
+            }
+
+            Keys.onTabPressed: (event) => {
+                const next = input.nextItemInFocusChain(true)
+                if (next && next !== input) next.forceActiveFocus(Qt.TabFocusReason)
+            }
+            Keys.onBacktabPressed: (event) => {
+                const previous = input.nextItemInFocusChain(false)
+                if (previous && previous !== input) previous.forceActiveFocus(Qt.BacktabFocusReason)
+            }
+
+            Component.onCompleted: if (root.interceptPaste) syncFromModel()
+            // TextEdit.textEdited was added in Qt 6.9. Treat changes made while
+            // focused as edits, excluding updates restored from the model.
+            onTextChanged: {
+                if (syncingFromModel || !activeFocus) return
+                if (!handlePaymentUriInput()) root.textEdited()
+            }
+            onEditingFinished: root.editingFinished()
         }
-        onEditingFinished: root.editingFinished()
     }
 }

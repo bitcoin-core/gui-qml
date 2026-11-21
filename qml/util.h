@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_UTIL_H
 #define BITCOIN_QML_UTIL_H
 
+#include <outputtype.h>
 #include <support/allocators/secure.h>
 
 #include <QString>
@@ -31,6 +32,9 @@ void LogQtInfo();
 
 SecureString SecureStringFromQString(const QString& value);
 void ClearSecureString(SecureString& value);
+
+//! Address type name shown in the wallet, such as "Bech32 (SegWit)".
+QString OutputTypeLabel(OutputType type);
 
 } // namespace QmlUtil
 

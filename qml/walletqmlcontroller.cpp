@@ -7,27 +7,34 @@
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/util.h>
+#include <qml/viewonlyimport.h>
 
+#include <chain.h>
 #include <common/args.h>
 #include <common/settings.h>
+#include <interfaces/chain.h>
 #include <interfaces/node.h>
-#include <key_io.h>
-#include <script/descriptor.h>
+#include <interfaces/wallet.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
+#include <util/fs.h>
 #include <util/result.h>
-#include <util/time.h>
+#include <wallet/context.h>
+#include <wallet/imports.h>
 #include <wallet/walletutil.h>
-#include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
 #include <util/translation.h>
 #include <util/threadnames.h>
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 #include <QDir>
 #include <QDesktopServices>
@@ -77,6 +84,46 @@ bool IsBackupLikeFile(const QFileInfo& file_info)
 bool ErrorContains(const QString& error, const QString& needle)
 {
     return error.contains(needle, Qt::CaseInsensitive);
+}
+
+// The import rescans from the oldest timestamp, which a pruned node may no longer have.
+bool ScanBlocksPruned(interfaces::Chain& chain, const std::vector<wallet::ImportDescriptorRequest>& requests)
+{
+    if (!chain.havePruned()) return false;
+    std::optional<int64_t> oldest;
+    for (const auto& request : requests) {
+        if (request.timestamp) oldest = std::min(oldest.value_or(*request.timestamp), *request.timestamp);
+    }
+    int height{0};
+    if (!oldest || !chain.findFirstBlockWithTimeAndHeight(*oldest - TIMESTAMP_WINDOW, 0, interfaces::FoundBlock().height(height))) {
+        return false;
+    }
+    const std::optional<int> prune_height{chain.getPruneHeight()};
+    return prune_height && height <= *prune_height;
+}
+
+// remove() only unloads the wallet. Its files are deleted too, so the name can be used again.
+void DiscardCreatedWallet(interfaces::WalletLoader& loader, std::unique_ptr<interfaces::Wallet> wallet)
+{
+    const std::string name{wallet->getWalletName()};
+    wallet::WalletContext* context{loader.context()};
+    std::shared_ptr<wallet::CWallet> shared{context ? wallet::GetWallet(*context, name) : nullptr};
+    wallet->remove();
+    wallet.reset();
+    if (!shared) return;
+    std::vector<fs::path> paths{shared->GetDatabase().Files()};
+    if (!name.empty() && !paths.empty()) paths.push_back(paths.front().parent_path());
+    // The database closes once the last reference is gone.
+    wallet::WaitForDeleteWallet(std::move(shared));
+    std::error_code error;
+    // A directory is only removed when empty.
+    for (const fs::path& path : paths) fs::remove(path, error);
+}
+
+QString ImportErrorText(const wallet::ImportError& error)
+{
+    const bilingual_str& message{error.wallet_error.message};
+    return QString::fromStdString(message.translated.empty() ? message.original : message.translated);
 }
 } // namespace
 
@@ -498,7 +545,8 @@ void WalletQmlController::createWalletAsync(const QString& name,
                                             uint64_t wallet_creation_flags,
                                             WalletLoadAction load_action,
                                             bool report_create_error,
-                                            WalletSetupFn setup_wallet)
+                                            WalletSetupFn setup_wallet,
+                                            WalletCheckFn check_before_create)
 {
     const QString wallet_name = name.trimmed();
     if (setup_wallet) {
@@ -507,8 +555,13 @@ void WalletQmlController::createWalletAsync(const QString& name,
     setWalletLoadInProgress(true);
 
     m_wallet_command_executor->submit(this, [node = &m_node, wallet_name, passphrase = std::move(passphrase),
-                            wallet_creation_flags, setup_wallet = std::move(setup_wallet)]() mutable {
+                            wallet_creation_flags, setup_wallet = std::move(setup_wallet),
+                            check_before_create = std::move(check_before_create)]() mutable {
         WalletCommandResult out;
+        if (check_before_create && !(out.error = check_before_create()).isEmpty()) {
+            QmlUtil::ClearSecureString(passphrase);
+            return out;
+        }
         std::vector<bilingual_str> warnings;
         auto wallet = node->walletLoader().createWallet(wallet_name.toStdString(), passphrase, wallet_creation_flags, warnings);
         QmlUtil::ClearSecureString(passphrase);
@@ -518,7 +571,7 @@ void WalletQmlController::createWalletAsync(const QString& name,
             out.error = QString::fromStdString(error.translated.empty() ? error.original : error.translated);
             if (out.error.isEmpty()) out.error = tr("Wallet creation failed.");
         } else if (setup_wallet && !(out.error = setup_wallet(**wallet)).isEmpty()) {
-            (*wallet)->remove();
+            DiscardCreatedWallet(node->walletLoader(), std::move(*wallet));
         } else {
             out.wallet = std::move(*wallet);
         }
@@ -615,7 +668,8 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
     return true;
 }
 
-void WalletQmlController::createWatchOnlyWallet(const QString &name, const QString &xpub)
+void WalletQmlController::createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time,
+                                                const QString& address_type)
 {
     if (m_wallet_load_in_progress) {
         return;
@@ -627,11 +681,25 @@ void WalletQmlController::createWatchOnlyWallet(const QString &name, const QStri
         return;
     }
 
-    const std::string xpub_str = xpub.trimmed().toStdString();
-    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub_str);
-    if (!ext_pubkey.pubkey.IsValid()) {
-        setWalletLoadError(tr("Invalid extended public key."));
+    ViewOnlyImport input{ParseViewOnlyImport(import_text, address_type)};
+    if (input.kind == ViewOnlyImport::Kind::Empty) {
+        setWalletLoadError(tr("Enter descriptors, or an extended public key (xpub)."));
         return;
+    }
+    if (!input.error.isEmpty()) {
+        setWalletLoadError(input.error);
+        return;
+    }
+    if (input.requests.empty()) {
+        setWalletLoadError(tr("Choose the address type of this key."));
+        return;
+    }
+    if (!input.undated.empty()) {
+        if (birth_time < 0) {
+            setWalletLoadError(tr("Choose when this wallet was created."));
+            return;
+        }
+        for (const size_t index : input.undated) input.requests[index].timestamp = birth_time;
     }
 
     const QString name_error = walletNameAvailabilityError(name);
@@ -643,54 +711,30 @@ void WalletQmlController::createWatchOnlyWallet(const QString &name, const QStri
     const uint64_t creation_flags = wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS |
                                     wallet::WALLET_FLAG_DESCRIPTORS |
                                     wallet::WALLET_FLAG_BLANK_WALLET;
-    std::vector<std::pair<std::string, bool>> descriptors = {
-        {"wpkh(" + xpub_str + "/0/*)", /*internal=*/false},
-        {"wpkh(" + xpub_str + "/1/*)", /*internal=*/true},
-    };
-
+    const bool date_chosen{!input.undated.empty()};
+    std::vector<wallet::ImportDescriptorRequest> requests{std::move(input.requests)};
     createWalletAsync(name.trimmed(),
                       SecureString{},
                       creation_flags,
                       WalletLoadAction::Create,
                       /*report_create_error=*/false,
-                      [descriptors = std::move(descriptors)](interfaces::Wallet& wallet) {
-        int descriptors_added = 0;
-        wallet::CWallet* raw_wallet = wallet.wallet();
-        if (!raw_wallet) {
-            return WalletQmlController::tr("Failed to import descriptors into watch-only wallet.");
-        }
-
-        LOCK(raw_wallet->cs_wallet);
-        for (const auto& [desc_str, internal] : descriptors) {
-            FlatSigningProvider keys;
-            std::string error;
-            auto parsed = Parse(desc_str, keys, error, /*require_checksum=*/false);
-            if (parsed.empty()) {
-                continue;
-            }
-            wallet::WalletDescriptor w_desc(
-                std::move(parsed.at(0)),
-                TicksSinceEpoch<std::chrono::seconds>(Now<NodeSeconds>()),
-                /*range_start=*/0,
-                /*range_end=*/0,
-                /*next_index=*/0);
-            auto spk_manager_res = raw_wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", internal);
-            if (spk_manager_res) {
-                raw_wallet->AddActiveScriptPubKeyMan(
-                    spk_manager_res.value().get().GetID(),
-                    OutputType::BECH32,
-                    internal);
-                ++descriptors_added;
-            }
-        }
-        raw_wallet->ConnectScriptPubKeyManNotifiers();
-
-        // A watch-only wallet needs both external and internal descriptors;
-        // succeeding with only one would leave a half-created wallet.
-        if (descriptors_added != static_cast<int>(descriptors.size())) {
-            return WalletQmlController::tr("Failed to import descriptors into watch-only wallet.");
+                      [node = &m_node, requests](interfaces::Wallet& wallet) mutable {
+        // Imports the descriptors, then rescans from the oldest timestamp.
+        const std::vector<wallet::ImportResult> results{wallet.importDescriptors(requests)};
+        // Shutdown stops the rescan early without an error, which would keep a wallet missing history.
+        if (node->shutdownRequested()) return WalletQmlController::tr("The import was interrupted before it found all transactions.");
+        for (const wallet::ImportResult& result : results) {
+            if (result.has_error()) return ImportErrorText(*result.error);
         }
         return QString{};
+    }, [node = &m_node, requests, date_chosen] {
+        // Checked before the wallet file exists, so another date can be tried with the same name.
+        wallet::WalletContext* context{node->walletLoader().context()};
+        if (!context || !context->chain || !ScanBlocksPruned(*context->chain, requests)) return QString{};
+        if (!date_chosen) {
+            return WalletQmlController::tr("This node no longer has the blocks from when these descriptors were created, so it can't find their older transactions. Import them on a node that keeps all blocks.");
+        }
+        return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
     });
 }
 
@@ -730,10 +774,9 @@ void WalletQmlController::clearWalletMigrationStatus()
     setWalletMigrationError(QString());
 }
 
-bool WalletQmlController::validateXpub(const QString& xpub) const
+QVariantMap WalletQmlController::describeViewOnlyImport(const QString& import_text, const QString& address_type) const
 {
-    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub.trimmed().toStdString());
-    return ext_pubkey.pubkey.IsValid();
+    return DescribeViewOnlyImport(import_text, address_type);
 }
 
 void WalletQmlController::requestOpenWalletSettings(WalletQmlModel* wallet)
