@@ -46,6 +46,7 @@ add_executable(bitcoinqml_unit_tests
   test_networktraffictower.cpp
   test_qmlinitexecutor_api.cpp
   test_shutdownproducers.cpp
+  test_fonts.cpp
   test_guiargs.cpp
   test_options_model.cpp
   test_async_options.cpp

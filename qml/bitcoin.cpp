@@ -31,6 +31,7 @@
 #include <qml/datadir.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
+#include <qml/fonts.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
@@ -100,7 +101,6 @@
 #include <QDebug>
 #include <QEvent>
 #include <QEventLoop>
-#include <QFontDatabase>
 #include <QIcon>
 #include <QMetaObject>
 #include <QPixmap>
@@ -277,13 +277,6 @@ QString ChainQSettingsName(const QString& chain)
 void setupChainQSettings(QGuiApplication* app, const QString& chain)
 {
     app->setApplicationName(ChainQSettingsName(chain));
-}
-
-void LoadFontResource(const QString& path)
-{
-    if (QFontDatabase::addApplicationFont(path) < 0) {
-        qWarning() << "Failed to load font resource:" << path;
-    }
 }
 
 #ifdef ENABLE_TEST_AUTOMATION
@@ -610,9 +603,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         }
     }
 
-    LoadFontResource(":/fonts/bitcoincoresans/regular");
-    LoadFontResource(":/fonts/bitcoincoresans/semibold");
-    LoadFontResource(":/fonts/robotomono/regular");
+    LoadBundledFonts();
 
     AppMode app_mode = SetupAppMode();
     BuildInfo build_info;

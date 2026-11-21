@@ -309,5 +309,7 @@
         <file alias="bitcoincoresans/regular">res/fonts/BitcoinCoreSans-Regular.otf</file>
         <file alias="bitcoincoresans/semibold">res/fonts/BitcoinCoreSans-SemiBold.otf</file>
         <file alias="robotomono/regular">res/fonts/RobotoMono-Regular.ttf</file>
+        <file alias="notosansarabic/regular">res/fonts/NotoSansArabic-Regular.otf</file>
+        <file alias="notosansarabic/semibold">res/fonts/NotoSansArabic-SemiBold.otf</file>
     </qresource>
 </RCC>
