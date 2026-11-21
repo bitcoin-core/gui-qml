@@ -51,7 +51,7 @@ public:
         RedactedRole,
     };
 
-    /** Lines, not replies: bounds the buffer at ~12 MB of text. */
+    /** Counts lines, not characters: one line can hold a whole long reply. */
     static constexpr int kMaxRows = 50000;
 
     struct OutputLine {
