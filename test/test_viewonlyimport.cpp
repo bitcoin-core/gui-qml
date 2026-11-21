@@ -177,6 +177,8 @@ void ViewOnlyImportTests::onlySingleKeyDescriptorsAreAccepted()
         QVERIFY2(ParseViewOnlyImport(descriptor).error.contains("single-key"), qPrintable(descriptor));
     }
     QVERIFY(ParseViewOnlyImport(Desc("sh(wpkh", "0/*") + ")").error.isEmpty());
+    QVERIFY(ParseViewOnlyImport(Desc("wpkh", "<0;1;2>/*")).error.contains("Only two paths"));
+    QVERIFY(ParseViewOnlyImport(Desc("wpkh", "<0;1>/*")).error.isEmpty());
 
     const ViewOnlyImport second{ParseViewOnlyImport("\n\n" + Desc("wpkh", "0/*") + "\n" + rejected[0])};
     QVERIFY2(second.error.startsWith("Line 4: "), qPrintable(second.error));

@@ -81,6 +81,11 @@ DescriptorCheck CheckDescriptor(const std::string& descriptor)
         check.error = QObject::tr("This includes a private key. Use the public descriptor instead.");
         return check;
     }
+    // The wallet only splits two paths into receive and change. More would all be receive.
+    if (parsed.size() > 2) {
+        check.error = QObject::tr("Only two paths, like <0;1> for receive and change, can be imported from one descriptor.");
+        return check;
+    }
     for (const auto& desc : parsed) {
         std::set<CPubKey> pubkeys;
         std::set<CExtPubKey> ext_pubs;
