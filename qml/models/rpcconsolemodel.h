@@ -26,7 +26,8 @@ class RpcConsoleWorker;
  * Owned by RpcConsoleModel and exposed to QML via the outputModel property;
  * the MonospaceOutputView in CommandConsole.qml binds to it directly. One row
  * holds one *line* of output, never a whole reply, so the view can virtualize.
- * Rows are capped at kMaxRows — the oldest are dropped when the cap is hit.
+ * Rows are capped at kMaxRows; the oldest entries are dropped whole when the
+ * cap is hit.
  *
  * Each row carries the content twice: contentHtml for rendering and
  * contentPlain for search offsets, accessibility and copying. Rows appended in

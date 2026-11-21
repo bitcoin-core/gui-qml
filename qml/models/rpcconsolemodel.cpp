@@ -88,7 +88,12 @@ void RpcOutputListModel::appendLines(const QString& timestamp,
     const int skipped = lines.size() - keep;
 
     if (m_rows.size() + keep > kMaxRows) {
-        const int to_remove = m_rows.size() + keep - kMaxRows;
+        int to_remove = m_rows.size() + keep - kMaxRows;
+        // Drop the rest of an entry the cut runs through, so no entry is left
+        // without its first rows.
+        while (to_remove < m_rows.size() && m_rows.at(to_remove).entry == m_rows.at(to_remove - 1).entry) {
+            ++to_remove;
+        }
         beginRemoveRows({}, 0, to_remove - 1);
         m_rows.remove(0, to_remove);
         endRemoveRows();

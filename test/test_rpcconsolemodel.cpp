@@ -204,6 +204,7 @@ private Q_SLOTS:
     void renderedTextMatchesPlainContent();
     void rowsOfOneReplyShareAnEntry();
     void commandRowsCarryTheRunnableCommand();
+    void trimmingDropsWholeEntries();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -583,6 +584,39 @@ void RpcConsoleModelTests::commandRowsCarryTheRunnableCommand()
     QVERIFY(!value(echo, command_role).toString().contains("hunter2"));
     QVERIFY(value(echo, command_role).toString().startsWith("walletpassphrase"));
     QCOMPARE(value(echo, redacted_role).toBool(), true);
+}
+
+static QVector<RpcOutputListModel::OutputLine> NumberedLines(int count, const QString& prefix)
+{
+    QVector<RpcOutputListModel::OutputLine> lines;
+    lines.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        const QString text = prefix + QString::number(i);
+        lines.append({text, text});
+    }
+    return lines;
+}
+
+void RpcConsoleModelTests::trimmingDropsWholeEntries()
+{
+    constexpr int max_rows = RpcOutputListModel::kMaxRows;
+    RpcOutputListModel out;
+    const int timestamp_role = roleForName(&out, "timestamp");
+    const int plain_role = roleForName(&out, "plainContent");
+    const int entry_role = roleForName(&out, "entry");
+    const auto value = [&](int row, int role) { return out.data(out.index(row, 0), role); };
+
+    out.appendLines("10:00:00", NumberedLines(3, "old "), RpcConsoleModel::CMD_REPLY);
+    out.appendLines("10:00:01", NumberedLines(max_rows - 3, "kept "), RpcConsoleModel::CMD_REPLY);
+    QCOMPARE(out.rowCount(), max_rows);
+
+    // One new row only needs one old row gone, but the rest of its entry goes too.
+    out.appendLines("10:00:02", NumberedLines(1, "new "), RpcConsoleModel::CMD_REPLY);
+    QCOMPARE(out.rowCount(), max_rows - 2);
+    QCOMPARE(value(0, plain_role).toString(), QStringLiteral("kept 0"));
+    QCOMPARE(value(0, timestamp_role).toString(), QStringLiteral("10:00:01"));
+    QCOMPARE(value(0, entry_role), value(max_rows - 4, entry_role));
+    QCOMPARE(value(max_rows - 3, plain_role).toString(), QStringLiteral("new 0"));
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
