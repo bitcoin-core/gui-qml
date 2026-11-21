@@ -205,6 +205,7 @@ private Q_SLOTS:
     void rowsOfOneReplyShareAnEntry();
     void commandRowsCarryTheRunnableCommand();
     void trimmingDropsWholeEntries();
+    void oversizedBlockKeepsItsTimestamp();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -617,6 +618,21 @@ void RpcConsoleModelTests::trimmingDropsWholeEntries()
     QCOMPARE(value(0, timestamp_role).toString(), QStringLiteral("10:00:01"));
     QCOMPARE(value(0, entry_role), value(max_rows - 4, entry_role));
     QCOMPARE(value(max_rows - 3, plain_role).toString(), QStringLiteral("new 0"));
+}
+
+void RpcConsoleModelTests::oversizedBlockKeepsItsTimestamp()
+{
+    constexpr int max_rows = RpcOutputListModel::kMaxRows;
+    RpcOutputListModel out;
+    const int timestamp_role = roleForName(&out, "timestamp");
+    const int plain_role = roleForName(&out, "plainContent");
+    const auto value = [&](int row, int role) { return out.data(out.index(row, 0), role); };
+
+    out.appendLines("10:00:00", NumberedLines(max_rows + 5, "line "), RpcConsoleModel::CMD_REPLY);
+    QCOMPARE(out.rowCount(), max_rows);
+    QCOMPARE(value(0, plain_role).toString(), QStringLiteral("line 5"));
+    QCOMPARE(value(0, timestamp_role).toString(), QStringLiteral("10:00:00"));
+    QCOMPARE(value(1, timestamp_role).toString(), QString{});
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()

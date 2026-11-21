@@ -105,7 +105,7 @@ void RpcOutputListModel::appendLines(const QString& timestamp,
     beginInsertRows({}, first, first + keep - 1);
     m_rows.reserve(first + keep);
     for (int i = skipped; i < lines.size(); ++i) {
-        m_rows.append(Row{i == 0 ? timestamp : QString{},
+        m_rows.append(Row{i == skipped ? timestamp : QString{},
                           lines.at(i).html, lines.at(i).plain, category, entry,
                           command, redacted});
     }
