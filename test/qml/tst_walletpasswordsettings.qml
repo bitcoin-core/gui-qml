@@ -7,8 +7,13 @@ import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/controls"
 import "../../qml/pages/wallet"
+import "../../qml/pages/settings" as SettingsPages
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "WalletPasswordSettings"
     when: windowShown
     width: 520
@@ -52,6 +57,87 @@ TestCase {
             width: 460
             height: 680
         }
+    }
+
+    Component {
+        id: walletSettingsComponent
+        SettingsPages.WalletSectionPage {
+            wallet: testWalletModel
+            width: 460
+            height: 680
+        }
+    }
+
+    function cleanup() {
+        pageLoader.sourceComponent = null
+        testWalletModel.isEncrypted = false
+        testWalletModel.resetWalletSettingsTestState()
+        testSecondWalletModel.resetWalletSettingsTestState()
+    }
+
+    function test_set_password_explains_older_backup_coverage() {
+        const page = createWalletPasswordSettingsPage(setPasswordComponent)
+        const intro = findChild(page, "walletPasswordIntroTextDescription")
+        verify(intro.text.indexOf("receiving and change keys") !== -1)
+        verify(intro.text.indexOf("earlier backups") !== -1)
+        verify(intro.text.indexOf("fresh backup") !== -1)
+    }
+
+    function test_encrypted_wallet_keeps_recovery_guidance_and_backup_action() {
+        testWalletModel.isEncrypted = true
+        pageLoader.sourceComponent = walletSettingsComponent
+        const page = pageLoader.item
+        verify(page !== null)
+        const action = findChild(page, "walletBackupRow")
+        verify(action !== null)
+        compare(action.visible, true)
+        verify(action.description.indexOf("earlier backups") !== -1)
+        verify(action.description.indexOf("Keep your older backups") !== -1)
+        const path = findChild(page, "walletSettingsBackupPathField")
+        path.text = "/tmp/recovery-fresh.bak"
+        action.clicked()
+        compare(testWalletModel.backupWalletCalls, 1)
+        compare(testWalletModel.lastBackupPath, "/tmp/recovery-fresh.bak")
+        testWalletModel.isEncrypted = false
+        compare(action.description, "")
+        page.wallet = null
+        compare(action.visible, false)
+        compare(action.description, "")
+    }
+
+    function test_backup_confirmation_data() {
+        return [ { tag: "new-final-name", replacing: false, approve: true },
+                 { tag: "replace-approved", replacing: true, approve: true },
+                 { tag: "replace-declined", replacing: true, approve: false },
+                 { tag: "escape-declined", replacing: true, approve: false, escape: true } ]
+    }
+
+    function test_backup_confirmation(data) {
+        pageLoader.sourceComponent = walletSettingsComponent
+        testWalletModel.prepareBackupConfirmationTestState("/tmp/final <wallet>.bak", data.replacing)
+        const popup = findChild(pageLoader.item, "walletBackupOverwritePopup")
+        verify(popup !== null)
+        tryCompare(popup, "visible", true)
+        compare(popup.title, data.replacing ? "Replace backup?" : "Save backup?")
+        const path = findChild(popup, "walletBackupFinalPathText")
+        compare(path.text, "/tmp/final <wallet>.bak")
+        compare(path.textFormat, Text.PlainText)
+        const action = findChild(pageLoader.item, "walletBackupRow")
+        compare(action.enabled, false)
+        const button = testSetup.findVisualDescendant(popup.contentItem, data.approve ? "walletBackupOverwriteApproveButton" : "walletBackupOverwriteRejectButton")
+        if (data.escape) {
+            testWindow.requestActivate()
+            tryCompare(testWindow, "active", true)
+            popup.contentItem.forceActiveFocus()
+            tryCompare(popup.contentItem, "activeFocus", true)
+            keyClick(Qt.Key_Escape)
+        } else {
+            button.clicked()
+        }
+        tryCompare(popup, "visible", false)
+        compare(action.enabled, true)
+        compare(testWalletModel.backupOperation.pending, false)
+        compare(action.supportingText, data.approve ? "Backup saved." : "")
     }
 
     function createWalletPasswordSettingsPage(component) {
@@ -138,6 +224,21 @@ TestCase {
         }
     }
 
+    // #1132: the new passphrase drops a pasted line ending; the current one,
+    // which must match what the wallet was encrypted with, keeps it.
+    function test_update_password_drops_pasted_line_endings_only_from_the_new_passphrase() {
+        const page = createWalletPasswordSettingsPage(updatePasswordComponent)
+        const current = findChild(page, "walletPasswordCurrentField")
+        const fresh = findChild(page, "walletPasswordNewField")
+        const confirm = findChild(page, "walletPasswordConfirmField")
+        current.insert(0, "old secret\n")
+        fresh.insert(0, "new secret\n")
+        confirm.insert(0, "new secret\r\n")
+        compare(current.text, "old secret\n")
+        compare(fresh.text, "new secret")
+        compare(confirm.text, "new secret")
+    }
+
     function test_update_password_focuses_current_password_field() {
         const page = createWalletPasswordSettingsPage(updatePasswordComponent)
         const currentPassword = findChild(page, "walletPasswordCurrentField")
@@ -166,6 +267,67 @@ TestCase {
         compare(newPassword.text, "")
     }
 
+    function startPasswordChange() {
+        const page = createWalletPasswordSettingsPage(updatePasswordComponent)
+        findChild(page, "walletPasswordCurrentField").text = "current secret"
+        findChild(page, "walletPasswordNewField").text = "replacement secret"
+        findChild(page, "walletPasswordConfirmField").text = "replacement secret"
+        const save = findChild(page, "walletPasswordSaveButton")
+        compare(save.enabled, true)
+        save.clicked()
+        compare(testWalletModel.securityBusy, true)
+        compare(page.waitingForSave, true)
+        compare(page.actionOperation, testWalletModel.security.activeOperation)
+        compare(save.enabled, false)
+        compare(findChild(page, "walletPasswordCurrentField").enabled, false)
+        compare(page.successText, "")
+        return page
+    }
+
+    function test_password_admission_waits_for_success() {
+        const page = startPasswordChange()
+        compare(findChild(page, "walletPasswordCurrentField").text, "current secret")
+        testWalletModel.finishSecurityForTest(true)
+        compare(page.waitingForSave, false)
+        compare(page.successText, "Password updated successfully.")
+        compare(findChild(page, "walletPasswordCurrentField").text, "")
+        compare(findChild(page, "walletPasswordNewField").text, "")
+        compare(findChild(page, "walletPasswordConfirmField").text, "")
+    }
+
+    function test_password_failure_preserves_active_recovery_fields() {
+        const page = startPasswordChange()
+        testWalletModel.finishSecurityForTest(false)
+        compare(page.waitingForSave, false)
+        compare(page.successText, "")
+        compare(page.errorText, "Security operation failed")
+        compare(findChild(page, "walletPasswordCurrentField").text, "current secret")
+        compare(findChild(page, "walletPasswordNewField").text, "replacement secret")
+        compare(findChild(page, "walletPasswordSaveButton").enabled, true)
+    }
+
+    function test_late_password_result_does_not_retarget_data() {
+        return [ {tag: "hidden"}, {tag: "switched"}, {tag: "unloaded"} ]
+    }
+
+    function test_late_password_result_does_not_retarget(data) {
+        const page = startPasswordChange()
+        if (data.tag === "hidden") page.visible = false
+        else if (data.tag === "switched") page.wallet = testSecondWalletModel
+        else testWalletModel.available = false
+        compare(page.waitingForSave, false)
+        compare(findChild(page, "walletPasswordCurrentField").text, "")
+        compare(findChild(page, "walletPasswordNewField").text, "")
+        compare(findChild(page, "walletPasswordConfirmField").text, "")
+        // The original owned operation still completes, but this view has
+        // detached. A new wallet or a later activation receives no old result.
+        testWalletModel.finishSecurityForTest(true)
+        if (data.tag === "hidden") page.visible = true
+        compare(page.successText, "")
+        compare(page.errorText, "")
+        compare(testSecondWalletModel.securityBusy, false)
+    }
+
     function test_update_password_result_uses_toast_without_leaving_page() {
         const page = createWalletPasswordSettingsPage(updatePasswordComponent)
         const banner = findChild(page, "walletPasswordResultBanner")
@@ -177,14 +339,19 @@ TestCase {
         let savedCount = 0
         page.saved.connect(function() { savedCount += 1 })
 
-        page.errorText = "The current password is incorrect."
+        findChild(page, "walletPasswordCurrentField").text = "current secret"
+        findChild(page, "walletPasswordNewField").text = "replacement secret"
+        findChild(page, "walletPasswordConfirmField").text = "replacement secret"
+        findChild(page, "walletPasswordSaveButton").clicked()
+        testWalletModel.finishSecurityForTest(false)
         tryCompare(banner, "visible", true)
-        compare(resultText.text, "The current password is incorrect.")
+        compare(resultText.text, "Security operation failed")
         compare(banner.iconSource.toString(), "image://images/alert-filled")
         compare(banner.textColor, Theme.color.dangerText)
 
         page.clearResult()
-        page.handleSaveResult(true)
+        findChild(page, "walletPasswordSaveButton").clicked()
+        testWalletModel.finishSecurityForTest(true)
         compare(savedCount, 0)
         compare(page.successText, "Password updated successfully.")
         tryCompare(banner, "visible", true)

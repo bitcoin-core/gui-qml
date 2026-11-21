@@ -8,6 +8,8 @@
 #include <common/args.h>
 #include <init.h>
 #include <qml/backendexecutor.h>
+#include <test/mocks/drainexecutors.h>
+#include <test/mocks/manualexecutionenvironment.h>
 #include <qml/guiargs.h>
 #include <qml/models/onboardingoptionsmodel.h>
 #include <qml/onboarding_settings.h>
@@ -23,6 +25,7 @@
 #include <QUrl>
 
 #include <atomic>
+#include <future>
 #include <stdexcept>
 #include <thread>
 
@@ -49,6 +52,17 @@ class OnboardingAsyncTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void directorySelectionHasOneValidatedCommand()
+    {
+        const auto& meta = OnboardingOptionsModel::staticMetaObject;
+        QCOMPARE(meta.indexOfMethod("setCustomDataDirArgs(QString)"), -1);
+        QCOMPARE(meta.indexOfMethod("setCustomDataDirString(QString)"), -1);
+        QVERIFY(meta.indexOfMethod("selectCustomDataDir(QString)") >= 0);
+        QVERIFY(meta.indexOfMethod("useDefaultDataDir()") >= 0);
+    }
+    void manualPreparationOwnershipAndSignalOrder_data();
+    void manualPreparationOwnershipAndSignalOrder();
+    void manualSelectionAndDefaultGettersAreOwned();
     void prepareAfterShutdownReportsFailure_data();
     void prepareAfterShutdownReportsFailure();
     void shutdownDuringPreparationPreservesCompletion_data();
@@ -63,6 +77,57 @@ private Q_SLOTS:
     void blockedConfigReadKeepsGuiResponsiveAndRejectsStaleSelection();
 };
 
+void OnboardingAsyncTests::manualPreparationOwnershipAndSignalOrder_data()
+{
+    QTest::addColumn<QString>("outcome");for(const char* name:{"success","failure","exception"})QTest::newRow(name)<<QString::fromLatin1(name);
+}
+void OnboardingAsyncTests::manualPreparationOwnershipAndSignalOrder()
+{
+    QFETCH(QString,outcome);ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;SetupServerArgs(args,false);SetupQmlGuiArgs(args);
+    args.ForceSetArg("-regtest","1");args.ForceSetArg("-datadir",directory.path().toStdString());
+    OnboardingOptionsModel model{Arguments(directory.path()),false,nullptr,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+    auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
+    auto settle=[&]{for(int turn=0;turn<100;++turn){if(!transport.queuedIdle()){transport.stepNext();continue;}if(publish())continue;return true;}return false;};
+    QVERIFY(settle());QVERIFY(!model.validationPending());
+    model.configureSettingsCommit(args);QVERIFY(model.canFinish());model.commitSettings();QVERIFY(settle());QVERIFY(model.setupCommitted());
+    QStringList signals;connect(&model,&OnboardingOptionsModel::nodePrepared,this,[&]{signals<<"prepared";});
+    connect(&model,&OnboardingOptionsModel::shutdownFinished,this,[&]{signals<<"shutdown";});
+    int calls{0};model.prepareNode(args,[&]{++calls;if(outcome=="exception")throw std::runtime_error("owned preparation failure");return outcome=="success";});
+    QCOMPARE(model.preparationState(),OnboardingOptionsModel::PreparationPending);QCOMPARE(calls,0);
+    QVERIFY(transport.step(execution::Lane::Domain));
+    model.beginShutdown();QVERIFY(signals.empty());
+    QVERIFY(transport.step(execution::Lane::Core));QCOMPARE(calls,1);QVERIFY(signals.empty());
+    QCOMPARE(model.preparationState(),outcome=="success"?OnboardingOptionsModel::PreparationSucceeded:
+        outcome=="failure"?OnboardingOptionsModel::PreparationFailed:OnboardingOptionsModel::PreparationUncertain);
+    QVERIFY(transport.step(execution::Lane::Domain));QVERIFY(signals.empty());
+    QVERIFY(settle());QCOMPARE(signals,QStringList({"prepared","shutdown"}));QCOMPARE(calls,1);
+    transport.drain();QVERIFY(transport.quiescent());
+}
+void OnboardingAsyncTests::manualSelectionAndDefaultGettersAreOwned()
+{
+    ManualRoutedExecution transport;std::deque<std::function<void()>> gui;
+    QTemporaryDir first,second;QVERIFY(first.isValid());QVERIFY(second.isValid());
+    OnboardingOptionsModel model{Arguments(first.path()),false,nullptr,{transport.scheduler,[&](auto turn){gui.push_back(std::move(turn));}}};
+    auto publish=[&]{if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true;};
+    auto settle=[&]{for(int turn=0;turn<150;++turn){if(!transport.queuedIdle()){transport.stepNext();continue;}if(publish())continue;return true;}return false;};
+    QVERIFY(model.getDefaultDataDirString().isEmpty());QVERIFY(model.getDefaultDataDirectory().isEmpty());
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(model.getDefaultDataDirString().isEmpty());
+    // Settings initialization has independent Domain decisions ahead of the
+    // Native startup result. Hold every GUI publication while they complete.
+    transport.drain();QVERIFY(model.getDefaultDataDirString().isEmpty());
+    for(int turn=0;turn<16&&model.getDefaultDataDirString().isEmpty();++turn)QVERIFY(publish());
+    QVERIFY(!model.getDefaultDataDirString().isEmpty());
+    QVERIFY(settle());QVERIFY(model.selectCustomDataDir(first.path()));
+    QVERIFY(transport.step(execution::Lane::Core));QVERIFY(transport.step(execution::Lane::Domain));
+    QVERIFY(model.selectCustomDataDir(second.path()));QVERIFY(publish());
+    QVERIFY(settle());QCOMPARE(model.dataDir(),second.path());QVERIFY(!model.validationPending());
+    QVERIFY(!model.storageCheckPending());
+    transport.rejectLane(execution::Lane::Core);QVERIFY(!model.selectCustomDataDir(first.path()));QVERIFY(publish());
+    QVERIFY(!model.previewError().isEmpty());QVERIFY(!model.canFinish());
+    model.beginShutdown();QVERIFY(settle());transport.drain();QVERIFY(transport.quiescent());
+}
+
 void OnboardingAsyncTests::prepareAfterShutdownReportsFailure_data()
 {
     QTest::addColumn<bool>("wait_for_preview");
@@ -76,6 +141,7 @@ void OnboardingAsyncTests::prepareAfterShutdownReportsFailure()
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     ArgsManager args;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     OnboardingOptionsModel model(Arguments(directory.path()), false);
     if (wait_for_preview) QTRY_VERIFY(!model.validationPending());
     QSignalSpy prepared(&model, &OnboardingOptionsModel::nodePrepared);
@@ -111,6 +177,7 @@ void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion()
     QVERIFY(directory.isValid());
     const auto argv = Arguments(directory.path());
     ArgsManager args;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     SetupServerArgs(args, false);
     SetupQmlGuiArgs(args);
     std::vector<const char*> raw;
@@ -132,6 +199,7 @@ void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion()
     QStringList signals;
     connect(&model, &OnboardingOptionsModel::nodePrepared, this, [&] { signals.append(QStringLiteral("prepared")); });
     connect(&model, &OnboardingOptionsModel::shutdownFinished, this, [&] { signals.append(QStringLiteral("shutdown")); });
+    QTRY_VERIFY(model.canFinish());
     model.prepareNode(args, [&] {
         ++calls;
         entered.release();
@@ -171,6 +239,7 @@ void OnboardingAsyncTests::shutdownObserverCanDestroyPreparedModel()
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     ArgsManager args;
+    const auto drain_native_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     SetupServerArgs(args, false);
     SetupQmlGuiArgs(args);
     args.ForceSetArg("-regtest", "1");
@@ -193,6 +262,7 @@ void OnboardingAsyncTests::shutdownObserverCanDestroyPreparedModel()
         prepared_at_shutdown = prepared;
         delete model.data();
     });
+    QTRY_VERIFY(model->canFinish());
     model->prepareNode(args, [&] { entered.release(); release.acquire(); return true; });
     QTRY_VERIFY(entered.available() > 0);
     entered.acquire();
@@ -213,7 +283,9 @@ void OnboardingAsyncTests::previewReadsOwnNetworkWithoutChangingGlobalParams()
     QVERIFY(QDir(directory.path()).mkpath("regtest"));
     QVERIFY(WriteFile(directory.filePath("settings.json"), R"({"listen":true})"));
     QVERIFY(WriteFile(directory.filePath("regtest/settings.json"), R"({"listen":false})"));
-    const auto preview = QmlOnboardingSettings::Preview(Arguments(directory.path()), false, directory.path());
+    const auto preview = std::async(std::launch::async, [&] {
+        return QmlOnboardingSettings::Preview(Arguments(directory.path()), false, directory.path());
+    }).get();
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(!preview.values.listen);
     QVERIFY(preview.profile.has_settings_file);
@@ -420,4 +492,4 @@ BITCOINQML_REGISTER_QT_TEST(OnboardingAsyncTests)
 #else
 QTEST_MAIN(OnboardingAsyncTests)
 #endif
-#include "test_onboardingasync.moc"
+#include <test_onboardingasync.moc>

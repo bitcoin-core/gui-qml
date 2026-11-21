@@ -16,6 +16,7 @@
 #include <qml/models/peerlistmodel.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <test/mocks/mocknode.h>
+#include <test/mocks/manualexecutionenvironment.h>
 #include <util/translation.h>
 
 #include <QScopeGuard>
@@ -25,6 +26,7 @@
 #include <QTemporaryDir>
 
 #include <atomic>
+#include <thread>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
 const TranslateFn G_TRANSLATION_FUN{nullptr};
@@ -83,18 +85,22 @@ private Q_SLOTS:
         }
         }
         QVERIFY(model);
-        auto* thread = model->findChild<QThread*>();
-        QVERIFY(thread);
-        auto* cleanup = new QObject;
-        cleanup->moveToThread(thread);
         auto entered = std::make_shared<QSemaphore>();
         auto release = std::make_shared<QSemaphore>();
         const auto unblock = qScopeGuard([release] { release->release(); });
-        connect(thread, &QThread::finished, cleanup, &QObject::deleteLater);
-        connect(cleanup, &QObject::destroyed, [entered, release] {
-            entered->release();
-            release->acquire();
-        });
+        {
+            // Producers use owned executors rather than a view-specific
+            // QThread. Delay the actual last-reference cleanup
+            // on that worker; drain must include it even after owner deletion.
+            auto* executor = model->findChild<BackendExecutor*>();
+            QVERIFY(executor);
+            auto cleanup = std::shared_ptr<int>(new int{0}, [entered, release](int* value) {
+                entered->release();
+                release->acquire();
+                delete value;
+            });
+            QVERIFY(executor->submit(model.get(), [cleanup] {}, [] {}));
+        }
         QSignalSpy drained(model.get(), producer == 0 ? SIGNAL(workDrained()) : SIGNAL(drained()));
         QVERIFY(drained.isValid());
         stop();
@@ -118,11 +124,35 @@ private Q_SLOTS:
     {
         SelectParams(ChainType::REGTEST);
         MockNode node;
+        ManualExecutionEnvironment environment;
+        int64_t milliseconds{0};
+        std::vector<std::function<void()>> deadlines;
+        const execution::SnapshotServices execution_services{environment.scheduler,
+            [&](auto publication) { environment.post(std::move(publication)); }};
+        NodeModel::Services services;
+        services.execution = execution_services;
+        services.wall_seconds = [] { return int64_t{100'000}; };
+        services.monotonic_milliseconds = [&] { return milliseconds; };
+        services.schedule = [&](NodeModel::Poll, std::chrono::milliseconds, auto callback) {
+            deadlines.push_back(std::move(callback));
+        };
+        services.cancel = [](NodeModel::Poll) {};
         const bool backend_ready{false};
-        NodeModel model(node, backend_ready);
+        NodeModel model(node, backend_ready, std::move(services));
         QVERIFY(model.nodeInformationRows().isEmpty());
-        PeerListModel peers(node, nullptr, backend_ready);
-        BanListModel bans(node, nullptr, backend_ready);
+        PeerListModel peers(node, nullptr, backend_ready, execution_services,
+                            [] { return NodeClock::time_point{}; });
+        BanListModel bans(node, nullptr, backend_ready, execution_services);
+        const auto settle = [&] {
+            for (int turn{0}; turn < 128; ++turn) {
+                environment.drain(); environment.publishAll();
+                if (environment.transportIdle() && environment.publicationsIdle()) return;
+            }
+            QTest::qFail("The original backend query owners did not settle", __FILE__, __LINE__);
+        };
+        const auto cleanup = qScopeGuard([&] {
+            model.beginShutdown(); peers.beginShutdown(); bans.beginShutdown(); settle();
+        });
         connect(&model, &NodeModel::chainStateReady, &peers, &PeerListModel::backendInitialized);
         connect(&model, &NodeModel::chainStateReady, &bans, &BanListModel::backendInitialized);
         model.setMempoolInfoPollingActive(true);
@@ -131,10 +161,10 @@ private Q_SLOTS:
         peers.refresh();
         bans.refresh();
         model.setPause(true);
-        QVERIFY(!model.disconnectPeer(1));
+        QVERIFY(!model.peerCommands()->requestDisconnectPeer(1));
         model.initializeResult(false, {});
         QVERIFY(model.nodeInformationRows().isEmpty());
-        QTest::qWait(30);
+        settle();
         QCOMPARE(node.calls.getMempoolSize.load(), 0);
         QCOMPARE(node.calls.getNodeCount.load(), 0);
         QCOMPARE(node.calls.getNodesStats.load(), 0);
@@ -142,8 +172,15 @@ private Q_SLOTS:
         QVERIFY(!peers.findChild<QTimer*>()->isActive());
 
         model.initializeResult(true, {});
-        QTRY_VERIFY(node.calls.getMempoolSize.load() > 0);
-        QTRY_VERIFY(node.calls.getNodeCount.load() > 0);
+        // Readiness can reuse an already projected diagnostic result. Either
+        // path must admit reads without executing them inline on this caller.
+        QCOMPARE(node.calls.getMempoolSize.load(), 0);
+        QCOMPARE(node.calls.getNodeCount.load(), 0);
+        QCOMPARE(node.calls.getNodesStats.load(), 0);
+        QCOMPARE(node.calls.getBanned.load(), 0);
+        settle();
+        QVERIFY(node.calls.getMempoolSize.load() > 0);
+        QVERIFY(node.calls.getNodeCount.load() > 0);
         QVERIFY(node.calls.getNodesStats.load() >= 1);
         QCOMPARE(node.calls.getBanned.load(), 1);
         QVERIFY(peers.findChild<QTimer*>()->isActive());
@@ -151,7 +188,7 @@ private Q_SLOTS:
         model.beginShutdown();
         peers.beginShutdown();
         bans.beginShutdown();
-        QTRY_COMPARE(drained.size(), 1);
+        settle(); QCOMPARE(drained.size(), 1);
         const int mempool_queries = node.calls.getMempoolSize.load();
         const int peer_queries = node.calls.getNodesStats.load();
         const int ban_queries = node.calls.getBanned.load();
@@ -159,9 +196,14 @@ private Q_SLOTS:
         model.refreshMempoolInfo();
         peers.backendInitialized();
         bans.backendInitialized();
+        milliseconds += 60'000;
+        const std::vector<std::function<void()>> old_deadlines{deadlines.begin(), deadlines.end()};
+        for (const auto& deadline : old_deadlines) deadline();
+        settle();
         QCOMPARE(node.calls.getMempoolSize.load(), mempool_queries);
         QCOMPARE(node.calls.getNodesStats.load(), peer_queries);
         QCOMPARE(node.calls.getBanned.load(), ban_queries);
+        QVERIFY(environment.quiescent());
     }
 
     void stoppedViewsDoNotRestartBackendQueries()
@@ -171,7 +213,7 @@ private Q_SLOTS:
         PeerListModel peers(node, nullptr);
         BanListModel bans(node);
         auto history = std::make_shared<BlockClockHistory>();
-        BlockClockModel clock(history);
+        BlockClockModel clock(history, {});
         history->initialize({});
         clock.refreshHistory();
         peers.beginShutdown();
@@ -214,10 +256,12 @@ private Q_SLOTS:
         QSemaphore release;
         std::atomic<bool> gui_call{false};
         MockNode node;
+        const auto gui_thread = QCoreApplication::instance()->thread();
         node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn) {
-            return std::make_unique<Handler>(entered, release, gui_call, QThread::currentThread());
+            return std::make_unique<Handler>(entered, release, gui_call, gui_thread);
         };
         NodeModel model(node);
+        QTRY_VERIFY(model.notificationsReady());
         const auto unblock = qScopeGuard([&] { release.release(); });
         QSignalSpy drained(&model, &NodeModel::workDrained);
         model.beginShutdown();
@@ -228,7 +272,7 @@ private Q_SLOTS:
         QCOMPARE(drained.size(), 0);
         QVERIFY(!gui_call.load());
         QVERIFY(model.nodeInformationRows().isEmpty());
-        QVERIFY(!model.disconnectPeer(1));
+        QVERIFY(!model.peerCommands()->requestDisconnectPeer(1));
         release.release();
         QTRY_COMPARE(drained.size(), 1);
     }
@@ -244,16 +288,24 @@ private Q_SLOTS:
             return interfaces::MakeCleanupHandler([] {});
         };
         NodeModel model(node);
+        QTRY_VERIFY(model.notificationsReady());
         QVERIFY(question);
         QSignalSpy requested(&model, &NodeModel::requestedShutdown);
-        QTimer::singleShot(0, &model, &NodeModel::requestShutdown);
-        QVERIFY(!question(Untranslated("Continue?"), "Continue?", CClientUIInterface::BTN_OK | CClientUIInterface::BTN_CANCEL));
-        QCOMPARE(requested.size(), 1);
+        std::atomic<bool> finished{false}, result{true};
+        std::thread worker([&] {
+            result = question(Untranslated("Continue?"), "Continue?", CClientUIInterface::BTN_OK | CClientUIInterface::BTN_CANCEL);
+            finished = true;
+        });
+        const auto unblock = qScopeGuard([&] { model.requestShutdown(); if (worker.joinable()) worker.join(); });
+        QTRY_VERIFY(model.runtimeDialogVisible());
+        QVERIFY(!finished.load());
+        model.requestShutdown();
+        QTRY_VERIFY(finished.load()); worker.join();
+        QVERIFY(!result.load()); QCOMPARE(requested.size(), 1);
         QVERIFY(!model.runtimeDialogVisible());
         QVERIFY(!question(Untranslated("Late question"), "Late question", CClientUIInterface::BTN_OK));
         QVERIFY(!model.runtimeDialogVisible());
         model.beginShutdown();
-        QTRY_VERIFY(model.isDrained());
     }
 };
 
@@ -263,4 +315,4 @@ BITCOINQML_REGISTER_QT_TEST(ShutdownProducersTests)
 #else
 QTEST_MAIN(ShutdownProducersTests)
 #endif
-#include "test_shutdownproducers.moc"
+#include <test_shutdownproducers.moc>

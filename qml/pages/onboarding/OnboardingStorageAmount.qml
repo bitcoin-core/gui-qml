@@ -14,11 +14,11 @@ OnboardingView {
     signal back()
     signal next()
 
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0
-    property bool customStorage: false
-    property int customStorageAmount
+    readonly property bool customStorage: root.settingsModel.coreSettings.showCustomStorage
+    readonly property int customStorageAmount: root.settingsModel.coreSettings.customStorageSizeGB
     readonly property bool storageCheckPending: root.settingsModel.storageCheckPending || false
     readonly property int storageAvailableGB: root.settingsModel.storageAvailableGB || 0
     readonly property string storageAvailableText: root.settingsModel.storageAvailableText || ""
@@ -38,7 +38,7 @@ OnboardingView {
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageAmountButton"
     primaryButtonEnabled: !root.storageCheckPending && root.storageErrorText.length === 0
-        && root.settingsModel.storageEnoughForSelected
+        && root.settingsModel.storageEnoughForSelected && root.settingsModel.pruneTargetError.length === 0
     onBackClicked: root.back()
     onPrimaryClicked: root.next()
 
@@ -60,12 +60,6 @@ OnboardingView {
             settingsModel: root.settingsModel
             assumedBlockchainSize: root.assumedBlockchainSize
             assumedChainstateSize: root.assumedChainstateSize
-            customStorage: root.customStorage
-            customStorageAmount: root.customStorageAmount
-            onStorageSelectionChanged: function(customStorage, customStorageAmount) {
-                root.customStorage = customStorage
-                root.customStorageAmount = customStorageAmount
-            }
         }
 
         LinkButton {
@@ -80,14 +74,9 @@ OnboardingView {
         id: storagePopup
         objectName: "onboardingStorageSettingsPopup"
         closeButtonObjectName: "onboardingStorageSettingsCloseButton"
-        onAboutToShow: pageStack.currentItem.resetPruneTarget()
         initialPage: StorageSettingsPage {
             settingsModel: root.settingsModel
             onboarding: true
-            onPruneTargetCommitted: function(target) {
-                root.customStorage = target !== 2
-                root.customStorageAmount = target
-            }
         }
     }
 }

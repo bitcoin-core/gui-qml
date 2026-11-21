@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <qml/legacy_settings_migration.h>
 
 #include <chainparamsbase.h>
@@ -20,10 +22,9 @@
 #include <txdb.h>
 #include <univalue.h>
 #include <validation.h>
-#ifdef ENABLE_WALLET
-#include <wallet/wallet.h>
-#endif
+#include <util/fs_helpers.h>
 
+#include <QCoreApplication>
 #include <QDataStream>
 #include <QMetaType>
 #include <QSettings>
@@ -31,8 +32,18 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+
+#ifdef WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 #include <functional>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -66,6 +77,29 @@ QDataStream& operator>>(QDataStream& in, LegacyBitcoinUnit& unit)
 
 Q_DECLARE_METATYPE(QmlLegacySettingsDetail::LegacyBitcoinUnit)
 
+namespace QmlLegacySettings {
+struct DirectoryCleanup {
+    QString organization, application;
+    QSettings::Format format;
+    std::map<QString,QVariant> values;
+    bool completed{false};
+};
+struct PendingCleanup {
+    struct Source {
+        QString organization, application;
+        std::map<QString, QVariant> values;
+        std::set<QString> consumed;
+        QSettings::Format format;
+        bool completed{false};
+        bool reset{false};
+    };
+    fs::path target;
+    bool requires_target_write{false};
+    std::map<std::string, common::SettingsValue> expected;
+    std::vector<Source> sources;
+};
+} // namespace QmlLegacySettings
+
 namespace {
 using LegacyBitcoinUnit = QmlLegacySettingsDetail::LegacyBitcoinUnit;
 
@@ -93,9 +127,20 @@ void RegisterLegacyBitcoinUnitMetaType()
     Q_UNUSED(meta_type);
 }
 
-std::unique_ptr<QSettings> OpenSettings(const QString& org, const QString& app)
+std::unique_ptr<QSettings> OpenSettings(QString org, const QString& app, QSettings::Format format = QSettings::defaultFormat())
 {
-    return std::make_unique<QSettings>(QSettings::defaultFormat(), QSettings::UserScope, org, app);
+#ifdef Q_OS_MACOS
+    // Default QSettings uses organizationDomain on Darwin. Match the actual
+    // historical writers instead of inventing a com.<organization> domain.
+    if (format == QSettings::NativeFormat) {
+        if (org == QStringLiteral(QAPP_ORG_NAME)) org = QStringLiteral(QAPP_ORG_DOMAIN);
+        else if (org == QStringLiteral("Bitcoin")) org = QStringLiteral("bitcoin.org");
+    }
+#endif
+    // Any historical store may hold a serialized BitcoinUnit. QSettings parses
+    // the whole store on first read, so every reader needs the type first.
+    RegisterLegacyBitcoinUnitMetaType();
+    return std::make_unique<QSettings>(format, QSettings::UserScope, org, app);
 }
 
 std::unique_ptr<QSettings> OpenLegacyDataDirSettings()
@@ -128,8 +173,10 @@ const QStringList& LegacyCoreKeys(bool include_language)
         QStringLiteral("nSettingsVersion"),
         QStringLiteral("nDatabaseCache"),
         QStringLiteral("nThreadsScriptVerif"),
+#ifdef ENABLE_WALLET
         QStringLiteral("bSpendZeroConfChange"),
         QStringLiteral("external_signer_path"),
+#endif
         QStringLiteral("fUseNatpmp"),
         QStringLiteral("fListen"),
         QStringLiteral("server"),
@@ -145,8 +192,10 @@ const QStringList& LegacyCoreKeys(bool include_language)
         QStringLiteral("nSettingsVersion"),
         QStringLiteral("nDatabaseCache"),
         QStringLiteral("nThreadsScriptVerif"),
+#ifdef ENABLE_WALLET
         QStringLiteral("bSpendZeroConfChange"),
         QStringLiteral("external_signer_path"),
+#endif
         QStringLiteral("fUseNatpmp"),
         QStringLiteral("fListen"),
         QStringLiteral("server"),
@@ -186,7 +235,7 @@ common::SettingsValue MigrationDefaultValue(const QString& name)
     if (name == QStringLiteral("signer")) return StringValue({});
     if (name == QStringLiteral("lang")) return StringValue({});
 #ifdef ENABLE_WALLET
-    if (name == QStringLiteral("spendzeroconfchange")) return BoolValue(wallet::DEFAULT_SPEND_ZEROCONF_CHANGE);
+    if (name == QStringLiteral("spendzeroconfchange")) return BoolValue(true); // Historical Qt preference default, not a live wallet-policy read.
 #endif
     return {};
 }
@@ -214,18 +263,19 @@ bool WriteMigratedSetting(ArgsManager& args, const QString& name, const common::
     return true;
 }
 
-bool MigrateSimpleSetting(ArgsManager& args, QSettings& settings, QmlLegacySettings::MigrationMode mode, const QString& qt_name, const QString& core_name, const std::function<common::SettingsValue(const QVariant&)>& convert)
+bool MigrateSimpleSetting(ArgsManager& args, QSettings& settings, const QString& qt_name, const QString& core_name, const std::function<common::SettingsValue(const QVariant&)>& convert, std::set<QString>& consumed)
 {
     if (!settings.contains(qt_name)) return false;
 
     bool changed{false};
-    if (WriteMigratedSetting(args, core_name, convert(settings.value(qt_name)))) {
+    const auto desired=convert(settings.value(qt_name));
+    if (WriteMigratedSetting(args, core_name, desired)) {
         changed = true;
     }
 
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.remove(qt_name);
-    }
+    auto actual=args.GetPersistentSetting(core_name.toStdString());
+    if(actual.isNull())actual=MigrationDefaultValue(core_name);
+    if(MigrationValuesEqual(core_name,desired,actual))consumed.insert(qt_name);
     return changed;
 }
 
@@ -255,7 +305,7 @@ QString ParsedProxyAddress(const QVariant& proxy)
     return QmlCoreSettings::DefaultProxyAddress();
 }
 
-bool MigratePruneSettings(ArgsManager& args, QSettings& settings, QmlLegacySettings::MigrationMode mode)
+bool MigratePruneSettings(ArgsManager& args, QSettings& settings, std::set<QString>& consumed)
 {
     const bool has_size = settings.contains(QStringLiteral("nPruneSize"));
     const bool has_enabled = settings.contains(QStringLiteral("bPrune"));
@@ -277,14 +327,19 @@ bool MigratePruneSettings(ArgsManager& args, QSettings& settings, QmlLegacySetti
         }
     }
 
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.remove(QStringLiteral("nPruneSize"));
-        settings.remove(QStringLiteral("bPrune"));
+    const bool enabled=has_enabled&&settings.value(QStringLiteral("bPrune")).toBool();
+    const auto size=has_size?ParseLegacyPruneSizeGB(settings.value(QStringLiteral("nPruneSize"))):DEFAULT_PRUNE_TARGET_GB;
+    auto actual=args.GetPersistentSetting("prune");if(actual.isNull())actual=IntValue(0);
+    const auto desired=enabled?QmlCoreSettings::PruneSetting(true,size):IntValue(0);
+    const bool previous_matches=enabled||!has_size||MigrationValuesEqual(QStringLiteral("prune"),args.GetPersistentSetting("prune-prev"),QmlCoreSettings::PruneSetting(true,size));
+    if(MigrationValuesEqual(QStringLiteral("prune"),desired,actual)&&previous_matches){
+        if(has_enabled)consumed.insert(QStringLiteral("bPrune"));
+        if(has_size)consumed.insert(QStringLiteral("nPruneSize"));
     }
     return changed;
 }
 
-bool MigrateProxySettings(ArgsManager& args, QSettings& settings, QmlLegacySettings::MigrationMode mode, const QString& address_key, const QString& enabled_key, const QString& core_name)
+bool MigrateProxySettings(ArgsManager& args, QSettings& settings, const QString& address_key, const QString& enabled_key, const QString& core_name, std::set<QString>& consumed)
 {
     const bool has_address = settings.contains(address_key);
     const bool has_enabled = settings.contains(enabled_key);
@@ -304,9 +359,14 @@ bool MigrateProxySettings(ArgsManager& args, QSettings& settings, QmlLegacySetti
         }
     }
 
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.remove(address_key);
-        settings.remove(enabled_key);
+    const bool enabled=has_enabled&&settings.value(enabled_key).toBool();
+    const auto address=has_address?ParsedProxyAddress(settings.value(address_key)):QmlCoreSettings::DefaultProxyAddress();
+    auto actual=args.GetPersistentSetting(core_name.toStdString());if(actual.isNull())actual=BoolValue(false);
+    const auto desired=QmlCoreSettings::ProxySetting(enabled,address);
+    const bool previous_matches=enabled||!has_address||args.GetPersistentSetting(QString(core_name+QStringLiteral("-prev")).toStdString()).write()==StringValue(address).write();
+    if(MigrationValuesEqual(core_name,desired,actual)&&previous_matches){
+        if(has_enabled)consumed.insert(enabled_key);
+        if(has_address)consumed.insert(address_key);
     }
     return changed;
 }
@@ -317,16 +377,7 @@ int LegacySettingsVersion(const QSettings& settings)
     return settings.contains(settings_version_key) ? settings.value(settings_version_key).toInt() : 0;
 }
 
-void UpdateLegacySettingsVersion(QSettings& settings, int settings_version, QmlLegacySettings::MigrationMode mode)
-{
-    if (settings_version >= CLIENT_VERSION) return;
-
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.setValue(QStringLiteral("nSettingsVersion"), CLIENT_VERSION);
-    }
-}
-
-bool MigrateStore(ArgsManager& args, SettingsStore& store, QmlLegacySettings::MigrationMode mode)
+bool MigrateStore(ArgsManager& args, SettingsStore& store, std::set<QString>& consumed)
 {
     QSettings& settings{*store.settings};
     const bool include_language = store.legacy_qt;
@@ -341,45 +392,41 @@ bool MigrateStore(ArgsManager& args, SettingsStore& store, QmlLegacySettings::Mi
     if (!has_legacy_key) return false;
 
     const int settings_version{LegacySettingsVersion(settings)};
-    UpdateLegacySettingsVersion(settings, settings_version, mode);
 
     bool changed{false};
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("nDatabaseCache"), QStringLiteral("dbcache"), [settings_version](const QVariant& value) {
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("nDatabaseCache"), QStringLiteral("dbcache"), [settings_version](const QVariant& value) {
         const qlonglong dbcache = value.toLongLong();
         return IntValue(settings_version < 130000 && dbcache == 100 ? DEFAULT_KERNEL_CACHE / 1_MiB : dbcache);
-    });
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("nThreadsScriptVerif"), QStringLiteral("par"), [](const QVariant& value) {
+    }, consumed);
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("nThreadsScriptVerif"), QStringLiteral("par"), [](const QVariant& value) {
         return IntValue(value.toLongLong());
-    });
+    }, consumed);
 #ifdef ENABLE_WALLET
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("bSpendZeroConfChange"), QStringLiteral("spendzeroconfchange"), [](const QVariant& value) {
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("bSpendZeroConfChange"), QStringLiteral("spendzeroconfchange"), [](const QVariant& value) {
         return BoolValue(value.toBool());
-    });
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("external_signer_path"), QStringLiteral("signer"), [](const QVariant& value) {
+    }, consumed);
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("external_signer_path"), QStringLiteral("signer"), [](const QVariant& value) {
         return StringValue(value.toString());
-    });
+    }, consumed);
 #endif
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("fUseNatpmp"), QStringLiteral("natpmp"), [](const QVariant& value) {
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("fUseNatpmp"), QStringLiteral("natpmp"), [](const QVariant& value) {
         return BoolValue(value.toBool());
-    });
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("fListen"), QStringLiteral("listen"), [](const QVariant& value) {
+    }, consumed);
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("fListen"), QStringLiteral("listen"), [](const QVariant& value) {
         return BoolValue(value.toBool());
-    });
-    changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("server"), QStringLiteral("server"), [](const QVariant& value) {
+    }, consumed);
+    changed |= MigrateSimpleSetting(args, settings, QStringLiteral("server"), QStringLiteral("server"), [](const QVariant& value) {
         return BoolValue(value.toBool());
-    });
-    changed |= MigratePruneSettings(args, settings, mode);
-    changed |= MigrateProxySettings(args, settings, mode, QStringLiteral("addrProxy"), QStringLiteral("fUseProxy"), QStringLiteral("proxy"));
-    changed |= MigrateProxySettings(args, settings, mode, QStringLiteral("addrSeparateProxyTor"), QStringLiteral("fUseSeparateProxyTor"), QStringLiteral("onion"));
+    }, consumed);
+    changed |= MigratePruneSettings(args, settings, consumed);
+    changed |= MigrateProxySettings(args, settings, QStringLiteral("addrProxy"), QStringLiteral("fUseProxy"), QStringLiteral("proxy"), consumed);
+    changed |= MigrateProxySettings(args, settings, QStringLiteral("addrSeparateProxyTor"), QStringLiteral("fUseSeparateProxyTor"), QStringLiteral("onion"), consumed);
     if (include_language) {
-        changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("language"), QStringLiteral("lang"), [](const QVariant& value) {
+        changed |= MigrateSimpleSetting(args, settings, QStringLiteral("language"), QStringLiteral("lang"), [](const QVariant& value) {
             return StringValue(value.toString());
-        });
+        }, consumed);
     }
 
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.sync();
-    }
     return changed;
 }
 } // namespace
@@ -400,7 +447,6 @@ bool ReadLegacyGuiReset()
 
 int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback)
 {
-    RegisterLegacyBitcoinUnitMetaType();
     const std::unique_ptr<QSettings> settings = OpenSettings(QString::fromUtf8(QT_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/true));
     if (!settings->contains(SettingsKeys::DISPLAY_UNIT)) {
         return fallback;
@@ -417,7 +463,7 @@ int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback)
 QString ReadLegacyGuiLanguage(const QString& chain)
 {
     const std::unique_ptr<QSettings> chain_settings = OpenSettings(QString::fromUtf8(QT_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/true));
-    const QString chain_language = chain_settings->value(SettingsKeys::LANGUAGE).toString();
+    QString chain_language = chain_settings->value(SettingsKeys::LANGUAGE).toString();
     if (!chain_language.isEmpty()) {
         return chain_language;
     }
@@ -425,7 +471,7 @@ QString ReadLegacyGuiLanguage(const QString& chain)
     return default_settings->value(SettingsKeys::LANGUAGE).toString();
 }
 
-void ClearLegacyGuiSettings(const QString& chain)
+bool ClearLegacyGuiSettings(const QString& chain, QString* error)
 {
     for (SettingsStore& store : CoreSettingsStores(chain)) {
         for (const QString& key : LegacyCoreKeys(store.legacy_qt)) {
@@ -433,12 +479,55 @@ void ClearLegacyGuiSettings(const QString& chain)
         }
         store.settings->remove(SettingsKeys::DISPLAY_UNIT);
         store.settings->sync();
+        if (store.settings->status() != QSettings::NoError) {
+            if (error) *error = QCoreApplication::translate("ProfileMigration", "Legacy settings cleanup could not be confirmed. The saved replacement is retained.");
+            return false;
+        }
     }
 
     const std::unique_ptr<QSettings> legacy_default_settings = OpenLegacyDataDirSettings();
     legacy_default_settings->remove(SettingsKeys::DATA_DIR);
     legacy_default_settings->remove(QString::fromUtf8(RESET_GUI_SETTINGS_KEY));
     legacy_default_settings->sync();
+    if (legacy_default_settings->status() != QSettings::NoError) {
+        if (error) *error = QCoreApplication::translate("ProfileMigration", "Legacy directory cleanup could not be confirmed. The saved replacement is retained.");
+        return false;
+    }
+    if (error) error->clear();
+    return true;
+}
+
+std::shared_ptr<DirectoryCleanup> CaptureLegacyGuiDataDir()
+{
+    const auto settings = OpenLegacyDataDirSettings();
+    settings->sync();
+    if (settings->status() != QSettings::NoError) return {};
+    auto result = std::make_shared<DirectoryCleanup>();
+    result->organization=settings->organizationName();result->application=settings->applicationName();result->format=settings->format();
+    for (const auto& key : {QString::fromLatin1(SettingsKeys::DATA_DIR),QString::fromUtf8(RESET_GUI_SETTINGS_KEY)})
+        result->values.emplace(key,settings->contains(key)?settings->value(key):QVariant{});
+    return result;
+}
+bool CompleteLegacyGuiDataDir(const std::shared_ptr<DirectoryCleanup>& cleanup, QString* error)
+{
+    if (error) error->clear();
+    const auto fail=[&] {if(error)*error=QCoreApplication::translate("ProfileMigration","The selected directory was saved, but the original legacy directory preference could not be cleared. Its source has been retained.");return false;};
+    if (!cleanup) return fail();
+    if (cleanup->completed) return true;
+    const auto settings=OpenSettings(cleanup->organization,cleanup->application,cleanup->format);
+    settings->sync();
+    if (settings->status()!=QSettings::NoError) return fail();
+    for (const auto& [key,value]:cleanup->values)
+        if(settings->contains(key)!=value.isValid()||(value.isValid()&&settings->value(key)!=value))return fail();
+    for (const auto& [key,value]:cleanup->values) if(value.isValid())settings->remove(key);
+    settings->sync();
+    if(settings->status()!=QSettings::NoError)return fail();
+    cleanup->completed=true;
+    return true;
+}
+bool ClearLegacyGuiDataDir(QString* error)
+{
+    return CompleteLegacyGuiDataDir(CaptureLegacyGuiDataDir(),error);
 }
 
 MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode)
@@ -449,13 +538,160 @@ MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode)
     }
 
     try {
+        auto pending = std::make_shared<PendingCleanup>();
+        if (mode == MigrationMode::Persist) args.GetSettingsPath(&pending->target);
         for (SettingsStore& store : CoreSettingsStores(QString::fromStdString(args.GetChainTypeString()))) {
-            result.settings_changed |= MigrateStore(args, store, mode);
+            store.settings->sync();
+            if (store.settings->status() != QSettings::NoError) {
+                result.error = QCoreApplication::translate("ProfileMigration", "The legacy settings could not be read. Their source has been retained.");
+                return result;
+            }
+            PendingCleanup::Source source{store.settings->organizationName(),store.settings->applicationName(),{},{},store.settings->format()};
+            if(mode==MigrationMode::Persist)
+                for(const auto& key:LegacyCoreKeys(store.legacy_qt))
+                    source.values.emplace(key,store.settings->contains(key)?store.settings->value(key):QVariant{});
+            result.settings_changed |= MigrateStore(args,store,source.consumed);
+            if(mode==MigrationMode::Persist&&!source.consumed.empty())pending->sources.push_back(std::move(source));
+        }
+        pending->requires_target_write = result.settings_changed;
+        if (mode == MigrationMode::Persist && !pending->sources.empty()) {
+            result.cleanup = std::move(pending);
+            CaptureMigrationTarget(args, result);
         }
     } catch (const std::exception& e) {
         result.error = QString::fromStdString(e.what());
     }
     return result;
+}
+
+
+MigrationResult CaptureResetSettings(ArgsManager& args)
+{
+    MigrationResult result;
+    if(!args.GetSettingsPath())return result;
+    auto pending=std::make_shared<PendingCleanup>();args.GetSettingsPath(&pending->target);
+    auto stores=CoreSettingsStores(QString::fromStdString(args.GetChainTypeString()));
+    const auto directory_source=OpenLegacyDataDirSettings();
+    const auto directory_org=directory_source->organizationName();const auto directory_app=directory_source->applicationName();
+    stores.push_back({true,OpenLegacyDataDirSettings()});
+    for(auto& store:stores){
+        auto& settings=*store.settings;settings.sync();
+        if(settings.status()!=QSettings::NoError){result.error=QCoreApplication::translate("ProfileMigration","The legacy reset source could not be read. Its source has been retained.");return result;}
+        auto found=std::find_if(pending->sources.begin(),pending->sources.end(),[&](const auto& source){return source.organization==settings.organizationName()&&source.application==settings.applicationName()&&source.format==settings.format();});
+        if(found==pending->sources.end()){
+            pending->sources.push_back({settings.organizationName(),settings.applicationName(),{},{},settings.format(),false,true});
+            found=std::prev(pending->sources.end());
+        }
+        QStringList keys=LegacyCoreKeys(store.legacy_qt);
+        keys<<QString::fromLatin1(SettingsKeys::DISPLAY_UNIT);
+        if(settings.organizationName()==directory_org&&settings.applicationName()==directory_app)
+            keys<<QString::fromLatin1(SettingsKeys::DATA_DIR)<<QString::fromUtf8(RESET_GUI_SETTINGS_KEY);
+        for(const auto& key:keys){
+            const bool present=settings.contains(key);found->values.emplace(key,present?settings.value(key):QVariant{});
+            if(present)found->consumed.insert(key);
+        }
+    }
+    pending->requires_target_write=true;result.cleanup=std::move(pending);
+    CaptureMigrationTarget(args,result);
+    return result;
+}
+
+void CaptureMigrationTarget(ArgsManager& args, const MigrationResult& migration)
+{
+    if (migration.cleanup) args.LockSettings([&](const common::Settings& settings) {
+        migration.cleanup->expected = settings.rw_settings;
+    });
+}
+
+bool CommitTargetFile(const fs::path& target, QString* error)
+{
+#ifdef WIN32
+    const HANDLE file = CreateFileW(target.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (error) *error = QCoreApplication::translate("ProfileMigration", "The replacement settings durability could not be confirmed. The legacy source has been retained.");
+    if (file == INVALID_HANDLE_VALUE) return false;
+    const bool committed = FlushFileBuffers(file) != 0;
+    CloseHandle(file);
+    // Windows' replacement uses Core's atomic file rename. A directory flush
+    // is not a supported separate Win32 receipt; do not manufacture one.
+    if (committed && error) error->clear();
+    return committed;
+#else
+    if (error) *error = QCoreApplication::translate("ProfileMigration", "The replacement settings durability could not be confirmed. The legacy source has been retained.");
+    const int file = open(target.c_str(), O_RDONLY);
+    if (file < 0) return false;
+    const bool committed = fsync(file) == 0;
+    close(file);
+    if (!committed) return false;
+    const int directory = open(target.parent_path().c_str(), O_RDONLY);
+    if (directory < 0) return false;
+    const bool directory_committed = fsync(directory) == 0;
+    close(directory);
+    if (directory_committed && error) error->clear();
+    return directory_committed;
+#endif
+}
+
+bool CompleteCoreSettingsMigration(ArgsManager& args, const MigrationResult& migration, QString* error)
+{
+    if (error) error->clear();
+    const auto fail = [&](const QString& message) {
+        if (error) *error = message;
+        return false;
+    };
+    if (!migration.error.isEmpty()) {
+        if (error) *error = migration.error;
+        return false;
+    }
+    if (!migration.cleanup) return true;
+    const auto& pending = *migration.cleanup;
+    fs::path target;
+    if (!args.GetSettingsPath(&target) || target != pending.target)
+        return fail(QCoreApplication::translate("ProfileMigration", "The migration target changed. The legacy source has been retained."));
+    const auto& expected = pending.expected;
+    std::map<std::string, common::SettingsValue> observed;
+    std::vector<std::string> errors;
+    if ((pending.requires_target_write && !fs::exists(target)) || !common::ReadSettings(target, observed, errors))
+        return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings could not be read back. The legacy source has been retained."));
+    if (expected.size() != observed.size())
+        return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings changed before migration completed. The legacy source has been retained."));
+    for (const auto& [name, value] : expected) {
+        const auto found = observed.find(name);
+        if (found == observed.end() || found->second.write() != value.write())
+            return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings changed before migration completed. The legacy source has been retained."));
+    }
+    if (fs::exists(target) && !CommitTargetFile(target))
+        return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings could not be committed to storage. The legacy source has been retained."));
+    // Check every captured source before changing any of them. App-owned
+    // effects serialize their writers; independent legacy applications do not
+    // participate in this reservation, so this is not a cross-process CAS.
+    std::vector<std::unique_ptr<QSettings>> stores;
+    for (const auto& source : pending.sources) {
+        if (source.completed) { stores.push_back({}); continue; }
+        auto settings = OpenSettings(source.organization, source.application, source.format);
+        settings->sync();
+        if (settings->status() != QSettings::NoError)
+            return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings were saved, but the legacy source could not be checked."));
+        for (const auto& [key, value] : source.values) {
+            if (settings->contains(key) != value.isValid() || (value.isValid() && settings->value(key) != value))
+                return fail(QCoreApplication::translate("ProfileMigration", "The legacy source changed during migration. The saved replacement and source have been retained."));
+        }
+        stores.push_back(std::move(settings));
+    }
+    for (size_t i = 0; i < stores.size(); ++i) {
+        if (!stores[i]) continue;
+        auto& settings = *stores[i];
+        for (const auto& key : pending.sources[i].consumed) settings.remove(key);
+        bool remaining=false;
+        for(const auto& [key,value]:pending.sources[i].values){(void)value;if(key!=QStringLiteral("nSettingsVersion")&&settings.contains(key))remaining=true;}
+        remaining|=settings.contains(QStringLiteral("bSpendZeroConfChange"))||settings.contains(QStringLiteral("external_signer_path"));
+        if(!pending.sources[i].reset&&!remaining&&LegacySettingsVersion(settings)<CLIENT_VERSION)settings.setValue(QStringLiteral("nSettingsVersion"),CLIENT_VERSION);
+        settings.sync();
+        if (settings.status() != QSettings::NoError)
+            return fail(QCoreApplication::translate("ProfileMigration", "The replacement settings were saved, but legacy cleanup could not be confirmed. Review the retained settings before retrying."));
+        migration.cleanup->sources[i].completed = true;
+    }
+    return true;
 }
 
 } // namespace QmlLegacySettings

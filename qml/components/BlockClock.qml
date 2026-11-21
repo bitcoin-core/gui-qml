@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
 import org.bitcoincore.qt 1.0
@@ -20,10 +19,10 @@ Item {
     property bool showNetworkIndicator: true
     // Backing models remain current while false; only presentation work stops.
     property bool renderingActive: true
-    property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
-    property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
-    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
-    property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
+    property var nodeModelRef: typeof nodeModel !== "undefined" ? ApplicationModels.nodeModel : null
+    property var chainModelRef: typeof chainModel !== "undefined" ? ApplicationModels.chainModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? ApplicationModels.blockClockModel : null
+    property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? ApplicationModels.networkStatusModel : null
     readonly property bool windowVisible: root.Window.window !== null &&
         root.Window.window.visible &&
         root.Window.window.visibility !== Window.Hidden &&
@@ -32,6 +31,7 @@ Item {
 
     width: dial.width
     height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
+        + (renderStatus.visible ? renderStatus.implicitHeight + Theme.space.m : 0)
 
     property alias header: mainText.text
     property alias headerSize: mainText.font.pixelSize
@@ -53,22 +53,18 @@ Item {
     property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property bool offline: root.networkStatusModelRef !== null && root.networkStatusModelRef.networkOffline
 
-    AppSettings {
-        id: settings
-        property alias blockclocksize: dial.scale
-    }
-
     BlockClockDial {
         id: dial
         objectName: "blockClockDial"
+        services: ApplicationModels.presentationServices
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
-                Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
+        width: Math.max(0, Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
+                Math.min(root.parentWidth * dial.scale, root.parentHeight * dial.scale)))
         height: dial.width
         penWidth: dial.width / 50
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
-        blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
+        blockSnapshot: root.blockClockModelRef !== null ? root.blockClockModelRef.blockSnapshot : undefined
         syncProgress: root.syncProgressFraction
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
@@ -183,11 +179,41 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
     }
 
+    Column {
+        id: renderStatus
+        objectName: "blockClockRenderStatus"
+        anchors.top: networkIndicator.visible ? networkIndicator.bottom : dial.bottom
+        anchors.topMargin: Theme.space.m
+        anchors.horizontalCenter: root.horizontalCenter
+        width: dial.width
+        readonly property string error: dial.renderError.length > 0 ? dial.renderError
+            : root.blockClockModelRef !== null ? root.blockClockModelRef.historyError : ""
+        readonly property bool pending: root.synced && ((root.blockClockModelRef !== null && root.blockClockModelRef.historyPending)
+            || (dial.renderPending && !dial.renderAvailable))
+        visible: error.length > 0 || pending
+        CoreText {
+            width: parent.width
+            text: renderStatus.error.length > 0 ? renderStatus.error : qsTr("Preparing block clock…")
+            textStyle: Theme.text.caption
+            color: renderStatus.error.length > 0 ? Theme.color.dangerText : Theme.color.neutral7
+            wrapMode: Text.WordWrap
+        }
+        LinkButton {
+            objectName: "blockClockRetryRendering"
+            visible: renderStatus.error.length > 0
+            text: qsTr("Retry block clock")
+            enabled: !dial.renderPending
+            onClicked: {
+                if (root.blockClockModelRef !== null) root.blockClockModelRef.refreshHistory()
+                dial.retryRendering()
+            }
+        }
+    }
+
     states: [
         State {
-            name: "IBD"; when: !faulted && !offline && !synced && !paused && connected
-            PropertyChanges {
-                target: root
+            name: "IBD"; when: !root.faulted && !root.offline && !root.synced && !root.paused && root.connected
+            PropertyChanges { target: root;
                 header: root.syncProgress
                 subText: root.headerSyncActive
                     ? (root.nodeModelRef.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers"))
@@ -196,9 +222,8 @@ Item {
         },
 
         State {
-            name: "BLOCKCLOCK"; when: !faulted && !offline && synced && !paused && connected
-            PropertyChanges {
-                target: root
+            name: "BLOCKCLOCK"; when: !root.faulted && !root.offline && root.synced && !root.paused && root.connected
+            PropertyChanges { target: root;
                 header: Number(root.nodeModelRef !== null ? root.nodeModelRef.blockTipHeight : 0).toLocaleString(Qt.locale(), 'f', 0)
                 subText: qsTr("Blocktime")
                 estimating: false
@@ -206,73 +231,62 @@ Item {
         },
 
         State {
-            name: "PAUSE"; when: paused && !faulted && !offline
-            PropertyChanges {
-                target: root
+            name: "PAUSE"; when: root.paused && !root.faulted && !root.offline
+            PropertyChanges { target: root;
                 header: qsTr("Paused")
                 headerSize: dial.width * (3/25)
                 subText: ""
                 estimating: false
             }
-            PropertyChanges {
-                target: bitcoinIcon
+            PropertyChanges { target: bitcoinIcon;
                 anchors.bottomMargin: dial.width / 40
             }
-            PropertyChanges {
-                target: subText
+            PropertyChanges { target: subText;
                 anchors.topMargin: dial.width / 50
             }
         },
 
         State {
-            name: "ERROR"; when: faulted
-            PropertyChanges {
-                target: root
+            name: "ERROR"; when: root.faulted
+            PropertyChanges { target: root;
                 header: qsTr("Error")
                 headerSize: dial.width * (3/25)
             }
-            PropertyChanges {
-                target: bitcoinIcon
+            PropertyChanges { target: bitcoinIcon;
                 anchors.bottomMargin: dial.width / 40
                 icon.source: "image://images/error"
             }
         },
 
         State {
-            name: "OFFLINE"; when: !faulted && offline
-            PropertyChanges {
-                target: root
+            name: "OFFLINE"; when: !root.faulted && root.offline
+            PropertyChanges { target: root;
                 header: qsTr("Offline")
                 headerSize: dial.width * (3/25)
                 subText: qsTr("Check network")
                 estimating: false
             }
-            PropertyChanges {
-                target: bitcoinIcon
+            PropertyChanges { target: bitcoinIcon;
                 anchors.bottomMargin: dial.width / 40
                 icon.source: "image://images/network-light"
             }
-            PropertyChanges {
-                target: subText
+            PropertyChanges { target: subText;
                 anchors.topMargin: dial.width / 50
             }
         },
 
         State {
-            name: "CONNECTING"; when: !faulted && !paused && !connected
-            PropertyChanges {
-                target: root
+            name: "CONNECTING"; when: !root.faulted && !root.paused && !root.connected
+            PropertyChanges { target: root;
                 header: qsTr("Connecting")
                 headerSize: dial.width * (3/25)
                 subText: qsTr("Please wait")
                 estimating: false
             }
-            PropertyChanges {
-                target: bitcoinIcon
+            PropertyChanges { target: bitcoinIcon;
                 anchors.bottomMargin: dial.width / 40
             }
-            PropertyChanges {
-                target: subText
+            PropertyChanges { target: subText;
                 anchors.topMargin: dial.width / 50
             }
         }

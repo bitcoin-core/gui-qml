@@ -9,13 +9,13 @@
 #include <QHash>
 #include <QModelIndex>
 #include <QPointer>
-#include <QSortFilterProxyModel>
+#include <qml/nativelistmodel.h>
 #include <QStringList>
 #include <QVariant>
 
 class PeerDetailsModel;
 
-class PeerListSortProxy : public QSortFilterProxyModel
+class PeerListSortProxy : public NativeListModel
 {
     Q_OBJECT
     Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
@@ -29,7 +29,11 @@ class PeerListSortProxy : public QSortFilterProxyModel
 
 public:
     explicit PeerListSortProxy(QObject* parent);
-    ~PeerListSortProxy() = default;
+    ~PeerListSortProxy() override;
+    void setSourceModel(QAbstractItemModel* source) override;
+    QModelIndex mapToSource(const QModelIndex& index) const override;
+    QModelIndex mapFromSource(const QModelIndex& index) const override;
+    void close() override;
 
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -62,10 +66,12 @@ Q_SIGNALS:
     void networkFiltersChanged(const QStringList& filters);
     void transportFiltersChanged(const QStringList& filters);
     void countChanged();
+    void admissionClosed();
 
 private:
-    bool lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const override;
-    bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
+    struct Input;
+    std::shared_ptr<Input> m_input;
+    void refreshProjection();
     int RoleNameToRole(const QString & name) const;
     int m_sort_role{0};
     QString m_sort_by;
@@ -75,7 +81,9 @@ private:
     QStringList m_connection_type_filters;
     QStringList m_network_filters;
     QStringList m_transport_filters;
-    mutable QHash<qint64, QPointer<PeerDetailsModel>> m_detail_models;
+    struct DetailCache;
+    std::shared_ptr<DetailCache> m_details;
+    bool m_destroying{false};
 };
 
 #endif // BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H

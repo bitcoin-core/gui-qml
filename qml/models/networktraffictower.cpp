@@ -1,26 +1,28 @@
 // Copyright (c) 2023-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #include <qml/models/networktraffictower.h>
-#include <qml/asyncjoin.h>
-
+#include <qml/backendexecutor.h>
+#include <qml/guipresentation.h>
+#include <qml/retainedsnapshot.h>
 #include <interfaces/node.h>
-#include <util/threadnames.h>
-
-#include <algorithm>
-#include <cstdint>
-#include <functional>
-#include <utility>
-
-#include <QObject>
-#include <QThread>
+#include <QPointer>
 #include <QTimer>
-
+#include <algorithm>
+#include <stdexcept>
 namespace {
 constexpr int MAX_SAMPLES{86400};
 constexpr int DEFAULT_FILTER_WINDOW_SIZE{30};
-
+class QtTrafficTimer final : public TrafficTimer {
+    QTimer m_timer;
+public:
+    void restart(int interval,std::function<void()> tick) override {
+        m_timer.stop();QObject::disconnect(&m_timer,nullptr,nullptr,nullptr);
+        QObject::connect(&m_timer,&QTimer::timeout,&m_timer,std::move(tick));m_timer.start(interval);
+    }
+    void stop() override {m_timer.stop();QObject::disconnect(&m_timer,nullptr,nullptr,nullptr);}
+};
+}
 struct TrafficSnapshot {
     quint64 generation{0};
     quint64 total_bytes_received{0};
@@ -31,6 +33,7 @@ struct TrafficSnapshot {
     QQueue<float> sent_rate_list;
 };
 
+namespace {
 quint64 NonNegativeTotal(int64_t total)
 {
     return total > 0 ? static_cast<quint64>(total) : 0;
@@ -42,34 +45,9 @@ float RateDelta(quint64 current, quint64 previous)
 }
 } // namespace
 
-class NetworkTrafficWorker : public QObject
+struct TrafficEngine
 {
-public:
-    using PublishFn = std::function<void(TrafficSnapshot)>;
-
-    NetworkTrafficWorker(interfaces::Node& node, int sample_interval_ms, PublishFn publish)
-        : m_node{node}
-        , m_publish{std::move(publish)}
-        , m_timer{new QTimer(this)}
-    {
-        m_timer->setInterval(std::max(1, sample_interval_ms));
-        connect(m_timer, &QTimer::timeout, this, [this] {
-            sample();
-        });
-    }
-
-    void start()
-    {
-        util::ThreadRename("qml-netstats");
-        sample();
-        m_timer->start();
-    }
-
-    void stop()
-    {
-        m_timer->stop();
-    }
-
+    TrafficSnapshot snapshot;
     void setActive(bool active, quint64 generation)
     {
         m_active = active;
@@ -98,7 +76,7 @@ public:
         }
     }
 
-private:
+
     float currentMovingAverage(const QQueue<float>& rates) const
     {
         const qsizetype count{std::min<qsizetype>(rates.size(), m_filter_window_size)};
@@ -182,10 +160,10 @@ private:
         m_max_sent_rate_bps = calculateMaxRate(m_smoothed_sent_rate_list);
     }
 
-    void sample()
+    void sample(interfaces::Node& node)
     {
-        const quint64 total_received{NonNegativeTotal(m_node.getTotalBytesRecv())};
-        const quint64 total_sent{NonNegativeTotal(m_node.getTotalBytesSent())};
+        const quint64 total_received{NonNegativeTotal(node.getTotalBytesRecv())};
+        const quint64 total_sent{NonNegativeTotal(node.getTotalBytesSent())};
 
         if (!m_has_baseline) {
             m_has_baseline = true;
@@ -228,7 +206,7 @@ private:
     {
         if (!m_active) return;
 
-        m_publish(TrafficSnapshot{
+        snapshot = TrafficSnapshot{
             m_generation,
             m_total_bytes_received,
             m_total_bytes_sent,
@@ -236,12 +214,10 @@ private:
             m_max_sent_rate_bps,
             visibleHistory(m_smoothed_received_rate_list),
             visibleHistory(m_smoothed_sent_rate_list),
-        });
+        };
     }
 
-    interfaces::Node& m_node;
-    PublishFn m_publish;
-    QTimer* m_timer;
+
     bool m_active{false};
     bool m_has_baseline{false};
     bool m_smoothed_history_valid{false};
@@ -259,96 +235,75 @@ private:
     QQueue<float> m_smoothed_sent_rate_list;
 };
 
-NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms)
-    : m_worker_thread{new QThread(this)}
+
+NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node,int interval,execution::SnapshotServices services,std::shared_ptr<TrafficTimer> timer)
+    :m_node(node),m_services(std::move(services)),m_timer(std::move(timer)),m_interval(std::max(1,interval))
 {
-    m_worker_thread->setObjectName(QStringLiteral("network-traffic"));
-    m_worker = new NetworkTrafficWorker(node, sample_interval_ms, [this](TrafficSnapshot snapshot) {
-        QMetaObject::invokeMethod(this, [this, snapshot = std::move(snapshot)]() mutable {
-            if (!m_active || snapshot.generation != m_activation_generation) return;
-
-            if (m_total_bytes_received != snapshot.total_bytes_received) {
-                m_total_bytes_received = snapshot.total_bytes_received;
-                Q_EMIT totalBytesReceivedChanged();
-            }
-            if (m_total_bytes_sent != snapshot.total_bytes_sent) {
-                m_total_bytes_sent = snapshot.total_bytes_sent;
-                Q_EMIT totalBytesSentChanged();
-            }
-            if (m_max_received_rate_bps != snapshot.max_received_rate_bps) {
-                m_max_received_rate_bps = snapshot.max_received_rate_bps;
-                Q_EMIT maxReceivedRateBpsChanged();
-            }
-            if (m_max_sent_rate_bps != snapshot.max_sent_rate_bps) {
-                m_max_sent_rate_bps = snapshot.max_sent_rate_bps;
-                Q_EMIT maxSentRateBpsChanged();
-            }
-
-            m_received_rate_list = std::move(snapshot.received_rate_list);
-            m_sent_rate_list = std::move(snapshot.sent_rate_list);
-            Q_EMIT receivedRateListChanged();
-            Q_EMIT sentRateListChanged();
-        }, Qt::QueuedConnection);
-    });
-    m_worker->moveToThread(m_worker_thread);
-    connect(m_worker_thread, &QThread::finished, m_worker, &QObject::deleteLater);
-    m_worker_thread->start();
+    if(!m_services.scheduler){m_executor=std::make_unique<BackendExecutor>(execution::Options{},this);m_services.scheduler=m_executor->scheduler();}
+    m_services.post=presentation::ReliablePost(std::move(m_services.post));
+    if(!m_timer)m_timer=std::make_shared<QtTrafficTimer>();
+    m_work=std::make_unique<execution::OwnedWork>(m_services);m_key=m_services.scheduler->allocateKey();
+    m_engine=execution::RetainSnapshot<TrafficEngine>(m_services.scheduler,[]{return std::make_unique<TrafficEngine>();});
+    if(!m_engine)m_error=tr("Traffic history is unavailable.");
 }
-
-void NetworkTrafficTower::startSampling()
-{
-    if (m_stopping || m_sampling_started) return;
-    m_sampling_started = true;
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker] {
-        worker->start();
-    }, Qt::QueuedConnection);
+NetworkTrafficTower::~NetworkTrafficTower(){close();if(m_executor)m_executor->shutdown();}
+void NetworkTrafficTower::close(){m_stopping=true;m_timer->stop();m_inflight=false;m_again=false;m_work->close();m_snapshot.reset();m_engine.reset();}
+void NetworkTrafficTower::beginShutdown(){
+    if(std::exchange(m_shutdown_started,true))return;
+    close();const QPointer<NetworkTrafficTower> observer{this};
+    if(m_executor){m_executor->whenDrained(this,[observer]{if(observer)Q_EMIT observer->drained();});m_executor->shutdown();}
+    else m_work->close([observer]{if(observer)Q_EMIT observer->drained();});
 }
-
-NetworkTrafficTower::~NetworkTrafficTower()
-{
-    if (!m_worker_thread) return;
-    m_worker_thread->quit();
-    m_worker_thread->wait();
-    m_worker = nullptr;
+void NetworkTrafficTower::startSampling(){
+    if(m_stopping||m_sampling_started)return;
+    m_sampling_started=true;
+    const QPointer<NetworkTrafficTower> observer{this};
+    m_timer->restart(m_interval,[observer]{if(observer)observer->requestSnapshot(true);});requestSnapshot(true);
 }
-
-void NetworkTrafficTower::beginShutdown()
-{
-    if (m_stopping) return;
-    m_stopping = true;
-    if (!m_worker_thread) {
-        Q_EMIT drained();
-        return;
-    }
-    JoinThreadAsync(m_worker_thread, this, [this] {
-        m_worker_thread = nullptr;
-        m_worker = nullptr;
-        Q_EMIT drained();
-    });
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, thread = m_worker_thread] {
-        worker->stop();
-        QMetaObject::invokeMethod(thread, &QThread::quit, Qt::QueuedConnection);
-    }, Qt::QueuedConnection);
+void NetworkTrafficTower::setActive(bool active){
+    if(m_stopping||m_active==active)return;
+    m_active=active;++m_activation_generation;
+    const QPointer<NetworkTrafficTower> observer{this};Q_EMIT activeChanged();if(observer&&!m_stopping)requestSnapshot(false);
 }
-
-void NetworkTrafficTower::setActive(bool active)
-{
-    if (m_stopping) return;
-    if (m_active == active) return;
-
-    m_active = active;
-    ++m_activation_generation;
-    Q_EMIT activeChanged();
-
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, active, generation = m_activation_generation] {
-        worker->setActive(active, generation);
-    }, Qt::QueuedConnection);
+void NetworkTrafficTower::updateFilterWindowSize(int size){
+    if(m_stopping)return;
+    size=std::clamp(size,1,MAX_SAMPLES);if(m_window==size)return;m_window=size;++m_activation_generation;requestSnapshot(false);
 }
-
-void NetworkTrafficTower::updateFilterWindowSize(int new_size)
-{
-    if (m_stopping) return;
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, new_size] {
-        worker->setFilterWindowSize(new_size);
-    }, Qt::QueuedConnection);
+void NetworkTrafficTower::requestSnapshot(bool sample){
+    if(m_stopping||!m_engine)return;
+    m_need_sample=m_need_sample||(sample&&m_sampling_started);
+    if(m_inflight){m_again=true;return;}m_inflight=true;
+    const bool take_sample=std::exchange(m_need_sample,false);const bool active=m_active;const auto generation=m_activation_generation;const auto window=m_window;
+    const QPointer<NetworkTrafficTower> observer{this};
+    m_work->submit([engine=m_engine,node=&m_node,scheduler=m_services.scheduler,take_sample,active,generation,window] {
+        engine->setFilterWindowSize(window);engine->setActive(active,generation);if(take_sample)engine->sample(*node);
+        auto result=execution::RetainSnapshot<TrafficSnapshot>(scheduler,[&]{return std::make_unique<TrafficSnapshot>(engine->snapshot);});
+        if(!result)throw std::runtime_error("Traffic snapshot capacity unavailable");
+        return std::shared_ptr<const TrafficSnapshot>{std::move(result)};
+    },[observer](auto snapshot){if(!observer||observer->m_stopping)return;observer->m_inflight=false;observer->m_error.clear();observer->publish(std::move(snapshot));
+        if(!observer||observer->m_stopping)return;
+        Q_EMIT observer->sampleStateChanged();if(observer&&!observer->m_stopping&&std::exchange(observer->m_again,false))observer->m_services.post([observer]{if(observer&&!observer->m_stopping)observer->requestSnapshot(false);});
+    },[observer](std::exception_ptr){if(!observer||observer->m_stopping)return;observer->m_inflight=false;observer->m_error=tr("Traffic statistics could not be refreshed.");
+        Q_EMIT observer->sampleStateChanged();if(observer&&!observer->m_stopping&&std::exchange(observer->m_again,false))observer->m_services.post([observer]{if(observer&&!observer->m_stopping)observer->requestSnapshot(false);});
+    },{execution::Lane::Core,m_key,execution::WorkClass::Observation});
+    if(observer&&!m_stopping)Q_EMIT sampleStateChanged();
+}
+QQueue<float> NetworkTrafficTower::receivedRateList() const{return m_snapshot?m_snapshot->received_rate_list:QQueue<float>{};}
+QQueue<float> NetworkTrafficTower::sentRateList() const{return m_snapshot?m_snapshot->sent_rate_list:QQueue<float>{};}
+void NetworkTrafficTower::publish(std::shared_ptr<const TrafficSnapshot> value){
+    if(!m_active||value->generation!=m_activation_generation)return;
+    const bool received=m_total_bytes_received!=value->total_bytes_received,sent=m_total_bytes_sent!=value->total_bytes_sent;
+    const bool max_received=m_max_received_rate_bps!=value->max_received_rate_bps,max_sent=m_max_sent_rate_bps!=value->max_sent_rate_bps;
+    m_snapshot=std::move(value);m_total_bytes_received=m_snapshot->total_bytes_received;m_total_bytes_sent=m_snapshot->total_bytes_sent;
+    m_max_received_rate_bps=m_snapshot->max_received_rate_bps;m_max_sent_rate_bps=m_snapshot->max_sent_rate_bps;
+    const QPointer<NetworkTrafficTower> observer{this};
+    if(received)Q_EMIT totalBytesReceivedChanged();
+    if(!observer||m_stopping)return;
+    if(sent)Q_EMIT totalBytesSentChanged();
+    if(!observer||m_stopping)return;
+    if(max_received)Q_EMIT maxReceivedRateBpsChanged();
+    if(!observer||m_stopping)return;
+    if(max_sent)Q_EMIT maxSentRateBpsChanged();
+    if(!observer||m_stopping)return;
+    Q_EMIT receivedRateListChanged();if(!observer||m_stopping)return;Q_EMIT sentRateListChanged();
 }

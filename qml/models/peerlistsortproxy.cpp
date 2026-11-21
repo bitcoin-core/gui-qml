@@ -1,12 +1,13 @@
 // Copyright (c) 2023-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistmodel.h>
-#include <util/check.h>
-
+#include <qml/retainedsnapshot.h>
+#include <algorithm>
+#include <mutex>
+#include <stdexcept>
 namespace {
 QString DirectionKey(const CNodeStats& stats)
 {
@@ -53,242 +54,126 @@ QString TransportKey(TransportProtocolType transport)
 }
 } // namespace
 
-PeerListSortProxy::PeerListSortProxy(QObject* parent)
-    : QSortFilterProxyModel(parent)
-{
+
+struct PeerListSortProxy::DetailCache { QHash<QString, QPointer<PeerDetailsModel>> models; };
+struct PeerListSortProxy::Input {
+    std::mutex mutex;
+    NativeVersionHandle source;
+    int role{PeerListModel::NetNodeId}; bool ascending{true};
+    QString search; QStringList directions, connections, networks, transports;
+};
+PeerListSortProxy::PeerListSortProxy(QObject* parent) : NativeListModel({}, parent) {
     m_sort_role = PeerListModel::NetNodeId;
-    setSortRole(m_sort_role);
-    setDynamicSortFilter(true);
-
-    const auto notify_count = [this] { Q_EMIT countChanged(); };
-    connect(this, &QAbstractItemModel::rowsInserted, this, notify_count);
-    connect(this, &QAbstractItemModel::rowsRemoved, this, notify_count);
-    connect(this, &QAbstractItemModel::modelReset, this, notify_count);
+    connect(this, &QAbstractItemModel::rowsInserted, this, &PeerListSortProxy::countChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &PeerListSortProxy::countChanged);
 }
-
-QHash<int, QByteArray> PeerListSortProxy::roleNames() const
-{
+PeerListSortProxy::~PeerListSortProxy() { m_destroying = true; close(); }
+void PeerListSortProxy::close() {
+    if (stopping()) return;
+    m_details.reset(); m_input.reset(); NativeListModel::close();
+    if (!m_destroying) Q_EMIT admissionClosed();
+}
+void PeerListSortProxy::setSourceModel(QAbstractItemModel* source) {
+    if (sourceModel() == source || stopping()) return;
     if (sourceModel()) {
-        return sourceModel()->roleNames();
+        disconnect(sourceModel(), nullptr, this, nullptr);
+        m_details = execution::RetainSnapshot<DetailCache>(scheduler(), [] { return std::make_unique<DetailCache>(); });
+        QAbstractProxyModel::setSourceModel(source);
+        if (auto* peer = qobject_cast<PeerListModel*>(source)) connect(peer, &NativeListModel::snapshotReady, this, &PeerListSortProxy::refreshProjection);
+        refreshProjection();
+        return;
     }
-    return {};
+    auto* peer = qobject_cast<PeerListModel*>(source);
+    if (!peer) { QAbstractProxyModel::setSourceModel(source); return; }
+    configureServices(peer->services());
+    m_input = execution::RetainSnapshot<Input>(scheduler(), [] { return std::make_unique<Input>(); });
+    m_details = execution::RetainSnapshot<DetailCache>(scheduler(), [] { return std::make_unique<DetailCache>(); });
+    if (!m_input || !m_details) throw std::runtime_error("Peer projection capacity unavailable");
+    setRead([input = m_input] {
+        NativeVersionHandle version; int role; bool ascending; QString search; QStringList directions, connections, networks, transports;
+        { std::lock_guard lock{input->mutex}; version=input->source; role=input->role; ascending=input->ascending; search=input->search.trimmed();
+          directions=input->directions; connections=input->connections; networks=input->networks; transports=input->transports; }
+        QString displayed_id;
+        if (search.startsWith(QLatin1Char('#'))) {
+            const auto digits = search.mid(1);
+            const bool numeric = !digits.isEmpty() && std::all_of(digits.begin(), digits.end(), [](QChar ch) { return ch >= QLatin1Char('0') && ch <= QLatin1Char('9'); });
+            bool valid{false}; const auto id = numeric ? digits.toLongLong(&valid) : -1;
+            if (valid && id >= 0) displayed_id = QString::number(id);
+        }
+        auto rows = NativeListModel::Rows(version);
+        std::erase_if(rows, [&](const auto& row) {
+            const auto& stats = static_cast<const PeerRecord*>(row->payload.get())->raw.nodeStats;
+            if (!directions.isEmpty() && !directions.contains(DirectionKey(stats))) return true;
+            if (!connections.isEmpty() && !connections.contains(ConnectionTypeKey(stats.m_conn_type))) return true;
+            if (!networks.isEmpty() && !networks.contains(NetworkKey(stats.m_network))) return true;
+            if (!transports.isEmpty() && !transports.contains(TransportKey(stats.m_transport_type))) return true;
+            if (search.isEmpty()) return false;
+            if (!displayed_id.isEmpty()) return row->values.value(PeerListModel::NodeIdText).toString() != displayed_id;
+            for (int role : {PeerListModel::NetNodeId, PeerListModel::Address, PeerListModel::Direction, PeerListModel::ConnectionType,
+                            PeerListModel::Network, PeerListModel::Transport, PeerListModel::Subversion, PeerListModel::Sent, PeerListModel::Received}) {
+                if (row->values.value(role).toString().contains(search, Qt::CaseInsensitive)) return false;
+            } return true;
+        });
+        std::sort(rows.begin(), rows.end(), [&](const auto& left, const auto& right) {
+            const auto& a = static_cast<const PeerRecord*>(left->payload.get())->raw.nodeStats;
+            const auto& b = static_cast<const PeerRecord*>(right->payload.get())->raw.nodeStats;
+            auto compare = [](const auto& a, const auto& b) { return a < b ? -1 : a > b ? 1 : 0; };
+            int result{0};
+            switch (role) {
+            case PeerListModel::NetNodeId: result=compare(a.nodeid,b.nodeid); break;
+            case PeerListModel::Age: result=compare(b.m_connected,a.m_connected); break;
+            case PeerListModel::Ping: result=compare(a.m_min_ping_time,b.m_min_ping_time); break;
+            case PeerListModel::Sent: result=compare(a.nSendBytes,b.nSendBytes); break;
+            case PeerListModel::Received: result=compare(a.nRecvBytes,b.nRecvBytes); break;
+            default: result=QString::localeAwareCompare(left->values.value(role).toString(),right->values.value(role).toString()); break;
+            }
+            if (!result) result=compare(a.nodeid,b.nodeid);
+            return ascending ? result < 0 : result > 0;
+        }); return rows;
+    }, execution::Lane::Domain);
+    QAbstractProxyModel::setSourceModel(source);
+    connect(peer, &NativeListModel::snapshotReady, this, &PeerListSortProxy::refreshProjection);
+    refreshProjection();
 }
-
-int PeerListSortProxy::RoleNameToRole(const QString & name) const
-{
-    auto role_names = roleNames();
-    auto keys = role_names.keys(name.toUtf8());
-    if (!keys.empty()) {
-        return keys.first();
-    } else {
-        return PeerListModel::NetNodeId;
-    }
+void PeerListSortProxy::refreshProjection() {
+    if (!m_input || stopping()) return;
+    auto* source = qobject_cast<PeerListModel*>(sourceModel());
+    invalidateProjection();
+    { std::lock_guard lock{m_input->mutex}; m_input->source=source ? source->completedSnapshot() : NativeVersionHandle{}; m_input->role=m_sort_role; m_input->ascending=m_sort_ascending;
+      m_input->search=m_search_text; m_input->directions=m_direction_filters; m_input->connections=m_connection_type_filters;
+      m_input->networks=m_network_filters; m_input->transports=m_transport_filters; }
+    refreshNative();
 }
-
-QVariant PeerListSortProxy::data(const QModelIndex& index, int role) const
-{
-    if (role == PeerListModel::StatsRole) {
-        return QVariant::fromValue(peerDetailsAt(index.row()));
-    }
-
-    return QSortFilterProxyModel::data(index, role);
+QModelIndex PeerListSortProxy::mapToSource(const QModelIndex& value) const {
+    const auto row=rowHandle(value); if (!row || !sourceModel()) return {};
+    auto* source=qobject_cast<PeerListModel*>(sourceModel()); return source ? source->index(source->indexForKey(row->key)) : QModelIndex{};
 }
-
-PeerDetailsModel* PeerListSortProxy::peerDetailsAt(int row) const
-{
-    if (row < 0 || row >= rowCount() || !sourceModel()) return nullptr;
-
-    const QModelIndex proxy_index = index(row, 0);
-    const QModelIndex source_index = mapToSource(proxy_index);
-    const qint64 node_id = sourceModel()->data(source_index, PeerListModel::NetNodeId).toLongLong();
-    if (auto existing = m_detail_models.value(node_id)) return existing;
-
-    const auto stats = sourceModel()->data(source_index, PeerListModel::StatsRole)
-        .value<const CNodeCombinedStats*>();
-    auto* peer_model = qobject_cast<PeerListModel*>(sourceModel());
-    if (!stats || !peer_model) return nullptr;
-
-    auto* details = new PeerDetailsModel(stats, peer_model);
-    m_detail_models.insert(node_id, details);
-    connect(details, &PeerDetailsModel::disconnected, this, [this, node_id, details] {
-        if (m_detail_models.value(node_id) == details) m_detail_models.remove(node_id);
-        details->deleteLater();
-    });
+QModelIndex PeerListSortProxy::mapFromSource(const QModelIndex& value) const {
+    auto* source=qobject_cast<PeerListModel*>(sourceModel()); if (!source || value.model()!=source) return {};
+    const auto row=source->rowHandle(value); return row ? index(indexForKey(row->key)) : QModelIndex{};
+}
+QHash<int,QByteArray> PeerListSortProxy::roleNames() const { return sourceModel() ? sourceModel()->roleNames() : QHash<int,QByteArray>{}; }
+int PeerListSortProxy::RoleNameToRole(const QString& name) const { const auto keys=roleNames().keys(name.toUtf8()); return keys.empty()?PeerListModel::NetNodeId:keys.front(); }
+QVariant PeerListSortProxy::data(const QModelIndex& value,int role) const { return role==PeerListModel::StatsRole ? QVariant::fromValue(peerDetailsAt(value.row())) : NativeListModel::data(value,role); }
+PeerDetailsModel* PeerListSortProxy::peerDetailsAt(int position) const {
+    const auto row=rowHandle(index(position)); auto* source=qobject_cast<PeerListModel*>(sourceModel()); if (!row || !source || !m_details) return nullptr;
+    const auto* original=static_cast<const PeerRecord*>(row->payload.get());
+    const auto source_row=source->rowForKey(row->key); if (!source_row) return nullptr;
+    const auto* record=static_cast<const PeerRecord*>(source_row->payload.get());
+    if (!SamePeerConnection(original->connection,record->connection)) return nullptr;
+    const auto id=record->connection.key;
+    if (auto existing=m_details->models.value(id); existing && existing->connected()) return existing;
+    auto* details=new PeerDetailsModel(PeerStatsHandle{source_row,&record->raw},source); m_details->models.insert(id,details);
+    connect(details,&PeerDetailsModel::disconnected,this,[this,id,details] { if(m_details && m_details->models.value(id)==details)m_details->models.remove(id); details->deleteLater(); });
+    connect(details,&QObject::destroyed,this,[this,id,details] { if(m_details && m_details->models.value(id)==details)m_details->models.remove(id); });
     return details;
 }
-
-int PeerListSortProxy::indexOfNodeId(qint64 node_id) const
-{
-    for (int row = 0; row < rowCount(); ++row) {
-        if (QSortFilterProxyModel::data(index(row, 0), PeerListModel::NetNodeId).toLongLong() == node_id) {
-            return row;
-        }
-    }
-    return -1;
-}
-
-QString PeerListSortProxy::sortBy() const
-{
-    return m_sort_by;
-}
-
-void PeerListSortProxy::setSortBy(const QString & roleName)
-{
-    if (m_sort_by == roleName) return;
-
-    m_sort_by = roleName;
-    m_sort_role = RoleNameToRole(roleName);
-    setSortRole(m_sort_role);
-    sort(0, m_sort_ascending ? Qt::AscendingOrder : Qt::DescendingOrder);
-    Q_EMIT sortByChanged(roleName);
-}
-
-void PeerListSortProxy::setSortAscending(bool ascending)
-{
-    if (m_sort_ascending == ascending) return;
-    m_sort_ascending = ascending;
-    sort(0, m_sort_ascending ? Qt::AscendingOrder : Qt::DescendingOrder);
-    Q_EMIT sortAscendingChanged(ascending);
-}
-
-void PeerListSortProxy::setSearchText(const QString& search_text)
-{
-    if (m_search_text == search_text) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_search_text = search_text;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT searchTextChanged(search_text);
-}
-
-void PeerListSortProxy::setDirectionFilters(const QStringList& filters)
-{
-    if (m_direction_filters == filters) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_direction_filters = filters;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT directionFiltersChanged(filters);
-}
-
-void PeerListSortProxy::setConnectionTypeFilters(const QStringList& filters)
-{
-    if (m_connection_type_filters == filters) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_connection_type_filters = filters;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT connectionTypeFiltersChanged(filters);
-}
-
-void PeerListSortProxy::setNetworkFilters(const QStringList& filters)
-{
-    if (m_network_filters == filters) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_network_filters = filters;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT networkFiltersChanged(filters);
-}
-
-void PeerListSortProxy::setTransportFilters(const QStringList& filters)
-{
-    if (m_transport_filters == filters) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_transport_filters = filters;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT transportFiltersChanged(filters);
-}
-
-bool PeerListSortProxy::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const
-{
-    if (!sourceModel()) return false;
-    const QModelIndex source_index = sourceModel()->index(source_row, 0, source_parent);
-    const auto* stats = sourceModel()->data(source_index, PeerListModel::StatsRole)
-        .value<const CNodeCombinedStats*>();
-    if (!stats) return false;
-
-    if (!m_direction_filters.isEmpty() && !m_direction_filters.contains(DirectionKey(stats->nodeStats))) return false;
-    if (!m_connection_type_filters.isEmpty()
-        && !m_connection_type_filters.contains(ConnectionTypeKey(stats->nodeStats.m_conn_type))) return false;
-    if (!m_network_filters.isEmpty() && !m_network_filters.contains(NetworkKey(stats->nodeStats.m_network))) return false;
-    if (!m_transport_filters.isEmpty()
-        && !m_transport_filters.contains(TransportKey(stats->nodeStats.m_transport_type))) return false;
-
-    const QString needle = m_search_text.trimmed();
-    if (needle.isEmpty()) return true;
-
-    const QList<int> searchable_roles{
-        PeerListModel::NetNodeId,
-        PeerListModel::Address,
-        PeerListModel::Direction,
-        PeerListModel::ConnectionType,
-        PeerListModel::Network,
-        PeerListModel::Transport,
-        PeerListModel::Subversion,
-        PeerListModel::Sent,
-        PeerListModel::Received,
-    };
-    for (const int role : searchable_roles) {
-        if (sourceModel()->data(source_index, role).toString().contains(needle, Qt::CaseInsensitive)) return true;
-    }
-    return false;
-}
-
-bool PeerListSortProxy::lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const
-{
-    const CNodeStats left_stats = Assert(sourceModel()->data(left_index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>())->nodeStats;
-    const CNodeStats right_stats = Assert(sourceModel()->data(right_index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>())->nodeStats;
-
-    switch (m_sort_role) {
-    case PeerListModel::NetNodeId:
-        return left_stats.nodeid < right_stats.nodeid;
-    case PeerListModel::Age:
-        return left_stats.m_connected > right_stats.m_connected;
-    case PeerListModel::Address:
-        return sourceModel()->data(left_index, m_sort_role).toString().localeAwareCompare(
-            sourceModel()->data(right_index, m_sort_role).toString()) < 0;
-    case PeerListModel::Direction:
-    case PeerListModel::ConnectionType:
-    case PeerListModel::Network:
-        return sourceModel()->data(left_index, m_sort_role).toString().localeAwareCompare(
-            sourceModel()->data(right_index, m_sort_role).toString()) < 0;
-    case PeerListModel::Ping:
-        return left_stats.m_min_ping_time < right_stats.m_min_ping_time;
-    case PeerListModel::Sent:
-        return left_stats.nSendBytes < right_stats.nSendBytes;
-    case PeerListModel::Received:
-        return left_stats.nRecvBytes < right_stats.nRecvBytes;
-    case PeerListModel::Subversion:
-    case PeerListModel::Transport:
-        return sourceModel()->data(left_index, m_sort_role).toString().localeAwareCompare(
-            sourceModel()->data(right_index, m_sort_role).toString()) < 0;
-    }
-    return false;
-}
+int PeerListSortProxy::indexOfNodeId(qint64 id) const { return indexForKey(QString::number(id)); }
+QString PeerListSortProxy::sortBy() const { return m_sort_by; }
+void PeerListSortProxy::setSortBy(const QString& value) { if (m_sort_by==value || stopping()) return; m_sort_by=value; m_sort_role=RoleNameToRole(value); refreshProjection(); Q_EMIT sortByChanged(value); }
+void PeerListSortProxy::setSortAscending(bool value) { if (m_sort_ascending==value || stopping()) return; m_sort_ascending=value; refreshProjection(); Q_EMIT sortAscendingChanged(value); }
+void PeerListSortProxy::setSearchText(const QString& value) { if (m_search_text==value || stopping()) return; m_search_text=value; refreshProjection(); Q_EMIT searchTextChanged(value); }
+void PeerListSortProxy::setDirectionFilters(const QStringList& value) { if (m_direction_filters==value || stopping()) return; m_direction_filters=value; refreshProjection(); Q_EMIT directionFiltersChanged(value); }
+void PeerListSortProxy::setConnectionTypeFilters(const QStringList& value) { if (m_connection_type_filters==value || stopping()) return; m_connection_type_filters=value; refreshProjection(); Q_EMIT connectionTypeFiltersChanged(value); }
+void PeerListSortProxy::setNetworkFilters(const QStringList& value) { if (m_network_filters==value || stopping()) return; m_network_filters=value; refreshProjection(); Q_EMIT networkFiltersChanged(value); }
+void PeerListSortProxy::setTransportFilters(const QStringList& value) { if (m_transport_filters==value || stopping()) return; m_transport_filters=value; refreshProjection(); Q_EMIT transportFiltersChanged(value); }

@@ -3,113 +3,65 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Layouts 1.15
-import "../../controls"
+import org.bitcoincore.qt 1.0
 import "../../components"
 
 OnboardingView {
     id: root
+    readonly property ExternalSignerWalletFields fieldsView: root.loadedChildView as ExternalSignerWalletFields
     objectName: "externalSignerWalletFormPage"
     showNavigationBar: false
     usesSharedNavigation: true
 
     property bool modalView: false
     property string defaultWalletName: ""
-    property string nameError: ""
-    property bool submitted: false
-    readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
-    readonly property bool canCreate: walletController.initialized
-        && walletController.canCreateExternalSignerWallet
-        && !creatingWallet && loadedChildView
-        && loadedChildView.walletName.trim().length > 0
+    property WalletCreationModel editor: ApplicationModels.walletController.newCreation()
+    property WalletOperationModel operation: editor ? editor.operation : null
+    readonly property string nameError: editor ? editor.name.error : qsTr("Wallet creation is unavailable.")
+    readonly property bool creatingWallet: operation && operation.busy
+    readonly property bool canCreate: editor && editor.canCreate && !creatingWallet
 
     signal cancel()
-    signal created(var wallet)
+    signal operationSubmitted(WalletOperationModel operation)
 
     function submit() {
         if (!canCreate) return
-        nameError = walletController.walletNameAvailabilityError(loadedChildView.walletName)
-        if (nameError.length > 0) return
-        submitted = true
-        if (!walletController.createExternalSignerWallet(loadedChildView.walletName.trim()))
-            submitted = false
+        const accepted = editor.create("", "")
+        if (accepted) operationSubmitted(accepted)
     }
 
     title: ""
     heading: qsTr("External signer wallet")
-    subheading: walletController.externalSignerError.length > 0
-        ? walletController.externalSignerError
-        : walletController.externalSignerName.length > 0
-          ? qsTr("Connected signer: %1").arg(walletController.externalSignerName)
+    subheading: ApplicationModels.walletController.externalSignerError.length > 0
+        ? ApplicationModels.walletController.externalSignerError
+        : ApplicationModels.walletController.externalSignerName.length > 0
+          ? qsTr("Connected signer: %1").arg(ApplicationModels.walletController.externalSignerName)
           : qsTr("Connect one external signer to continue.")
     maximumContentWidth: 800
     showBackButton: !creatingWallet && navigationStack && navigationStack.depth > 1
     showCloseButton: modalView && !creatingWallet
-    primaryButtonText: creatingWallet ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creatingWallet ? qsTr("Creating…") : editor && editor.pendingValidation ? qsTr("Checking…") : qsTr("Create wallet")
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
 
     Component.onCompleted: {
-        walletController.clearWalletLoadStatus()
-        walletController.refreshExternalSignerStatus()
+        if (editor) {
+            editor.chooseKind(WalletCreationModel.ExternalSigner)
+            editor.name.edit(defaultWalletName)
+        }
+        ApplicationModels.walletController.refreshExternalSignerStatus()
+    }
+    Component.onDestruction: if (editor) editor.discard()
+
+    childView: ExternalSignerWalletFields {
+        defaultWalletName: root.defaultWalletName
+        nameError: root.nameError
+        creatingWallet: root.creatingWallet
+        operation: root.operation
+        submissionError: root.editor ? root.editor.error.message : ""
+        onNameIntent: function(value) { if (root.editor) root.editor.name.edit(value) }
     }
 
-    Connections {
-        target: walletController
-        function onWalletLoadSucceeded(wallet) {
-            if (!root.submitted) return
-            root.submitted = false
-            root.created(wallet)
-        }
-        function onWalletLoadErrorChanged() {
-            if (root.submitted && walletController.walletLoadError.length > 0)
-                root.submitted = false
-        }
-    }
-
-    childView: ColumnLayout {
-        id: fields
-        property alias walletName: nameEntry.text
-        spacing: 20
-
-        CoreText {
-            Layout.fillWidth: true
-            text: qsTr("This wallet stores public descriptors on this computer and uses your external signer for addresses and signing.")
-            color: Theme.color.neutral7
-            textStyle: Theme.text.body
-            wrap: true
-            horizontalAlignment: Text.AlignLeft
-        }
-
-        LabeledTextField {
-            id: nameEntry
-            objectName: "externalWalletNameEntry"
-            Layout.fillWidth: true
-            label: qsTr("Wallet name")
-            fieldObjectName: "externalWalletNameInput"
-            placeholderText: qsTr("e.g. Hardware wallet")
-            text: root.defaultWalletName
-            supportingText: qsTr("You cannot change this later.")
-            fieldSurface: true
-            fieldBackgroundColor: Theme.color.surface2
-            enabled: !root.creatingWallet
-            onTextEdited: {
-                root.nameError = ""
-                walletController.clearWalletLoadStatus()
-            }
-        }
-
-        CoreText {
-            objectName: "externalWalletNameError"
-            Layout.fillWidth: true
-            visible: text.length > 0
-            text: root.nameError.length > 0 ? root.nameError : walletController.walletLoadError
-            color: Theme.color.dangerText
-            textStyle: Theme.text.caption
-            wrap: true
-            horizontalAlignment: Text.AlignLeft
-        }
-    }
 }

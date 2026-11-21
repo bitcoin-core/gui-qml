@@ -32,6 +32,9 @@ DialogPopup {
         : Theme.color.neutral9
     property string errorText: ""
     property string errorTextObjectName: "alertErrorText"
+    property var errorDetailsModel: null
+    property bool showErrorDetails: false
+    onErrorTextChanged: showErrorDetails = false
     // Extra controls between the message and the actions, such as a field.
     property alias content: contentColumn.data
     default property alias actions: actionStore.data
@@ -99,7 +102,7 @@ DialogPopup {
     function focusAction(action, reason) {
         const index = visibleActions.indexOf(action)
         const delegate = index >= 0 ? actionRepeater.itemAt(index) : null
-        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason)
+        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason) // qmllint disable missing-property
     }
 
     function cancelAction() {
@@ -129,7 +132,7 @@ DialogPopup {
         const window = contentItem ? contentItem.Window.window : null
         const focused = window ? window.activeFocusItem : null
         // Check boxes and switches ignore Return; it shouldn't submit past them.
-        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return
+        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return // qmllint disable missing-property
         const action = acceptAction()
         if (action) trigger(action)
     }
@@ -257,6 +260,33 @@ DialogPopup {
                 wrapMode: Text.WordWrap
                 horizontalAlignment: root.messageAlignment
             }
+
+            TextButton {
+                objectName: root.errorTextObjectName + "DetailsButton"
+                visible: root.errorText.length > 0 && root.errorDetailsModel !== null
+                text: root.showErrorDetails ? qsTr("Hide details") : qsTr("Show details")
+                onClicked: root.showErrorDetails = !root.showErrorDetails
+            }
+
+            ListView {
+                id: errorDetails
+                objectName: root.errorTextObjectName + "Details"
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 120 : 0
+                visible: root.showErrorDetails && root.errorText.length > 0 && root.errorDetailsModel !== null
+                model: root.errorDetailsModel
+                clip: true
+                reuseItems: true
+                cacheBuffer: 0
+                delegate: CoreText {
+                    required property string content
+                    width: errorDetails.width
+                    text: content
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                    textStyle: Theme.text.description
+                }
+            }
         }
 
         Separator {
@@ -300,6 +330,7 @@ DialogPopup {
                         : Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
                     height: Theme.size.controlLarge
 
+                    enabled: alertAction.enabled
                     function triggerAction() {
                         root.trigger(alertAction)
                     }

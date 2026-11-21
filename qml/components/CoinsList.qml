@@ -16,8 +16,9 @@ ColumnLayout {
     // picking coins to send.
     property bool hidesAmounts: false
     property bool walletSelectionActive: false
-    property var markedIds: []
-    property string errorText: ""
+    readonly property int markedCount: coins ? coins.markedCount : 0
+    property string admissionError: ""
+    readonly property string errorText: admissionError.length > 0 ? admissionError : (coins ? (coins.lockError.length > 0 ? coins.lockError : coins.readError) : "")
     property string pendingLockedCoinId: ""
     property string contextCoinId: ""
     property bool contextCoinLocked: false
@@ -31,36 +32,31 @@ ColumnLayout {
     readonly property real changeAmount: Math.max(0, selectedAmount - target)
     readonly property int activeFilterCount: !coins ? 0 : (coins.filter !== "all" ? 1 : 0) + (coins.minAmount >= 0 || coins.maxAmount >= 0 ? 1 : 0)
     spacing: Theme.space.l
-    onWalletChanged: { markedIds = []; walletSelectionActive = false; pendingLockedCoinId = ""; errorText = "" }
+    onWalletChanged: { if (coins) coins.clearMarks(); walletSelectionActive = false; pendingLockedCoinId = ""; admissionError = "" }
 
-    BitcoinAmount { id: targetAmount; unit: optionsModel.displayUnit; satoshi: root.target }
-    BitcoinAmount { id: selectedAmountText; unit: optionsModel.displayUnit; satoshi: root.selectedAmount }
-    BitcoinAmount { id: remainingAmountText; unit: optionsModel.displayUnit; satoshi: root.remainingAmount }
-    BitcoinAmount { id: changeAmountText; unit: optionsModel.displayUnit; satoshi: root.changeAmount }
-    BitcoinAmount { id: totalAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
-    BitcoinAmount { id: spendableAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lockedAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lowerAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
-    BitcoinAmount { id: upperAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.upperValue }
+    BitcoinAmount { id: targetAmount; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.target }
+    BitcoinAmount { id: selectedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.selectedAmount }
+    BitcoinAmount { id: remainingAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.remainingAmount }
+    BitcoinAmount { id: changeAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.changeAmount }
+    BitcoinAmount { id: totalAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
+    BitcoinAmount { id: spendableAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lockedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lowerAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
+    BitcoinAmount { id: upperAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.upperValue }
 
     function toggleRow(row, coinId, locked, marked) {
         if (selectionMode && locked && !marked) {
             pendingLockedCoinId = coinId
             lockedCoinAlert.open()
         } else if (selectionMode) coins.toggleCoinSelection(row)
-        else if (walletSelectionActive) {
-            const ids = markedIds.slice()
-            const i = ids.indexOf(coinId)
-            if (i < 0) ids.push(coinId); else ids.splice(i, 1)
-            markedIds = ids
-        }
+        else if (walletSelectionActive)
+            admissionError = coins.toggleMarkById(coinId) ? "" : qsTr("This coin could not be marked. Try again.")
     }
     function lockMarked(locked) {
-        errorText = coins.setCoinsLocked(markedIds, locked) ? "" : qsTr("Some coins could not be updated. Try again.")
-        markedIds = []
+        admissionError = coins.lockMarkedCoins(locked) ? "" : qsTr("Some coins could not be updated. Try again.")
     }
     function setCoinLocked(coinId, locked) {
-        errorText = coins.setCoinsLocked([coinId], locked) ? "" : qsTr("This coin could not be updated. Try again.")
+        admissionError = coins.setCoinsLocked([coinId], locked) ? "" : qsTr("This coin could not be updated. Try again.")
     }
     function openMenu(menu, button) {
         menu.openBelow(button, Theme.space.s)
@@ -118,7 +114,8 @@ ColumnLayout {
             Accessible.checked: root.walletSelectionActive
             onClicked: {
                 root.walletSelectionActive = !root.walletSelectionActive
-                if (!root.walletSelectionActive) root.markedIds = []
+                if (!root.walletSelectionActive && root.coins)
+                    root.admissionError = root.coins.clearMarks() ? "" : qsTr("Coin marks could not be cleared. Try again.")
             }
         }
     }
@@ -188,12 +185,13 @@ ColumnLayout {
             required property var date
             required property bool locked
             required property bool selected
+            required property bool walletMarked
             required property bool groupFirst
             required property bool groupLast
             property int surfaceLevel: root.selectionMode ? 1 : 0
             property bool suppressNextRowClick: false
             objectName: "coinSelectionItem_" + index
-            readonly property bool marked: root.selectionMode ? selected : root.markedIds.indexOf(coinId) >= 0
+            readonly property bool marked: root.selectionMode ? selected : walletMarked
             width: list.width
             implicitHeight: Math.max(implicitContentHeight + 2 * Theme.space.ml,
                 root.coins && root.coins.groupBy === "address"
@@ -222,7 +220,7 @@ ColumnLayout {
                 }
             }
             Accessible.name: (label.length ? label + " " : "") + address + " "
-                + (root.hidesAmounts && optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
+                + (root.hidesAmounts && ApplicationModels.optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
             Accessible.checkable: root.selectionMode || root.walletSelectionActive
             Accessible.checked: marked
             background: GroupedRowBackground {
@@ -237,7 +235,7 @@ ColumnLayout {
                 dividerLeftInset: coinRow.leftPadding
                 dividerRightInset: coinRow.rightPadding
             }
-            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }
+            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: ApplicationModels.optionsModel.displayUnit }
             contentItem: RowLayout {
                 spacing: 0
                 Item {
@@ -281,7 +279,7 @@ ColumnLayout {
                         CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.subheading; wrap: false; elide: Text.ElideRight }
                     }
                     CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.monoCaption; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
-                    CoreText { Layout.fillWidth: true; text: coinRow.date ? new Date(coinRow.date).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
+                    CoreText { objectName: "coinLocalizedDateTime"; Layout.fillWidth: true; text: Qt.formatDateTime(coinRow.date, Qt.locale(), Locale.ShortFormat); horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
                 }
                 RowLayout {
                     spacing: Theme.space.s
@@ -330,9 +328,9 @@ ColumnLayout {
     RowLayout {
         visible: !root.selectionMode && root.walletSelectionActive
         Layout.fillWidth: true
-        CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description }
-        NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
-        NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
+        CoreText { text: qsTr("%1 selected").arg(root.markedCount); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description }
+        NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedCount > 0 && root.coins && !root.coins.marksPending && !root.coins.lockPending; onClicked: root.lockMarked(true) }
+        NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedCount > 0 && root.coins && !root.coins.marksPending && !root.coins.lockPending; onClicked: root.lockMarked(false) }
     }
     CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; textStyle: Theme.text.caption; horizontalAlignment: Text.AlignLeft }
 
@@ -372,12 +370,6 @@ ColumnLayout {
     ContextMenu {
         id: amountPopup; parent: Overlay.overlay; objectName: "coinBrowserAmountFilterPopup"
         implicitWidth: Math.min(320, root.width)
-        onAboutToShow: {
-            const low = root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0
-            const high = root.coins && root.coins.availableMaxAmount !== undefined ? root.coins.availableMaxAmount : 0
-            amountSlider.setValues(root.coins && root.coins.minAmount >= 0 ? root.coins.minAmount : low,
-                                   root.coins && root.coins.maxAmount >= 0 ? root.coins.maxAmount : high)
-        }
         ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: Theme.space.ml
@@ -385,9 +377,13 @@ ColumnLayout {
             BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); hidesAmount: root.hidesAmounts; textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
-                valuesHidden: root.hidesAmounts && optionsModel.hideAmounts
-                minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0
-                maxValue: root.coins && root.coins.availableMaxAmount !== undefined ? root.coins.availableMaxAmount : 0
+                valuesHidden: root.hidesAmounts && ApplicationModels.optionsModel.hideAmounts
+                minValue: root.coins ? Math.min(root.coins.availableMinAmount,
+                                               root.coins.minAmount < 0 ? root.coins.availableMinAmount : root.coins.minAmount,
+                                               root.coins.maxAmount < 0 ? root.coins.availableMinAmount : root.coins.maxAmount) : 0
+                maxValue: root.coins ? Math.max(root.coins.availableMaxAmount, root.coins.minAmount, root.coins.maxAmount) : 0
+                selectedLower: root.coins && root.coins.minAmount >= 0 ? root.coins.minAmount : minValue
+                selectedUpper: root.coins && root.coins.maxAmount >= 0 ? root.coins.maxAmount : maxValue
                 Accessible.name: qsTr("Coin amount range")
                 first.onMoved: if (root.coins) root.coins.minAmount = Math.round(lowerValue)
                 second.onMoved: if (root.coins) root.coins.maxAmount = Math.round(upperValue)
@@ -430,7 +426,7 @@ ColumnLayout {
                 const coinId = root.pendingLockedCoinId
                 root.pendingLockedCoinId = ""
                 if (coinId.length && root.coins && !root.coins.toggleCoinSelectionById(coinId)) {
-                    root.errorText = qsTr("This coin is no longer available. Try again.")
+                    root.admissionError = qsTr("This coin is no longer available. Try again.")
                 }
             }
         }

@@ -3,19 +3,38 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
+import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
     id: root
     property var details: ({})
+    property var activityModel: null
+    property double copyTicket: 0
+    property string copyTransactionId: ""
+    property string copyError: ""
+    readonly property bool copyPending: copyTicket !== 0
+    readonly property string detailTransactionId: details.txid || ""
+    onDetailTransactionIdChanged: { copyTicket = 0; copyError = "" }
+    onActivityModelChanged: { copyTicket = 0; copyError = "" }
+    onEnabledChanged: if (!enabled) { copyTicket = 0; copyError = "" }
+    onVisibleChanged: if (!visible) { copyTicket = 0; copyError = "" }
+    Connections {
+        target: root.activityModel
+        function onCopyFinished(ticket, copied, error) {
+            if (!root.copyTicket || ticket !== root.copyTicket || root.copyTransactionId !== root.details.txid) return
+            root.copyTicket = 0
+            root.copyError = copied ? "" : error
+            if (copied && root.visible) rawCopy.acknowledgeCopy()
+        }
+    }
     property bool showTransactionId: true
     property bool showBlock: true
     property bool showRawTransaction: true
     property bool hidesAmounts: false
-    readonly property bool amountsHidden: hidesAmounts && optionsModel.hideAmounts
+    readonly property bool amountsHidden: hidesAmounts && ApplicationModels.optionsModel.hideAmounts
     readonly property var flow: details.flow || ({})
     readonly property bool coinbase: !!flow.coinbase
     readonly property string unavailable: qsTr("Unavailable")
@@ -106,26 +125,53 @@ ColumnLayout {
             titleTextStyle: Theme.text.caption
             showDivider: false
             trailingItem: CopyButton {
+                id: rawCopy
                 objectName: "transactionRawCopyButton"
-                enabled: !!root.details.rawTransaction
-                onCopyRequested: Clipboard.setText(root.details.rawTransaction || "")
+                autoAcknowledge: false
+                enabled: root.enabled && !!root.details.rawAvailable && !!root.activityModel && !root.copyPending
+                onCopyRequested: {
+                    root.copyError = ""
+                    root.copyTransactionId = root.details.txid
+                    root.copyTicket = root.activityModel.requestCopyRawTransaction(root.copyTransactionId)
+                    if (!root.copyTicket) root.copyError = qsTr("The raw transaction could not be copied.")
+                }
             }
-            bodyItem: ScrollView {
-                id: rawScroll
-                objectName: "transactionRawScroll"
+            bodyItem: ColumnLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(180, Math.max(24, rawText.contentHeight))
-                clip: true
-                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                SelectableText {
-                    id: rawText
-                    objectName: "transactionRawText"
-                    width: rawScroll.availableWidth
-                    text: root.visible ? root.details.rawTransaction || "" : ""
-                    placeholderText: root.unavailable
-                    wrapMode: TextEdit.WrapAnywhere
-                    textStyle: Theme.text.monoCaption
-                    Accessible.name: qsTr("Raw transaction")
+                CoreText {
+                    visible: root.copyError.length > 0
+                    Layout.fillWidth: true
+                    text: root.copyError
+                    color: Theme.color.dangerText
+                    textStyle: Theme.text.caption
+                    wrap: true
+                }
+                ListView {
+                    id: rawScroll
+                    objectName: "transactionRawScroll"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.details.rawAvailable ? 180 : 24
+                    clip: true
+                    model: root.visible && root.activityModel ? root.activityModel.rawTransactionLines : null
+                    cacheBuffer: 0
+                    reuseItems: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: SelectableText {
+                        required property string content
+                        objectName: "transactionRawText"
+                        width: rawScroll.width
+                        text: content
+                        wrapMode: TextEdit.WrapAnywhere
+                        textStyle: Theme.text.monoCaption
+                        Accessible.name: qsTr("Raw transaction")
+                    }
+                    CoreText {
+                        visible: !root.details.rawAvailable
+                        text: root.unavailable
+                        color: Theme.color.neutral6
+                        textStyle: Theme.text.monoCaption
+                    }
                 }
             }
         }

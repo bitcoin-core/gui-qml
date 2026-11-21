@@ -15,8 +15,10 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+#include <QTemporaryFile>
 #include <QUrl>
 
 #include <string>
@@ -35,6 +37,30 @@ QString CleanComparablePath(const QString& path)
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
     return normalized.isEmpty() ? QString{} : QDir::cleanPath(normalized);
 }
+
+bool HasReadablePreferencesSource(const QSettings& settings)
+{
+    bool ini = settings.format() == QSettings::IniFormat;
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
+    ini = ini || settings.format() == QSettings::NativeFormat;
+#endif
+    if (!ini || !QFileInfo::exists(settings.fileName())) return true;
+    // Qt shares a parsed INI cache across instances but does not retain its
+    // FormatError in every later instance. Ask Qt's own parser to validate a
+    // bounded, uniquely named snapshot so repeated startup reads cannot turn
+    // a malformed present preference into an absent/default preference.
+    constexpr qint64 MAX_PREFERENCE_BYTES{1024 * 1024};
+    QFile source{settings.fileName()};
+    if (!source.open(QIODevice::ReadOnly)) return false;
+    const auto bytes = source.read(MAX_PREFERENCE_BYTES + 1);
+    if (source.error() != QFileDevice::NoError || bytes.size() > MAX_PREFERENCE_BYTES) return false;
+    QTemporaryFile snapshot;
+    if (!snapshot.open() || snapshot.write(bytes) != bytes.size() || !snapshot.flush()) return false;
+    QSettings parsed{snapshot.fileName(), QSettings::IniFormat};
+    parsed.setFallbacksEnabled(false);
+    (void)parsed.allKeys();
+    return parsed.status() == QSettings::NoError;
+}
 } // namespace
 
 namespace QmlDataDir {
@@ -42,6 +68,14 @@ namespace QmlDataDir {
 QString DefaultDataDirString()
 {
     return QString::fromStdString(GetDefaultDataDir().utf8string());
+}
+
+QString DisplayPath(QString path)
+{
+#ifdef __ANDROID__
+    path.replace("content://com.android.externalstorage.documents/tree/primary%3A", "/storage/self/primary/");
+#endif
+    return path;
 }
 
 QString NormalizeLocalPath(QString path)
@@ -61,28 +95,34 @@ fs::path QStringToPath(const QString& path)
     return fs::u8path(path.toStdString());
 }
 
-GuiDataDir ReadGuiDataDirWithSource()
+GuiDataDir ReadGuiDataDirWithSource(const UiPreferencesNamespace* identity)
 {
-    QSettings settings;
+    const auto owner=OpenPreferences(identity?*identity:UiPreferencesNamespace::Capture());QSettings& settings=*owner;
     const QString default_dir = DefaultDataDirString();
+    settings.sync();
+    if (!HasReadablePreferencesSource(settings) || settings.status() != QSettings::NoError)
+        return {{}, GuiDataDirSource::Invalid, DataDirTr("The saved data directory preference could not be read. Its source has been retained; restore access and retry startup.")};
     if (settings.contains(SettingsKeys::DATA_DIR)) {
-        const QString data_dir = NormalizeLocalPath(settings.value(SettingsKeys::DATA_DIR, default_dir).toString());
-        if (data_dir.isEmpty() || IsDefaultDataDir(data_dir)) {
-            return {default_dir, GuiDataDirSource::Default};
+        const QVariant stored = settings.value(SettingsKeys::DATA_DIR);
+        if (stored.metaType().id() != QMetaType::QString || stored.toString().trimmed().isEmpty())
+            return {{}, GuiDataDirSource::Invalid, DataDirTr("The saved data directory preference is invalid. Its source has been retained; correct the preference before retrying startup.")};
+        const QString data_dir = NormalizeLocalPath(stored.toString());
+        if (IsDefaultDataDir(data_dir)) {
+            return {default_dir, GuiDataDirSource::Default, {}, true};
         }
-        return {data_dir, GuiDataDirSource::Settings};
+        return {data_dir, GuiDataDirSource::Settings, {}, true};
     }
 
     const QString legacy_data_dir = NormalizeLocalPath(QmlLegacySettings::ReadLegacyGuiDataDir());
     if (!legacy_data_dir.isEmpty()) {
         if (IsDefaultDataDir(legacy_data_dir)) {
-            return {default_dir, GuiDataDirSource::Default};
+            return {default_dir, GuiDataDirSource::Default, {}};
         }
-        return {legacy_data_dir, GuiDataDirSource::LegacySettings};
+        return {legacy_data_dir, GuiDataDirSource::LegacySettings, {}};
     }
 
     const QString data_dir = NormalizeLocalPath(settings.value(SettingsKeys::DATA_DIR, default_dir).toString());
-    return {data_dir.isEmpty() ? default_dir : data_dir, GuiDataDirSource::Default};
+    return {data_dir.isEmpty() ? default_dir : data_dir, GuiDataDirSource::Default, {}};
 }
 
 QString ReadGuiDataDir()
@@ -202,13 +242,15 @@ bool EnsureDataDir(const QString& path, QString* error)
 }
 
 namespace {
-bool SaveDataDirSelection(const QString& local_path, QString* error)
+bool SaveDataDirSelection(const QString& local_path, QString* error, bool consume_legacy, const UiPreferencesNamespace* identity)
 {
-    QSettings settings;
+    const auto cleanup=consume_legacy?QmlLegacySettings::CaptureLegacyGuiDataDir():nullptr;
+    const auto owner=OpenPreferences(identity?*identity:UiPreferencesNamespace::Capture());QSettings& settings=*owner;
     const QVariant old_path = settings.value(SettingsKeys::DATA_DIR);
     const QVariant old_reset = settings.value(RESET_GUI_SETTINGS_KEY);
-    if (IsDefaultDataDir(local_path)) settings.remove(SettingsKeys::DATA_DIR);
-    else settings.setValue(SettingsKeys::DATA_DIR, local_path);
+    // An explicit default remains a valid historical path value. Retain it
+    // across restart so obsolete legacy fallback cannot retarget this choice.
+    settings.setValue(SettingsKeys::DATA_DIR, local_path);
     settings.setValue(RESET_GUI_SETTINGS_KEY, false);
     settings.sync();
     if (settings.status() != QSettings::NoError) {
@@ -220,63 +262,66 @@ bool SaveDataDirSelection(const QString& local_path, QString* error)
         if (error) *error = QObject::tr("Unable to save the selected data directory.");
         return false;
     }
-    QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
+    // Known successful replacement remains known even if obsolete-source
+    // cleanup cannot be confirmed. Onboarding owns its separate typed receipt.
     if (error) error->clear();
+    if (consume_legacy) QmlLegacySettings::CompleteLegacyGuiDataDir(cleanup,error);
     return true;
 }
 } // namespace
 
-bool PersistGuiDataDirSelection(const QString& path, QString* error)
+bool PersistGuiDataDirSelection(const QString& path, QString* error, bool consume_legacy, const UiPreferencesNamespace* identity)
 {
     const QString local_path = NormalizeLocalPath(path);
-    return EnsureDataDir(local_path, error) && SaveDataDirSelection(local_path, error);
+    return EnsureDataDir(local_path, error) && SaveDataDirSelection(local_path, error, consume_legacy, identity);
 }
 
-bool PersistDefaultDataDirSelection(QString* error)
+bool PersistDefaultDataDirSelection(QString* error, bool consume_legacy, const UiPreferencesNamespace* identity)
 {
-    return SaveDataDirSelection(DefaultDataDirString(), error);
+    return SaveDataDirSelection(DefaultDataDirString(), error, consume_legacy, identity);
 }
 
 bool ResetGuiSettings(ArgsManager& args, QString* error)
 {
     if (error) error->clear();
 
-    QSettings settings;
-    settings.clear();
-    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
-
     try {
         SelectParams(args.GetChainType());
         args.SelectConfigNetwork(args.GetChainTypeString());
-        QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(args.GetChainTypeString()));
     } catch (const std::exception& e) {
         if (error) *error = QString::fromStdString(e.what());
         return false;
     }
 
     fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path) || !fs::exists(settings_path)) {
-        return true;
+    if (args.GetSettingsPath(&settings_path) && fs::exists(settings_path)) {
+        std::vector<std::string> settings_errors;
+        if (!args.ReadSettingsFile(&settings_errors)) {
+            if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
+            return false;
+        }
+        if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
+            if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
+            return false;
+        }
+        args.LockSettings([](common::Settings& settings) {
+            settings.rw_settings.clear();
+        });
+        settings_errors.clear();
+        if (!args.WriteSettingsFile(&settings_errors)) {
+            if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
+            return false;
+        }
     }
-
-    std::vector<std::string> settings_errors;
-    if (!args.ReadSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
+    QSettings settings;
+    settings.clear();
+    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        if (error) *error = DataDirTr("The reset settings were saved, but GUI preference cleanup could not be confirmed.");
         return false;
     }
-    if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
-        return false;
-    }
-    args.LockSettings([](common::Settings& settings) {
-        settings.rw_settings.clear();
-    });
-    settings_errors.clear();
-    if (!args.WriteSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
-        return false;
-    }
-    return true;
+    return QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(args.GetChainTypeString()), error);
 }
 
 bool HasExplicitDataDirArg(const ArgsManager& args)

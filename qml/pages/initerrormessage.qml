@@ -3,40 +3,55 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 import "../controls"
 
-// Shown for errors before any other window exists, so it hosts the alert in
-// its own window.
+// Shown for errors before any other window exists. The summary follows the
+// startup diagnostics projection, which can still change after the window opens.
 ApplicationWindow {
     id: root
-    // The engine sets the `message` context property. AlertPopup has its own
-    // `message`, which would bind to itself.
-    readonly property string errorMessage: message
-
+    property bool showCompleteDiagnostics: false
     visible: true
     title: qsTr("Bitcoin Core App")
-    width: 500
-    height: Math.max(250, errorAlert.implicitHeight + 80)
     minimumWidth: 500
-    minimumHeight: 250
+    minimumHeight: showCompleteDiagnostics ? 520 : 250
     color: Theme.color.background
+    ColumnLayout {
+        spacing: Theme.space.xxl
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(root.width - 56, 640)
 
-    AlertPopup {
-        id: errorAlert
-        objectName: "initErrorPopup"
-        dim: false
-        title: qsTr("There was an issue starting up")
-        message: root.errorMessage
-        messageObjectName: "initErrorMessage"
-        messageTextFormat: Text.PlainText
-
-        AlertAction {
-            text: qsTr("Close")
-            buttonObjectName: "initErrorCloseButton"
+        PageHeading {
+            objectName: "initErrorHeading"
+            Layout.topMargin: Theme.space.xxl
+            Layout.fillWidth: true
+            title: qsTr("There was an issue starting up")
+            description: ApplicationModels.startupError
+            descriptionTextFormat: Text.PlainText
         }
-
-        onClosed: Qt.quit()
-        Component.onCompleted: open()
+        MonospaceOutputView {
+            objectName: "startupCompleteDiagnostics"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 240
+            visible: root.showCompleteDiagnostics
+            listModel: ApplicationModels.startupErrorDetails
+            autoScrollToBottom: false
+        }
+        NeutralButton {
+            objectName: "startupDetailsButton"
+            Layout.alignment: Qt.AlignCenter
+            visible: ApplicationModels.startupErrorDetails !== null
+            text: root.showCompleteDiagnostics ? qsTr("Show summary") : qsTr("Show complete diagnostics")
+            onClicked: root.showCompleteDiagnostics = !root.showCompleteDiagnostics
+        }
+        PrimaryButton {
+            objectName: "initErrorCloseButton"
+            Layout.alignment: Qt.AlignCenter
+            text: qsTr("Close")
+            onClicked: Qt.quit()
+        }
     }
 }

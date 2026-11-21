@@ -16,18 +16,22 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <optional>
 
 #include <QStringList>
 #include <QUrl>
+#include <QCoreApplication>
 
 namespace {
 
-// Commands whose arguments must be redacted in history / display output.
-// Covers passphrase and signing-key inputs. Note: importprivkey, dumpprivkey,
-// dumpwallet, and importwallet are intentionally omitted — their sensitive data
-// is a file path or key blob, not a passphrase, and redacting them obscures
-// useful history context without a meaningful security benefit.
+// Redact arguments before storing either request output or recall history.
+// Keep the pinned Qt Widgets historyFilter policy, plus addhdkey's private key.
+// The parity regression requires an explicit review when Core's policy changes.
 const QStringList HISTORY_FILTER = QStringList()
+    << "addhdkey"
+    << "createwallet"
+    << "createwalletdescriptor"
+    << "migratewallet"
     << "signmessagewithprivkey"
     << "signrawtransactionwithkey"
     << "walletpassphrase"
@@ -36,20 +40,23 @@ const QStringList HISTORY_FILTER = QStringList()
 
 } // namespace
 
-/**
- * Split a shell-like command line and optionally execute the command(s).
- *
- * Ported from RPCConsole::RPCParseCommandLine() in src/qt/rpcconsole.cpp.
- * See that file for a full description of the accepted syntax.
- */
-bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
-                                             std::string& strResult,
-                                             const std::string& strCommand,
-                                             const bool fExecute,
-                                             std::string* const pstrFilteredOut,
-                                             const QString& wallet_name)
+struct RpcCommandExecutor::Plan {
+    struct Argument {
+        std::string literal;
+        std::optional<size_t> result;
+        std::vector<std::string> queries;
+    };
+    std::vector<std::vector<Argument>> calls;
+    Argument result;
+    std::string filtered;
+};
+
+const std::string& RpcCommandExecutor::Prepared::filtered() const { return m_plan->filtered; }
+
+std::optional<RpcCommandExecutor::Prepared> RpcCommandExecutor::Prepare(const std::string& strCommand)
 {
-    std::vector<std::vector<std::string>> stack;
+    auto plan = std::make_shared<Plan>();
+    std::vector<std::vector<Plan::Argument>> stack;
     stack.emplace_back();
 
     enum CmdParseState {
@@ -66,21 +73,19 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
     } state = STATE_EATING_SPACES;
 
     std::string curarg;
-    UniValue lastResult;
+    Plan::Argument last_result;
     unsigned nDepthInsideSensitive = 0;
     size_t filter_begin_pos = 0, chpos;
     std::vector<std::pair<size_t, size_t>> filter_ranges;
 
     auto add_to_current_stack = [&](const std::string& strArg) {
+        if (stack.empty()) throw std::runtime_error("Invalid Syntax");
         if (stack.back().empty() && (!nDepthInsideSensitive) &&
             HISTORY_FILTER.contains(QString::fromStdString(strArg), Qt::CaseInsensitive)) {
             nDepthInsideSensitive = 1;
             filter_begin_pos = chpos;
         }
-        if (stack.empty()) {
-            stack.emplace_back();
-        }
-        stack.back().push_back(strArg);
+        stack.back().push_back({strArg, {}, {}});
     };
 
     auto close_out_params = [&]() {
@@ -98,8 +103,8 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
     };
 
     std::string strCommandTerminated = strCommand;
-    if (strCommandTerminated.back() != '\n')
-        strCommandTerminated += "\n";
+    if (strCommandTerminated.empty() || strCommandTerminated.back() != '\n')
+        strCommandTerminated += '\n';
 
     for (chpos = 0; chpos < strCommandTerminated.size(); ++chpos) {
         char ch = strCommandTerminated[chpos];
@@ -118,21 +123,7 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
                         curarg += ch;
                         break;
                     }
-                    if (curarg.size() && fExecute) {
-                        UniValue subelement;
-                        if (lastResult.isArray()) {
-                            const auto parsed{ToIntegral<size_t>(curarg)};
-                            if (!parsed) {
-                                throw std::runtime_error("Invalid result query");
-                            }
-                            subelement = lastResult[parsed.value()];
-                        } else if (lastResult.isObject()) {
-                            subelement = lastResult.find_value(curarg);
-                        } else {
-                            throw std::runtime_error("Invalid result query");
-                        }
-                        lastResult = subelement;
-                    }
+                    if (!curarg.empty()) last_result.queries.push_back(curarg);
                     state = STATE_COMMAND_EXECUTED;
                     break;
                 }
@@ -140,17 +131,8 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
 
                 close_out_params();
 
-                if (lastResult.isStr())
-                    curarg = lastResult.get_str();
-                else
-                    curarg = lastResult.write(2);
-
-                if (curarg.size()) {
-                    if (stack.size())
-                        add_to_current_stack(curarg);
-                    else
-                        strResult = curarg;
-                }
+                if (!stack.empty()) stack.back().push_back(last_result);
+                else plan->result = last_result;
                 curarg.clear();
                 state = STATE_EATING_SPACES;
             }
@@ -190,20 +172,9 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
                     curarg.clear();
                     state = STATE_EATING_SPACES_IN_BRACKETS;
                 }
-                if ((ch == ')' || ch == '\n') && stack.size() > 0) {
-                    if (fExecute) {
-                        UniValue params = RPCConvertValues(
-                            stack.back()[0],
-                            std::vector<std::string>(stack.back().begin() + 1, stack.back().end()));
-                        std::string method = stack.back()[0];
-                        std::string uri;
-                        if (!wallet_name.isEmpty()) {
-                            QByteArray encodedName = QUrl::toPercentEncoding(wallet_name);
-                            uri = "/wallet/" + std::string(encodedName.constData(), encodedName.length());
-                        }
-                        assert(node);
-                        lastResult = node->executeRpc(method, params, uri);
-                    }
+                if ((ch == ')' || ch == '\n') && !stack.empty() && !stack.back().empty()) {
+                    plan->calls.push_back(stack.back());
+                    last_result = {{}, plan->calls.size() - 1, {}};
                     state = STATE_COMMAND_EXECUTED;
                     curarg.clear();
                 }
@@ -262,28 +233,97 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
         }
     }
 
-    if (pstrFilteredOut) {
-        if (STATE_COMMAND_EXECUTED == state) {
-            assert(!stack.empty());
-            close_out_params();
-        }
-        *pstrFilteredOut = strCommand;
-        for (auto i = filter_ranges.rbegin(); i != filter_ranges.rend(); ++i) {
-            pstrFilteredOut->replace(i->first, i->second - i->first, "(…)");
-        }
+    if (STATE_COMMAND_EXECUTED == state) {
+        assert(!stack.empty());
+        close_out_params();
+        plan->result = last_result;
     }
+    plan->filtered = strCommand;
+    for (auto i = filter_ranges.rbegin(); i != filter_ranges.rend(); ++i)
+        plan->filtered.replace(i->first, i->second - i->first, "(…)");
 
     switch (state) {
     case STATE_COMMAND_EXECUTED:
-        if (lastResult.isStr())
-            strResult = lastResult.get_str();
-        else
-            strResult = lastResult.write(2);
-        [[fallthrough]];
     case STATE_ARGUMENT:
     case STATE_EATING_SPACES:
-        return true;
+        return Prepared{std::move(plan)};
     default:
-        return false;
+        return {};
     }
+}
+
+std::string RpcCommandExecutor::Execute(interfaces::Node& node, const Prepared& command,
+                                       const RpcCommandContext& context, bool& attempted)
+{
+    attempted = false;
+    const auto& plan = *command.m_plan;
+    std::vector<UniValue> results;
+    results.reserve(plan.calls.size());
+    const auto value = [&](const Plan::Argument& argument) {
+        UniValue result{argument.literal};
+        if (argument.result) {
+            result = std::move(results.at(*argument.result));
+            results.at(*argument.result).setNull();
+        }
+        for (const auto& query : argument.queries) {
+            UniValue next;
+            if (result.isArray()) {
+                const auto index = ToIntegral<size_t>(query);
+                if (!index) throw std::runtime_error("Invalid result query");
+                next = result[*index];
+            } else if (result.isObject()) next = result.find_value(query);
+            else throw std::runtime_error("Invalid result query");
+            result = std::move(next);
+        }
+        return result.isStr() ? result.get_str() : result.write(2);
+    };
+    std::string uri;
+    if (context.target == RpcCommandContext::Target::Wallet) {
+        const auto encoded = QUrl::toPercentEncoding(context.wallet_name);
+        uri = "/wallet/" + std::string{encoded.constData(), size_t(encoded.size())};
+    }
+    for (const auto& call : plan.calls) {
+        const auto method = value(call.front());
+        std::vector<std::string> arguments;
+        for (size_t i = 1; i < call.size(); ++i) {
+            auto argument = value(call[i]);
+            // Widgets omits a nested string result when that string is empty.
+            if (!call[i].result || !argument.empty()) arguments.push_back(std::move(argument));
+        }
+        const auto params = [&] {
+            try { return RPCConvertValues(method, arguments); }
+            catch (const std::runtime_error&) {
+                // Core's public JSON converter includes the rejected argument
+                // in its exception. That is still original input, not an RPC
+                // reply; the history redaction policy must cover it as well.
+                if (HISTORY_FILTER.contains(QString::fromStdString(method), Qt::CaseInsensitive))
+                    throw std::runtime_error(QCoreApplication::translate("RpcCommandExecutor", "Invalid RPC arguments.").toStdString());
+                throw;
+            }
+        }();
+        attempted = true;
+        results.push_back(node.executeRpc(method, params, uri));
+    }
+    return plan.result.result ? value(plan.result) : std::string{};
+}
+
+bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node, std::string& result,
+    const std::string& command, bool execute, std::string* filtered, const QString& wallet)
+{
+    return RPCParseCommandLine(node, result, command, execute, filtered,
+        wallet.isEmpty() ? RpcCommandContext::ForNode() : RpcCommandContext::ForWallet(wallet));
+}
+
+bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node, std::string& result,
+    const std::string& command, bool execute, std::string* filtered, const RpcCommandContext& context)
+{
+    const auto prepared = Prepare(command);
+    if (!prepared) return false;
+    if (filtered) *filtered = prepared->filtered();
+    if (execute) {
+        if (!node) throw std::invalid_argument("RPC execution requires a node");
+        bool attempted{false};
+        result = Execute(*node, *prepared, context, attempted);
+    }
+    return true;
 }

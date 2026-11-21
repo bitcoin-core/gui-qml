@@ -11,7 +11,7 @@ import "../controls"
 Rectangle {
     id: root
     property var entry: ({})
-    property int displayUnit: optionsModel.displayUnit
+    property int displayUnit: ApplicationModels.optionsModel.displayUnit
     property string walletName: qsTr("Your wallet")
     property color accentColor: Theme.color.txInternal
     property bool input: false
@@ -29,6 +29,7 @@ Rectangle {
     readonly property string title: entry.label || (entry.kind === "coinbase" ? qsTr("Block reward")
         : entry.kind === "fee" ? qsTr("Network fee")
         : entry.kind === "output-group" ? qsTr("%1 outputs").arg(entry.outputCount)
+        : entry.kind === "input-group" ? qsTr("%1 inputs").arg(entry.inputCount)
         : entry.kind === "data" ? qsTr("Data output")
         : entry.ownership === "wallet" ? (entry.isChange ? qsTr("Change · %1").arg(walletName) : walletName)
         : input ? qsTr("External input") : qsTr("Recipient"))
@@ -48,7 +49,7 @@ Rectangle {
     implicitHeight: Math.max(80, content.height + 24)
     height: implicitHeight
     Accessible.role: Accessible.Grouping
-    Accessible.name: title + ", " + (hidesAmount && optionsModel.hideAmounts ? qsTr("Hidden amount") : amountText)
+    Accessible.name: title + ", " + (hidesAmount && ApplicationModels.optionsModel.hideAmounts ? qsTr("Hidden amount") : amountText)
 
     ColumnLayout {
         id: content
@@ -118,7 +119,7 @@ Rectangle {
             visible: !root.entry.address && !root.hasData
             Layout.fillWidth: true
             text: root.entry.kind === "fee" ? qsTr("Total transaction fee")
-                : root.entry.kind === "output-group" ? qsTr("Not wallet-owned")
+                : root.entry.kind === "output-group" || root.entry.kind === "input-group" ? qsTr("Grouped entries")
                 : root.entry.kind === "coinbase" ? qsTr("Newly mined bitcoin")
                 : root.entry.previousTxid ? String(root.entry.previousTxid).substring(0, 8) + "…:" + root.entry.previousOutputIndex
                 : qsTr("No standard address")
@@ -187,7 +188,7 @@ Rectangle {
                         Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.paymentRequest; size: 16 }
                         CoreText {
                             Layout.fillWidth: true
-                            text: qsTr("Payment request #%1").arg(modelData.requestId || "")
+                            text: qsTr("Payment request #%1").arg(requestButton.modelData.requestId || "")
                             color: Theme.color.paymentRequestText
                             textStyle: Theme.text.caption
                             horizontalAlignment: Text.AlignLeft

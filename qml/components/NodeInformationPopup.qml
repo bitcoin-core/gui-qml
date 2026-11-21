@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -12,13 +13,12 @@ DialogPopup {
     id: root
     objectName: "nodeInformationPopup"
 
-    property var rows: []
+    property var rows: ApplicationModels.nodeModel.informationRows
     readonly property int informationRowCount: informationRepeater.count
     readonly property string firstInformationValue: rows.length > 0 ? rows[0].value : ""
-    readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueLineCount : 0
-    readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
+    readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueLineCount : 0
+    readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? (informationRepeater.itemAt(informationRepeater.count - 1) as NodeInformationRow).valueWrapMode : Text.NoWrap
 
-    onAboutToShow: rows = nodeModel.nodeInformationRows()
 
     title: qsTr("Node information")
     implicitWidth: 760
@@ -56,23 +56,11 @@ DialogPopup {
                     Repeater {
                         id: informationRepeater
                         model: root.rows
-                        delegate: ValueRow {
-                            required property var modelData
-                            required property int index
-
-                            width: informationColumn.width
-                            title: modelData.label
-                            titleColor: Theme.color.neutral7
-                            valueObjectName: "nodeInformationValue_" + index
-                            value: modelData.value
-                            valueTextStyle: modelData.mono ? Theme.text.monoDescription : Theme.text.description
-                            valueMaximumWidth: Math.round(informationColumn.width * 0.65)
-                            valueWrap: true
-                            showDivider: index < root.rows.length - 1
-                        }
+                        delegate: NodeInformationRow { width: informationColumn.width; rowCount: root.rows.length }
                     }
                 }
             }
         }
     }
+
 }

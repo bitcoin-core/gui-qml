@@ -5,8 +5,13 @@
 import QtQuick 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "WalletPassphrasePopup"
     when: windowShown
     width: 500
@@ -159,5 +164,80 @@ TestCase {
         tryCompare(popup, "opened", true)
 
         compare(field.text, "")
+    }
+
+    function findByAccessibleName(root, name) {
+        if (!root) return null
+        if (root.accessibleName === name) return root
+        const children = root.children || []
+        for (let i = 0; i < children.length; ++i) {
+            const found = findByAccessibleName(children[i], name)
+            if (found) return found
+        }
+        return root.contentItem ? findByAccessibleName(root.contentItem, name) : null
+    }
+
+    // #1132: the unlock prompt keeps exactly what was pasted, so a wallet
+    // encrypted with a pasted line ending still opens.
+    function test_unlock_prompt_keeps_a_pasted_line_ending() {
+        const popup = createPopup()
+        const field = findObjectByName(popup, "testPassphraseField")
+        field.insert(0, "Correct-Horse-7\n")
+        compare(field.text, "Correct-Horse-7\n")
+        findObjectByName(popup, "testPassphraseConfirmButton").clicked()
+        compare(submittedPassphrase, "Correct-Horse-7\n")
+    }
+
+    // #1133: a reveal is for the passphrase being typed. The next opening of
+    // the same prompt starts masked again.
+    function test_reopen_starts_masked_after_a_reveal() {
+        const popup = createPopup()
+        const field = findObjectByName(popup, "testPassphraseField")
+        verify(field !== null)
+        compare(field.echoMode, TextInput.Password)
+        const show = findByAccessibleName(popup.contentItem, "Show password")
+        verify(show !== null)
+        mouseClick(show)
+        tryCompare(field, "echoMode", TextInput.Normal)
+
+        popup.close()
+        tryCompare(popup, "opened", false)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        compare(field.echoMode, TextInput.Password)
+        verify(findByAccessibleName(popup.contentItem, "Show password") !== null)
+    }
+
+    // #1134: keys typed while the prompt fades in go into its field, not into
+    // the field that had the caret before it opened.
+    function test_keys_typed_during_the_fade_in_reach_the_passphrase_field() {
+        const behind = createTemporaryObject(behindFieldComponent, this)
+        behind.forceActiveFocus()
+        tryCompare(behind, "activeFocus", true)
+        // Tests run with motion off; this needs the real 300 ms fade-in.
+        const motion = Theme.motion.mode
+        Theme.motion.mode = "full"
+        try {
+        submittedPassphrase = ""
+        const popup = createTemporaryObject(popupComponent, this)
+        verify(popup !== null)
+        const field = findObjectByName(popup, "testPassphraseField")
+        popup.open()
+        wait(0)
+        // Still fading in; this is the window the issue describes.
+        verify(!popup.opened)
+        keyClick("5")
+        keyClick("x")
+        compare(behind.text, "")
+        tryCompare(popup, "opened", true)
+        compare(field.text, "5x")
+        } finally {
+            Theme.motion.mode = motion
+        }
+    }
+
+    Component {
+        id: behindFieldComponent
+        TextInput { width: 100; height: 20 }
     }
 }

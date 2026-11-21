@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H
 #define BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H
 
+#include <qml/blockclockprojection.h>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <QList>
 #include <QObject>
 #include <QTimer>
+#include <QVariant>
 
 class BlockClockHistory;
 
@@ -43,8 +45,9 @@ struct BlockClockTimeline
  * to NodeModel.
  *
  * History comes from a local notification cache. A callback only schedules
- * one pending GUI refresh; all presentation work and the minute timer run on
- * this object's thread. This model never calls the node or chain interfaces.
+ * one pending GUI refresh. Native owns complete history projection and cleanup;
+ * the GUI minute timer updates bounded scalar presentation only. This model
+ * never calls the node or chain interfaces.
  * Block updates wake the GUI even while the clock is hidden, without polling.
  */
 class BlockClockModel : public QObject
@@ -53,19 +56,27 @@ class BlockClockModel : public QObject
     Q_PROPERTY(qint64 periodStart READ periodStart NOTIFY periodChanged)
     Q_PROPERTY(qreal currentTimeFraction READ currentTimeFraction NOTIFY currentTimeFractionChanged)
     Q_PROPERTY(QList<qreal> blockTimeFractions READ blockTimeFractions NOTIFY blockTimeFractionsChanged)
+    Q_PROPERTY(QVariant blockSnapshot READ blockSnapshot NOTIFY blockSnapshotChanged)
+    Q_PROPERTY(bool historyPending READ historyPending NOTIFY historyStateChanged)
+    Q_PROPERTY(QString historyError READ historyError NOTIFY historyStateChanged)
 
 public:
     static constexpr qint64 PERIOD_SECONDS{12 * 60 * 60};
     static constexpr int CLOCK_UPDATE_INTERVAL_MS{60 * 1000};
     using CurrentTimeProvider = std::function<QDateTime()>;
 
-    explicit BlockClockModel(std::shared_ptr<BlockClockHistory> history = {}, bool start_timer = true,
-                             CurrentTimeProvider current_time_provider = {}, QObject* parent = nullptr);
+    /** Without a scheduler, block history is not projected in the background. */
+    BlockClockModel(std::shared_ptr<BlockClockHistory> history, execution::SnapshotServices services, bool start_timer = true,
+                    CurrentTimeProvider current_time_provider = {}, QObject* parent = nullptr);
     ~BlockClockModel() override;
+    void close();
 
-    qint64 periodStart() const { return m_timeline.period_start; }
+    qint64 periodStart() const { return m_period_start; }
     qreal currentTimeFraction() const { return m_current_time_fraction; }
-    QList<qreal> blockTimeFractions() const { return m_block_time_fractions; }
+    QList<qreal> blockTimeFractions() const { return m_projection ? m_projection->fractions : QList<qreal>{}; }
+    QVariant blockSnapshot() const { return QVariant::fromValue(blockclock::WeakSnapshot{m_projection && m_projection->period == m_period_start ? m_projection : blockclock::Snapshot{}}); }
+    bool historyPending() const { return m_pending; }
+    QString historyError() const { return m_error; }
     bool timerActive() const { return m_clock_timer.isActive(); }
 
     /** Return the midnight/noon boundary containing @p current_time. */
@@ -84,24 +95,26 @@ Q_SIGNALS:
     void periodChanged();
     void currentTimeFractionChanged();
     void blockTimeFractionsChanged();
+    void blockSnapshotChanged();
+    void historyStateChanged();
 
 private:
-    /** Called only by the cache under its mutex; stop() detaches before destruction. */
-    void scheduleHistoryRefresh();
+    struct Native;
     void scheduleNextClockUpdate(const QDateTime& current_time);
-    void replaceBlockHistory(QList<qint64> block_timestamps, bool period_changed = false);
-    void rebuildBlockTimeFractions();
+    void publishHistory();
     qreal fractionForTimestamp(qint64 timestamp) const;
-
-    std::shared_ptr<BlockClockHistory> m_history;
+    execution::SnapshotServices m_services;
+    std::shared_ptr<Native> m_native;
+    std::shared_ptr<execution::SnapshotQuery<blockclock::Snapshot>> m_query;
+    blockclock::Snapshot m_projection;
     CurrentTimeProvider m_current_time_provider;
     QTimer m_clock_timer;
-    std::atomic_bool m_history_refresh_pending{false};
-    QList<qint64> m_cached_block_timestamps;
-    BlockClockTimeline m_timeline;
+    qint64 m_period_start{0};
+    quint64 m_revision{0};
     qreal m_current_time_fraction{0.0};
-    QList<qreal> m_block_time_fractions;
-    bool m_stopped{false};
+    bool m_stopped{false}, m_pending{false};
+    QString m_error;
+
 };
 
 #endif // BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H

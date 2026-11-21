@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -11,6 +12,7 @@ OnboardingView {
     objectName: "externalWalletCreatedPage"
     showNavigationBar: false
     usesSharedNavigation: true
+    property WalletOperationModel operation: null
     signal done()
 
     title: ""
@@ -23,6 +25,8 @@ OnboardingView {
     secondaryButtonText: qsTr("Go to wallet")
     secondaryButtonObjectName: "externalWalletCreatedDoneButton"
     onSecondaryClicked: root.done()
+
+    childView: WalletOperationWarnings { operation: root.operation }
 
     imageView: WalletSuccessBadge {
         objectName: "externalWalletSuccessBadge"

@@ -10,16 +10,23 @@ TestCase {
     visible: true
     width: 900; height: 700
     Component { id: factory; SendFeeSelection { walletModel: testWalletModel; width: 800 } }
-    function init() { testWalletModel.minimumCustomFeeRate = 0.1; testWalletModel.customFeeEnabled = false; testWalletModel.customFeeRate = ""; testWalletModel.targetBlocks = 6; testWalletModel.feeEstimatePending = false }
+    function init() {
+        testSetup.failOnWarnings()
+        testWalletModel.minimumCustomFeeRate = 0.1
+        testWalletModel.resetFeePolicyForTest()
+        tryCompare(testWalletModel.fees, "policyPending", false)
+        testWalletModel.targetBlocks = 6
+        testWalletModel.feeEstimatePending = false
+    }
     function cleanup() { testWalletModel.minimumCustomFeeRate = 0.1 }
     function test_custom_rate_error_uses_configured_minimum() {
         const control = createTemporaryObject(factory, this)
         selectOption(control, 3)
         testWalletModel.minimumCustomFeeRate = 1
         testWalletModel.customFeeRate = "0.1"
-        compare(findChild(control, "feeSelectionCustomRateRow").errorText, "Enter a fee rate of at least 1 sat/vB.")
+        tryCompare(findChild(control, "feeSelectionCustomRateRow"), "errorText", "Enter a fee rate of at least 1 sat/vB.")
         testWalletModel.customFeeRate = "1"
-        compare(findChild(control, "feeSelectionCustomRateRow").errorText, "")
+        tryCompare(findChild(control, "feeSelectionCustomRateRow"), "errorText", "")
     }
     function selectOption(control, index) {
         const picker = findChild(control, "feeSelectionPicker")
@@ -32,9 +39,9 @@ TestCase {
         const control = createTemporaryObject(factory, this)
         const picker = findChild(control, "feeSelectionPicker")
         compare(picker.currentText, "Standard")
-        compare(picker.itemAtIndex(0).subtitle, "Targets 2 blocks · Usually higher fee")
-        compare(picker.itemAtIndex(1).subtitle, "Targets 6 blocks · Balanced speed and cost")
-        compare(picker.itemAtIndex(2).subtitle, "Targets 10 blocks · Usually lower fee")
+        compare(picker.itemAtIndex(0).subtitle, "Requested target: 2 blocks")
+        compare(picker.itemAtIndex(1).subtitle, "Requested target: 6 blocks")
+        compare(picker.itemAtIndex(2).subtitle, "Requested target: 10 blocks")
         compare(picker.itemAtIndex(3).subtitle, "Choose your fee rate and block target")
         for (let i = 0; i < 3; ++i) {
             selectOption(control, i)
@@ -87,13 +94,13 @@ TestCase {
         const slider = findChild(control, "feeTargetBlocksSlider")
         selectOption(control, 3)
         compare(testWalletModel.targetBlocks, 25)
-        compare(slider.value, 5)
+        tryCompare(slider, "value", 5)
 
         selectOption(control, 1)
         testWalletModel.targetBlocks = 42
         selectOption(control, 3)
-        compare(testWalletModel.targetBlocks, 50)
-        compare(slider.value, 6)
+        tryCompare(testWalletModel, "targetBlocks", 50)
+        tryCompare(slider, "value", 6)
     }
     function test_pending_estimate_does_not_show_stale_fee() {
         const control = createTemporaryObject(factory, this)

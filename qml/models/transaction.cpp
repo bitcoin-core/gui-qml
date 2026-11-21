@@ -27,7 +27,6 @@ Transaction::Transaction(
     , credit(credit)
     , debit(debit)
     , hash(hash)
-    , status(Unconfirmed)
     , time(time)
     , type(type)
     , txid(QString::fromStdString(hash.GetHex()))

@@ -9,6 +9,7 @@
 #include <span>
 #include <string_view>
 #include <vector>
+#include <QStringList>
 
 class BitcoinQmlApplication;
 class QObject;
@@ -18,6 +19,10 @@ struct IntegrationTestModule {
     const char* name;
     std::vector<WalletMode> wallet_modes;
     std::unique_ptr<QObject> (*create)(BitcoinQmlApplication&, WalletMode);
+    int stage;
+    QStringList (*arguments)(const QString& selector){nullptr};
+    // Empty means fresh setup; otherwise copy the seed wallet under this name.
+    QString (*prepared_wallet)(const QString& selector){nullptr};
 };
 
 std::span<const IntegrationTestModule> IntegrationTestModules();
@@ -26,6 +31,29 @@ const char* WalletModeName(WalletMode mode);
 
 std::unique_ptr<QObject> CreateLifecycleTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateNavigationTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateDebugLogTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
 std::unique_ptr<QObject> CreateNodeTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateBlockClockTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateSettingsTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateConsoleTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateBlocksonlyTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateWalletTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateReceiveTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateActivityTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateTransactionPolicyTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateSendTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateFeeBumpTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreatePsbtTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreateWatchOnlyTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+std::unique_ptr<QObject> CreatePaymentImportTests(BitcoinQmlApplication& app, WalletMode wallet_mode);
+QString SendPreparedWallet(const QString& selector);
+QString PsbtPreparedWallet(const QString& selector);
+QString WalletPreparedWallet(const QString& selector);
+QStringList SettingsTestArguments(const QString& selector);
+QStringList SendTestArguments(const QString& selector);
+QStringList ReceiveTestArguments(const QString& selector);
+QStringList WalletTestArguments(const QString& selector);
+QStringList DebugLogTestArguments(const QString& selector);
+QStringList WatchOnlyTestArguments(const QString& selector);
 
 #endif // BITCOIN_QML_TEST_INTEGRATION_RUNNER_TEST_CASES_H

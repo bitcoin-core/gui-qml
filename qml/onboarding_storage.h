@@ -21,6 +21,8 @@ struct State {
     bool prune{false};
     int prune_size_gb{0};
     bool existing_profile{false};
+    bool manual_pruning{false},custom_manual_pruning{false};
+    int custom_prune_size_gb{0};
 };
 
 struct Info {
@@ -32,8 +34,10 @@ struct Info {
     int full_required_gb{0};
     int pruned_required_gb{0};
     int selected_required_gb{0};
+    int reduced_required_gb{0};
     bool enough_for_selected{false};
     bool enough_for_full{false};
+    bool enough_for_reduced{false},enough_for_custom{false};
 };
 
 Info Evaluate(const State& state);

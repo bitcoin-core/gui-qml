@@ -8,10 +8,12 @@ Image {
     id: root
 
     property string code: ""
-    property color backgroundColor: Qt.black
-    property color foregroundColor: Qt.white
+    property color backgroundColor: "black"
+    property color foregroundColor: "white"
 
     fillMode: Image.PreserveAspectFit
     smooth: false
-    source: code.length === 0 ? "" : `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
+    // All legal QR payloads fit this bound. Check length before the
+    // presentation binding percent-encodes a potentially large legacy value.
+    source: code.length === 0 || code.length > 32768 ? "" : `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
 }

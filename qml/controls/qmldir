@@ -1,2 +1,4 @@
 singleton SizeClass 1.0 SizeClass.qml
 singleton Theme 1.0 Theme.qml
+
+TextEditMenu 1.0 TextEditMenu.qml

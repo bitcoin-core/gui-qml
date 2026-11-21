@@ -9,6 +9,7 @@
 #include <interfaces/handler.h>
 #include <uint256.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -30,8 +31,8 @@ class Node;
  * worker owns a separate BlockClockSubscription, which stops this cache before
  * unregistering. In-flight notifications may keep the stopped cache alive.
  *
- * The GUI only sets the retention boundary and takes cached snapshots. The
- * mutex protects this small cache; no backend call runs with the mutex held.
+ * The GUI may request an atomic retention boundary. Native consumers alone
+ * lock, prune and copy the cache; no backend call runs with the mutex held.
  * Future timestamps are retained so advancing the dial needs no node query.
  */
 class BlockClockHistory : public interfaces::Chain::Notifications
@@ -47,15 +48,23 @@ public:
      * callback to return, so the consumer can then be safely destroyed.
      */
     void setChangedCallback(std::function<void()> callback);
+    quint64 installChangedCallback(std::function<void()> callback);
+    void clearChangedCallback(quint64 token);
 
     /** Discard timestamps before this boundary, retaining current/future blocks. */
     void setRetentionStart(qint64 retention_start);
+    void applyRequestedRetention();
+
+    /** GUI admission only: Native snapshot consumption applies/prunes this boundary. */
+    void requestRetentionStart(qint64 retention_start) { m_requested_retention.store(retention_start); }
 
     /** Return the startup snapshot boundary, or nullopt after stop(). */
     std::optional<qint64> retentionStart();
 
     /** Return changed cached timestamps, or nullopt if nothing has changed. */
     std::optional<QList<qint64>> takeSnapshot();
+    std::optional<std::pair<QList<qint64>, quint64>> takeSnapshotWithGeneration(bool force = false);
+    quint64 generation() const { return m_generation.load(); }
 
     /** Install the initial snapshot and reconcile notifications received meanwhile. */
     void initialize(Blocks blocks);
@@ -68,10 +77,13 @@ private:
 
     std::mutex m_mutex;
     std::function<void()> m_changed;
+    quint64 m_callback_token{0};
     Blocks m_blocks;
     // Only the last event for each hash matters when reconciling a snapshot.
     std::map<uint256, std::optional<int64_t>> m_pending;
     qint64 m_retention_start{0};
+    std::atomic<qint64> m_requested_retention{0};
+    std::atomic<quint64> m_generation{0};
     bool m_initialized{false};
     bool m_dirty{false};
     bool m_stopped{false};

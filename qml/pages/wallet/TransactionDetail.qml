@@ -12,11 +12,19 @@ import "../../components"
 Page {
     id: root
     objectName: "activityDetailsPage"
-    property var wallet: null
-    property var transactionData: ({})
+    property WalletQmlModel wallet: null
+    readonly property bool actionContextAvailable: root.visible && root.wallet !== null && root.wallet.available
+    onActionContextAvailableChanged: if (!actionContextAvailable) root.retireDialogs()
+    property string transactionId: ""
+    readonly property ActivityDetailModel activityModel: wallet ? wallet.transactionActivityModel.createDetailView(root) : null
+    Binding { target: root.activityModel; property: "transactionId"; value: root.transactionId; when: root.activityModel !== null }
+    Binding { target: root.activityModel; property: "active"; value: root.visible && root.wallet !== null && root.wallet.available; when: root.activityModel !== null }
+    property var transactionData: activityModel && activityModel.selectedTransactionDetails.txid === transactionId
+        ? activityModel.selectedTransactionDetails : ({txid: transactionId, detailsLoading: true})
     property int outputIndex: -1
+    property bool walletViewActive: true
     property bool detailsExpanded: false
-    onTxidChanged: detailsExpanded = false
+    onTxidChanged: { detailsExpanded = false; root.retireDialogs() }
     readonly property string txid: transactionData.txid || ""
     readonly property bool detailsLoading: !!transactionData.detailsLoading
     readonly property string detailsError: transactionData.detailsError || ""
@@ -31,7 +39,8 @@ Page {
     readonly property string inactiveLabel: replacedByTxid ? qsTr("Replaced")
         : transactionData.status === Transaction.Abandoned ? qsTr("Cancelled")
         : transactionData.status === Transaction.Conflicted ? qsTr("Conflicted")
-        : transactionData.status === Transaction.NotAccepted ? qsTr("Not accepted") : ""
+        : transactionData.status === Transaction.NotAccepted ? qsTr("Not accepted")
+        : inactive ? qsTr("Not in mempool") : ""
     readonly property string actionLabel: {
         switch (transactionData.activityType) {
         case TransactionActivityModel.Send: return qsTr("Sent")
@@ -74,9 +83,9 @@ Page {
                 id: moreMenu
                 objectName: "transactionDetailMoreMenu"
                 txid: root.txid
-                rawTransaction: function(txid) {
-                    return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
-                }
+                showsCopyRawTransaction: true
+                copyRawTransactionEnabled: root.activityModel !== null && !!root.transactionData.rawAvailable
+                onCopyRawTransactionRequested: root.activityModel.requestCopyRawTransaction(root.txid)
                 onExplorerLinkRequested: function(url) { root.openExternalLink(url) }
             }
         }
@@ -86,7 +95,12 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; parent: Overlay.overlay; wallet: root.wallet }
+    RequestDetailsHost {
+        id: paymentRequestModal
+        objectName: "transactionPaymentRequestModal"
+        wallet: root.wallet
+        contextActive: root.walletViewActive
+    }
 
     function openExternalLink(link) {
         externalLinkPopup.link = link
@@ -180,7 +194,7 @@ Page {
                     tone: ToastBanner.Error
                     text: root.detailsError
                     actionText: qsTr("Try again")
-                    onActionTriggered: if (root.wallet) root.wallet.transactionActivityModel.requestTransactionDetails(root.txid)
+                    onActionTriggered: if (root.activityModel) root.activityModel.reload()
                 }
                 InfoBanner {
                     objectName: "speedUpBanner"
@@ -215,7 +229,7 @@ Page {
                     visible: !!root.flow.inputs && !!root.flow.outputs
                     flow: root.flow
                     transactionId: root.txid
-                    displayUnit: optionsModel.displayUnit
+                    displayUnit: ApplicationModels.optionsModel.displayUnit
                     hidesAmounts: true
                     walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                     selectedEntryId: root.outputIndex >= 0 ? "output:" + root.outputIndex : ""
@@ -228,33 +242,97 @@ Page {
                     opened: root.detailsExpanded
                     onClicked: root.detailsExpanded = !root.detailsExpanded
                 }
+                TransactionEntriesList {
+                    objectName: "transactionAllInputs"
+                    visible: root.detailsExpanded
+                    Layout.fillWidth: true
+                    title: qsTr("All inputs")
+                    input: true
+                    entryModel: root.activityModel ? root.activityModel.detailInputs : null
+                    walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
+                    onEntryRequested: (row) => root.openEntry("inputs", row)
+                    onPaymentRequestRequested: (requestId) => root.openPaymentRequestDetail(requestId)
+                }
+                TransactionEntriesList {
+                    objectName: "transactionAllOutputs"
+                    visible: root.detailsExpanded
+                    Layout.fillWidth: true
+                    title: qsTr("All outputs")
+                    entryModel: root.activityModel ? root.activityModel.detailOutputs : null
+                    walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
+                    onEntryRequested: (row) => root.openEntry("outputs", row)
+                    onPaymentRequestRequested: (requestId) => root.openPaymentRequestDetail(requestId)
+                }
+                TransactionEntriesList {
+                    objectName: "transactionAllActions"
+                    visible: root.detailsExpanded
+                    Layout.fillWidth: true
+                    title: qsTr("All actions")
+                    entryModel: root.activityModel ? root.activityModel.detailActions : null
+                    walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
+                    onEntryRequested: (row) => root.openEntry("actions", row)
+                    onPaymentRequestRequested: (requestId) => root.openPaymentRequestDetail(requestId)
+                }
                 TransactionDetailsSection {
                     visible: root.detailsExpanded
                     Layout.fillWidth: true
                     hidesAmounts: true
                     details: root.transactionData
+                    activityModel: root.activityModel
+                    enabled: !!root.wallet && root.wallet.available
                 }
             }
         }
     }
+
+    function openEntry(side, row) {
+        if (!root.wallet || !root.wallet.available || !root.activityModel) return
+        if (root.activityModel.requestEntryDetails(side, row)) entryPopup.open()
+    }
+    TransactionEntryPopup {
+        id: entryPopup
+        objectName: "transactionEntryPopup"
+        documentObjectName: "transactionEntryDocument"
+        loading: !!root.activityModel && root.activityModel.entryDetailsBusy
+        errorText: root.activityModel ? root.activityModel.entryDetailsError : ""
+        document: root.activityModel ? root.activityModel.entryDocument : null
+    }
+    function retireDialogs() {
+        if (entryPopup) entryPopup.close()
+        if (speedUpOverlay) speedUpOverlay.close()
+        if (speedUpComplete) speedUpComplete.close()
+    }
+    onWalletChanged: root.retireDialogs()
 
     SpeedUpOverlay {
         id: speedUpOverlay
         parent: Overlay.overlay
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
-        onBumpSucceeded: {
-            speedUpComplete.txid = speedUpOverlay.newTxid
+        onBumpSucceeded: function(newTxid, walletRecordState, walletSubmissionState) {
+            if (!root.actionContextAvailable) return
+            speedUpComplete.contextWallet = root.wallet
+            speedUpComplete.txid = newTxid
+            speedUpComplete.walletRecordState = walletRecordState
+            speedUpComplete.walletSubmissionState = walletSubmissionState
             speedUpComplete.open()
+        }
+        onViewNewTransaction: function(txid) {
+            if (root.actionContextAvailable) root.showTransaction(txid)
         }
     }
 
     SpeedUpComplete {
         id: speedUpComplete
         parent: Overlay.overlay
-        onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
+        property WalletQmlModel contextWallet: null
+        onClosed: contextWallet = null
         onDone: close()
         onViewNewTransaction: function(txid) {
+            if (!root.actionContextAvailable || contextWallet !== root.wallet) {
+                close()
+                return
+            }
             close()
             root.showTransaction(txid)
         }

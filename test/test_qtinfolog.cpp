@@ -5,30 +5,48 @@
 #include <QtTest/QtTest>
 
 #include <qml/util.h>
+#include <qml/backendexecutor.h>
+#include <qml/guipresentation.h>
+#include <qml/startupeffects.h>
 
 #include <logging.h>
 
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 #include <QGuiApplication>
+#include <QScreen>
+#include <QSysInfo>
+#include <QThread>
 #include <QString>
+#include <QScopeGuard>
 
 namespace {
 std::vector<std::string> CaptureQtInfo()
 {
-    std::vector<std::string> lines;
-    LogInstance().m_print_to_file = false;
-    LogInstance().m_print_to_console = false;
-    const auto callback = LogInstance().PushBackCallback([&lines](const std::string& str) {
-        lines.push_back(str);
+    const auto info = QmlUtil::CaptureQtInfo();
+    auto* gui_thread = QThread::currentThread();
+    BackendExecutor executor{execution::Options{}};
+    auto lines = startup::Run({executor.scheduler(), presentation::QueuedPost()}, [info, gui_thread] {
+        std::vector<std::string> lines;
+        bool wrote_on_gui{false};
+        LogInstance().m_print_to_file = false;
+        LogInstance().m_print_to_console = false;
+        const auto callback = LogInstance().PushBackCallback([&](const std::string& str) {
+            wrote_on_gui |= QThread::currentThread() == gui_thread;
+            lines.push_back(str);
+        });
+        const auto disconnect = qScopeGuard([callback] {
+            LogInstance().DeleteCallback(callback);
+            LogInstance().DisconnectTestLogger();
+        });
+        LogInstance().StartLogging();
+        QmlUtil::LogQtInfo(info);
+        if (wrote_on_gui) throw std::runtime_error{"Qt diagnostics wrote on GUI"};
+        return lines;
     });
-    LogInstance().StartLogging();
-
-    QmlUtil::LogQtInfo();
-
-    LogInstance().DeleteCallback(callback);
-    LogInstance().DisconnectTestLogger();
+    executor.shutdown(); startup::DrainWorkers();
     return lines;
 }
 
@@ -82,4 +100,4 @@ BITCOINQML_REGISTER_QT_TEST(QtInfoLogTests)
 #else
 QTEST_MAIN(QtInfoLogTests)
 #endif
-#include "test_qtinfolog.moc"
+#include <test_qtinfolog.moc>

@@ -156,7 +156,7 @@ Popup {
         if (!focused || contains(focused)) return
         returnFocusItem = focused
         returnFocusWindow = window
-        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason
+        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason // qmllint disable missing-property
         let page = focused
         while (page && !isPage(page)) page = page.parent
         returnFocusPage = page
@@ -209,6 +209,15 @@ Popup {
             verticalOffset = Theme.motion.reduced ? 0 : enterOffset
         }
         exiting = false
+    }
+    // Take the keyboard as soon as the popup is shown, not when its enter
+    // transition ends: keys typed during the fade-in otherwise went to the
+    // field behind it. Focus already inside the popup is left where it is.
+    onVisibleChanged: {
+        if (!visible || exiting) return
+        const window = contentItem ? contentItem.Window.window : null
+        const focused = window ? window.activeFocusItem : null
+        if (!focused || !contains(focused)) focusContent()
     }
     onOpened: focusContent()
     onAboutToHide: exiting = true

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQml.Models 2.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
@@ -16,10 +17,13 @@ SettingsPage {
     title: qsTr("Wallet settings")
     showBackButton: false
 
-    property var wallet: null
-    property string errorText: ""
+    property WalletQmlModel wallet: null
+    readonly property string errorText: root.wallet
+        ? (root.wallet.settingsError.length > 0 ? root.wallet.settingsError
+            : root.wallet.backupOperation ? root.wallet.backupOperation.error : "")
+        : ""
     readonly property bool walletLoaded: root.wallet !== null
-    readonly property bool noWalletsAvailable: walletController.noWalletsFound
+    readonly property bool noWalletsAvailable: ApplicationModels.walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
 
     signal selectWalletRequested()
@@ -28,41 +32,15 @@ SettingsPage {
     signal addressesRequested()
     signal coinsRequested()
 
-    function backupFileName() {
-        const walletName = root.wallet && root.wallet.name.length > 0
-            ? root.wallet.name.replace(/[\\/]/g, "_")
-            : "wallet"
-        return walletName + ".bak"
-    }
-
-    function backupDefaultFileUrl() {
-        return "file://" + walletController.homePath() + "/" + root.backupFileName()
-    }
-
-    function resolvedBackupPath(rawPath) {
-        let normalized = walletController.normalizeWalletPath(rawPath)
-        if (normalized.length === 0) return ""
-
-        const hasKnownSuffix = /\.(bak|dat)$/i.test(normalized)
-        if (walletController.walletPathExists(normalized) && !hasKnownSuffix) {
-            normalized += "/" + root.backupFileName()
-        } else if (!hasKnownSuffix) {
-            normalized += ".bak"
-        }
-        return normalized
-    }
-
     function startBackup() {
         if (!root.wallet) return
-        root.errorText = ""
         root.wallet.clearSettingsError()
         if (backupAutomationPath.text.length > 0) {
-            const automatedPath = root.resolvedBackupPath(backupAutomationPath.text)
+            const automatedPath = backupAutomationPath.text
             backupAutomationPath.text = ""
-            if (!root.wallet.backupWallet(automatedPath)) root.errorText = root.wallet.settingsError
+            root.wallet.backupWallet(automatedPath)
             return
         }
-        backupDialog.targetWallet = root.wallet
         backupDialog.open()
     }
 
@@ -70,20 +48,14 @@ SettingsPage {
         id: backupDialog
         objectName: "walletSettingsBackupDialog"
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + walletController.homePath()
-        currentFile: root.backupDefaultFileUrl()
+        currentFolder: ApplicationModels.walletController.homeUrl
+        suggestedName: root.wallet ? root.wallet.backupFileName : "wallet.bak"
         defaultSuffix: "bak"
+        confirmOverwrite: false // The operation confirms the resolved final path.
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
-        property var targetWallet: null
-        onAccepted: {
-            const wallet = targetWallet
-            targetWallet = null
-            if (!wallet || wallet !== root.wallet || backupDialog.selectedFile.toString().length === 0) return
-            const normalized = root.resolvedBackupPath(backupDialog.selectedFile.toString())
-            if (!wallet.backupWallet(normalized)) root.errorText = wallet.settingsError
-            else root.errorText = ""
-        }
-        onRejected: targetWallet = null
+        contextObject: root.wallet
+        enabled: root.visible && root.wallet !== null && root.wallet.available
+        onChosen: (context, file) => { if (context === root.wallet) root.wallet.backupWallet(file.toString()) }
     }
 
     TextField {
@@ -92,15 +64,24 @@ SettingsPage {
         visible: false
     }
 
-    Connections {
-        target: root.wallet
-
-        function onSettingsErrorChanged() {
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
+    Instantiator {
+        model: root.wallet && root.wallet.backupOperation ? [root.wallet.backupOperation] : []
+        delegate: SaveConfirmationPopup {
+            required property BackupFileOperation modelData
+            objectName: "walletBackupOverwritePopup"
+            parent: root.Overlay.overlay
+            visible: root.visible && modelData.confirmationRequired
+            replacing: modelData.replacing
+            finalPath: modelData.finalPath
+            saveTitle: qsTr("Save backup?")
+            replaceTitle: qsTr("Replace backup?")
+            pathObjectName: "walletBackupFinalPathText"
+            approveObjectName: "walletBackupOverwriteApproveButton"
+            refuseObjectName: "walletBackupOverwriteRejectButton"
+            onApproved: modelData.approve()
+            onRefused: modelData.refuse()
         }
     }
-
-    onWalletChanged: root.errorText = ""
 
     PageHeading {
         objectName: "walletSettingsEmptyHeading"
@@ -192,6 +173,14 @@ SettingsPage {
             objectName: "walletBackupRow"
             Layout.fillWidth: true
             title: qsTr("Back up wallet")
+            enabled: root.wallet && (!root.wallet.backupOperation || !root.wallet.backupOperation.pending)
+            supportingText: root.wallet && root.wallet.backupOperation
+                ? (root.wallet.backupOperation.pending ? qsTr("Preparing backup...")
+                    : root.wallet.backupOperation.phase === BackupFileOperation.Succeeded ? qsTr("Backup saved.") : "")
+                : ""
+            description: root.wallet && root.wallet.isEncrypted
+                ? qsTr("After setting a password, earlier backups may not cover new receiving addresses or change. Make a fresh backup. Keep your older backups in a safe place.")
+                : ""
             showsDisclosureIndicator: true
             onClicked: root.startBackup()
         }

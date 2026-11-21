@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
@@ -16,8 +17,9 @@ OnboardingView {
     property bool modalView: false
     property bool encryptedWallet: false
     // The wallet this page announces, not whichever wallet is selected.
+    property WalletOperationModel operation: null
     property var wallet: null
-    property bool navigationBackEnabled: false
+    navigationBackEnabled: false
     readonly property bool backupRequired: !watchOnly
     signal done()
 
@@ -34,20 +36,23 @@ OnboardingView {
     secondaryButtonObjectName: "createWalletReadyDoneButton"
     onSecondaryClicked: root.done()
 
-    Component.onCompleted: walletController.clearWalletLocationOpenError()
+    Component.onCompleted: ApplicationModels.walletController.clearWalletLocationOpenError()
 
     imageView: WalletSuccessBadge {
         objectName: "walletCreationSuccessBadge"
     }
 
-    childView: backupRequired ? backupContent : null
+    childView: backupRequired || (operation && operation.result.warnings.length > 0) ? backupContent : null
 
     Component {
         id: backupContent
         ColumnLayout {
             spacing: 20
 
+            WalletOperationWarnings { Layout.fillWidth: true; operation: root.operation }
+
             FormSection {
+                visible: root.backupRequired
                 objectName: "walletCreationBackupSection"
                 Layout.fillWidth: true
                 showBackground: false
@@ -62,13 +67,13 @@ OnboardingView {
                     Layout.leftMargin: 4
                     buttonSize: NeutralButton.Large
                     text: qsTr("View file")
-                    onClicked: walletController.openWalletLocation(root.wallet)
+                    onClicked: ApplicationModels.walletController.openWalletLocation(root.wallet)
                 }
                 CoreText {
                     objectName: "createWalletBackupErrorText"
                     visible: text.length > 0
                     Layout.fillWidth: true
-                    text: walletController.walletLocationOpenError
+                    text: ApplicationModels.walletController.walletLocationOpenError
                     color: Theme.color.dangerText
                     textStyle: Theme.text.caption
                     wrapMode: Text.WordWrap

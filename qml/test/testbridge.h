@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QJsonValue>
+#include <QJsonObject>
 #include <QList>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -26,6 +27,8 @@
 ///   {"cmd": "get_current_page"}
 ///   {"cmd": "get_context_property", "name": "<contextPropertyName>"}
 ///   {"cmd": "get_property", "objectName": "<name>", "prop": "<property>"}
+///   {"cmd": "get_enum_property", "objectName": "<name>", "prop": "<enum-property-path>"}
+///   {"cmd": "get_model_row", "objectName": "<name>", "prop": "<model-path>", "row": <index-or-minus-one>, "role": "<role>", "modelId": "<optional-original-id>", "expectedRows": <optional-count>, "revisionProperty": "<optional-path>", "revision": "<original-uint64>"}
 ///   {"cmd": "set_property", "objectName": "<name>", "prop": "<property>", "value": <json-value>}
 ///   {"cmd": "invoke", "objectName": "<name>", "method": "<method-or-signal-name>", "args": ["<arg>"]}
 ///   {"cmd": "invoke_property_object", "objectName": "<name>", "prop": "<QObject-property>", "method": "<method>", "args": ["<arg>"]}
@@ -71,7 +74,7 @@ private:
     QObject* findListItem(QObject* view_obj, int row) const;
     QObject* resolveCurrentLeafItem(QObject* item) const;
 
-    /// Recursively collect all named objects from the QML tree.
+    /// Collect all named objects from the QML tree.
     void collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, QSet<const QObject*>& visited, int depth) const;
 
     /// Process a single JSON command and return the JSON response.
@@ -82,6 +85,8 @@ private:
     QByteArray cmdGetCurrentPage();
     QByteArray cmdGetContextProperty(const QString& name);
     QByteArray cmdGetProperty(const QString& object_name, const QString& prop);
+    QByteArray cmdGetEnumProperty(const QString& object_name, const QString& prop);
+    QByteArray cmdGetModelRow(const QJsonObject& command);
     QByteArray cmdSetProperty(const QString& object_name, const QString& prop, const QJsonValue& value);
     QByteArray cmdInvoke(const QString& object_name, const QString& method, const QJsonArray& args);
     QByteArray cmdInvokePropertyObject(const QString& object_name, const QString& prop, const QString& method, const QJsonArray& args);
@@ -107,6 +112,8 @@ private:
     QLocalServer* m_server;
     std::vector<QLocalSocket*> m_clients;
     QHash<QLocalSocket*, QByteArray> m_read_buffers;
+    QHash<QObject*, quint64> m_observed_models;
+    quint64 m_next_model_id{0};
     bool m_processing_client_data{false};
     bool m_pending_client_data{false};
 };

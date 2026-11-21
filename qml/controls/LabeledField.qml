@@ -54,7 +54,7 @@ Control {
         spacing: 0
 
         RowLayout {
-            visible: root.label.length > 0 || root.showCopyButton || root.actionText.length > 0
+            visible: root.visible && (root.label.length > 0 || root.showCopyButton || root.actionText.length > 0)
             Layout.fillWidth: true
             Layout.bottomMargin: visible ? root.labelSpacing : 0
             spacing: Theme.space.m

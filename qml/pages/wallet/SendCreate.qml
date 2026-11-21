@@ -18,12 +18,13 @@ PageStack {
     property WalletQmlModel wallet: null
     property SendRecipient recipient: wallet ? wallet.recipients.current : null
     property string prepareTransactionErrorText: ""
-    property bool manualCoinSelection: false
+    readonly property bool manualCoinSelection: root.wallet !== null
+        && root.wallet.coinsListModel !== null && root.wallet.coinsListModel.manualInputSelection
     readonly property bool externalSignerWallet: wallet !== null && wallet.hasExternalSigner
-    readonly property string recipientValidationError: wallet ? wallet.recipients.validationError : ""
+    readonly property string recipientValidationError: wallet ? wallet.recipients.budgetError || wallet.recipients.validationError : ""
     readonly property bool selectedInputsActive: wallet !== null
         && wallet.coinsListModel !== null
-        && wallet.coinsListModel.selectedCoinsCount > 0
+        && (wallet.coinsListModel.manualInputSelection || wallet.coinsListModel.selectedCoinsCount > 0)
     readonly property bool hasLockedCoins: wallet !== null
         && wallet.coinsListModel !== null
         && wallet.coinsListModel.lockedSatoshi > 0
@@ -36,14 +37,41 @@ PageStack {
     readonly property string feeBalanceErrorText: wallet && wallet.sendAmountExhaustsBalance
         ? (selectedInputsActive ? selectedInputsBalanceErrorText : availableBalanceErrorText)
         : ""
-    readonly property string formErrorText: recipientValidationError.length > 0
+    readonly property string formErrorText: wallet && wallet.fees && !wallet.fees.estimatePending && wallet.fees.errorText.length > 0
+        ? wallet.fees.errorText : recipientValidationError.length > 0
         ? recipientValidationError
-        : (feeBalanceErrorText.length > 0 ? feeBalanceErrorText : prepareTransactionErrorText)
+        : (wallet && wallet.coinsListModel && wallet.coinsListModel.selectionReconciliationRequired
+           ? qsTr("Some selected coins are no longer available. Choose Automatic inputs or update the selection.")
+           : (feeBalanceErrorText.length > 0 ? feeBalanceErrorText : prepareTransactionErrorText))
 
     signal viewTransactionInActivity(string txid)
 
+    property double psbtImportTicket: 0
+    property WalletQmlModel psbtImportWallet: null
+    property int psbtImportHiddenCount: -1
+    property string psbtImportDraftRevision: ""
+    property string psbtImportSelectionToken: ""
+    function requestPsbtImport(path) {
+        if (!root.wallet || root.wallet.psbtActionBusy) return
+        psbtImportWallet = root.wallet
+        psbtImportHiddenCount = root.hiddenCount
+        psbtImportDraftRevision = root.draftRevision
+        psbtImportSelectionToken = root.wallet.coinsListModel.selectionToken
+        psbtImportTicket = 0
+        psbtImportTicket = root.wallet.requestImportPsbtFromFile(path)
+        handlePsbtOutcome()
+    }
+    function handlePsbtOutcome() {
+        if (!psbtImportTicket || !root.wallet || psbtImportWallet !== root.wallet || root.wallet.psbtActionId !== psbtImportTicket || root.wallet.psbtActionBusy) return
+        psbtImportTicket = 0
+        if (!root.visible || psbtImportHiddenCount !== root.hiddenCount || psbtImportDraftRevision !== root.draftRevision
+            || root.wallet.coinsListModel.selectionPending || psbtImportSelectionToken !== root.wallet.coinsListModel.selectionToken
+            || root.wallet.psbtActionState === WalletQmlModel.PsbtStale) return
+        sendPage.handlePsbtImportResult(root.wallet.psbtImportResult)
+    }
+
     function confirmTransactionReview() {
-        if (!root.wallet) return
+        if (!root.wallet || !root.wallet.available || sendPage.imports.pending) return
         if (root.wallet.sendDraftSweepsWallet) {
             reviewSweepAlert.draftRevision = root.draftRevision
             reviewSweepAlert.open()
@@ -51,15 +79,47 @@ PageStack {
         else root.prepareTransactionForReview()
     }
 
+    property bool preparingReview: false
+    property double preparationTicket: 0
+    property WalletQmlModel preparationWallet: null
+    property string preparationDraftRevision: ""
+    property int preparationHiddenCount: -1
+
     function prepareTransactionForReview() {
+        if (!root.wallet || !root.wallet.available || root.wallet.preparationBusy || sendPage.imports.pending) return
         root.clearPrepareTransactionError()
-        if (root.wallet.prepareTransaction()) root.openTransactionReview()
-        else if (root.wallet.transactionNeedsUnlock) {
-            reviewPassphrasePopup.errorText = ""
+        preparationWallet = root.wallet
+        preparationDraftRevision = root.draftRevision
+        preparationHiddenCount = root.hiddenCount
+        preparingReview = true
+        preparationTicket = 0
+        preparationTicket = root.wallet.requestPrepareTransaction()
+        if (!preparationTicket) {
+            preparingReview = false
+            root.prepareTransactionErrorText = qsTr("Another wallet action is still running.")
+        } else root.handlePreparationOutcome()
+    }
+
+    function handlePreparationOutcome() {
+        if (!preparingReview || !preparationTicket || preparationWallet !== root.wallet || !root.wallet) return
+        if (root.wallet.preparationId !== preparationTicket) { preparingReview = false; return }
+        if (root.wallet.preparationBusy) return
+        preparingReview = false
+        if (!root.visible || preparationDraftRevision !== root.draftRevision || preparationHiddenCount !== root.hiddenCount) return
+        if (root.wallet.preparationState === WalletQmlModel.PreparationReady) {
+            reviewPassphrasePopup.close()
+            root.openTransactionReview()
+        } else if (root.wallet.preparationState === WalletQmlModel.PreparationNeedsUnlock) {
             reviewPassphrasePopup.open()
-        } else root.prepareTransactionErrorText = root.wallet.transactionError.length > 0
-            ? root.displayTransactionError(root.wallet.transactionError)
-            : root.selectedInputsActive ? root.selectedInputsBalanceErrorText : root.availableBalanceErrorText
+        } else if (root.wallet.preparationState === WalletQmlModel.PreparationStale) {
+            // The draft on this page did not change, so the wallet or an import
+            // did. Say so instead of ending Review without explanation.
+            root.prepareTransactionErrorText = qsTr("Your balance or this transaction changed while it was being prepared. Review it again.")
+        } else {
+            root.prepareTransactionErrorText = root.wallet.transactionError.length > 0
+                ? root.displayTransactionError(root.wallet.transactionError)
+                : root.selectedInputsActive ? root.selectedInputsBalanceErrorText : root.availableBalanceErrorText
+        }
     }
 
     function openTransactionReview() {
@@ -79,18 +139,28 @@ PageStack {
         root.openWhileShown(sendPage.openPaymentRequestImport)
     }
 
+    function acceptDesktopImport(mailbox: DesktopIntentModel): bool {
+        const imports = sendPage.imports
+        if (!mailbox || !imports.canAccept) return false
+        // Taking the inspection can change the selection; the import then
+        // belongs to no draft and is cancelled.
+        const context = imports.context
+        return imports.acceptImport(mailbox.takeInspection(imports), context)
+    }
+
     function openPsbtFileImport() {
         root.returnToSendForm()
         root.openWhileShown(sendPage.openPsbtFileImport)
     }
 
-    // Counts edits to the payment draft. A confirmation applies only to the
-    // draft it was shown for, so any edit closes it, including one from
-    // outside the form such as File > Open URI.
-    property int draftRevision: 0
+    // The draft owner stamps captured user intent. Validation echoes and
+    // automatic Maximum observations do not create another user revision.
+    readonly property string draftRevision: root.wallet ? root.wallet.recipients.revision : ""
+    onDraftRevisionChanged: if (sendPage && reviewSweepAlert) root.draftChanged()
 
     function draftChanged() {
-        root.draftRevision++
+        sendPage.imports.draftChanged()
+        root.preparingReview = false
         reviewSweepAlert.close()
     }
 
@@ -114,19 +184,11 @@ PageStack {
     function resetSendForm() {
         if (!root.wallet) return
         root.wallet.recipients.clear()
-        root.wallet.clearSelectedCoins()
+        root.wallet.coinsListModel.setManualInputSelection(false)
         root.wallet.coinsListModel.update()
-        root.manualCoinSelection = false
         root.clearPrepareTransactionError()
         sendPage.expandedRecipient = 0
-        sendPage.paymentRequestStatus = ""
-        sendPage.paymentRequestIsError = false
-        sendPage.paymentRequestMessage = ""
-        sendPage.m_pendingClipboardUri = ""
-        sendPage.m_filledUri = ""
-        sendPage.m_dismissedUri = ""
-        sendPage.showClipboardUriBanner = false
-        sendPage.clearPendingPaymentUriPaste()
+        sendPage.imports.clearStatus()
     }
 
     function displayTransactionError(error) {
@@ -147,12 +209,8 @@ PageStack {
         sendPage.expandedRecipient = index
     }
 
-    // Re-check the clipboard whenever the Send tab becomes visible so the
-    // banner appears even if the URI was copied before navigating here.
     onVisibleChanged: {
-        if (visible) {
-            sendPage.checkClipboard()
-        } else {
+        if (!visible) {
             root.hiddenCount++
             reviewSweepAlert.close()
         }
@@ -163,18 +221,6 @@ PageStack {
             transactionReviewPopup.close()
         }
         root.pop()
-        // Clear URI import state so stale results from the previous wallet
-        // are not shown when this page is pointed at another wallet.
-        sendPage.paymentRequestStatus = ""
-        sendPage.paymentRequestIsError = false
-        sendPage.paymentRequestMessage = ""
-        sendPage.showClipboardUriBanner = false
-        sendPage.m_pendingClipboardUri = ""
-        sendPage.m_filledUri = ""
-        sendPage.m_dismissedUri = ""
-        sendPage.m_applyingUri = false
-        sendPage.clearPendingPaymentUriPaste()
-        paymentUriOverwritePopup.close()
     }
 
     Connections {
@@ -193,44 +239,31 @@ PageStack {
             root.scheduleFeeEstimates()
         }
         function onTotalAmountChanged() {
-            // With Use maximum the amount follows fee estimates; only a
-            // fixed amount changing is an edit. Replacing the maximum
-            // amount clears the maximum recipient, handled below.
-            if (root.wallet && !root.wallet.maximumRecipient) root.draftChanged()
+            // Only the bounded warning presentation follows this observation.
+            // A validation echo does not retire the original import intent.
+            if (root.wallet && !root.wallet.maximumRecipient) reviewSweepAlert.close()
         }
         function onCurrentRecipientChanged() {
             root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
-            sendPage.paymentRequestStatus = ""
-            sendPage.paymentRequestIsError = false
-            sendPage.paymentRequestMessage = ""
             sendPage.expandedRecipient = root.wallet.recipients.currentIndex - 1
-            sendPage.checkClipboard()
-            sendPage.clearPendingPaymentUriPaste()
-            paymentUriOverwritePopup.close()
-        }
-    }
-
-    Connections {
-        target: root.recipient ? root.recipient.address : null
-        function onFormattedAddressChanged() {
-            root.draftChanged()
         }
     }
 
     Connections {
         target: root.wallet ? root.wallet.coinsListModel : null
-        function onSelectedCoinsCountChanged() {
+        function onSelectionSnapshotChanged() {
             root.draftChanged()
             root.clearPrepareTransactionError()
-            root.scheduleFeeEstimates()
         }
     }
 
     Connections {
         target: root.wallet
         function onCurrentTransactionChanged() { reviewSweepAlert.close() }
+        function onPreparationChanged() { root.handlePreparationOutcome() }
+        function onPsbtActionChanged() { root.handlePsbtOutcome() }
         function onMaximumRecipientChanged() { root.draftChanged() }
         function onCustomFeeEnabledChanged() {
             root.clearPrepareTransactionError()
@@ -243,7 +276,7 @@ PageStack {
     Binding {
         target: root.recipient ? root.recipient.amount : null
         property: "unit"
-        value: optionsModel.displayUnit
+        value: ApplicationModels.optionsModel.displayUnit
         when: root.recipient !== null
     }
 
@@ -252,7 +285,7 @@ PageStack {
         satoshi: root.wallet && root.wallet.recipients
             ? root.wallet.recipients.totalAmountSatoshi
             : 0
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
     }
 
     initialItem: Page {
@@ -265,7 +298,7 @@ PageStack {
             sendOptionsPopup.close()
             if (result === WalletQmlModel.WalletCanSign) {
                 root.openTransactionReview()
-            } else if (result === WalletQmlModel.WalletCannotSign) {
+            } else if (result === WalletQmlModel.WalletCannotSign || result === WalletQmlModel.ReviewPending) {
                 root.openTransactionReview()
             } else if (result === WalletQmlModel.TransactionAlreadyKnown) {
                 knownPsbtTxPopup.txid = root.wallet.importedPsbt.matchedTxid
@@ -285,8 +318,7 @@ PageStack {
 
         function openPsbtFileImport() {
             sendOptionsPopup.close()
-            psbtOpenDialog.targetWallet = root.wallet
-            psbtOpenDialog.open()
+            if (imports.beginFileChoice()) psbtOpenDialog.open()
         }
 
         Popup {
@@ -301,11 +333,17 @@ PageStack {
             dim: false
             closePolicy: Popup.NoAutoClose
             padding: 0
-            width: Overlay.overlay.width
-            height: Overlay.overlay.height
-            onOpened: if (reviewStack.currentItem) reviewStack.currentItem.focusInitialControl()
+            width: Overlay.overlay ? Overlay.overlay.width : 0
+            height: Overlay.overlay ? Overlay.overlay.height : 0
+            onOpened: {
+                const review = reviewStack.currentItem as SendTransactionReview
+                const complete = reviewStack.currentItem as SendComplete
+                if (review) review.focusInitialControl()
+                else if (complete) complete.focusInitialControl()
+            }
 
             enter: Transition {
+                enabled: Theme.motion.animated
                 NumberAnimation {
                     property: "verticalOffset"
                     from: Theme.motion.reduced ? 0 : transactionReviewPopup.height
@@ -322,6 +360,7 @@ PageStack {
                 }
             }
             exit: Transition {
+                enabled: Theme.motion.animated
                 NumberAnimation {
                     property: "verticalOffset"
                     to: Theme.motion.reduced ? 0 : transactionReviewPopup.height
@@ -367,7 +406,7 @@ PageStack {
                 reviewStack.pop(null, StackView.Immediate)
                 reviewWallet = null
                 importedReview = false
-                if (wallet && wasImported) {
+                if (wallet && wasImported && !wallet.sendBusy) {
                     wallet.discardCurrentTransaction()
                 }
             }
@@ -396,11 +435,13 @@ PageStack {
                     SendTransactionReview {
                         wallet: transactionReviewPopup.reviewWallet
                         onBack: transactionReviewPopup.close()
-                        onTransactionSent: (txid) => {
+                        onTransactionSent: (txid, submissionState, recordState) => {
                             transactionReviewPopup.sent = true
                             reviewStack.push(sendCompletePage, {
                                 "txid": txid,
-                                "targetBlocks": !transactionReviewPopup.importedReview && wallet && !wallet.customFeeEnabled
+                                "submissionState": submissionState,
+                                "recordState": recordState,
+                                "targetBlocks": !transactionReviewPopup.importedReview && wallet && wallet.currentTransaction.reviewFeeSource === FeeSelectionModel.Estimated
                                     ? wallet.currentTransaction.reviewTargetBlocks : 0
                             })
                         }
@@ -430,15 +471,9 @@ PageStack {
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-            property WalletQmlModel targetWallet: null
-            onAccepted: {
-                const wallet = targetWallet
-                targetWallet = null
-                if (wallet && wallet === root.wallet) {
-                    sendPage.handlePsbtImportResult(wallet.importPsbtFromFile(selectedFile.toString()))
-                }
-            }
-            onRejected: targetWallet = null
+            contextObject: sendPage.imports.operation
+            enabled: root.visible && root.wallet !== null && root.wallet.available && !root.wallet.psbtActionBusy
+            onChosen: (context, file) => sendPage.imports.chooseFile(context as ImportOperation, file)
         }
 
         // Kept hidden so functional tests can inject a PSBT path until the
@@ -489,204 +524,22 @@ PageStack {
             }
         }
 
-        // URI import state
-        property string paymentRequestStatus: ""
-        property bool paymentRequestIsError: false
-        property string paymentRequestMessage: ""
-
-        // Clipboard URI detection
-        property bool showClipboardUriBanner: false
-        // Cache the clipboard text at detection time to avoid a TOCTOU race:
-        // the "Fill" button applies this value rather than re-reading the
-        // clipboard, which may have changed since the banner appeared.
-        property string m_pendingClipboardUri: ""
-        // Soft suppress (Fill): URI that was most recently applied to the form.
-        // The banner stays hidden while all URI-specified fields still match the
-        // form; as soon as any field diverges the banner re-appears.
-        property string m_filledUri: ""
-        // Hard suppress (Dismiss): URI the user explicitly dismissed.
-        // The banner only re-appears when the clipboard contains a different URI.
-        property string m_dismissedUri: ""
-        // Guard that prevents field-change Connections from triggering a
-        // re-check while a programmatic URI fill is writing to the form.
-        property bool m_applyingUri: false
-        property var m_pendingPastedPaymentRequest: null
-        property string m_pendingPastedPaymentRequestText: ""
-
-        function looksLikePaymentUri(text) {
-            return String(text).trim().toLowerCase().startsWith("bitcoin:")
-        }
-
-        function pasteIntoFocusedRecipientField(field, editor) {
-            if (!editor) return
-            if (field === "address") {
-                editor.addressField.paste()
-            } else if (field === "label") {
-                editor.noteField.paste()
-            } else if (field === "amount") {
-                editor.amountField.paste()
-            }
-        }
-
-        function paymentRequestNote(result) {
-            if (!result.hasMessage || result.uriMessage.length === 0) return ""
-            return result.hasLabel && result.label.length > 0
-                ? result.uriMessage + " - " + result.label : result.uriMessage
-        }
-
-        function paymentUriConflicts(result, sourceField) {
-            if (!root.recipient) return false
-
-            const addressConflict = sourceField !== "address"
-                && root.recipient.address.address.length > 0
-                && root.recipient.address.address !== result.address
-            const amountConflict = sourceField !== "amount"
-                && result.hasAmount
-                && root.recipient.amount.satoshi !== 0
-                && root.recipient.amount.satoshi !== result.amountSats
-            const note = paymentRequestNote(result)
-            const noteConflict = sourceField !== "label"
-                && note.length > 0
-                && root.recipient.label.length > 0
-                && root.recipient.label !== note
-            return addressConflict || amountConflict || noteConflict
-        }
-
-        function clearPendingPaymentUriPaste() {
-            m_pendingPastedPaymentRequest = null
-            m_pendingPastedPaymentRequestText = ""
-        }
-
-        function applyPastedPaymentRequest(result, text) {
-            applyParsedPaymentRequest(result, qsTr("clipboard"))
-            if (result.success && Clipboard.text() === text) {
-                m_filledUri = text
-                showClipboardUriBanner = false
-            }
-        }
-
-        function handlePaymentUriPaste(text, sourceField) {
-            const result = BitcoinUri.parseBitcoinUri(text)
-            if (!result.success) {
-                applyParsedPaymentRequest(result, qsTr("clipboard"))
-                return
-            }
-            if (paymentUriConflicts(result, sourceField)) {
-                m_pendingPastedPaymentRequest = result
-                m_pendingPastedPaymentRequestText = text
-                paymentUriOverwritePopup.open()
-                return
-            }
-            applyPastedPaymentRequest(result, text)
-        }
-
-        function handleClipboardPaste(field, editor) {
-            const text = Clipboard.text()
-            if (looksLikePaymentUri(text)) {
-                handlePaymentUriPaste(text, field)
-            } else {
-                pasteIntoFocusedRecipientField(field, editor)
-            }
-        }
-
-        function checkClipboard() {
-            // Skip parsing when the Send tab is not visible or no wallet is
-            // loaded (recipient fields depend on the wallet being present).
-            if (!root.visible || root.wallet === null) {
-                showClipboardUriBanner = false
-                return
-            }
-
-            const text = Clipboard.text()
-            const parsed = BitcoinUri.parseBitcoinUri(text)
-            if (!parsed.success) {
-                showClipboardUriBanner = false
-                m_pendingClipboardUri = ""
-                return
-            }
-
-            // Hard suppress: user dismissed this exact URI.
-            // Only lifts when the clipboard changes to a different URI.
-            if (text === m_dismissedUri) {
-                showClipboardUriBanner = false
-                return
-            }
-
-            // Soft suppress: user filled this URI. Hide the banner while every
-            // field the URI specified still matches its current form value.
-            // As soon as any field diverges the banner re-appears automatically.
-            if (text === m_filledUri) {
-                const filled = BitcoinUri.parseBitcoinUri(m_filledUri)
-                const formMatches =
-                    root.recipient.address.address === filled.address
-                    && (!filled.hasAmount || root.recipient.amount.satoshi === filled.amountSats)
-                    && (!filled.hasLabel  || root.recipient.paymentRequestLabel === filled.label)
-                if (formMatches) {
-                    showClipboardUriBanner = false
-                    return
-                }
-                // Form diverged — lift fill suppression.
-                m_filledUri = ""
-            }
-
-            m_pendingClipboardUri = text
-            showClipboardUriBanner = true
-        }
-
-        // Apply a pre-parsed URI result to the current recipient form fields.
-        function applyParsedPaymentRequest(result, source) {
-            if (!result.success) {
-                paymentRequestStatus = result.error
-                paymentRequestIsError = true
-                return
-            }
-            m_applyingUri = true
-            sendPage.expandedRecipient = root.wallet.recipients.currentIndex - 1
-            root.recipient.applyPaymentRequest(result.address, result.hasLabel ? result.label : "", result.hasMessage ? result.uriMessage : "")
-            // Only fields present in the URI are applied. Amount is intentionally
-            // not cleared when the URI omits 'amount='. This matches Bitcoin Core
-            // Qt's URI import behaviour: only populate what the URI specifies.
-            if (result.hasAmount) {
-                root.recipient.amount.satoshi = result.amountSats
-            }
-            const note = paymentRequestNote(result)
-            if (note.length > 0) root.recipient.label = note
-            if (amountInput) amountInput.syncFromAmount(true)
-            // Lower the guard only after all writes are done. Field-change
-            // Connections must not fire checkClipboard() before the Fill
-            // handler has had a chance to set m_filledUri.
-            m_applyingUri = false
-            root.scheduleFeeEstimates()
-            paymentRequestMessage = result.hasMessage ? result.uriMessage : ""
-            paymentRequestStatus = qsTr("Payment request imported from %1").arg(source)
-            paymentRequestIsError = false
-        }
-
-        // Parse a URI from text and apply to form.
-        function applyPaymentRequestFromText(text, source) {
-            const result = BitcoinUri.parseBitcoinUri(text)
-            applyParsedPaymentRequest(result, source)
-            // If the applied URI matches what's on the clipboard, treat it like
-            // the Fill button: soft-suppress the banner so it stays hidden while
-            // the form still reflects what the URI specified.
-            if (result.success && Clipboard.text() === text) {
-                m_filledUri = text
-                showClipboardUriBanner = false
-            }
-        }
-
-        // Parse a URI from a file path and apply to form.
-        function applyPaymentRequestFromFile(path) {
-            const result = BitcoinUri.parseBitcoinUriFromFile(path)
-            applyParsedPaymentRequest(result, qsTr("file"))
+        // Payment request and PSBT imports into this wallet's draft.
+        readonly property SendImportModel imports: SendImportModel {
+            objectName: "sendImportModel"
+            target: WalletImportTarget { wallet: root.wallet; uri: BitcoinUri }
+            active: root.visible
+            clipboardText: Clipboard.currentText
+            onReviewReady: root.openTransactionReview()
         }
 
         AlertPopup {
             id: paymentUriOverwritePopup
             objectName: "sendPaymentUriOverwritePopup"
             parent: Overlay.overlay
-            title: qsTr("Confirm paste?")
-            message: qsTr("The payment request from the clipboard contains information that differs from the currently populated values. Pasting will replace the values.")
+            visible: sendPage.imports.confirmationRequired
+            title: qsTr("Replace payment details?")
+            message: qsTr("The payment request differs from the current draft. Replace the payment details?")
             messageObjectName: "sendPaymentUriOverwriteMessage"
 
             AlertAction {
@@ -694,63 +547,16 @@ PageStack {
                 role: AlertAction.Cancel
                 buttonObjectName: "sendPaymentUriOverwriteCancelButton"
                 closesPopup: false
-                onTriggered: {
-                    sendPage.clearPendingPaymentUriPaste()
-                    paymentUriOverwritePopup.close()
-                }
+                onTriggered: sendPage.imports.cancel()
             }
 
             AlertAction {
-                text: qsTr("Paste")
+                text: qsTr("Replace")
                 buttonObjectName: "sendPaymentUriOverwriteConfirmButton"
                 closesPopup: false
-                onTriggered: {
-                    const result = sendPage.m_pendingPastedPaymentRequest
-                    const text = sendPage.m_pendingPastedPaymentRequestText
-                    sendPage.clearPendingPaymentUriPaste()
-                    paymentUriOverwritePopup.close()
-                    if (result) sendPage.applyPastedPaymentRequest(result, text)
-                }
+                onTriggered: sendPage.imports.replace()
             }
         }
-
-        Connections {
-            target: Clipboard
-            function onDataChanged() { sendPage.checkClipboard() }
-        }
-
-        // Re-check the clipboard whenever any form field changes due to user
-        // input. checkClipboard() compares current values against the filled URI
-        // and re-shows the banner if any specified field has diverged.
-        // The m_applyingUri guard prevents these from firing during a programmatic
-        // fill, which would trigger a re-check before m_filledUri is set.
-        Connections {
-            target: root.recipient.address
-            function onAddressChanged() {
-                if (!sendPage.m_applyingUri) {
-                    if (root.recipient.address.address === "") {
-                        sendPage.paymentRequestStatus = ""
-                        sendPage.paymentRequestIsError = false
-                        sendPage.paymentRequestMessage = ""
-                    }
-                    sendPage.checkClipboard()
-                }
-            }
-        }
-        Connections {
-            target: root.recipient.amount
-            function onAmountChanged() {
-                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
-            }
-        }
-        Connections {
-            target: root.recipient
-            function onLabelChanged() {
-                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
-            }
-        }
-
-        Component.onCompleted: sendPage.checkClipboard()
 
         Connections {
             target: sendOptionsPopup
@@ -787,7 +593,7 @@ PageStack {
                 text: qsTr("Apply")
                 buttonObjectName: "sendUriImportApplyButton"
                 enabled: uriImportInput.text.trim().length > 0
-                onTriggered: sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
+                onTriggered: sendPage.imports.importText(uriImportInput.text, SendImportModel.ManualEntry)
             }
         }
 
@@ -797,25 +603,20 @@ PageStack {
             anchors.fill: parent
             keys: ["text/uri-list", "text/plain"]
             onDropped: (drop) => {
-                if (drop.hasUrls && drop.urls.length > 0) {
-                    const url = drop.urls[0].toString()
-                    if (url.startsWith("file://")) {
-                        // Pass the raw file:// URL; C++ uses QUrl::toLocalFile()
-                        // to derive the correct local path on all platforms.
-                        sendPage.applyPaymentRequestFromFile(url)
-                    } else {
-                        sendPage.applyPaymentRequestFromText(url, qsTr("drag and drop"))
-                    }
-                } else if (drop.hasText) {
-                    sendPage.applyPaymentRequestFromText(drop.text, qsTr("drag and drop"))
-                }
+                sendPage.imports.importDrop(drop.hasUrls ? drop.urls.length : 0,
+                    drop.hasUrls && drop.urls.length ? drop.urls[0] : "", drop.hasUrls ? "" : drop.text)
             }
+        }
+
+        function removeRecipient(index) {
+            root.wallet.recipients.removeAt(index)
+            expandedRecipient = root.wallet.recipients.currentIndex - 1
         }
 
         property int expandedRecipient: root.wallet ? root.wallet.recipients.currentIndex - 1 : 0
         readonly property var currentEditor: {
             const revision = root.wallet ? root.wallet.recipients.currentIndex : 0
-            const row = recipientRepeater.itemAt(expandedRecipient)
+            const row = recipientRepeater.itemAt(expandedRecipient) as SendRecipientCard
             return row ? row.editorItem : null
         }
         readonly property var addressField: currentEditor ? currentEditor.addressField : null
@@ -839,7 +640,7 @@ PageStack {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top; anchors.topMargin: 28
                     spacing: 24
-                    enabled: walletController.initialized
+                    enabled: ApplicationModels.walletController.initialized
                     RowLayout {
                         Layout.fillWidth: true
                         ColumnLayout {
@@ -871,7 +672,14 @@ PageStack {
                                     animationAvailableWidth: Math.max(0, availableBalanceRow.parent.width
                                         - availableBalanceCaption.width - availableBalanceRow.spacing)
                                 }
-                                BitcoinAmount { id: availableAmount; satoshi: root.wallet ? (root.wallet.coinsListModel.coinCount, root.wallet.availableSendBalanceSatoshi) : 0; unit: optionsModel.displayUnit }
+                                BitcoinAmount {
+                                    id: availableAmount
+                                    satoshi: {
+                                        const coinCount = root.wallet ? root.wallet.coinsListModel.coinCount : 0
+                                        return root.wallet ? root.wallet.availableSendBalanceSatoshi : 0
+                                    }
+                                    unit: ApplicationModels.optionsModel.displayUnit
+                                }
                             }
                         }
                         OverflowMenuButton {
@@ -886,7 +694,7 @@ PageStack {
                                     if (psbtAutomationPathField.text.length > 0) {
                                         const automatedPath = psbtAutomationPathField.text
                                         psbtAutomationPathField.text = ""
-                                        sendPage.handlePsbtImportResult(root.wallet.importPsbtFromFile(automatedPath))
+                                        root.requestPsbtImport(automatedPath)
                                     } else sendPage.openPsbtFileImport()
                                 }
                             }
@@ -919,109 +727,42 @@ PageStack {
                                 Repeater {
                                     id: recipientRepeater
                                     model: root.wallet.recipients
-                                    delegate: Pane {
-                                        id: recipientCard
-                                        required property int index
-                                        required property var recipientObject
-                                        readonly property var walletModel: root.wallet
-                                        readonly property var pageController: sendPage
-                                        readonly property bool expanded: sendPage.expandedRecipient === index
-                                        readonly property var editorItem: editorLoader.item
-                                        objectName: "sendRecipientCard_" + index
+                                    delegate: SendRecipientCard {
+                                        id: recipientDelegate
+                                        wallet: root.wallet
                                         width: recipientColumn.width
-                                        implicitWidth: 0
-                                        padding: 12
-                                        implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-                                        background: Rectangle {
-                                            color: Theme.color.surface1
-                                            radius: Theme.radius.card
+                                        expanded: sendPage.expandedRecipient === recipientDelegate.index
+                                        clipboardRequest: sendPage.imports.clipboardOffered
+                                        clipboardText: sendPage.imports.offeredText
+                                        onToggleExpanded: {
+                                            const wasExpanded = recipientDelegate.expanded
+                                            root.wallet.recipients.setCurrentIndex(recipientDelegate.index)
+                                            sendPage.expandedRecipient = wasExpanded ? -1 : recipientDelegate.index
                                         }
-                                        contentItem: ColumnLayout {
-                                            spacing: 12
-                                            RowLayout {
-                                                visible: root.wallet.recipients.count > 1
-                                                Layout.fillWidth: true; spacing: 10
-                                                AbstractButton {
-                                                    id: recipientToggle
-                                                    objectName: "sendEditRecipient_" + recipientCard.index
-                                                    Layout.fillWidth: true; implicitHeight: 36
-                                                    focusPolicy: Qt.StrongFocus
-                                                    //: Accessible action to expand or collapse one recipient in the stack.
-                                                    Accessible.name: qsTr("Edit recipient %1").arg(recipientCard.index + 1)
-                                                    //: Accessible state of one recipient in the stack.
-                                                    Accessible.description: recipientCard.expanded ? qsTr("Expanded") : qsTr("Collapsed")
-                                                    background: Item {
-                                                        FocusBorder {
-                                                            objectName: recipientToggle.objectName + "FocusBorder"
-                                                            visible: recipientToggle.visualFocus
-                                                            targetRadius: 6
-                                                        }
-                                                    }
-                                                    onClicked: {
-                                                        const wasExpanded = recipientCard.expanded
-                                                        root.wallet.recipients.setCurrentIndex(recipientCard.index)
-                                                        sendPage.expandedRecipient = wasExpanded ? -1 : recipientCard.index
-                                                    }
-                                                    contentItem: RowLayout {
-                                                        spacing: 10
-                                                        Rectangle {
-                                                            implicitWidth: 28; implicitHeight: 28; radius: height / 2
-                                                            color: recipientCard.expanded ? Theme.color.accent : Theme.color.surface3
-                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; textStyle: Theme.text.subheading; color: recipientCard.expanded ? Theme.color.accentForeground : Theme.color.neutral9 }
-                                                        }
-                                                        CoreText {
-                                                            Layout.fillWidth: true
-                                                            Layout.alignment: Qt.AlignVCenter
-                                                            horizontalAlignment: Text.AlignLeft
-                                                            wrap: false
-                                                            elide: Text.ElideRight
-                                                            textStyle: Theme.text.subheading
-                                                            text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
-                                                        }
-                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; textStyle: Theme.text.amountDescription }
-                                                        CaretRightIcon {
-                                                            expanded: recipientCard.expanded
-                                                            color: Theme.color.neutral6
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            Loader {
-                                                id: editorLoader
-                                                active: recipientCard.expanded || root.wallet.recipients.count === 1
-                                                visible: active
-                                                Layout.fillWidth: true
-                                                sourceComponent: SendRecipientEditor {
-                                                    wallet: root.wallet; recipient: recipientCard.recipientObject
-                                                    clipboardRequest: sendPage.showClipboardUriBanner
-                                                    canRemove: root.wallet.recipients.count > 1
-                                                    removeButtonObjectName: "sendRemoveRecipient_" + recipientCard.index
-                                                    onPasteRequested: function(field) { sendPage.handleClipboardPaste(field, editorLoader.item) }
-                                                    onEdited: { root.clearPrepareTransactionError(); root.scheduleFeeEstimates() }
-                                                    onRemoveRequested: {
-                                                        const walletModel = recipientCard.walletModel
-                                                        const pageController = recipientCard.pageController
-                                                        walletModel.recipients.removeAt(recipientCard.index)
-                                                        pageController.expandedRecipient = walletModel.recipients.currentIndex - 1
-                                                    }
-                                                }
-                                            }
+                                        onPaymentUriPasted: function(field, text) {
+                                            sendPage.imports.importPaste(field, text, recipientDelegate.editorItem ? recipientDelegate.editorItem.recipient : null)
                                         }
+                                        onEdited: {
+                                            root.draftChanged()
+                                            root.clearPrepareTransactionError()
+                                            root.scheduleFeeEstimates()
+                                        }
+                                        onRemoveRequested: sendPage.removeRecipient(recipientDelegate.index)
                                     }
                                 }
                             }
                             CoreText {
                                 objectName: "sendPaymentRequestStatusText"
-                                visible: sendPage.paymentRequestIsError && sendPage.paymentRequestStatus.length > 0
+                                visible: sendPage.imports.statusIsError && sendPage.imports.status.length > 0
                                 Layout.leftMargin: 16; Layout.rightMargin: 16
-                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
+                                Layout.fillWidth: true; text: sendPage.imports.status; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
                             }
 
                             NeutralButton {
                                 objectName: "sendAddRecipientButton"
                                 Layout.fillWidth: true
                                 text: qsTr("+ Add another")
-                                enabled: root.wallet.recipients.count < 25
+                                enabled: root.wallet.recipients.canAddRecipient
                                 onClicked: { root.wallet.recipients.add(); sendPage.expandedRecipient = root.wallet.recipients.currentIndex - 1 }
                             }
                         }
@@ -1058,14 +799,8 @@ PageStack {
                                         model: [qsTr("Automatic"), qsTr("Manual")]
                                         currentIndex: root.manualCoinSelection || root.selectedInputsActive ? 1 : 0
                                         onSelected: function(index, option) {
-                                            root.manualCoinSelection = index === 1
-                                            if (index === 0) {
-                                                if (root.selectedInputsActive) {
-                                                    root.wallet.clearSelectedCoins()
-                                                    root.wallet.coinsListModel.update()
-                                                    root.scheduleFeeEstimates()
-                                                }
-                                            }
+                                            if (root.wallet && root.wallet.coinsListModel)
+                                                root.wallet.coinsListModel.setManualInputSelection(index === 1)
                                         }
                                     }
                                 }
@@ -1089,7 +824,8 @@ PageStack {
                                     objectName: "sendInputsSelectedText"
                                     visible: false
                                     //: Status in the Send form showing how many transaction inputs are selected.
-                                    text: root.selectedInputsActive ? (root.wallet.coinsListModel.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount))
+                                    text: root.manualCoinSelection && root.wallet.coinsListModel.selectedCoinsCount === 0 ? qsTr("No inputs selected")
+                                        : root.selectedInputsActive ? (root.wallet.coinsListModel.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount))
                                         : qsTr("%1 inputs selected automatically").arg(root.wallet.estimatedInputCount)
                                 }
                                 NeutralButton {
@@ -1097,15 +833,15 @@ PageStack {
                                     buttonSize: NeutralButton.Large
                                     visible: false
                                     text: qsTr("Use automatic selection")
-                                    onClicked: { root.wallet.clearSelectedCoins(); root.wallet.coinsListModel.update(); root.scheduleFeeEstimates() }
+                                    onClicked: { root.wallet.coinsListModel.setManualInputSelection(false); root.wallet.coinsListModel.update(); root.scheduleFeeEstimates() }
                                 }
                             }
 
                             FormSection {
                                 Layout.fillWidth: true
                                 title: qsTr("Summary")
-                                BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
-                                BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
+                                BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: ApplicationModels.optionsModel.displayUnit }
+                                BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: ApplicationModels.optionsModel.displayUnit }
                                 ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel }
                                 ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.amountBody }
                             }
@@ -1115,8 +851,8 @@ PageStack {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true
                                 text: qsTr("Review transaction")
-                                enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
-                                    && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
+                                enabled: !sendPage.imports.pending && root.wallet && root.wallet.available && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending && !root.wallet.preparationBusy && !root.wallet.fees.policyPending && !root.wallet.customFeeTargetPending && !root.wallet.coinSelectionPending && !root.wallet.coinSelectionBlocked
+                                    && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.maximumRecipient || root.wallet.fees.errorText.length === 0) && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: root.confirmTransactionReview()
                             }
                         }
@@ -1130,7 +866,7 @@ PageStack {
         // C++ context property set at startup). In production builds the Loader
         // is inactive and no hook items exist in the QML object tree.
         Loader {
-            active: testAutomationEnabled
+            active: ApplicationModels.testAutomationEnabled
             anchors.fill: parent
             sourceComponent: Component {
                 Item {
@@ -1145,7 +881,7 @@ PageStack {
                     Button {
                         objectName: "sendApplyPaymentRequestFilePathButton"
                         visible: false
-                        onClicked: sendPage.applyPaymentRequestFromFile(fileImportPathInput.text)
+                        onClicked: sendPage.imports.importFile(fileImportPathInput.text)
                     }
 
                     TextField {
@@ -1157,11 +893,11 @@ PageStack {
                     Button {
                         objectName: "sendApplyDropUriButton"
                         visible: false
-                        onClicked: sendPage.applyPaymentRequestFromText(dropUriInput.text, qsTr("drag and drop"))
+                        onClicked: sendPage.imports.importText(dropUriInput.text, SendImportModel.DragAndDrop)
                     }
 
                     // Exercises the DropArea hasUrls + file:// branch.
-                    // Passes the raw URL to applyPaymentRequestFromFile so C++
+                    // Passes the raw URL to importFile so C++
                     // handles the platform-correct toLocalFile() conversion.
                     TextField {
                         id: dropFileUrlInput
@@ -1175,22 +911,23 @@ PageStack {
                         onClicked: {
                             const url = dropFileUrlInput.text
                             if (url.startsWith("file://")) {
-                                sendPage.applyPaymentRequestFromFile(url)
+                                sendPage.imports.importFile(url)
                             } else {
-                                sendPage.applyPaymentRequestFromText(url, qsTr("drag and drop"))
+                                sendPage.imports.importText(url, SendImportModel.DragAndDrop)
                             }
                         }
                     }
                 }
             }
         }
+
     }
 
     AlertPopup {
         id: reviewSweepAlert
         objectName: "sendReviewSweepAlert"
         parent: Overlay.overlay
-        property int draftRevision: -1
+        property string draftRevision: ""
         //: Confirmation before reviewing a transaction that sends the wallet's entire available balance.
         title: qsTr("Use all available funds?")
         //: %1 is the total recipient amount with its unit, excluding the transaction fee.
@@ -1225,16 +962,25 @@ PageStack {
         descriptionText: qsTr("Enter your wallet password to prepare this transaction for review.")
         confirmText: qsTr("Unlock and continue")
         busyConfirmText: qsTr("Unlocking…")
+        // The password answers the wallet and draft it was requested for.
+        property WalletQmlModel actionWallet: null
+        property string actionDraftRevision: ""
+        contextValid: root.visible && actionWallet !== null
+            && actionWallet === root.wallet && actionWallet.available && actionDraftRevision === root.draftRevision
+        onAboutToShow: { actionWallet = root.wallet; actionDraftRevision = root.draftRevision }
+        busy: opened && contextValid && actionWallet.preparationBusy
+        errorText: contextValid && actionWallet.preparationState === WalletQmlModel.PreparationFailed ? actionWallet.transactionError : ""
         onSubmitted: (passphrase) => {
-            reviewPassphrasePopup.busy = true
-            if (root.wallet.prepareTransactionWithPassphrase(passphrase)) {
-                reviewPassphrasePopup.busy = false
-                reviewPassphrasePopup.close()
-                root.openTransactionReview()
-                return
-            }
-            reviewPassphrasePopup.busy = false
-            reviewPassphrasePopup.errorText = root.wallet.transactionError
+            if (!opened || !contextValid || actionWallet.preparationBusy) return
+            root.preparationWallet = actionWallet
+            root.preparationDraftRevision = root.draftRevision
+            root.preparationHiddenCount = root.hiddenCount
+            root.preparingReview = true
+            root.preparationTicket = 0
+            root.preparationTicket = actionWallet.requestPrepareTransactionWithPassphrase(passphrase)
+            if (!root.preparationTicket) root.preparingReview = false
+            else root.handlePreparationOutcome()
         }
     }
+
 }

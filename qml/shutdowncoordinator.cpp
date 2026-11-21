@@ -5,6 +5,23 @@
 #include <qml/initexecutor.h>
 #include <qml/shutdowncoordinator.h>
 #include <qml/backendexecutor.h>
+#include <QPointer>
+
+void QmlShutdownCoordinator::addBeforeInterruptTask(std::function<void(std::function<void()>)> begin)
+{
+    Q_ASSERT(!m_shutdown_requested);
+    const QPointer<QmlShutdownCoordinator> observer{this};
+    const auto completed = std::make_shared<bool>(false);
+    m_before_interrupt_participants.emplace_back([observer, completed, begin = std::move(begin)] {
+        begin([observer, completed] {
+            if (!observer) return;
+            QMetaObject::invokeMethod(observer, [observer, completed] {
+                if (!observer || !observer->m_draining_before_interrupt || std::exchange(*completed, true)) return;
+                observer->participantFinished(true);
+            }, Qt::QueuedConnection);
+        });
+    });
+}
 
 QmlShutdownCoordinator::QmlShutdownCoordinator(QmlInitExecutor& executor, QObject* parent)
     : QObject(parent), m_executor(executor)
@@ -19,6 +36,7 @@ void QmlShutdownCoordinator::requestShutdown()
 {
     if (m_shutdown_requested) return;
     m_shutdown_requested = true;
+    for (const auto& fence : m_admission_fences) fence();
     Q_EMIT shutdownStarted();
     m_pending_participants = m_before_interrupt_participants.size();
     if (m_pending_participants == 0) {

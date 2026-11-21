@@ -5,12 +5,14 @@
 #ifndef BITCOIN_QML_MODELS_PEERLISTMODEL_H
 #define BITCOIN_QML_MODELS_PEERLISTMODEL_H
 
-#include <net.h>
-#include <net_processing.h>
+#include <qml/models/peerrecord.h>
+#include <qml/nativelistmodel.h>
+#include <util/time.h>
+#include <map>
+#include <set>
 
-#include <QAbstractListModel>
-#include <QList>
 #include <QModelIndex>
+#include <QPointer>
 #include <QStringList>
 #include <QVariant>
 
@@ -21,20 +23,16 @@ class Node;
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
+class PeerCommandPort;
 
-struct CNodeCombinedStats {
-    CNodeStats nodeStats;
-    CNodeStateStats nodeStateStats;
-    bool fNodeStateStatsAvailable;
-};
-Q_DECLARE_METATYPE(const CNodeCombinedStats*)
-
-class PeerListModel : public QAbstractListModel
+class PeerListModel : public NativeListModel
 {
     Q_OBJECT
 
 public:
-    explicit PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready = true);
+    explicit PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready = true,
+                           execution::SnapshotServices services = {},
+                           std::function<NodeClock::time_point()> clock = [] { return NodeClock::now(); });
     void backendInitialized();
     ~PeerListModel();
 
@@ -43,6 +41,12 @@ public:
     Q_INVOKABLE
     void stopAutoRefresh();
     void beginShutdown();
+    void close() override;
+    int rowForId(qint64 id) const { return indexForKey(QString::number(id)); }
+    void watchDetails(qint64 id, PeerPresentationObserver* details);
+    void setCommands(PeerCommandPort* commands);
+    PeerCommandPort* commands() const;
+    bool readingAvailable() const { return !stopping(); }
 
     enum Role {
         StatsRole = Qt::UserRole,
@@ -57,23 +61,32 @@ public:
         Received,
         Subversion,
         Transport,
+        ConnectionId,
+        NodeIdText,
     };
 
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
 public Q_SLOTS:
     void refresh();
+Q_SIGNALS:
+    void commandsChanged();
 
+protected:
+    void rowUpdated(const QString& key, const NativeRowHandle& row) override;
+    void rowRemoved(const QString& key) override;
 private:
-    QList<CNodeCombinedStats> m_peers_data{};
-    interfaces::Node& m_node;
+    void notifyDetails(qint64 id, bool removed, PeerPresentationObserver* after = nullptr);
+    struct DetailRegistry;
+    std::shared_ptr<DetailRegistry> m_details;
     QTimer* m_timer{nullptr};
-    bool m_stopping{false};
     bool m_backend_ready;
     bool m_auto_refresh_requested{false};
+    bool m_destroying{false};
+    PeerCommandPort* m_commands{nullptr};
+    QPointer<QObject> m_commands_object;
+    QMetaObject::Connection m_commands_change, m_commands_destroyed;
 };
-
 #endif // BITCOIN_QML_MODELS_PEERLISTMODEL_H

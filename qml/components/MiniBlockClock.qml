@@ -17,7 +17,7 @@ Item {
     property bool pageSelected: false
     property color selectedColor: Theme.color.accentText
     property bool renderingActive: true
-    property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
+    property var nodeModelRef: typeof nodeModel !== "undefined" ? ApplicationModels.nodeModel : null
     readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
     readonly property bool synced: root.nodeModelRef !== null && root.nodeModelRef.initialSyncComplete
     readonly property real syncProgressFraction: root.nodeModelRef !== null
@@ -25,8 +25,8 @@ Item {
         : 0
     property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
     property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
-    property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
-    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
+    property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? ApplicationModels.networkStatusModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? ApplicationModels.blockClockModel : null
     property bool offline: networkStatusModelRef !== null && networkStatusModelRef.networkOffline
     readonly property bool windowVisible: root.Window.window !== null &&
         root.Window.window.visible &&
@@ -56,12 +56,12 @@ Item {
     BlockClockDial {
         id: dial
         objectName: "miniBlockClockDial"
+        services: ApplicationModels.presentationServices
         visible: root.showConnectingState || root.showIbdState || root.showClockState
         anchors.fill: parent
         penWidth: root.strokeWidth
         connectingAnimationDelayMs: 0
         currentTimeFraction: root.pageSelected ? 1.0 : (root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0)
-        blockTimeFractions: []
         syncProgress: root.pageSelected ? 1.0 : root.syncProgressFraction
         connected: root.pageSelected || root.connected
         synced: root.pageSelected || root.synced

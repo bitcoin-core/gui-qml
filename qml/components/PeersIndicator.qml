@@ -28,9 +28,11 @@ Row {
         model: 5
         Rectangle {
             id: dot
-            objectName: "peerIndicatorDot" + index
-            readonly property real restingOpacity: (index === 0 && root.numOutboundPeers > 0)
-                || (index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
+            // Qt 6.2 does not inject `index` into this delegate; declare it.
+            required property int index
+            objectName: "peerIndicatorDot" + dot.index
+            readonly property real restingOpacity: (dot.index === 0 && root.numOutboundPeers > 0)
+                || (dot.index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
             property real pulseOpacity: restingOpacity
             width: root.indicatorDimensions
             height: root.indicatorDimensions
@@ -41,7 +43,7 @@ Row {
             SequentialAnimation on pulseOpacity {
                 id: pulse
                 loops: Animation.Infinite
-                running: root.presentationActive && numOutboundPeers === 0 && index === 0 && !root.paused
+                running: root.presentationActive && root.numOutboundPeers === 0 && dot.index === 0 && !root.paused
                     && Theme.motion.decorativeLoops
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }

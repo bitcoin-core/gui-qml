@@ -6,6 +6,7 @@
 #define BITCOIN_QML_MODELS_TRANSACTIONFLOW_H
 
 #include <primitives/transaction.h>
+#include <qml/flowpresentation.h>
 
 #include <QVariantMap>
 

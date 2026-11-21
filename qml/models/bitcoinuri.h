@@ -26,6 +26,8 @@ class BitcoinUri
 {
 public:
     static BitcoinUriParseResult Parse(const QString& uri_text);
+    /** Whether the edit from previous to current inserted exactly the clipboard text. */
+    static bool PasteProvenance(const QString& previous, const QString& current, const QString& clipboard);
 };
 
 #endif // BITCOIN_QML_MODELS_BITCOINURI_H

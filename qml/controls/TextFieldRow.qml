@@ -3,12 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQml 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 FormRow {
     id: root
 
+    property TextEditInput textInput: null
     property string fieldObjectName: ""
     property string text: ""
     property string placeholderText: ""
@@ -48,7 +51,9 @@ FormRow {
 
     onValueChanged: if (tracksValue && !modified) text = value
     // Also covers a caller that assigned field.text and so replaced its binding.
-    onTextChanged: if (input.text !== text) input.text = text
+    // A typed editor's draft owns the field: a changed committed value must
+    // not overwrite what the user typed while the draft is unsaved.
+    onTextChanged: if (!textInput && input.text !== text) input.text = text
     Component.onCompleted: if (tracksValue) reset()
 
     trailingItem: RowLayout {
@@ -63,7 +68,11 @@ FormRow {
             implicitHeight: root.fieldHeight
             enabled: root.enabled
             readOnly: root.readOnly
-            text: root.text
+            Binding {
+                target: input
+                property: "text"
+                value: root.textInput ? root.textInput.text : root.text
+            }
             placeholderText: root.placeholderText
             placeholderTextColor: root.placeholderColor
             validator: root.validator
@@ -94,10 +103,14 @@ FormRow {
             }
 
             onTextChanged: {
-                if (root.text !== text) root.text = text
+                if (!root.textInput && root.text !== text) root.text = text
             }
             onTextEdited: {
-                if (root.tracksValue) root.modified = text !== root.value
+                if (root.textInput) {
+                    root.textInput.edit(text)
+                } else if (root.tracksValue) {
+                    root.modified = text !== root.value
+                }
                 root.textEdited(text)
             }
             onEditingFinished: root.editingFinished()

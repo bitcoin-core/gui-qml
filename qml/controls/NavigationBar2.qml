@@ -17,7 +17,7 @@ Pane {
     property alias centerItem: center_section.contentItem
     property alias rightItem: right_section.contentItem
     property var navigationStack: null
-    property bool showBackButton: navigationStack ? navigationStack.canGoBack : false
+    property bool showBackButton: root.navigationStack ? root.navigationStack.canGoBack : false
     property string backButtonObjectName: ""
     // Empty for an icon-only back button.
     property string backButtonText: qsTr("Back")
@@ -46,6 +46,9 @@ Pane {
                     iconObjectName: root.backButtonIconObjectName
                     text: root.backButtonText
                     Accessible.name: root.backButtonAccessibleName
+                    // Keyboard users tab to Back; a click must not take focus
+                    // from an editor first, which would commit its draft.
+                    focusPolicy: Qt.TabFocus
                     onClicked: {
                         if (root.navigationStack) {
                             root.navigationStack.goBack()

@@ -10,29 +10,22 @@ import "../controls"
 ColumnLayout {
     id: root
     objectName: "feeSelectionControl"
-    property var walletModel: null
-    property int currentTarget: walletModel ? walletModel.targetBlocks : 6
-    readonly property bool customSelected: walletModel ? walletModel.customFeeEnabled : false
+    property WalletQmlModel walletModel: null
+    readonly property FeeSelectionModel fees: walletModel ? walletModel.fees : null
+    readonly property int currentTarget: fees ? fees.targetBlocks : 6
+    readonly property bool customSelected: fees && fees.mode === FeeSelectionModel.Manual
     readonly property var blockTargets: [2, 3, 4, 6, 10, 25, 50]
-    readonly property int presetIndex: customSelected ? 3 : currentTarget === 2 ? 0 : currentTarget === 10 ? 2 : 1
+    readonly property int presetIndex: fees ? fees.presetIndex : 1
     readonly property var speedOptions: [
-        { text: qsTr("Priority"), subtitle: qsTr("Targets 2 blocks · Usually higher fee"), value: 0, blocks: 2, objectName: "feeSelectionOption0" },
-        { text: qsTr("Standard"), subtitle: qsTr("Targets 6 blocks · Balanced speed and cost"), value: 1, blocks: 6, objectName: "feeSelectionOption1" },
-        { text: qsTr("Flexible"), subtitle: qsTr("Targets 10 blocks · Usually lower fee"), value: 2, blocks: 10, objectName: "feeSelectionOption2" },
+        { text: qsTr("Priority"), subtitle: qsTr("Requested target: 2 blocks"), value: 0, blocks: 2, objectName: "feeSelectionOption0" },
+        { text: qsTr("Standard"), subtitle: qsTr("Requested target: 6 blocks"), value: 1, blocks: 6, objectName: "feeSelectionOption1" },
+        { text: qsTr("Flexible"), subtitle: qsTr("Requested target: 10 blocks"), value: 2, blocks: 10, objectName: "feeSelectionOption2" },
         { text: qsTr("Custom"), subtitle: qsTr("Choose your fee rate and block target"), value: 3, blocks: -1, objectName: "feeSelectionOption3" }
     ]
     signal feeChanged(int target)
     spacing: 0
 
-    function nearestBlockTarget(target) {
-        let nearest = blockTargets[0]
-        for (const candidate of blockTargets) {
-            if (Math.abs(candidate - target) < Math.abs(nearest - target)) nearest = candidate
-        }
-        return nearest
-    }
-
-    BitcoinAmount { id: fee; satoshi: root.walletModel ? Math.max(0, root.walletModel.estimatedFeeSatoshi) : 0; unit: optionsModel.displayUnit }
+    BitcoinAmount { id: fee; satoshi: root.walletModel ? Math.max(0, root.walletModel.estimatedFeeSatoshi) : 0; unit: ApplicationModels.optionsModel.displayUnit }
 
     FormRow {
         Layout.fillWidth: true
@@ -46,14 +39,10 @@ ColumnLayout {
             minimumMenuWidth: 340
             surfaceLevel: 1
             onActivated: function(index) {
-                if (!root.walletModel) return
+                if (!root.fees) return
                 const option = root.speedOptions[index]
-                if (option.blocks < 0) root.walletModel.setCustomFeeTarget(root.nearestBlockTarget(root.currentTarget))
-                else {
-                    root.walletModel.customFeeEnabled = false
-                    root.walletModel.targetBlocks = option.blocks
-                    root.feeChanged(option.blocks)
-                }
+                if (option.blocks < 0) root.fees.chooseCustom()
+                else { root.fees.choosePreset(option.blocks); root.feeChanged(option.blocks) }
             }
         }
     }
@@ -74,9 +63,9 @@ ColumnLayout {
                 discrete: true
                 from: 0
                 to: root.blockTargets.length - 1
-                value: root.blockTargets.indexOf(root.nearestBlockTarget(root.currentTarget))
+                value: root.fees ? root.fees.targetIndex : 3
                 Accessible.name: qsTr("Targeted blocks")
-                onMoved: root.walletModel.setCustomFeeTarget(root.blockTargets[Math.round(value)])
+                onMoved: if (root.fees) root.fees.chooseTargetIndex(Math.round(value))
             }
 
             Item {
@@ -113,17 +102,17 @@ ColumnLayout {
         visible: root.customSelected
         objectName: "feeSelectionCustomRateRow"
         fieldObjectName: "feeSelectionCustomRateInput"
+        enabled: root.fees && !root.fees.customDefaultPending
         Layout.fillWidth: true
         title: qsTr("Fee rate")
         description: "sat/vB"
-        text: root.walletModel ? root.walletModel.customFeeRate : ""
+        maximumLength: 33 // One invalid sentinel beyond the original 32-character budget.
+        text: root.fees ? root.fees.customRate.text : ""
         //: Placeholder for the empty custom fee rate field, in sat/vB.
         placeholderText: qsTr("Enter custom fee")
-        validator: RegularExpressionValidator { regularExpression: /^(|[0-9]+(\.[0-9]{0,3})?)$/ }
         //: Validation error for the custom transaction fee rate. sat/vB means satoshis per virtual byte.
-        errorText: root.walletModel && !root.walletModel.customFeeRateValid
-            ? qsTr("Enter a fee rate of at least %1 sat/vB.").arg(root.walletModel.minimumCustomFeeRate) : ""
-        onTextEdited: function(text) { if (root.walletModel) root.walletModel.customFeeRate = text }
+        errorText: root.fees && !root.fees.customRate.pending ? root.fees.customRate.error : ""
+        onTextEdited: function(text) { if (root.fees) root.fees.customRate.edit(text) }
     }
 
     ValueRow {
@@ -138,5 +127,37 @@ ColumnLayout {
         valueUnit: fee.unitLabel
     }
 
+    NeutralButton {
+        objectName: "feeRefreshButton"
+        visible: root.fees && root.fees.errorText.length > 0
+        enabled: root.fees && !root.fees.policyPending && !root.fees.estimatePending
+        buttonSize: NeutralButton.Large
+        textStyle: Theme.text.buttonStrong
+        text: qsTr("Refresh estimate")
+        onClicked: root.fees.refresh()
+    }
+    CoreText {
+        objectName: "feePreviousEstimateText"
+        Layout.fillWidth: true
+        visible: root.fees && root.fees.hasPreviousEstimate
+        text: root.fees ? qsTr("Previous estimate: %1 sat/vB. Waiting for a current estimate.").arg(root.fees.estimatedRate) : ""
+        wrapMode: Text.WordWrap
+        color: Theme.color.neutral7
+    }
+    CoreText {
+        objectName: "feeEstimateProvenanceText"
+        Layout.fillWidth: true
+        visible: root.fees && root.fees.estimateFresh && root.fees.provenance === FeeSelectionModel.Fallback
+        text: qsTr("Fee estimation is unavailable. The wallet fallback rate is shown; it has no confirmation target.")
+        wrapMode: Text.WordWrap
+    }
+    CoreText {
+        objectName: "feeEstimateErrorText"
+        Layout.fillWidth: true
+        visible: root.fees && !root.fees.estimatePending && root.fees.errorText.length > 0
+        text: root.fees ? root.fees.errorText : ""
+        wrapMode: Text.WordWrap
+        color: Theme.color.dangerText
+    }
     CoreText { objectName: "feeSelectionCustomEstimateLabel"; visible: false; text: fee.displayWithUnit }
 }

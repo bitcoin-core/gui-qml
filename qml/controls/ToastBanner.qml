@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 Rectangle {
@@ -146,7 +145,7 @@ Rectangle {
 
         Icon {
             objectName: root.objectName !== "" ? root.objectName + "Icon" : ""
-            visible: root.iconSource != ""
+            visible: root.iconSource.toString() !== ""
             source: root.iconSource
             color: root.iconColor
             size: Theme.size.icon.xl
@@ -158,7 +157,7 @@ Rectangle {
         CoreText {
             objectName: root.textObjectName
             Layout.fillWidth: true
-            Layout.rightMargin: root.iconSource != ""
+            Layout.rightMargin: root.iconSource.toString() !== ""
                 && root.actionText === ""
                 && !root.showsCloseButton
                 ? 24
@@ -171,7 +170,7 @@ Rectangle {
             textFormat: Text.PlainText
             color: root.textColor
             textStyle: root.messageTextStyle
-            horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
+            horizontalAlignment: root.iconSource.toString() !== "" ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap
         }
