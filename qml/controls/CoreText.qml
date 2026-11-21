@@ -13,6 +13,7 @@ Text {
     property bool wrap: true
     color: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     linkColor: Theme.color.accentText
+    textFormat: Text.PlainText
     font.family: textStyle ? textStyle.family : Theme.text.family
     font.weight: textStyle ? textStyle.weight : bold ? Theme.text.strongWeight : Theme.text.regularWeight
     font.pixelSize: textStyle ? textStyle.pixelSize : 13

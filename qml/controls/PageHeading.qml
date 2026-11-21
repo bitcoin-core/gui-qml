@@ -16,7 +16,7 @@ Control {
     property int contentSpacing: Theme.space.l
     property var titleTextStyle: Theme.text.headline
     property var descriptionTextStyle: Theme.text.description
-    property int descriptionTextFormat: Text.AutoText
+    property int descriptionTextFormat: Text.PlainText
     property int titleAlignment: Text.AlignLeft
     // Settings intros follow their left-aligned title.
     property int descriptionAlignment: titleAlignment

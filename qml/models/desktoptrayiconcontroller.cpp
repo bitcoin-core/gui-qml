@@ -125,6 +125,13 @@ void DesktopTrayIconController::showMainWindow()
     m_main_window->requestActivate();
 }
 
+void DesktopTrayIconController::activateMainWindow()
+{
+    if (!m_main_window) return;
+    m_main_window->setWindowStates(m_main_window->windowStates() & ~Qt::WindowMinimized);
+    showMainWindow();
+}
+
 bool DesktopTrayIconController::supported() const
 {
     return QSystemTrayIcon::isSystemTrayAvailable();
