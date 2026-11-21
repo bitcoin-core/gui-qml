@@ -194,11 +194,26 @@ TestCase {
 
         findChild(banner, "nodeBannerCloseButton").clicked()
         compare(banner.shown, false)
-        compare(nodeModel.dismissedWarningList, ["Clock skew warning"])
+        compare(nodeModel.dismissedWarningList, [])
+        compare(banner.status.warningCount, 1)
         nodeModel.setWarningsForTest(["Clock skew warning", "Unknown new rules activated"])
         tryCompare(banner, "shown", true)
         verify(text.text.indexOf("Unknown new rules activated") > 0)
-        verify(text.text.indexOf("Clock skew warning") < 0)
+        verify(text.text.indexOf("Clock skew warning") > 0)
+    }
+
+    function test_closed_warning_banner_returns_when_the_warning_recurs() {
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem)
+        nodeModel.setWarningsForTest(["Clock skew warning"])
+        tryCompare(banner, "shown", true)
+        findChild(banner, "nodeBannerCloseButton").clicked()
+        compare(banner.shown, false)
+
+        nodeModel.setWarningsForTest([])
+        tryCompare(banner.status, "warningCount", 0)
+        nodeModel.setWarningsForTest(["Clock skew warning"])
+        tryCompare(banner, "shown", true)
+        compare(nodeModel.dismissedWarningList, [])
     }
 
     function test_closed_offline_banner_returns_after_reconnecting() {

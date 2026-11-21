@@ -8,7 +8,8 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-// Closed warnings stay dismissed; other notices return when they change.
+// Closing hides the current notice for this session; it returns when it
+// changes or recurs. Saved warning dismissals belong to the Warnings dialog.
 Rectangle {
     id: root
     objectName: "nodeBanner"
@@ -21,11 +22,7 @@ Rectangle {
     onMessageChanged: if (message !== dismissedMessage) dismissedMessage = ""
 
     function dismiss() {
-        if (root.status.bannerKind === "warning") {
-            root.status.dismissWarnings(root.status.activeWarnings)
-        } else {
-            root.dismissedMessage = root.message
-        }
+        root.dismissedMessage = root.message
     }
 
     function escaped(text) {
