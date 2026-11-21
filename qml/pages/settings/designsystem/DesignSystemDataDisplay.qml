@@ -94,6 +94,38 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
+        objectName: "designSystemDescriptorText"
+        Layout.fillWidth: true
+        name: "DescriptorText"
+        note: "An output descriptor, one part per line. Clicking copies the descriptor."
+
+        DesignSystemState {
+            width: 400
+            label: "parts"
+            DescriptorText {
+                Layout.fillWidth: true
+                descriptor: "wpkh([621f5481/84h/1h/0h]tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L/<0;1>/*)#hv6zap77"
+                parts: ({
+                    opening: "wpkh(",
+                    origin: "[621f5481/84h/1h/0h]",
+                    key: "tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L",
+                    path: "/<0;1>/*",
+                    closing: ")",
+                    checksum: "hv6zap77"
+                })
+            }
+        }
+        DesignSystemState {
+            width: 400
+            label: "without parts"
+            DescriptorText {
+                Layout.fillWidth: true
+                descriptor: "wsh(multi(2,tpubDD7VgqKs35ZQein21QPXtb5o8tUngVN1FK5L/0/*,tpubDCVXgEFJ2YikWyX17RmAtzPYVfzoif4Vs6Bw/0/*))#8sqkc6pm"
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
         objectName: "designSystemSelectableText"
         Layout.fillWidth: true
         name: "SelectableText"

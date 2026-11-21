@@ -795,17 +795,19 @@ QByteArray TestBridge::cmdInvokePropertyObject(const QString& object_name, const
 
     const QMetaMethod meta_method = meta->method(idx);
     const bool returns_bool = meta_method.returnMetaType() == QMetaType::fromType<bool>();
+    const bool returns_string = meta_method.returnMetaType() == QMetaType::fromType<QString>();
     bool bool_result{false};
+    QString string_result;
     bool invoked{false};
     if (args.isEmpty()) {
-        invoked = returns_bool
-            ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(bool, bool_result))
-            : meta_method.invoke(property_object, Qt::DirectConnection);
+        invoked = returns_bool ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(bool, bool_result))
+            : returns_string   ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(QString, string_result))
+                               : meta_method.invoke(property_object, Qt::DirectConnection);
     } else {
         const QString arg = args.at(0).toString();
-        invoked = returns_bool
-            ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(bool, bool_result), Q_ARG(QString, arg))
-            : meta_method.invoke(property_object, Qt::DirectConnection, Q_ARG(QString, arg));
+        invoked = returns_bool ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(bool, bool_result), Q_ARG(QString, arg))
+            : returns_string   ? meta_method.invoke(property_object, Qt::DirectConnection, Q_RETURN_ARG(QString, string_result), Q_ARG(QString, arg))
+                               : meta_method.invoke(property_object, Qt::DirectConnection, Q_ARG(QString, arg));
     }
     if (!invoked) {
         return errorResponse(QStringLiteral("Could not invoke %1 on %2.%3").arg(QString::fromUtf8(signature), object_name, prop));
@@ -814,6 +816,8 @@ QByteArray TestBridge::cmdInvokePropertyObject(const QString& object_name, const
     QJsonObject resp = QJsonDocument::fromJson(okResponse()).object();
     if (returns_bool) {
         resp[QStringLiteral("value")] = bool_result;
+    } else if (returns_string) {
+        resp[QStringLiteral("value")] = string_result;
     }
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
