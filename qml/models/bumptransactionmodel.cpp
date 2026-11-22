@@ -149,6 +149,20 @@ bool BumpTransactionModel::confirmFeeBumpInternal(std::optional<SecureString> pa
         return false;
     }
 
+    std::unique_lock<std::mutex> unlock_session;
+    const bool crypted{m_wallet->isCrypted()};
+    if (crypted) unlock_session = m_unlock_session->tryAcquire();
+    if (crypted && !unlock_session) {
+        if (passphrase.has_value()) {
+            QmlUtil::ClearSecureString(*passphrase);
+            passphrase.reset();
+        }
+        // Stay in NeedsConfirmation so the same bump can be retried.
+        m_error = tr("The wallet is busy with another operation. Try again in a moment.");
+        setNeedsUnlock(false);
+        Q_EMIT resultChanged();
+        return false;
+    }
     if (!m_wallet->privateKeysDisabled() && m_wallet->isCrypted() && m_wallet->isLocked() && !passphrase.has_value()) {
         setUnlockRequired(tr("Enter your wallet password to update this transaction."));
         return false;

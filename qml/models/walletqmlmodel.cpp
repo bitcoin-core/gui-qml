@@ -530,6 +530,7 @@ WalletQmlModel::WalletQmlModel(std::shared_ptr<interfaces::Wallet> wallet, inter
     m_address_list_model = new AddressListModel(this);
     m_bump_transaction_model = new BumpTransactionModel(m_wallet.get(), this);
     m_bump_transaction_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
+    m_bump_transaction_model->setUnlockSession(m_unlock_session);
     m_coins_list_model = new CoinsListModel(this);
     m_send_recipients = new SendRecipientsListModel(this);
     connect(m_send_recipients, &SendRecipientsListModel::totalAmountChanged,
@@ -538,6 +539,7 @@ WalletQmlModel::WalletQmlModel(std::shared_ptr<interfaces::Wallet> wallet, inter
             this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
     m_sign_verify_message_model = new SignVerifyMessageModel(m_wallet, m_backend_executor, this);
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
+    m_sign_verify_message_model->setUnlockSession(m_unlock_session);
     m_current_payment_request = new PaymentRequest(this);
     m_receiving_address = new PaymentRequest(this);
     m_detail_payment_request = new PaymentRequest(this);
@@ -604,7 +606,7 @@ void WalletQmlModel::initializeWalletState()
         if (QThread::currentThread() == object->thread()) delete object;
         else object->deleteLater();
     }};
-    if (m_wallet) m_wallet_state_backend = std::make_shared<WalletStateBackend>(m_wallet);
+    if (m_wallet) m_wallet_state_backend = std::make_shared<WalletStateBackend>(m_wallet, m_unlock_session);
     m_wallet_poll_timer.setInterval(1000);
     connect(&m_wallet_poll_timer, &QTimer::timeout, this, &WalletQmlModel::pollWalletState);
     if (m_wallet) m_wallet_poll_timer.start();
@@ -1133,6 +1135,12 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
         return false;
     }
 
+    // Core relocks after the change only if the wallet was locked when it started.
+    const auto unlock_session = m_unlock_session->tryAcquire();
+    if (!unlock_session) {
+        setSettingsError(tr("The wallet is busy with another operation. Try again in a moment."));
+        return false;
+    }
     SecureString secure_old_passphrase{QmlUtil::SecureStringFromQString(old_passphrase)};
     SecureString secure_new_passphrase{QmlUtil::SecureStringFromQString(new_passphrase)};
     const bool changed{m_wallet->changeWalletPassphrase(secure_old_passphrase, secure_new_passphrase)};
@@ -1750,6 +1758,17 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         return false;
     }
 
+    std::unique_lock<std::mutex> unlock_session;
+    const bool crypted{m_wallet->isCrypted()};
+    if (crypted) unlock_session = m_unlock_session->tryAcquire();
+    if (crypted && !unlock_session) {
+        if (passphrase.has_value()) {
+            QmlUtil::ClearSecureString(*passphrase);
+            passphrase.reset();
+        }
+        setTransactionStatus(tr("The wallet is busy with another operation. Try again in a moment."));
+        return false;
+    }
     if (!m_wallet->privateKeysDisabled() && m_wallet->isCrypted() && m_wallet->isLocked() && !passphrase.has_value()) {
         refreshSecurityState();
         setTransactionStatus(tr("Enter your wallet password to prepare this transaction."), true);
@@ -2025,6 +2044,17 @@ bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphr
                     passphrase.reset();
                 }
                 setTransactionStatus(tr("This wallet cannot sign transactions."));
+                return false;
+            }
+            std::unique_lock<std::mutex> unlock_session;
+            const bool crypted{m_wallet->isCrypted()};
+            if (crypted) unlock_session = m_unlock_session->tryAcquire();
+            if (crypted && !unlock_session) {
+                if (passphrase.has_value()) {
+                    QmlUtil::ClearSecureString(*passphrase);
+                    passphrase.reset();
+                }
+                setTransactionStatus(tr("The wallet is busy with another operation. Try again in a moment."));
                 return false;
             }
             if (!m_wallet->privateKeysDisabled() && m_wallet->isCrypted() && m_wallet->isLocked() && !passphrase.has_value()) {

@@ -3536,6 +3536,7 @@ class MockBumpTransactionModel : public QObject
     Q_PROPERTY(QString newTxid MEMBER m_new_txid NOTIFY resultChanged)
     Q_PROPERTY(QString errorText MEMBER m_error_text NOTIFY resultChanged)
     Q_PROPERTY(bool needsUnlock MEMBER m_needs_unlock NOTIFY needsUnlockChanged)
+    Q_PROPERTY(bool busy MEMBER m_busy NOTIFY resultChanged)
 
 public:
     enum State { Idle, Preparing, NeedsConfirmation, Committing, Succeeded, Failed };
@@ -3574,6 +3575,13 @@ public:
 
     Q_INVOKABLE bool confirmFeeBump()
     {
+        if (m_busy) {
+            m_error_text = QStringLiteral("The wallet is busy with another operation. Try again in a moment.");
+            m_needs_unlock = false;
+            Q_EMIT resultChanged();
+            Q_EMIT needsUnlockChanged();
+            return false;
+        }
         if (m_require_unlock) {
             m_error_text = QStringLiteral("Enter your wallet password to update this transaction.");
             m_needs_unlock = true;
@@ -3608,6 +3616,7 @@ public:
         m_error_text.clear();
         m_needs_unlock = false;
         m_require_unlock = false;
+        m_busy = false;
         Q_EMIT stateChanged();
         Q_EMIT resultChanged();
         Q_EMIT needsUnlockChanged();
@@ -3629,6 +3638,7 @@ private:
     QString m_error_text;
     bool m_needs_unlock{false};
     bool m_require_unlock{false};
+    bool m_busy{false};
 };
 
 // Configurable presentation fixture. Transaction interpretation and filtering

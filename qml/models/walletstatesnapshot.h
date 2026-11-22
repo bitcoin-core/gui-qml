@@ -6,6 +6,7 @@
 #define BITCOIN_QML_MODELS_WALLETSTATESNAPSHOT_H
 
 #include <qml/models/receiverequestentry.h>
+#include <qml/models/walletunlock.h>
 
 #include <interfaces/wallet.h>
 #include <outputtype.h>
@@ -86,7 +87,8 @@ struct CoinLockResult {
 // serial backend executor, including persistence and notification reconciliation.
 class WalletStateBackend {
 public:
-    explicit WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet);
+    explicit WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet,
+                                std::shared_ptr<WalletUnlockSession> unlock_session = std::make_shared<WalletUnlockSession>());
     WalletStateSnapshot read(interfaces::Node* node);
     std::optional<WalletStateSnapshot> poll(interfaces::Node* node);
     ReceiveCommandResult execute(interfaces::Node* node, ReceiveCommand command);
@@ -96,6 +98,7 @@ private:
     QString settingsKey() const;
     bool setAddressType(interfaces::Node* node, const QString& type);
     std::shared_ptr<interfaces::Wallet> m_wallet;
+    std::shared_ptr<WalletUnlockSession> m_unlock_session;
     std::set<QString> m_observed_addresses;
     std::optional<uint256> m_last_processed_block;
     std::set<Txid> m_unconfirmed_payment_txids;

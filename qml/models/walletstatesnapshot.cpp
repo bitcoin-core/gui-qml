@@ -88,7 +88,8 @@ WalletKeyScheme ReadWalletKeyScheme(interfaces::Wallet& wallet)
     return WalletKeyScheme::SingleKey;
 }
 
-WalletStateBackend::WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet) : m_wallet(std::move(wallet)) {}
+WalletStateBackend::WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet, std::shared_ptr<WalletUnlockSession> unlock_session)
+    : m_wallet(std::move(wallet)), m_unlock_session(std::move(unlock_session)) {}
 
 CoinLockResult WalletStateBackend::setCoinsLocked(interfaces::Node* node, const std::vector<COutPoint>& outputs, bool locked)
 {
@@ -284,6 +285,11 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
         }
         return std::move(result);
     };
+    // Deriving addresses can depend on an encrypted wallet being unlocked.
+    std::unique_lock<std::mutex> unlock_session;
+    if (command.passphrase || ((command.kind == ReceiveCommand::Kind::Save || command.kind == ReceiveCommand::Kind::EnsureAddress) && ReadSecurityState(*m_wallet).encrypted)) {
+        unlock_session = m_unlock_session->acquire();
+    }
     bool relock{false};
     if (command.passphrase) {
         const auto unlocked = TryUnlockWithPassphrase(*m_wallet, *command.passphrase);
@@ -306,6 +312,7 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
     auto complete = [&] {
         wallet_lock.reset();
         guard.relock();
+        if (unlock_session) unlock_session.unlock();
         return finish();
     };
     QSettings settings;

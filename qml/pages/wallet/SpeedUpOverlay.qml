@@ -104,7 +104,9 @@ DialogPopup {
 
             CoreText {
                 objectName: "speedUpErrorText"
-                visible: root.bumpModel && root.bumpModel.state === BumpTransactionModel.Failed
+                visible: root.bumpModel && (root.bumpModel.state === BumpTransactionModel.Failed
+                    || (root.bumpModel.state === BumpTransactionModel.NeedsConfirmation
+                        && !root.bumpModel.needsUnlock && root.bumpModel.errorText.length > 0))
                 text: root.bumpModel ? root.bumpModel.errorText : ""
                 textStyle: Theme.text.description
                 color: Theme.color.dangerText

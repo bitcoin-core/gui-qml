@@ -235,6 +235,27 @@ TestCase {
         mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
         tryCompare(overlay, "visible", false)
     }
+    function test_busy_wallet_keeps_speed_up_retryable() {
+        testBumpModel.busy = true
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "opened", true)
+        verify(waitForRendering(overlay.contentItem))
+        const updateButton = findChild(overlay.contentItem, "updateTransactionButton")
+        mouseClick(updateButton)
+        const error = findChild(overlay.contentItem, "speedUpErrorText")
+        tryCompare(error, "visible", true)
+        compare(error.text, "The wallet is busy with another operation. Try again in a moment.")
+        verify(updateButton.enabled)
+
+        testBumpModel.busy = false
+        mouseClick(updateButton)
+        const complete = findChild(page, "speedUpCompletePopup")
+        tryCompare(complete, "opened", true)
+        findChild(complete.contentItem, "speedUpCompleteDoneButton").clicked()
+        tryCompare(complete, "opened", false)
+    }
     function test_fee_bump_success_opens_modal_completion() {
         const page = createDetail()
         findChild(page, "speedUpBanner").primaryClicked()

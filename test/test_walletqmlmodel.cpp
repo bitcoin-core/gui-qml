@@ -728,6 +728,10 @@ private Q_SLOTS:
     void sendBalanceReadsCachedState();
     void externalCoinLockRefreshesAvailableBalance();
     void sendWaitsForPendingCoinLock();
+    void unencryptedWalletIgnoresTheUnlockSession();
+    void sendDoesNotRelyOnAnotherTemporaryUnlock();
+    void signingWaitsForTheUnlockSession();
+    void passwordChangeWaitsForTheUnlockSession();
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
@@ -2673,6 +2677,86 @@ void WalletQmlModelTests::externalCoinLockRefreshesAvailableBalance()
     }
     model->requestWalletStateRefresh();
     QTRY_COMPARE_WITH_TIMEOUT(model->availableSendBalanceSatoshi(), 100 * COIN, 5000);
+}
+
+void WalletQmlModelTests::sendDoesNotRelyOnAnotherTemporaryUnlock()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    SetPasswordRecipient(*model, 10'000);
+    QSemaphore entered, release;
+    wallet->sign_message_fn = [&](const std::string&, const PKHash&, std::string& signature) {
+        entered.release();
+        release.acquire();
+        signature = "signature";
+        return SigningResult::OK;
+    };
+    auto* signing = model->signVerifyMessageModel();
+    const auto unblock = qScopeGuard([&] {
+        release.release();
+        if (!QTest::qWaitFor([&] { return !signing->signingPending(); })) qFatal("Signing did not finish");
+    });
+    QVERIFY(signing->signMessageWithPassphrase(VALID_MAINNET_ADDRESS, "message", "secret"));
+    QTRY_VERIFY(entered.available());
+    QVERIFY(!wallet->locked);
+
+    const auto created = wallet->create_transaction_sign_args.size();
+    QVERIFY(!model->prepareTransaction());
+    QCOMPARE(wallet->create_transaction_sign_args.size(), created);
+    QVERIFY(!model->transactionError().isEmpty());
+
+    release.release();
+    QTRY_VERIFY(!signing->signingPending());
+    QVERIFY(wallet->locked);
+    QVERIFY(!model->prepareTransaction());
+    QVERIFY(model->transactionNeedsUnlock());
+    QVERIFY(model->prepareTransactionWithPassphrase("secret"));
+    QVERIFY(wallet->locked);
+}
+
+void WalletQmlModelTests::passwordChangeWaitsForTheUnlockSession()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    {
+        auto held = model->unlockSession()->acquire();
+        QVERIFY(!model->changeWalletPassphrase("secret", "new-secret"));
+        QCOMPARE(wallet->change_passphrase_calls, 0);
+        QCOMPARE(model->settingsError(), QString("The wallet is busy with another operation. Try again in a moment."));
+    }
+    QVERIFY(model->changeWalletPassphrase("secret", "new-secret"));
+    QCOMPARE(wallet->change_passphrase_calls, 1);
+}
+
+void WalletQmlModelTests::signingWaitsForTheUnlockSession()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    auto* signing = model->signVerifyMessageModel();
+    auto held = model->unlockSession()->acquire();
+    QVERIFY(signing->signMessageWithPassphrase(VALID_MAINNET_ADDRESS, "message", "secret"));
+    QTest::qWait(100);
+    QVERIFY(signing->signingPending());
+    QCOMPARE(wallet->unlock_calls, 0);
+    held.unlock();
+    QTRY_VERIFY(!signing->signingPending());
+    QCOMPARE(wallet->sign_message_calls, 1);
+    QVERIFY(wallet->locked);
+}
+
+void WalletQmlModelTests::unencryptedWalletIgnoresTheUnlockSession()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->encrypted = false;
+    wallet->locked = false;
+    SetPasswordRecipient(*model, 10'000);
+
+    // Without a password there is no lock state to protect, so nothing waits for the session.
+    auto held = model->unlockSession()->acquire();
+    QVERIFY(model->prepareTransaction());
+    QVERIFY(CompleteReceive(*model, model->ensureReceivingAddress(true)));
+    auto* signing = model->signVerifyMessageModel();
+    QVERIFY(signing->signMessage(VALID_MAINNET_ADDRESS, "message"));
+    QTRY_VERIFY(!signing->signingPending());
+    QCOMPARE(signing->signature(), QStringLiteral("fake-signature"));
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

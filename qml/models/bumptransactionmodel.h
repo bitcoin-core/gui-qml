@@ -7,6 +7,7 @@
 
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
+#include <qml/models/walletunlock.h>
 #include <support/allocators/secure.h>
 #include <uint256.h>
 
@@ -62,6 +63,7 @@ public:
     Q_INVOKABLE bool confirmFeeBumpWithPassphrase(const QString& passphrase);
     Q_INVOKABLE void reset();
     void setSecurityStateChangedFn(std::function<void()> fn);
+    void setUnlockSession(std::shared_ptr<WalletUnlockSession> session) { m_unlock_session = std::move(session); }
 
 Q_SIGNALS:
     void stateChanged();
@@ -80,6 +82,7 @@ private:
 
     interfaces::Wallet* m_wallet{nullptr};
     std::function<void()> m_security_state_changed_fn;
+    std::shared_ptr<WalletUnlockSession> m_unlock_session{std::make_shared<WalletUnlockSession>()};
     State m_state{Idle};
     ActionType m_action_type{SpeedUp};
     CAmount m_old_fee{0};

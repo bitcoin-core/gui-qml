@@ -71,7 +71,9 @@ bool SignVerifyMessageModel::signMessageInternal(const QString& address, const Q
     const auto generation = ++m_signing_generation;
     Q_EMIT signingPendingChanged();
     const auto wallet = m_wallet;
-    m_executor->submitTask(this, [wallet, pkhash = *pkhash, message = message.toStdString(), passphrase = std::move(passphrase)]() mutable {
+    m_executor->submitTask(this, [wallet, session = m_unlock_session, pkhash = *pkhash, message = message.toStdString(), passphrase = std::move(passphrase)]() mutable {
+        std::unique_lock<std::mutex> unlock_session;
+        if (passphrase || ReadSecurityState(*wallet).encrypted) unlock_session = session->acquire();
         Result result;
         bool relock{false};
         const auto security = ReadSecurityState(*wallet);

@@ -7,6 +7,7 @@
 
 #include <interfaces/wallet.h>
 #include <qml/backendexecutor.h>
+#include <qml/models/walletunlock.h>
 #include <support/allocators/secure.h>
 
 #include <functional>
@@ -40,6 +41,7 @@ public:
 
     void setWallet(std::shared_ptr<interfaces::Wallet> wallet);
     void setSecurityStateChangedFn(SecurityStateChangedFn fn);
+    void setUnlockSession(std::shared_ptr<WalletUnlockSession> session) { m_unlock_session = std::move(session); }
 
     Q_INVOKABLE bool isLegacyP2PKHAddress(const QString& address) const;
     Q_INVOKABLE bool signMessage(const QString& address, const QString& message);
@@ -65,6 +67,7 @@ private:
 
     std::shared_ptr<interfaces::Wallet> m_wallet;
     std::shared_ptr<BackendExecutor> m_executor;
+    std::shared_ptr<WalletUnlockSession> m_unlock_session{std::make_shared<WalletUnlockSession>()};
     quint64 m_signing_generation{0};
     quint64 m_verification_generation{0};
     bool m_signing_pending{false};

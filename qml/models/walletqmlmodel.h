@@ -16,6 +16,7 @@
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 #include <qml/models/walletstatesnapshot.h>
+#include <qml/models/walletunlock.h>
 #include <qml/backendexecutor.h>
 
 #include <consensus/amount.h>
@@ -233,6 +234,7 @@ public:
     std::shared_ptr<interfaces::Wallet> walletHandle() const { return m_wallet; }
     interfaces::Node* node() const { return m_node; }
     std::shared_ptr<BackendExecutor> backendExecutor() const { return m_backend_executor; }
+    std::shared_ptr<WalletUnlockSession> unlockSession() const { return m_unlock_session; }
     // False once the wallet is unloading or closing. Set from the unload
     // notification's own thread, before the GUI hears about it.
     bool available() const { return m_wallet && !m_unload_requested->load(); }
@@ -396,6 +398,7 @@ private:
     QTimer m_wallet_poll_timer;
     bool m_receive_reconciliation_applying{false};
     std::shared_ptr<BackendExecutor> m_backend_executor{std::make_shared<BackendExecutor>()};
+    std::shared_ptr<WalletUnlockSession> m_unlock_session{std::make_shared<WalletUnlockSession>()};
     std::shared_ptr<WalletStateBackend> m_wallet_state_backend;
     std::shared_ptr<QObject> m_notification_bridge;
     WalletStateSnapshot m_wallet_state;
