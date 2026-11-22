@@ -360,6 +360,7 @@ private:
     bool canSubmitReceiveCommand() const;
     bool submitReceiveCommand(ReceiveCommand command, QString operation, PaymentRequest* request = nullptr);
     void applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry);
+    bool loadSavedRequest(PaymentRequest* request, const QString& request_id);
     void initializeFeeEstimator();
     void setMaximumRecipient(SendRecipient* recipient);
     void updateMaximumAmount();

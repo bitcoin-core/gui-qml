@@ -1411,52 +1411,25 @@ bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
     return submitReceiveCommand(std::move(command), QStringLiteral("remove"));
 }
 
+bool WalletQmlModel::loadSavedRequest(PaymentRequest* request, const QString& request_id)
+{
+    if (!request || !m_receive_requests) return false;
+    const auto entry = m_receive_requests->entryById(request_id);
+    if (!entry || entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
+    if (!IsValidDestination(DecodeDestination(entry->recipient.address))) return false;
+    request->clear();
+    applySavedRequest(request, *entry);
+    return true;
+}
+
 bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
 {
-    if (!m_current_payment_request || !m_receive_requests) return false;
-    const auto entry = m_receive_requests->entryById(request_id);
-    if (!entry) return false;
-    if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
-
-    const CTxDestination destination = DecodeDestination(entry->recipient.address);
-    if (!IsValidDestination(destination)) return false;
-
-    m_current_payment_request->clear();
-    m_current_payment_request->setDestination(destination);
-    m_current_payment_request->setLabel(QString::fromStdString(entry->recipient.label));
-    m_current_payment_request->setMessage(QString::fromStdString(entry->recipient.message));
-    m_current_payment_request->setNoteSelf(QString::fromStdString(entry->recipient.noteSelf));
-    m_current_payment_request->amount()->setSatoshi(entry->recipient.amount);
-    m_current_payment_request->setId(static_cast<unsigned int>(entry->id));
-    m_current_payment_request->setCreated(entry->date);
-    m_current_payment_request->setReceivedAmountSatoshi(receivedPaymentRequestAmount(m_current_payment_request->address()));
-    m_current_payment_request->setPaymentReceived(entry->payment_received);
-    m_current_payment_request->setIsEditing(false);
-    return true;
+    return loadSavedRequest(m_current_payment_request, request_id);
 }
 
 bool WalletQmlModel::loadPaymentRequestDetail(const QString& request_id)
 {
-    if (!m_detail_payment_request || !m_receive_requests) return false;
-    const auto entry = m_receive_requests->entryById(request_id);
-    if (!entry) return false;
-    if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
-
-    const CTxDestination destination = DecodeDestination(entry->recipient.address);
-    if (!IsValidDestination(destination)) return false;
-
-    m_detail_payment_request->clear();
-    m_detail_payment_request->setDestination(destination);
-    m_detail_payment_request->setLabel(QString::fromStdString(entry->recipient.label));
-    m_detail_payment_request->setMessage(QString::fromStdString(entry->recipient.message));
-    m_detail_payment_request->setNoteSelf(QString::fromStdString(entry->recipient.noteSelf));
-    m_detail_payment_request->amount()->setSatoshi(entry->recipient.amount);
-    m_detail_payment_request->setId(static_cast<unsigned int>(entry->id));
-    m_detail_payment_request->setCreated(entry->date);
-    m_detail_payment_request->setReceivedAmountSatoshi(receivedPaymentRequestAmount(m_detail_payment_request->address()));
-    m_detail_payment_request->setPaymentReceived(entry->payment_received);
-    m_detail_payment_request->setIsEditing(false);
-    return true;
+    return loadSavedRequest(m_detail_payment_request, request_id);
 }
 
 bool WalletQmlModel::updatePaymentRequest(const QString& request_id, qint64 amount,
