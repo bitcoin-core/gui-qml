@@ -400,6 +400,35 @@ TestCase {
         tryCompare(continueButton, "enabled", true)
     }
 
+    function test_send_continue_button_waits_for_selected_balance() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const continueButton = findChild(page, "sendReviewButton")
+        tryCompare(continueButton, "enabled", true)
+        testWalletModel.sendBalancePending = true
+        try {
+            tryCompare(continueButton, "enabled", false)
+            compare(page.formErrorText, "")
+        } finally {
+            testWalletModel.sendBalancePending = false
+        }
+        tryCompare(continueButton, "enabled", true)
+    }
+
+    function test_send_continue_button_waits_for_coin_lock() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const continueButton = findChild(page, "sendReviewButton")
+        tryCompare(continueButton, "enabled", true)
+        testWalletModel.coinLockPending = true
+        try {
+            tryCompare(continueButton, "enabled", false)
+        } finally {
+            testWalletModel.coinLockPending = false
+        }
+        tryCompare(continueButton, "enabled", true)
+    }
+
     function test_send_continue_button_requires_fee_buffer() {
         const page = createTemporaryObject(sendComponent, this)
         verify(page !== null)

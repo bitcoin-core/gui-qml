@@ -110,6 +110,8 @@ private:
     Q_PROPERTY(SendRecipient* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString estimatedFee READ estimatedFee NOTIFY estimatedFeeChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(bool sendBalancePending READ sendBalancePending NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(bool coinLockPending READ coinLockPending NOTIFY coinLockStateChanged)
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
     Q_PROPERTY(QString customFeeRate READ customFeeRate WRITE setCustomFeeRate NOTIFY customFeeRateChanged)
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
@@ -197,6 +199,7 @@ public:
     Q_INVOKABLE void setCustomFeeTarget(unsigned int target);
     CFeeRate dustRelayFee() const;
     bool sendAmountExhaustsBalance() const;
+    bool sendBalancePending() const { return m_coin_control.HasSelected() && !m_selected_available_balance; }
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
     QString customFeeRate() const { return m_custom_fee_rate; }
     bool customFeeRateValid() const;
@@ -346,6 +349,8 @@ private:
     void initializeWalletState();
     void startWalletStateRefresh(bool force);
     void applyWalletState(WalletStateSnapshot state);
+    CAmount sendAvailableBalance() const;
+    void refreshSelectedAvailableBalance(bool selection_changed);
     bool submitReceiveCommand(ReceiveCommand command, QString operation, PaymentRequest* request = nullptr);
     void applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry);
     void initializeFeeEstimator();
@@ -423,6 +428,9 @@ private:
     QString m_custom_fee_rate;
     quint64 m_fee_estimate_request_id{0};
     std::optional<BackendExecutor::TaskId> m_fee_estimate_task;
+    std::optional<CAmount> m_selected_available_balance;
+    std::optional<BackendExecutor::TaskId> m_selected_balance_task;
+    quint64 m_selected_balance_request{0};
     int m_fee_estimate_revision{0};
     bool m_custom_fee_enabled{false};
     bool m_fee_estimate_pending{false};

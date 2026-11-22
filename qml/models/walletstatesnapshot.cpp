@@ -119,6 +119,11 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
     const bool have_processed_block = m_wallet->tryGetBalances(balances, processed_block);
     WalletStateSnapshot state;
     state.name = QString::fromStdString(m_wallet->getWalletName());
+    // Read the lock set first, so a lockunspent call before the balance read is seen by the next poll.
+    std::vector<COutPoint> locked;
+    m_wallet->listLockedCoins(locked);
+    state.locked_coins.insert(locked.begin(), locked.end());
+    m_locked_coins = state.locked_coins;
     state.balance = m_wallet->getBalance();
     state.available_balance = m_wallet->getAvailableBalance(wallet::CCoinControl{});
     state.key_scheme = ReadWalletKeyScheme(*m_wallet);
@@ -148,9 +153,6 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
         if (address.is_mine && address.purpose == wallet::AddressPurpose::RECEIVE) receive_addresses.insert(text);
     }
     state.coins = m_wallet->listCoins();
-    std::vector<COutPoint> locked;
-    m_wallet->listLockedCoins(locked);
-    state.locked_coins.insert(locked.begin(), locked.end());
     state.receive_requests = ReceiveRequestHistoryModel::DeserializeEntries(m_wallet->getAddressReceiveRequests());
     std::set<QString> request_addresses;
     for (const auto& request : state.receive_requests) {
@@ -225,6 +227,11 @@ std::optional<WalletStateSnapshot> WalletStateBackend::poll(interfaces::Node* no
         if (!m_wallet->tryGetBalances(balances, processed_block)) return std::nullopt;
     }
     if (m_last_processed_block != processed_block) return read(node);
+
+    // lockunspent does not notify the wallet either.
+    std::vector<COutPoint> locked;
+    m_wallet->listLockedCoins(locked);
+    if (std::set<COutPoint>(locked.begin(), locked.end()) != m_locked_coins) return read(node);
 
     // Mempool eviction need not notify the receiving wallet. Check only the
     // outstanding payments; an unchanged payment must not rebuild every wallet

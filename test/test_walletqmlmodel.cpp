@@ -725,6 +725,9 @@ private Q_SLOTS:
     void supersededFeeEstimateDoesNotRun();
     void shutdownDeliversPendingMessageVerification();
     void receiveCommandsReadWalletTwice();
+    void sendBalanceReadsCachedState();
+    void externalCoinLockRefreshesAvailableBalance();
+    void sendWaitsForPendingCoinLock();
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
@@ -1551,26 +1554,30 @@ void WalletQmlModelTests::sendAmountExhaustsBalance_usesCoinControlAvailableBala
     QSignalSpy spy{model.get(), &WalletQmlModel::sendAmountExhaustsBalanceChanged};
     model->selectCoin(selected_outpoint);
     QCOMPARE(spy.count(), 1);
-    QVERIFY(model->sendAmountExhaustsBalance());
+    QVERIFY(model->sendBalancePending());
+    QTRY_VERIFY(model->sendAmountExhaustsBalance());
     QVERIFY(!model->prepareTransaction());
     QVERIFY(!create_transaction_called);
     QCOMPARE(model->transactionError(), QStringLiteral("Selected inputs do not cover the amount plus fee"));
 
+    spy.clear();
     model->unselectCoin(selected_outpoint);
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.count(), 1);
     QVERIFY(!model->sendAmountExhaustsBalance());
     QVERIFY(model->prepareTransaction());
     QVERIFY(create_transaction_called);
 
+    spy.clear();
     model->selectCoin(selected_outpoint);
-    QCOMPARE(spy.count(), 3);
-    QVERIFY(model->sendAmountExhaustsBalance());
+    QCOMPARE(spy.count(), 1);
+    QTRY_VERIFY(model->sendAmountExhaustsBalance());
+    spy.clear();
     model->clearSelectedCoins();
-    QCOMPARE(spy.count(), 4);
+    QCOMPARE(spy.count(), 1);
     QVERIFY(!model->sendAmountExhaustsBalance());
 
     model->clearSelectedCoins();
-    QCOMPARE(spy.count(), 4);
+    QCOMPARE(spy.count(), 1);
     QVERIFY(selected_coin_control_valid);
     QVERIFY(unselected_coin_control_valid);
 }
@@ -1827,10 +1834,12 @@ void WalletQmlModelTests::prepareTransaction_disallowsOtherInputsWhenCoinsSelect
     bool saw_other_inputs_allowed{true};
 
     [[maybe_unused]] auto verify_wallet = wallet->VerifyOnExit();
-    wallet->ExpectExactly(wallet->calls.getAvailableBalance, 1);
+    wallet->ExpectAtLeast(wallet->calls.getAvailableBalance, 1);
     wallet->ExpectExactly(wallet->calls.createTransaction, 1);
+    // The worker also reads the selected balance; check only prepareTransaction()'s read.
+    const auto gui_thread = QThread::currentThread();
     wallet->get_available_balance_fn = [&](const wallet::CCoinControl& coin_control) {
-        available_balance_allow_other_inputs = coin_control.m_allow_other_inputs;
+        if (QThread::currentThread() == gui_thread) available_balance_allow_other_inputs = coin_control.m_allow_other_inputs;
         return 10 * COIN;
     };
 
@@ -1890,6 +1899,9 @@ void WalletQmlModelTests::scheduleFeeEstimates_invalidatesStalePreviewState()
 {
     auto [wallet, model] = MakeWalletModel();
     wallet->get_available_balance_fn = [](const wallet::CCoinControl&) { return CAmount{50'000}; };
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QCOMPARE(model->availableSendBalanceSatoshi(), 50'000);
     SetValidRecipient(*model);
 
     auto* recipient = model->sendRecipientList()->currentRecipient();
@@ -2547,6 +2559,120 @@ void WalletQmlModelTests::receiveCommandsReadWalletTwice()
     wallet->reads = 0;
     QVERIFY(CompleteReceive(*model, model->commitReceivingPaymentRequest()));
     QCOMPARE(wallet->reads.load(), 2);
+}
+
+void WalletQmlModelTests::sendBalanceReadsCachedState()
+{
+    auto [wallet, model] = MakeWalletModel();
+    const auto gui_thread = QThread::currentThread();
+    std::atomic_int gui_reads{0};
+    std::atomic_int selected_reads{0};
+    wallet->get_available_balance_fn = [&](const wallet::CCoinControl& coin_control) {
+        if (QThread::currentThread() == gui_thread) ++gui_reads;
+        if (!coin_control.HasSelected()) return CAmount{100'000};
+        ++selected_reads;
+        return CAmount{200'000};
+    };
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    SetValidRecipient(*model);
+    QCOMPARE(model->availableSendBalanceSatoshi(), 100'000);
+    QVERIFY(!model->sendAmountExhaustsBalance());
+
+    const COutPoint selected{Txid::FromUint256(uint256::ONE), 1};
+    model->selectCoin(selected);
+    // An unknown selected balance is pending, not insufficient.
+    QVERIFY(model->sendBalancePending());
+    QVERIFY(!model->sendAmountExhaustsBalance());
+    QTRY_VERIFY(!model->sendBalancePending());
+    QVERIFY(!model->sendAmountExhaustsBalance());
+    QVERIFY(selected_reads.load() > 0);
+
+    model->unselectCoin(selected);
+    QVERIFY(!model->sendAmountExhaustsBalance());
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QCOMPARE(gui_reads.load(), 0);
+}
+
+void WalletQmlModelTests::sendWaitsForPendingCoinLock()
+{
+    auto [wallet, model] = MakeWalletModel();
+    wallet->get_available_balance_fn = [](const wallet::CCoinControl&) { return CAmount{200'000}; };
+    bool create_transaction_called{false};
+    wallet->create_transaction_fn = [&](const std::vector<wallet::CRecipient>&, const wallet::CCoinControl&, bool,
+                                        int& change_pos, CAmount& fee) -> util::Result<CTransactionRef> {
+        create_transaction_called = true;
+        change_pos = -1;
+        fee = 200;
+        return util::Result<CTransactionRef>{MakeTransactionRef(CMutableTransaction{})};
+    };
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    SetValidRecipient(*model);
+    const COutPoint selected{Txid::FromUint256(uint256::ONE), 1};
+    model->selectCoin(selected);
+    QTRY_VERIFY(!model->sendBalancePending());
+
+    QSemaphore entered, release;
+    const auto release_worker = qScopeGuard([&] { if (release.available() == 0) release.release(); });
+    model->backendExecutor()->submit(model.get(), [&] { entered.release(); release.acquire(); }, [] {});
+    QTRY_COMPARE(entered.available(), 1);
+    QSignalSpy lock_state{model.get(), &WalletQmlModel::coinLockStateChanged};
+    QVERIFY(model->setCoinsLocked({selected}, true));
+    QVERIFY(model->coinLockPending());
+    QCOMPARE(lock_state.size(), 1);
+    // The selected coin may be locked before the transaction is prepared.
+    QVERIFY(!model->prepareTransaction());
+    QVERIFY(!create_transaction_called);
+    QVERIFY(!model->transactionError().isEmpty());
+
+    release.release();
+    QTRY_VERIFY(!model->coinLockPending());
+    QVERIFY(model->prepareTransaction());
+    QVERIFY(create_transaction_called);
+}
+
+void WalletQmlModelTests::externalCoinLockRefreshesAvailableBalance()
+{
+    struct LockingWallet : FakePasswordWallet {
+        std::mutex mutex;
+        std::set<COutPoint> locked_coins;
+        void listLockedCoins(std::vector<COutPoint>& outputs) override
+        {
+            std::lock_guard lock{mutex};
+            outputs.assign(locked_coins.begin(), locked_coins.end());
+        }
+        bool lock_after_balance{false};
+        CAmount getAvailableBalance(const wallet::CCoinControl&) override
+        {
+            std::lock_guard lock{mutex};
+            const CAmount balance{locked_coins.empty() ? 150 * COIN : 100 * COIN};
+            if (std::exchange(lock_after_balance, false)) locked_coins.insert(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+            return balance;
+        }
+    };
+    auto [wallet, model] = MakePasswordWalletModel<LockingWallet>();
+    QCOMPARE(model->availableSendBalanceSatoshi(), 150 * COIN);
+
+    {
+        std::lock_guard lock{wallet->mutex};
+        wallet->locked_coins.insert(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(model->availableSendBalanceSatoshi(), 100 * COIN, 5000);
+    {
+        std::lock_guard lock{wallet->mutex};
+        wallet->locked_coins.clear();
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(model->availableSendBalanceSatoshi(), 150 * COIN, 5000);
+
+    // A lock between the balance and lock-set reads must still be seen by the next poll.
+    {
+        std::lock_guard lock{wallet->mutex};
+        wallet->lock_after_balance = true;
+    }
+    model->requestWalletStateRefresh();
+    QTRY_COMPARE_WITH_TIMEOUT(model->availableSendBalanceSatoshi(), 100 * COIN, 5000);
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

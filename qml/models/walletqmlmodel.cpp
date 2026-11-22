@@ -687,6 +687,7 @@ void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
     Q_EMIT walletStateChanged();
     if (labels_changed) Q_EMIT addressListChanged();
     if (balance_changed) Q_EMIT balanceChanged();
+    refreshSelectedAvailableBalance(false);
     Q_EMIT sendAmountExhaustsBalanceChanged();
     // New funds and lock changes affect previews without editing the draft; other snapshots keep them.
     if (spendable_changed) scheduleFeeEstimates();
@@ -899,7 +900,7 @@ qint64 WalletQmlModel::sendTotalSatoshi() const
 
 qint64 WalletQmlModel::availableSendBalanceSatoshi() const
 {
-    return m_wallet ? m_wallet->getAvailableBalance(wallet::CCoinControl{}) : 0;
+    return m_wallet ? m_wallet_state.available_balance : 0;
 }
 
 bool WalletQmlModel::sendDraftSweepsWallet() const
@@ -966,14 +967,11 @@ CFeeRate WalletQmlModel::dustRelayFee() const
 
 bool WalletQmlModel::sendAmountExhaustsBalance() const
 {
-    if (!m_wallet || !m_send_recipients || !m_send_recipients->allValid()) {
+    if (!m_wallet || !m_send_recipients || !m_send_recipients->allValid() || sendBalancePending()) {
         return false;
     }
 
-    wallet::CCoinControl coin_control{m_coin_control};
-    ApplySelectedInputsPolicy(coin_control);
-
-    const CAmount balance{m_wallet->getAvailableBalance(coin_control)};
+    const CAmount balance{sendAvailableBalance()};
     const CAmount total_amount{m_send_recipients->totalAmountSatoshi()};
     if (total_amount > balance) {
         return true;
@@ -1525,10 +1523,8 @@ void WalletQmlModel::scheduleFeeEstimates()
 
     // Until a destination is entered, show the gross remainder. A valid
     // address enables the sendall preview, which replaces it with the net amount.
-    if (m_wallet && m_maximum_recipient && m_maximum_recipient->address()->address().isEmpty()) {
-        wallet::CCoinControl control{m_coin_control};
-        ApplySelectedInputsPolicy(control);
-        CAmount remainder = m_wallet->getAvailableBalance(control);
+    if (m_wallet && m_maximum_recipient && m_maximum_recipient->address()->address().isEmpty() && !sendBalancePending()) {
+        CAmount remainder = sendAvailableBalance();
         for (const auto* recipient : m_send_recipients->recipients()) {
             if (recipient != m_maximum_recipient) remainder -= recipient->cAmount();
         }
@@ -1715,6 +1711,15 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
             passphrase.reset();
         }
         setTransactionStatus(tr("This wallet is closing."));
+        return false;
+    }
+    // A coin being locked may still be in the selection.
+    if (m_coin_lock_pending) {
+        if (passphrase.has_value()) {
+            QmlUtil::ClearSecureString(*passphrase);
+            passphrase.reset();
+        }
+        setTransactionStatus(tr("Coins are being updated. Try again in a moment."));
         return false;
     }
     if (!m_wallet || !m_send_recipients || m_send_recipients->recipients().empty()) {
@@ -2495,6 +2500,7 @@ void WalletQmlModel::selectCoin(const COutPoint& output)
     const bool was_selected{m_coin_control.IsSelected(output)};
     m_coin_control.Select(output);
     if (!was_selected) {
+        refreshSelectedAvailableBalance(true);
         Q_EMIT sendAmountExhaustsBalanceChanged();
     }
     scheduleFeeEstimates();
@@ -2505,6 +2511,7 @@ void WalletQmlModel::unselectCoin(const COutPoint& output)
     const bool was_selected{m_coin_control.IsSelected(output)};
     m_coin_control.UnSelect(output);
     if (was_selected) {
+        refreshSelectedAvailableBalance(true);
         Q_EMIT sendAmountExhaustsBalanceChanged();
     }
     scheduleFeeEstimates();
@@ -2532,8 +2539,41 @@ void WalletQmlModel::setSelectedCoins(const std::vector<COutPoint>& outputs)
     m_coin_control.UnSelectAll();
     for (const auto& output : outputs) m_coin_control.Select(output);
     if (m_coins_list_model) m_coins_list_model->refreshSelection();
+    refreshSelectedAvailableBalance(true);
     Q_EMIT sendAmountExhaustsBalanceChanged();
     scheduleFeeEstimates();
+}
+
+CAmount WalletQmlModel::sendAvailableBalance() const
+{
+    if (!m_coin_control.HasSelected()) return m_wallet_state.available_balance;
+    // Callers check sendBalancePending() before trusting this; zero covers nothing.
+    return m_selected_available_balance.value_or(0);
+}
+
+void WalletQmlModel::refreshSelectedAvailableBalance(bool selection_changed)
+{
+    if (m_selected_balance_task) m_backend_executor->cancel(*m_selected_balance_task);
+    m_selected_balance_task.reset();
+    if (selection_changed) m_selected_available_balance.reset();
+    const quint64 request = ++m_selected_balance_request;
+    if (!m_wallet || m_stopping || !m_coin_control.HasSelected()) return;
+    wallet::CCoinControl control{m_coin_control};
+    ApplySelectedInputsPolicy(control);
+    m_selected_balance_task = m_backend_executor->submitTask(this,
+        [wallet = m_wallet, control] { return wallet->getAvailableBalance(control); },
+        [this, request](BackendExecutor::Outcome<CAmount> outcome) {
+            if (request != m_selected_balance_request) return;
+            m_selected_balance_task.reset();
+            if (std::holds_alternative<BackendExecutor::Cancelled>(outcome)) return;
+            // A failed read covers nothing rather than leaving Send pending.
+            const auto* read = std::get_if<0>(&outcome);
+            const CAmount balance{read ? *read : 0};
+            if (m_selected_available_balance == balance) return;
+            m_selected_available_balance = balance;
+            Q_EMIT sendAmountExhaustsBalanceChanged();
+            scheduleFeeEstimates();
+        });
 }
 
 unsigned int WalletQmlModel::feeTargetBlocks() const

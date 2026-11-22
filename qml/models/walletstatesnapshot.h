@@ -99,6 +99,7 @@ private:
     std::set<QString> m_observed_addresses;
     std::optional<uint256> m_last_processed_block;
     std::set<Txid> m_unconfirmed_payment_txids;
+    std::set<COutPoint> m_locked_coins;
 };
 
 #endif // BITCOIN_QML_MODELS_WALLETSTATESNAPSHOT_H

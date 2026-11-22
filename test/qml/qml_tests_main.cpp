@@ -1235,6 +1235,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool feeEstimatePending MEMBER m_fee_estimate_pending NOTIFY feeEstimatePendingChanged)
     Q_PROPERTY(int feeEstimateRevision MEMBER m_fee_estimate_revision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance WRITE setSendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(bool sendBalancePending MEMBER m_send_balance_pending NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(bool coinLockPending MEMBER m_coin_lock_pending NOTIFY coinLockStateChanged)
     Q_PROPERTY(bool prepareTransactionResult MEMBER m_prepare_transaction_result NOTIFY prepareTransactionResultChanged)
     Q_PROPERTY(bool sendTransactionResult MEMBER m_send_transaction_result NOTIFY sendTransactionResultChanged)
     Q_PROPERTY(int prepareTransactionCalls READ prepareTransactionCalls NOTIFY prepareTransactionCallsChanged)
@@ -1834,6 +1836,7 @@ Q_SIGNALS:
     void feeEstimateRevisionChanged();
     void maximumRecipientChanged();
     void sendAmountExhaustsBalanceChanged();
+    void coinLockStateChanged();
     void prepareTransactionResultChanged();
     void sendTransactionResultChanged();
     void prepareTransactionCallsChanged();
@@ -1886,6 +1889,8 @@ private:
     QString m_custom_fee_estimate;
     bool m_fee_estimate_pending{false};
     bool m_send_amount_exhausts_balance{false};
+    bool m_send_balance_pending{false};
+    bool m_coin_lock_pending{false};
     bool m_send_transaction_result{true};
     bool m_is_encrypted{false};
     bool m_is_locked{false};

@@ -1116,7 +1116,7 @@ PageStack {
                                 Layout.fillWidth: true
                                 text: qsTr("Review transaction")
                                 enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
-                                    && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
+                                    && !root.wallet.sendBalancePending && !root.wallet.coinLockPending && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: root.confirmTransactionReview()
                             }
                         }
