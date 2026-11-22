@@ -724,6 +724,7 @@ private Q_SLOTS:
     void shutdownDeliversPendingWalletResults();
     void supersededFeeEstimateDoesNotRun();
     void shutdownDeliversPendingMessageVerification();
+    void receiveCommandsReadWalletTwice();
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
@@ -2520,6 +2521,32 @@ void WalletQmlModelTests::shutdownDeliversPendingMessageVerification()
     // Closing the wallet clears the page, so the result itself is discarded.
     QTRY_VERIFY(!messages->verificationPending());
     QVERIFY(!messages->verificationValid());
+}
+
+void WalletQmlModelTests::receiveCommandsReadWalletTwice()
+{
+    struct CountingWallet : FakePasswordWallet {
+        std::atomic_int reads{0};
+        std::atomic<wallet::CWallet*> raw_wallet{nullptr};
+        std::set<interfaces::WalletTx> getWalletTxs() override
+        {
+            ++reads;
+            return FakePasswordWallet::getWalletTxs();
+        }
+        wallet::CWallet* wallet() override { return raw_wallet; }
+    };
+    // Save and EnsureAddress validate under cs_wallet, so give the fake a real lock.
+    wallet::CWallet raw_wallet{nullptr, "read-count-test", nullptr};
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel<CountingWallet>();
+    wallet->raw_wallet = &raw_wallet;
+    wallet->reads = 0;
+    QVERIFY(CompleteReceive(*model, model->ensureReceivingAddress()));
+    QCOMPARE(wallet->reads.load(), 2);
+    model->currentPaymentRequest()->setLabel("Read twice");
+    wallet->reads = 0;
+    QVERIFY(CompleteReceive(*model, model->commitReceivingPaymentRequest()));
+    QCOMPARE(wallet->reads.load(), 2);
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

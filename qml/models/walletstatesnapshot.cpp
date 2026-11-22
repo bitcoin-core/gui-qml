@@ -22,6 +22,7 @@
 #include <wallet/wallet.h>
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QSettings>
 
 #include <algorithm>
@@ -276,7 +277,6 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
         }
         return std::move(result);
     };
-    auto state = read(node);
     bool relock{false};
     if (command.passphrase) {
         const auto unlocked = TryUnlockWithPassphrase(*m_wallet, *command.passphrase);
@@ -288,15 +288,14 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
         relock = unlocked == WalletUnlockResult::UnlockedNowRelockRequired;
     }
     WalletRelockGuard guard{*m_wallet, [] {}, relock};
-    // Keep validation and persistence together, but release cs_wallet before
-    // relocking (which acquires the wallet's relock mutex first).
+    // Release cs_wallet before settings I/O and before relocking, which takes the relock mutex first.
     std::unique_ptr<UniqueLock<RecursiveMutex>> wallet_lock;
     if (command.kind == ReceiveCommand::Kind::Save || command.kind == ReceiveCommand::Kind::EnsureAddress) {
         if (auto* wallet = m_wallet->wallet()) {
             wallet_lock = std::make_unique<UniqueLock<RecursiveMutex>>(wallet->cs_wallet, "wallet->cs_wallet", __FILE__, __LINE__);
-            state = read(node);
         }
     }
+    auto state = read(node);
     auto complete = [&] {
         wallet_lock.reset();
         guard.relock();
@@ -334,6 +333,7 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
             address = new_address({});
         }
         if (address.isEmpty()) return complete();
+        wallet_lock.reset();
         settings.setValue(address_key, address);
         settings.sync();
         if (settings.status() != QSettings::NoError || !setAddressType(node, type_text)) result.error = Tr("The receiving address preference could not be saved.");
@@ -370,7 +370,13 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
         if (note_changed && old_label != note && (!note.isEmpty() || (existing != state.receive_requests.end() && old_label.toStdString() == existing->recipient.noteSelf))) {
             if (!m_wallet->setAddressBook(DecodeDestination(entry.recipient.address), entry.recipient.noteSelf, wallet::AddressPurpose::RECEIVE)) result.error = Tr("The request was saved, but its address label could not be saved.");
         }
-        if (command.reserve_receiving_address) { settings.remove(address_key); settings.sync(); }
+        wallet_lock.reset();
+        if (command.reserve_receiving_address) {
+            settings.remove(address_key);
+            settings.sync();
+            // Harmless once the request is saved, so log it instead of failing.
+            if (settings.status() != QSettings::NoError) qWarning() << "Could not clear the receiving address preference for" << address_key;
+        }
     } else if (command.kind == ReceiveCommand::Kind::Remove) {
         const auto existing = std::find_if(state.receive_requests.begin(), state.receive_requests.end(), [&](const auto& item) { return item.id == command.entry.id; });
         result.success = existing != state.receive_requests.end() && m_wallet->setAddressReceiveRequest(DecodeDestination(existing->recipient.address), util::ToString(existing->id), {});
