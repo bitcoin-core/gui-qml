@@ -677,10 +677,15 @@ void ActivityFilterProxyModel::collectExportBatch()
         return;
     }
     if (!m_export_executor) m_export_executor = std::make_shared<BackendExecutor>();
-    m_export_executor->submit(this,
+    m_export_executor->submitTask(this,
         [path = m_export_path, records = std::move(m_export_records), unit = m_export_unit] { return WriteActivityCsv(path, records, unit); },
-        [this](bool success) { finishExport(success, success ? QString{} : tr("The Activity CSV could not be saved. Check the file path and try again.")); },
-        [this](std::exception_ptr) { finishExport(false, tr("The Activity CSV could not be saved. Please try again.")); });
+        [this](BackendExecutor::Outcome<bool> outcome) {
+            if (const auto* written = std::get_if<0>(&outcome)) {
+                finishExport(*written, *written ? QString{} : tr("The Activity CSV could not be saved. Check the file path and try again."));
+            } else {
+                finishExport(false, tr("The Activity CSV could not be saved. Please try again."));
+            }
+        });
 }
 
 void ActivityFilterProxyModel::finishExport(bool success, QString error)

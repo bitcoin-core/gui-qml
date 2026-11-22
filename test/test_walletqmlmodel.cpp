@@ -67,6 +67,7 @@ std::unique_ptr<interfaces::Handler> MakeNoopHandler()
 constexpr auto NON_P2PKH_ADDRESS{"bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj"};
 
 constexpr auto FEE_ESTIMATE_TIMEOUT_MS{3'000};
+constexpr auto FEE_ESTIMATE_DEBOUNCE_MS{250};
 const auto VALID_MAINNET_ADDRESS = QStringLiteral("1BoatSLRHtKNngkdXEeobR76b53LETtpyT");
 const auto VALID_MAINNET_P2SH_ADDRESS = QStringLiteral("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy");
 const auto VALID_REGTEST_ADDRESS = QStringLiteral("bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9");
@@ -720,6 +721,9 @@ private Q_SLOTS:
     void capabilitiesRefreshAfterDescriptorImport();
     void unloadIsConnectedBeforeBackgroundSubscriptions();
     void signingRunsOffGuiAndDiscardsClearedResult();
+    void shutdownDeliversPendingWalletResults();
+    void supersededFeeEstimateDoesNotRun();
+    void shutdownDeliversPendingMessageVerification();
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
@@ -2410,6 +2414,112 @@ void WalletQmlModelTests::signingRunsOffGuiAndDiscardsClearedResult()
     QVERIFY(!signing->signingError().isEmpty());
     QVERIFY(wallet->locked);
     QCOMPARE(wallet->lock_calls, 2);
+}
+
+void WalletQmlModelTests::shutdownDeliversPendingWalletResults()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    QSemaphore entered, release;
+    const auto new_destination = wallet->get_new_destination_fn;
+    wallet->get_new_destination_fn = [&, new_destination](OutputType type, const std::string& label) {
+        entered.release();
+        release.acquire();
+        return new_destination(type, label);
+    };
+    const auto unblock = qScopeGuard([&] {
+        release.release();
+        if (!QTest::qWaitFor([&] { return model->backendExecutor()->isDrained(); })) qFatal("Wallet queue did not drain");
+    });
+    QSignalSpy finished{model.get(), &WalletQmlModel::receiveOperationFinished};
+    QVERIFY(model->ensureReceivingAddress());
+    QTRY_VERIFY(entered.available());
+    QVERIFY(model->setCoinsLocked({COutPoint{Txid{}, 0}}, true));
+    QVERIFY(model->coinLockPending());
+
+    model->beginShutdown();
+    release.release();
+    QTRY_VERIFY(model->backendExecutor()->isDrained());
+    QTRY_VERIFY(!model->receiveOperationPending());
+    QCOMPARE(finished.size(), 1);
+    QVERIFY(!model->coinLockPending());
+    QVERIFY(!model->receiveRequestReconciliationPending());
+}
+
+void WalletQmlModelTests::supersededFeeEstimateDoesNotRun()
+{
+    auto [wallet, model] = MakeWalletModel();
+    SetValidRecipient(*model);
+    model->setCustomFeeEnabled(true);
+    model->setCustomFeeRate("1");
+    ThreadSafeCallLog<FeeEstimateCall> calls;
+    std::atomic_bool first_call_blocked{false};
+    std::atomic_bool first_call_started{false};
+    QSemaphore release_first_call;
+    wallet->create_transaction_fn = [&](const std::vector<wallet::CRecipient>& recipients,
+                                        const wallet::CCoinControl& coin_control,
+                                        bool sign,
+                                        int& change_pos,
+                                        CAmount& fee) -> util::Result<CTransactionRef> {
+        calls.Append({
+            coin_control.m_confirm_target.value_or(0),
+            sign,
+            coin_control.HasSelected() || !coin_control.ListSelected().empty(),
+            coin_control.m_feerate ? std::optional<CAmount>{coin_control.m_feerate->GetFeePerK()} : std::nullopt,
+            recipients.size(),
+        });
+        change_pos = -1;
+        fee = 100;
+        if (!first_call_blocked.exchange(true)) {
+            first_call_started = true;
+            release_first_call.acquire();
+        }
+        return util::Result<CTransactionRef>{MakeTransactionRef(CMutableTransaction{})};
+    };
+    const auto unblock = qScopeGuard([&] { release_first_call.release(); });
+
+    model->scheduleFeeEstimates();
+    QTRY_VERIFY_WITH_TIMEOUT(first_call_started.load(), FEE_ESTIMATE_TIMEOUT_MS);
+    for (const auto* rate : {"2", "3"}) {
+        model->setCustomFeeRate(rate);
+        model->scheduleFeeEstimates();
+        QTest::qWait(FEE_ESTIMATE_DEBOUNCE_MS * 3);
+    }
+    release_first_call.release();
+    QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
+    QCOMPARE(model->estimatedFeeRate(), QString("3"));
+    const auto snapshot = calls.Snapshot();
+    QVERIFY(std::none_of(snapshot.begin(), snapshot.end(), [](const FeeEstimateCall& call) { return call.fee_rate == CAmount{2'000}; }));
+    QVERIFY(std::any_of(snapshot.begin(), snapshot.end(), [](const FeeEstimateCall& call) { return call.fee_rate == CAmount{3'000}; }));
+}
+
+void WalletQmlModelTests::shutdownDeliversPendingMessageVerification()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    QSemaphore entered, release;
+    const auto new_destination = wallet->get_new_destination_fn;
+    wallet->get_new_destination_fn = [&, new_destination](OutputType type, const std::string& label) {
+        entered.release();
+        release.acquire();
+        return new_destination(type, label);
+    };
+    const auto unblock = qScopeGuard([&] {
+        release.release();
+        if (!QTest::qWaitFor([&] { return model->backendExecutor()->isDrained(); })) qFatal("Wallet queue did not drain");
+    });
+    QVERIFY(model->ensureReceivingAddress());
+    QTRY_VERIFY(entered.available());
+    auto* messages = model->signVerifyMessageModel();
+    QVERIFY(messages->verifyMessage(VALID_MAINNET_ADDRESS, "message", "not a signature"));
+    QVERIFY(messages->verificationPending());
+
+    model->beginShutdown();
+    release.release();
+    QTRY_VERIFY(model->backendExecutor()->isDrained());
+    // Closing the wallet clears the page, so the result itself is discarded.
+    QTRY_VERIFY(!messages->verificationPending());
+    QVERIFY(!messages->verificationValid());
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

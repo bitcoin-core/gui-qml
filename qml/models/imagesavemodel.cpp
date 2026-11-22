@@ -12,16 +12,14 @@ bool ImageSaveModel::save(const QImage& image, const QUrl& destination)
     if (!m_executor) m_executor = std::make_unique<BackendExecutor>();
     m_pending = true;
     Q_EMIT pendingChanged();
-    return m_executor->submit(this, [image, path = destination.toLocalFile()] {
+    m_executor->submitTask(this, [image, path = destination.toLocalFile()] {
         QSaveFile file{path};
         return file.open(QIODevice::WriteOnly) && image.save(&file, "PNG") && file.commit();
-    }, [this](bool success) {
+    }, [this](BackendExecutor::Outcome<bool> outcome) {
+        const auto* saved = std::get_if<0>(&outcome);
         m_pending = false;
         Q_EMIT pendingChanged();
-        Q_EMIT finished(success);
-    }, [this](std::exception_ptr) {
-        m_pending = false;
-        Q_EMIT pendingChanged();
-        Q_EMIT finished(false);
+        Q_EMIT finished(saved && *saved);
     });
+    return true;
 }

@@ -631,18 +631,17 @@ void WalletQmlModel::startWalletStateRefresh(bool force)
     m_state_refresh_requested = false;
     const auto backend = m_wallet_state_backend;
     const auto node = m_node;
-    m_backend_executor->submit(this,
+    m_backend_executor->submitTask(this,
         [backend, node, force]() -> std::optional<WalletStateSnapshot> {
             return force ? backend->read(node) : backend->poll(node);
-        }, [this](std::optional<WalletStateSnapshot> state) {
+        }, [this](BackendExecutor::Outcome<std::optional<WalletStateSnapshot>> outcome) {
             m_state_refresh_pending = false;
-            if (state) applyWalletState(std::move(*state));
-            if (m_state_refresh_requested) requestWalletStateRefresh();
-            Q_EMIT receiveRequestReconciliationPendingChanged();
-        }, [this](std::exception_ptr) {
-            m_state_refresh_pending = false;
-            m_wallet_state_error = tr("Wallet information could not be loaded. Please try again.");
-            Q_EMIT walletStateChanged();
+            if (auto* state = std::get_if<0>(&outcome)) {
+                if (*state) applyWalletState(std::move(**state));
+            } else if (std::holds_alternative<std::exception_ptr>(outcome)) {
+                m_wallet_state_error = tr("Wallet information could not be loaded. Please try again.");
+                Q_EMIT walletStateChanged();
+            }
             if (m_state_refresh_requested) requestWalletStateRefresh();
             Q_EMIT receiveRequestReconciliationPendingChanged();
         });
@@ -723,9 +722,21 @@ bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operat
     const QPointer<PaymentRequest> held{request};
     const auto revision = request ? request->revision() : 0;
     const bool reserve = command.reserve_receiving_address;
-    const bool accepted = m_backend_executor->submit(this,
+    m_backend_executor->submitTask(this,
         [backend, node, command = std::move(command)]() mutable { return backend->execute(node, std::move(command)); },
-        [this, held, revision, operation, reserve](ReceiveCommandResult result) {
+        [this, held, revision, operation, reserve](BackendExecutor::Outcome<ReceiveCommandResult> outcome) {
+            auto* received = std::get_if<0>(&outcome);
+            if (!received) {
+                m_receive_operation_pending = false;
+                m_receive_operation_error = tr("The wallet operation failed. Please try again.");
+                Q_EMIT receiveOperationPendingChanged();
+                Q_EMIT receiveOperationErrorChanged();
+                Q_EMIT receiveRequestReconciliationPendingChanged();
+                Q_EMIT receiveOperationFinished(operation, false);
+                requestWalletStateRefresh();
+                return;
+            }
+            auto& result = *received;
             const bool current_request = held && held->revision() == revision;
             m_receive_operation_pending = false;
             m_receive_operation_error = result.error;
@@ -772,21 +783,8 @@ bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operat
             Q_EMIT receiveOperationErrorChanged();
             Q_EMIT receiveRequestReconciliationPendingChanged();
             Q_EMIT receiveOperationFinished(operation, result.success);
-        }, [this, operation](std::exception_ptr) {
-            m_receive_operation_pending = false;
-            m_receive_operation_error = tr("The wallet operation failed. Please try again.");
-            Q_EMIT receiveOperationPendingChanged();
-            Q_EMIT receiveOperationErrorChanged();
-            Q_EMIT receiveRequestReconciliationPendingChanged();
-            Q_EMIT receiveOperationFinished(operation, false);
-            requestWalletStateRefresh();
         });
-    if (!accepted) {
-        m_receive_operation_pending = false;
-        Q_EMIT receiveOperationPendingChanged();
-        Q_EMIT receiveRequestReconciliationPendingChanged();
-    }
-    return accepted;
+    return true;
 }
 
 void WalletQmlModel::beginShutdown(bool remove_wallet)
@@ -1601,7 +1599,8 @@ void WalletQmlModel::requestFeeEstimatesNow()
         Q_EMIT feeEstimateRevisionChanged();
     }
 
-    m_backend_executor->submit(this, [remainder_index, recipients = *recipients, base_coin_control, preview_change_type, custom_fee_enabled, custom_fee_rate_per_kvb, wallet]() {
+    if (m_fee_estimate_task) m_backend_executor->cancel(*m_fee_estimate_task);
+    m_fee_estimate_task = m_backend_executor->submitTask(this, [remainder_index, recipients = *recipients, base_coin_control, preview_change_type, custom_fee_enabled, custom_fee_rate_per_kvb, wallet]() {
         QHash<unsigned int, SendFeePreview> estimates;
         std::optional<SendFeePreview> custom_estimate;
 
@@ -1626,10 +1625,9 @@ void WalletQmlModel::requestFeeEstimatesNow()
         }
 
         return std::pair{std::move(estimates), std::move(custom_estimate)};
-    }, [this, request_id](const auto& result) {
-        applyFeeEstimates(result.first, result.second, request_id);
-    }, [this, request_id](std::exception_ptr) {
-        applyFeeEstimates({}, {}, request_id);
+    }, [this, request_id](const auto& outcome) {
+        if (const auto* result = std::get_if<0>(&outcome)) applyFeeEstimates(result->first, result->second, request_id);
+        else applyFeeEstimates({}, {}, request_id);
     });
 }
 
@@ -2452,33 +2450,28 @@ bool WalletQmlModel::setCoinsLocked(std::vector<COutPoint> outputs, bool locked)
     const auto node = m_node;
     // Use the snapshot reader's serial executor so earlier refreshes cannot
     // arrive after this command's result and restore an obsolete lock state.
-    const bool accepted = m_backend_executor->submit(this,
+    m_backend_executor->submitTask(this,
         [backend, node, outputs, locked] { return backend->setCoinsLocked(node, outputs, locked); },
-        [this, outputs, locked](CoinLockResult result) {
-            if (m_stopping) return;
-            if (locked) {
-                for (const auto& output : outputs) {
-                    if (result.snapshot.locked_coins.contains(output)) unselectCoin(output);
+        [this, outputs, locked](BackendExecutor::Outcome<CoinLockResult> outcome) {
+            if (!m_stopping) {
+                if (auto* result = std::get_if<0>(&outcome)) {
+                    if (locked) {
+                        for (const auto& output : outputs) {
+                            if (result->snapshot.locked_coins.contains(output)) unselectCoin(output);
+                        }
+                    }
+                    m_coin_lock_error = result->success ? QString{} : tr("Some coins could not be updated. Try again.");
+                    applyWalletState(std::move(result->snapshot));
+                    scheduleFeeEstimates();
+                } else {
+                    m_coin_lock_error = tr("Coins could not be updated or reloaded. Try again.");
+                    requestWalletStateRefresh();
                 }
             }
-            m_coin_lock_error = result.success ? QString{} : tr("Some coins could not be updated. Try again.");
-            applyWalletState(std::move(result.snapshot));
-            scheduleFeeEstimates();
-            m_coin_lock_pending = false;
-            Q_EMIT coinLockStateChanged();
-        }, [this](std::exception_ptr) {
-            if (m_stopping) return;
-            m_coin_lock_error = tr("Coins could not be updated or reloaded. Try again.");
-            requestWalletStateRefresh();
             m_coin_lock_pending = false;
             Q_EMIT coinLockStateChanged();
         });
-    if (!accepted) {
-        m_coin_lock_error = tr("Coins could not be updated. Try again.");
-        m_coin_lock_pending = false;
-        Q_EMIT coinLockStateChanged();
-    }
-    return accepted;
+    return true;
 }
 
 bool WalletQmlModel::isLockedCoin(const COutPoint& output)
@@ -2649,6 +2642,7 @@ void WalletQmlModel::subscribeToWalletSignals()
             }
         }, Qt::QueuedConnection);
     });
+    // Keep submit(): if the wallet closes first, the handlers must be released on the worker.
     m_backend_executor->submit(this, [wallet = m_wallet, guard, bridge = m_notification_bridge] {
         auto status = wallet->handleStatusChanged([guard, bridge] {
             QMetaObject::invokeMethod(bridge.get(), [guard] {

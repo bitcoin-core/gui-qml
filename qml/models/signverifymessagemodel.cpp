@@ -71,7 +71,7 @@ bool SignVerifyMessageModel::signMessageInternal(const QString& address, const Q
     const auto generation = ++m_signing_generation;
     Q_EMIT signingPendingChanged();
     const auto wallet = m_wallet;
-    const bool accepted = m_executor->submit(this, [wallet, pkhash = *pkhash, message = message.toStdString(), passphrase = std::move(passphrase)]() mutable {
+    m_executor->submitTask(this, [wallet, pkhash = *pkhash, message = message.toStdString(), passphrase = std::move(passphrase)]() mutable {
         Result result;
         bool relock{false};
         const auto security = ReadSecurityState(*wallet);
@@ -93,24 +93,21 @@ bool SignVerifyMessageModel::signMessageInternal(const QString& address, const Q
         if (status == SigningResult::OK) result.signature = QString::fromStdString(signature);
         else result.error = QString::fromStdString(SigningResultString(status));
         return result;
-    }, [this, generation](Result result) {
+    }, [this, generation](BackendExecutor::Outcome<Result> outcome) {
         m_signing_pending = false;
         Q_EMIT signingPendingChanged();
         notifySecurityStateChanged();
         if (generation != m_signing_generation) return;
-        setSigningStatus(result.error, result.needs_unlock);
-        setSignature(result.signature);
-        Q_EMIT signingFinished(result.error.isEmpty());
-    }, [this, generation](std::exception_ptr) {
-        m_signing_pending = false;
-        Q_EMIT signingPendingChanged();
-        notifySecurityStateChanged();
-        if (generation != m_signing_generation) return;
-        setSigningStatus(tr("The message could not be signed. Please try again."));
-        Q_EMIT signingFinished(false);
+        if (const auto* result = std::get_if<0>(&outcome)) {
+            setSigningStatus(result->error, result->needs_unlock);
+            setSignature(result->signature);
+            Q_EMIT signingFinished(result->error.isEmpty());
+        } else {
+            setSigningStatus(tr("The message could not be signed. Please try again."));
+            Q_EMIT signingFinished(false);
+        }
     });
-    if (!accepted) { m_signing_pending = false; Q_EMIT signingPendingChanged(); }
-    return accepted;
+    return true;
 }
 
 bool SignVerifyMessageModel::verifyMessage(const QString& address, const QString& message, const QString& signature)
@@ -120,23 +117,17 @@ bool SignVerifyMessageModel::verifyMessage(const QString& address, const QString
     m_verification_pending = true;
     m_verification_valid = false;
     Q_EMIT verificationPendingChanged();
-    const bool accepted = m_executor->submit(this, [address = address.trimmed().toStdString(), message = message.toStdString(), signature = signature.trimmed().toStdString()] {
+    m_executor->submitTask(this, [address = address.trimmed().toStdString(), message = message.toStdString(), signature = signature.trimmed().toStdString()] {
         return MessageVerify(address, signature, message) == MessageVerificationResult::OK;
-    }, [this, generation](bool valid) {
+    }, [this, generation](BackendExecutor::Outcome<bool> outcome) {
         m_verification_pending = false;
         Q_EMIT verificationPendingChanged();
         if (generation != m_verification_generation) return;
-        m_verification_valid = valid;
-        Q_EMIT verificationFinished();
-    }, [this, generation](std::exception_ptr) {
-        m_verification_pending = false;
-        Q_EMIT verificationPendingChanged();
-        if (generation != m_verification_generation) return;
-        m_verification_valid = false;
+        const auto* valid = std::get_if<0>(&outcome);
+        m_verification_valid = valid && *valid;
         Q_EMIT verificationFinished();
     });
-    if (!accepted) { m_verification_pending = false; Q_EMIT verificationPendingChanged(); }
-    return accepted;
+    return true;
 }
 
 void SignVerifyMessageModel::clear()

@@ -422,6 +422,7 @@ private:
     std::optional<SendFeePreview> m_custom_fee_estimate;
     QString m_custom_fee_rate;
     quint64 m_fee_estimate_request_id{0};
+    std::optional<BackendExecutor::TaskId> m_fee_estimate_task;
     int m_fee_estimate_revision{0};
     bool m_custom_fee_enabled{false};
     bool m_fee_estimate_pending{false};
