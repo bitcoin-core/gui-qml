@@ -92,12 +92,12 @@ TestBridge::TestBridge(QQmlApplicationEngine& engine, const QString& socket_path
     QLocalServer::removeServer(socket_path);
     m_server.setSocketOptions(QLocalServer::UserAccessOption);
     m_server.setMaxPendingConnections(MAX_CLIENTS);
+    connect(&m_server, &QLocalServer::newConnection, this, &TestBridge::handleNewConnection);
     if (!m_server.listen(socket_path)) {
         qWarning("TestBridge: failed to listen: %s", qPrintable(m_server.errorString()));
         return;
     }
 
-    connect(&m_server, &QLocalServer::newConnection, this, &TestBridge::handleNewConnection);
     qInfo("TestBridge: listening");
 }
 

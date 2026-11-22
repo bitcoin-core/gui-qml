@@ -106,6 +106,44 @@ QString ActiveDataDirString(const ArgsManager& args)
     return QmlDataDir::NormalizeLocalPath(QString::fromStdString(fs::PathToString(data_dir)));
 }
 
+struct PreviewProfile {
+    std::unique_ptr<CBaseChainParams> base_params;
+    std::unique_ptr<const CChainParams> chain_params;
+    fs::path data_dir;
+
+    void resolve(ArgsManager& args)
+    {
+        const auto chain{args.GetChainType()};
+        args.SelectConfigNetwork(args.GetChainTypeString());
+        base_params = CreateBaseChainParams(args, chain);
+        chain_params = CreateChainParams(args, chain);
+        data_dir = args.GetDataDirBase();
+    }
+
+    fs::path networkDataDir(const fs::path& base_dir) const
+    {
+        return base_dir / fs::PathFromString(base_params->DataDir());
+    }
+
+    std::optional<fs::path> settingsPath(const ArgsManager& args) const
+    {
+        const fs::path settings{args.GetPathArg("-settings", BITCOIN_SETTINGS_FILENAME)};
+        if (settings.empty()) return std::nullopt;
+        return fsbridge::AbsPathJoin(networkDataDir(data_dir), settings);
+    }
+
+    bool readSettings(ArgsManager& args, std::vector<std::string>& errors) const
+    {
+        const auto path{settingsPath(args)};
+        if (!path) return true;
+        bool success{false};
+        args.LockSettings([&](common::Settings& settings) {
+            success = common::ReadSettings(*path, settings.rw_settings, errors);
+        });
+        return success;
+    }
+};
+
 QmlOnboardingSettings::DataDirSource ResolvedDataDirSource(
     QmlOnboardingSettings::DataDirSource selected_source,
     const QString& selected_data_dir,
@@ -174,7 +212,7 @@ void SetPreviewDataDirs(
     result.config_redirected_data_dir = !SameDataDirPath(selected_data_dir, resolved_data_dir);
 }
 
-bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
+bool ReadConfigAndResolveProfile(ArgsManager& args, PreviewProfile& profile, QString* error)
 {
     try {
         std::string config_error;
@@ -182,8 +220,7 @@ bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
             if (error) *error = QString::fromStdString(config_error);
             return false;
         }
-        SelectParams(args.GetChainType());
-        args.SelectConfigNetwork(args.GetChainTypeString());
+        profile.resolve(args);
     } catch (const std::exception& e) {
         if (error) *error = QString::fromStdString(e.what());
         return false;
@@ -198,14 +235,13 @@ struct ReadOnlyProfileResult {
     bool settings_file_unreadable{false};
 };
 
-bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QString* error)
+bool ReadResolvedProfile(ArgsManager& args, PreviewProfile& profile, ReadOnlyProfileResult& result, QString* error)
 {
     result = {};
-    if (!ReadConfigAndSelectNetwork(args, error)) return false;
+    if (!ReadConfigAndResolveProfile(args, profile, error)) return false;
     result.config_file_path_available = true;
 
-    fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path)) {
+    if (!profile.settingsPath(args)) {
         result.settings_enabled = false;
         if (error) error->clear();
         return true;
@@ -215,7 +251,7 @@ bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QStri
         args.GetBoolArg("-resetguisettings", false)
     };
     std::vector<std::string> settings_errors;
-    if (!args.ReadSettingsFile(&settings_errors)) {
+    if (!profile.readSettings(args, settings_errors)) {
         // Preserve settings.json precedence when it is readable, while still
         // allowing an already-selected reset to recover an unreadable file.
         if (reset_without_settings) {
@@ -269,38 +305,36 @@ bool DirectoryHasNonHiddenEntry(const fs::path& path)
     return false;
 }
 
-fs::path BlocksDirPathNoCreate(const ArgsManager& args)
+fs::path BlocksDirPathNoCreate(const ArgsManager& args, const PreviewProfile& profile)
 {
     fs::path path;
     if (args.IsArgSet("-blocksdir")) {
         path = fs::absolute(args.GetPathArg("-blocksdir"));
         if (!DirectoryExists(path)) return {};
     } else {
-        path = args.GetDataDirBase();
+        path = profile.data_dir;
     }
 
     if (path.empty()) return {};
-    path /= fs::PathFromString(BaseParams().DataDir());
-    path /= "blocks";
-    return path;
+    return profile.networkDataDir(path) / "blocks";
 }
 
-bool HasExistingChainData(const ArgsManager& args)
+bool HasExistingChainData(const ArgsManager& args, const PreviewProfile& profile)
 {
-    const fs::path network_data_dir{args.GetDataDirNet()};
+    const fs::path network_data_dir{profile.networkDataDir(profile.data_dir)};
     if (DirectoryHasNonHiddenEntry(network_data_dir / "chainstate")) return true;
     if (DirectoryHasNonHiddenEntry(network_data_dir / "chainstate_snapshot")) return true;
     if (DirectoryHasNonHiddenEntry(network_data_dir / "indexes")) return true;
-    return DirectoryHasNonHiddenEntry(BlocksDirPathNoCreate(args));
+    return DirectoryHasNonHiddenEntry(BlocksDirPathNoCreate(args, profile));
 }
 
-QmlOnboardingSettings::ProfileSummary BuildProfileSummary(const ArgsManager& args, bool config_file_path_available)
+QmlOnboardingSettings::ProfileSummary BuildProfileSummary(const ArgsManager& args, const PreviewProfile& profile, bool config_file_path_available)
 {
     QmlOnboardingSettings::ProfileSummary summary;
-    fs::path settings_path;
-    summary.has_settings_file = args.GetSettingsPath(&settings_path) && PathExists(settings_path);
+    const auto settings_path{profile.settingsPath(args)};
+    summary.has_settings_file = settings_path && PathExists(*settings_path);
     summary.has_config_file = config_file_path_available && PathExists(args.GetConfigFilePath());
-    summary.has_chain_data = HasExistingChainData(args);
+    summary.has_chain_data = HasExistingChainData(args, profile);
     summary.existing_profile = summary.has_settings_file ||
                                summary.has_config_file ||
                                summary.has_chain_data;
@@ -628,20 +662,6 @@ QString SettingsPathString(ArgsManager& args)
         QString::fromStdString(fs::PathToString(settings_path)));
 }
 
-QString SettingsPathForNewDataDir(ArgsManager& args, const QString& data_dir)
-{
-    const fs::path settings{args.GetPathArg("-settings", BITCOIN_SETTINGS_FILENAME)};
-    if (settings.empty()) return {};
-
-    fs::path network_data_dir{QmlDataDir::QStringToPath(data_dir)};
-    if (!BaseParams().DataDir().empty()) {
-        network_data_dir /= fs::PathFromString(BaseParams().DataDir());
-    }
-    return QmlDataDir::NormalizeLocalPath(
-        QString::fromStdString(
-            fs::PathToString(fsbridge::AbsPathJoin(network_data_dir, settings))));
-}
-
 bool ValidatePendingApply(
     ArgsManager& args,
     const QmlOnboardingSettings::PendingApply& pending,
@@ -792,8 +812,9 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         return status;
     }
 
+    PreviewProfile profile;
     try {
-        SelectParams(preview_args.GetChainType());
+        profile.resolve(preview_args);
         status.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
     } catch (const std::exception& e) {
         status.error = QString::fromStdString(e.what());
@@ -833,7 +854,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     QString read_error;
     ReadOnlyProfileResult profile_read;
     if (can_read_profile) {
-        if (!ReadResolvedProfile(preview_args, profile_read, &read_error)) {
+        if (!ReadResolvedProfile(preview_args, profile, profile_read, &read_error)) {
             status.error = read_error;
             status.settings_file_unreadable = profile_read.settings_file_unreadable;
             return status;
@@ -843,8 +864,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, resolved_data_dir, explicit_datadir);
     } else {
         try {
-            SelectParams(preview_args.GetChainType());
-            preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
+            profile.resolve(preview_args);
         } catch (const std::exception& e) {
             status.error = QString::fromStdString(e.what());
             return status;
@@ -906,8 +926,9 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         return result;
     }
 
+    PreviewProfile profile;
     try {
-        SelectParams(preview_args.GetChainType());
+        profile.resolve(preview_args);
     } catch (const std::exception& e) {
         result.error = QString::fromStdString(e.what());
         return result;
@@ -927,7 +948,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     if (!apply_datadir_before_config || custom_datadir_exists) {
         ReadOnlyProfileResult profile_read;
         QString read_error;
-        if (!ReadResolvedProfile(preview_args, profile_read, &read_error)) {
+        if (!ReadResolvedProfile(preview_args, profile, profile_read, &read_error)) {
             result.error = read_error;
             return result;
         }
@@ -948,7 +969,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
             }
         }
     } else {
-        preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
+        profile.data_dir = QmlDataDir::QStringToPath(data_dir);
         SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
         result.effective_reset = preview_args.GetBoolArg("-resetguisettings", false);
         if (!result.effective_reset) {
@@ -968,16 +989,15 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     // bitcoin.conf values.
     InitParameterInteraction(preview_args);
 
-    result.assumed_blockchain_size = static_cast<int>(Params().AssumedBlockchainSize());
-    result.assumed_chainstate_size = static_cast<int>(Params().AssumedChainStateSize());
-    result.profile = BuildProfileSummary(preview_args, config_file_path_available);
+    result.assumed_blockchain_size = static_cast<int>(profile.chain_params->AssumedBlockchainSize());
+    result.assumed_chainstate_size = static_cast<int>(profile.chain_params->AssumedChainStateSize());
+    result.profile = BuildProfileSummary(preview_args, profile, config_file_path_available);
     result.core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(preview_args, QmlCoreSettings::OnboardingCoreSettingNames());
     result.values = QmlCoreSettings::LoadEffectiveValues(preview_args);
     result.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
-    if (apply_datadir_before_config && !custom_datadir_exists) {
-        result.resolved_settings_path = SettingsPathForNewDataDir(preview_args, result.resolved_data_dir);
-    } else {
-        result.resolved_settings_path = SettingsPathString(preview_args);
+    if (const auto settings_path{profile.settingsPath(preview_args)}) {
+        result.resolved_settings_path = QmlDataDir::NormalizeLocalPath(
+            QString::fromStdString(fs::PathToString(*settings_path)));
     }
     result.ok = true;
     return result;
