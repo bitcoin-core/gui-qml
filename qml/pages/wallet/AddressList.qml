@@ -53,6 +53,10 @@ SettingsPage {
         if (closeAction) {
             closeAction();
         }
+        if (root.walletBusy()) {
+            root.errorText = root.walletBusyText();
+            return;
+        }
         addressModel.refresh();
         root.errorText = qsTr("This address is no longer available.");
     }
@@ -83,9 +87,13 @@ SettingsPage {
         if (root.addressModel.labelChangePending) return false
         root.errorText = ""
         if (root.addressModel.setAddressLabel(address, label)) return true
-        root.errorText = qsTr("The address label could not be saved. Please try again.")
+        root.errorText = root.walletBusy() ? root.walletBusyText()
+            : qsTr("The address label could not be saved. Please try again.")
         return false
     }
+
+    function walletBusy() { return !!root.wallet && root.wallet.receiveOperationPending }
+    function walletBusyText() { return qsTr("The wallet is saving another change. Try again in a moment.") }
 
     Connections {
         target: root.addressModel
@@ -146,6 +154,7 @@ SettingsPage {
                 used: root.selectedUsed
                 hasPaymentRequest: root.selectedHasPaymentRequest
                 labelChangePending: root.addressModel.labelChangePending
+                receiveOperationPending: !!root.wallet && root.wallet.receiveOperationPending
                 onCloseRequested: detailsPopup.close()
                 onCreatePaymentRequestRequested: {
                     root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
@@ -155,7 +164,8 @@ SettingsPage {
                     if (root.updateAddressLabel(address, label)) {
                         noteErrorText = "";
                     } else {
-                        noteErrorText = qsTr("This address is no longer available.");
+                        noteErrorText = root.walletBusy() ? root.walletBusyText()
+                            : qsTr("This address is no longer available.");
                     }
                 }
             }

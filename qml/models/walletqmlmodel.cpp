@@ -724,7 +724,10 @@ void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
     if (name_changed) { Q_EMIT nameChanged(); Q_EMIT displayNameChanged(); }
     if (was_encrypted != m_is_encrypted || was_locked != m_is_locked) Q_EMIT securityStateChanged();
     Q_EMIT walletStateChanged();
-    if (labels_changed) Q_EMIT addressListChanged();
+    if (labels_changed) {
+        followPrefilledNote();
+        Q_EMIT addressListChanged();
+    }
     if (balance_changed) Q_EMIT balanceChanged();
     refreshSelectedAvailableBalance(false);
     Q_EMIT sendAmountExhaustsBalanceChanged();
@@ -749,9 +752,14 @@ void WalletQmlModel::applySavedRequest(PaymentRequest* request, const QmlRecentR
     request->setUnlockError({});
 }
 
+bool WalletQmlModel::canSubmitReceiveCommand() const
+{
+    return available() && !m_stopping && m_wallet_state_backend && !m_receive_operation_pending;
+}
+
 bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operation, PaymentRequest* request)
 {
-    if (!available() || m_stopping || !m_wallet_state_backend || m_receive_operation_pending) return false;
+    if (!canSubmitReceiveCommand()) return false;
     m_receive_operation_pending = true;
     m_receive_operation_error.clear();
     Q_EMIT receiveOperationPendingChanged();
@@ -769,6 +777,7 @@ bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operat
             if (!received) {
                 m_receive_operation_pending = false;
                 m_receive_operation_error = tr("The wallet operation failed. Please try again.");
+                if (std::exchange(m_prefilled_note_follow_pending, false)) followPrefilledNote();
                 Q_EMIT receiveOperationPendingChanged();
                 Q_EMIT receiveOperationErrorChanged();
                 Q_EMIT receiveRequestReconciliationPendingChanged();
@@ -819,6 +828,7 @@ bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operat
                 result.success = false;
                 m_receive_operation_error = tr("The request changed while the operation was running. Check Activity for saved requests.");
             }
+            if (std::exchange(m_prefilled_note_follow_pending, false)) followPrefilledNote();
             Q_EMIT receiveOperationPendingChanged();
             Q_EMIT receiveOperationErrorChanged();
             Q_EMIT receiveRequestReconciliationPendingChanged();
@@ -1293,6 +1303,7 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         const QVariantList existing = m_receive_requests->matchingEntriesForAddress(address);
         if (!existing.isEmpty()) {
             const QString request_id = existing.first().toMap().value(QStringLiteral("requestId")).toString();
+            m_prefilled_note_address.clear();
             if (!loadPaymentRequest(request_id)) {
                 return false;
             }
@@ -1301,9 +1312,12 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         }
     }
 
+    if (!canSubmitReceiveCommand()) return false;
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
     m_current_payment_request->setNoteSelf(getAddressLabel(address));
+    m_prefilled_note_address = address;
+    m_prefilled_note = m_current_payment_request->noteSelf();
     m_current_payment_request->setIsEditing(false);
     m_current_payment_request->setIsEditing(true);
     // The explicit Receive action in Addresses must keep the chosen address.
@@ -1357,6 +1371,9 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
     command.entry.recipient.noteSelf = request->noteSelf().toStdString();
     command.address_type = request->addressType();
     command.reserve_receiving_address = request == m_current_payment_request && request->id().isEmpty() && !request->address().isEmpty();
+    command.note_is_prefill = request == m_current_payment_request && request->id().isEmpty()
+        && !m_prefilled_note_address.isEmpty() && request->address() == m_prefilled_note_address
+        && request->noteSelf() == m_prefilled_note;
     return submitReceiveCommand(std::move(command), QStringLiteral("save"), request);
 }
 
@@ -2613,6 +2630,24 @@ void WalletQmlModel::setSelectedCoins(const std::vector<COutPoint>& outputs)
     refreshSelectedAvailableBalance(true);
     Q_EMIT sendAmountExhaustsBalanceChanged();
     scheduleFeeEstimates();
+}
+
+void WalletQmlModel::followPrefilledNote()
+{
+    if (m_prefilled_note_address.isEmpty()) return;
+    // A pending Receive command checks the request's revision; follow the label once it finishes.
+    if (m_receive_operation_pending) {
+        m_prefilled_note_follow_pending = true;
+        return;
+    }
+    auto* request = m_current_payment_request;
+    if (!request->id().isEmpty() || request->address() != m_prefilled_note_address || request->noteSelf() != m_prefilled_note) {
+        m_prefilled_note_address.clear();
+        return;
+    }
+    // An untouched prefill follows the label, so saving it cannot restore an older one.
+    m_prefilled_note = getAddressLabel(m_prefilled_note_address);
+    request->setNoteSelf(m_prefilled_note);
 }
 
 CAmount WalletQmlModel::sendAvailableBalance() const

@@ -732,9 +732,14 @@ private Q_SLOTS:
     void ownNotificationsDoNotRereadTheWallet();
     void failedReadsRetryWithDelay();
     void recoveredSnapshotEndsTheRetryDelay();
+    void untouchedPrefilledNoteFollowsLaterLabel();
+    void editedPrefilledNoteStillUpdatesLabel();
+    void prefilledNoteKeepsLabelChangedBeforeSnapshot();
+    void prefilledNoteWaitsForPendingSave();
     void sendDoesNotRelyOnAnotherTemporaryUnlock();
     void signingWaitsForTheUnlockSession();
     void passwordChangeWaitsForTheUnlockSession();
+    void rejectedAddressRequestKeepsReceiveDraft();
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
@@ -2866,6 +2871,122 @@ void WalletQmlModelTests::recoveredSnapshotEndsTheRetryDelay()
     wallet->get_address_label = "Changed elsewhere";
     wallet->address_book_changed(destination, "Changed elsewhere", true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
     QTRY_COMPARE_WITH_TIMEOUT(model->getAddressLabel(VALID_MAINNET_ADDRESS), QStringLiteral("Changed elsewhere"), 500);
+}
+
+void WalletQmlModelTests::rejectedAddressRequestKeepsReceiveDraft()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Draft in progress"));
+    QSemaphore entered, release;
+    const auto new_destination = wallet->get_new_destination_fn;
+    wallet->get_new_destination_fn = [&, new_destination](OutputType type, const std::string& label) {
+        entered.release();
+        release.acquire();
+        return new_destination(type, label);
+    };
+    const auto unblock = qScopeGuard([&] {
+        release.release();
+        if (!QTest::qWaitFor([&] { return !model->receiveOperationPending(); })) qFatal("Receive operation did not finish");
+    });
+    QVERIFY(model->ensureReceivingAddress());
+    QTRY_VERIFY(entered.available());
+
+    QVERIFY(!model->setCurrentPaymentRequestAddress(VALID_MAINNET_P2SH_ADDRESS));
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("Draft in progress"));
+    QVERIFY(model->currentPaymentRequest()->address() != VALID_MAINNET_P2SH_ADDRESS);
+    QVERIFY(model->receivingAddress()->address() != VALID_MAINNET_P2SH_ADDRESS);
+}
+
+void WalletQmlModelTests::untouchedPrefilledNoteFollowsLaterLabel()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_label = "Rent";
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QVERIFY(CompleteReceive(*model, model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS)));
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Rent"));
+
+    wallet->get_address_label = "Landlord";
+    model->requestWalletStateRefresh();
+    QTRY_COMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Landlord"));
+    const auto writes = wallet->set_address_book_calls;
+    QVERIFY(CompleteReceive(*model, model->commitReceivingPaymentRequest()));
+    QCOMPARE(wallet->set_address_book_calls, writes);
+    QCOMPARE(wallet->get_address_label, std::string{"Landlord"});
+}
+
+void WalletQmlModelTests::editedPrefilledNoteStillUpdatesLabel()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_label = "Rent";
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QVERIFY(CompleteReceive(*model, model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS)));
+    model->currentPaymentRequest()->setNoteSelf("Office");
+
+    wallet->get_address_label = "Landlord";
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Office"));
+    QVERIFY(CompleteReceive(*model, model->commitReceivingPaymentRequest()));
+    QCOMPARE(wallet->get_address_label, std::string{"Office"});
+}
+
+void WalletQmlModelTests::prefilledNoteKeepsLabelChangedBeforeSnapshot()
+{
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_label = "Rent";
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QVERIFY(CompleteReceive(*model, model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS)));
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Rent"));
+
+    // The label changes in the wallet, but its notification has not been applied yet.
+    wallet->get_address_label = "Landlord";
+    const auto writes = wallet->set_address_book_calls;
+    QVERIFY(CompleteReceive(*model, model->commitReceivingPaymentRequest()));
+    QCOMPARE(wallet->set_address_book_calls, writes);
+    QCOMPARE(wallet->get_address_label, std::string{"Landlord"});
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Landlord"));
+}
+
+void WalletQmlModelTests::prefilledNoteWaitsForPendingSave()
+{
+    struct HeldRefreshWallet : FakePasswordWallet {
+        std::function<void()> before_addresses;
+        std::vector<interfaces::WalletAddress> getAddresses() override
+        {
+            if (auto hook = std::exchange(before_addresses, {})) hook();
+            return FakePasswordWallet::getAddresses();
+        }
+    };
+    QSettings{}.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel<HeldRefreshWallet>();
+    wallet->get_address_label = "Rent";
+    model->requestWalletStateRefresh();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QVERIFY(CompleteReceive(*model, model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS)));
+
+    // Hold the refresh for the label change on the worker until the save is queued behind it.
+    QSemaphore reading;
+    QSemaphore release;
+    const auto release_worker = qScopeGuard([&] { if (release.available() == 0) release.release(); });
+    wallet->before_addresses = [&] {
+        reading.release();
+        release.acquire();
+    };
+    wallet->get_address_label = "Landlord";
+    model->requestWalletStateRefresh();
+    QTRY_COMPARE(reading.available(), 1);
+    const bool accepted = model->commitReceivingPaymentRequest();
+    release.release();
+    QVERIFY(CompleteReceive(*model, accepted));
+    QCOMPARE(model->receiveOperationError(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Landlord"));
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

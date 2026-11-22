@@ -118,7 +118,10 @@ AbstractButton {
                 onActiveFocusChanged: {
                     if (noteField.activeFocus) noteField.submittedText = root.label
                 }
-                onTextEdited: root.noteDraftEdited(root.address, noteField.text)
+                onTextEdited: {
+                    if (noteField.text === root.label) root.noteDraftDiscarded(root.address)
+                    else root.noteDraftEdited(root.address, noteField.text)
+                }
                 onAccepted: noteField.focus = false
                 onEditingFinished: {
                     if (!root.labelChangePending && noteField.text !== root.label

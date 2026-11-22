@@ -374,6 +374,10 @@ ReceiveCommandResult WalletStateBackend::execute(interfaces::Node* node, Receive
             entry.date = QDateTime::fromSecsSinceEpoch(QDateTime::currentSecsSinceEpoch());
             if (entry.recipient.address.empty()) entry.recipient.address = new_address(entry.recipient.noteSelf).toStdString();
             if (entry.recipient.address.empty()) return complete();
+            if (command.note_is_prefill) {
+                std::string label;
+                if (m_wallet->getAddress(DecodeDestination(entry.recipient.address), &label, nullptr)) entry.recipient.noteSelf = label;
+            }
         }
         if (!m_wallet->setAddressReceiveRequest(DecodeDestination(entry.recipient.address), util::ToString(entry.id), ReceiveRequestHistoryModel::SerializeEntry(entry))) { result.error = Tr("The payment request could not be saved."); return complete(); }
         result.saved_entry = entry;

@@ -373,6 +373,7 @@ class MockAddressListModel : public QAbstractListModel
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
+    Q_PROPERTY(bool rejectsLabelChanges MEMBER m_rejects_label_changes)
     Q_PROPERTY(bool labelChangePending MEMBER m_label_change_pending NOTIFY labelChangePendingChanged)
     Q_PROPERTY(int labelChangeDelay MEMBER m_label_change_delay)
 
@@ -481,7 +482,7 @@ public:
     Q_INVOKABLE void refresh() {}
     Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label)
     {
-        if (m_label_change_pending) return false;
+        if (m_label_change_pending || m_rejects_label_changes) return false;
         m_label_change_pending = true;
         Q_EMIT labelChangePendingChanged();
         QTimer::singleShot(m_label_change_delay, this, [this, address, label, success = m_set_address_label_succeeds] {
@@ -545,6 +546,7 @@ private:
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
+    bool m_rejects_label_changes{false};
     bool m_label_change_pending{false};
     int m_label_change_delay{0};
 };

@@ -436,6 +436,17 @@ TestCase {
         tryCompare(button, "visible", false)
     }
 
+    function test_addressDetails_create_waits_for_receive_operation() {
+        const details = createTemporaryObject(detailsComponent, host)
+        verify(details !== null)
+        const button = findObject(details, "addressDetailsCreatePaymentRequestButton")
+        verify(button.enabled)
+        details.receiveOperationPending = true
+        verify(!button.enabled)
+        details.hasPaymentRequest = true
+        verify(button.enabled)
+    }
+
     function test_addressLabel_alternates_color_every_four_characters() {
         const label = createTemporaryObject(addressLabelComponent, host)
         verify(label !== null)
@@ -677,6 +688,52 @@ TestCase {
         page.addressModel.setAddressLabelSucceeds = false
         popup.close()
         tryCompare(popup, "visible", false)
+    }
+
+    function test_addressRow_edit_back_to_original_discards_draft() {
+        const page = createTemporaryObject(addressListComponent, host)
+        page.addressModel.resetForTest()
+        const list = findObject(page, "addressListView")
+        tryVerify(() => list.itemAtIndex(0) !== null)
+        const address = page.addressModel.addressAt(0)
+        const note = findObject(list.itemAtIndex(0), "addressRowNoteField")
+        note.forceActiveFocus()
+        note.cursorPosition = note.text.length
+        keyClick(Qt.Key_X)
+        compare(page.pendingNote(address, "no draft"), page.addressModel.labelAt(0) + "x")
+        keyClick(Qt.Key_Backspace)
+        compare(page.pendingNote(address, "no draft"), "no draft")
+        note.focus = false
+        compare(page.pendingNote(address, "no draft"), "no draft")
+    }
+
+    function test_addressList_busy_wallet_label_edit_asks_to_retry() {
+        const page = createTemporaryObject(addressListComponent, host)
+        page.addressModel.resetForTest()
+        const list = findObject(page, "addressListView")
+        tryVerify(() => list.itemAtIndex(0) !== null)
+        page.selectedAddress = page.addressModel.addressAt(0)
+        page.selectedLabel = page.addressModel.labelAt(0)
+        const details = findChild(page, "addressDetails")
+        const popup = findChild(page, "addressDetailsPopup")
+        popup.open()
+        tryCompare(popup, "opened", true)
+        page.addressModel.rejectsLabelChanges = true
+        testWalletModel.receiveOperationPending = true
+        try {
+            details.editLabelRequested(page.selectedAddress, "Busy")
+            compare(details.noteErrorText, "The wallet is saving another change. Try again in a moment.")
+            verify(!page.updateAddressLabel(page.selectedAddress, "Busy"))
+            compare(page.errorText, "The wallet is saving another change. Try again in a moment.")
+            testWalletModel.receiveOperationPending = false
+            details.editLabelRequested(page.selectedAddress, "Gone")
+            compare(details.noteErrorText, "This address is no longer available.")
+        } finally {
+            testWalletModel.receiveOperationPending = false
+            page.addressModel.rejectsLabelChanges = false
+            popup.close()
+            tryCompare(popup, "visible", false)
+        }
     }
 
     function test_addressList_preservesPendingNotesAcrossRefresh() {

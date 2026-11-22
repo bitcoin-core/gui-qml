@@ -22,6 +22,7 @@ ColumnLayout {
     property bool canEditLabel: category !== "change"
     property string noteErrorText: ""
     property bool labelChangePending: false
+    property bool receiveOperationPending: false
 
     signal closeRequested
     signal createPaymentRequestRequested
@@ -138,6 +139,7 @@ ColumnLayout {
             //: Starts a new payment request for this address
             : qsTr("Create payment request")
         visible: root.category === "single-use" && !root.used
+        enabled: root.hasPaymentRequest || !root.receiveOperationPending
         onClicked: root.createPaymentRequestRequested()
     }
 }

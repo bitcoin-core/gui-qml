@@ -69,6 +69,8 @@ struct ReceiveCommand {
     QString label;
     bool next{false};
     bool reserve_receiving_address{false};
+    // The note is the untouched copy of the address label, not an edit.
+    bool note_is_prefill{false};
     std::optional<SecureString> passphrase;
 };
 

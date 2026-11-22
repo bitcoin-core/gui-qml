@@ -355,7 +355,9 @@ private:
     void noteWalletNotification(uint64_t count);
     void scheduleWalletStateRefresh();
     bool walletStateRefreshNeeded() const;
+    void followPrefilledNote();
     void refreshSelectedAvailableBalance(bool selection_changed);
+    bool canSubmitReceiveCommand() const;
     bool submitReceiveCommand(ReceiveCommand command, QString operation, PaymentRequest* request = nullptr);
     void applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry);
     void initializeFeeEstimator();
@@ -442,6 +444,9 @@ private:
     std::optional<CAmount> m_selected_available_balance;
     std::optional<BackendExecutor::TaskId> m_selected_balance_task;
     quint64 m_selected_balance_request{0};
+    QString m_prefilled_note_address;
+    QString m_prefilled_note;
+    bool m_prefilled_note_follow_pending{false};
     int m_fee_estimate_revision{0};
     bool m_custom_fee_enabled{false};
     bool m_fee_estimate_pending{false};
