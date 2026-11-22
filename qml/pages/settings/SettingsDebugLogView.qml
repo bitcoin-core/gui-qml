@@ -211,6 +211,9 @@ SettingsPage {
             id: titlesHeader
             objectName: "debugLogTitlesHeader"
             Layout.fillWidth: true
+            // Log lines are in English, so the table reads left to right.
+            LayoutMirroring.enabled: false
+            LayoutMirroring.childrenInherit: true
         }
 
         ListView {
@@ -224,6 +227,8 @@ SettingsPage {
             cacheBuffer: 48 * 6
             reuseItems: false
             boundsBehavior: Flickable.StopAtBounds
+            LayoutMirroring.enabled: false
+            LayoutMirroring.childrenInherit: true
 
             header: Item {
                 width: logList.width

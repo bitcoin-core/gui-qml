@@ -92,6 +92,9 @@ FormSection {
     }
 
     Item {
+        // The diagram reads inputs to outputs left to right in every language.
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         Layout.fillWidth: true
         implicitHeight: contents.height + 48
         ColumnLayout {

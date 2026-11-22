@@ -157,6 +157,20 @@ TestCase {
         }
     }
 
+    Component {
+        id: flowComponent
+        TransactionFlow {
+            width: 900
+            flow: ({
+                inputs: [{ id: "input:0", kind: "output", amountSat: 100000, amountKnown: true, ownership: "wallet",
+                    address: "bcrt1qexampleaddress012345678901234567890", label: "", paymentRequests: [] }],
+                outputs: [{ id: "output:0", kind: "output", amountSat: 99000, amountKnown: true, ownership: "external",
+                    address: "bcrt1qexampleaddress012345678901234567890", label: "", paymentRequests: [] }],
+                complete: true, feeKnown: true, feeSat: 1000, inputCount: 1, outputCount: 1
+            })
+        }
+    }
+
     function create(component, host, properties) {
         const item = createTemporaryObject(component, host, properties || {})
         verify(item !== null)
@@ -340,5 +354,14 @@ TestCase {
         const iconLeft = row.mapFromItem(icon, 0, 0).x
         verify(labelRight <= iconLeft)
         verify(iconLeft - labelRight < 40)
+    }
+
+    function test_transactionFlowStaysLeftToRight() {
+        const flow = create(flowComponent, rtlHost)
+        const input = findChild(flow, "transactionFlowInput_0")
+        const output = findChild(flow, "transactionFlowOutput_0")
+        verify(input !== null && output !== null)
+        compare(input.LayoutMirroring.enabled, false)
+        verify(flow.mapFromItem(input, 0, 0).x < flow.mapFromItem(output, 0, 0).x)
     }
 }

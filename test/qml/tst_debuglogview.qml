@@ -22,6 +22,14 @@ TestCase {
         visible: true
     }
 
+    Item {
+        id: rtlHost
+        width: 900
+        height: 700
+        LayoutMirroring.enabled: true
+        LayoutMirroring.childrenInherit: true
+    }
+
     Component {
         id: viewComponent
 
@@ -348,6 +356,26 @@ TestCase {
                 Text.AlignLeft)
         compare(findChild(row, "debugLogItemRow_0Time").text,
                 "15:42:08")
+    }
+
+    function test_log_table_stays_left_to_right_when_mirrored() {
+        testDebugLogModel.resetForTest(2, false)
+        rtlHost.parent = testWindow.contentItem
+        const view = createTemporaryObject(viewComponent, rtlHost)
+        verify(view !== null)
+        const list = findChild(view, "debugLogListView")
+        tryCompare(list, "count", testDebugLogModel.count)
+        view.scrollToTop()
+        tryVerify(function() { return list.itemAtIndex(0) !== null })
+        const row = list.itemAtIndex(0)
+        const time = findChild(row, "debugLogItemRow_0Time")
+        const message = findChild(row, "debugLogItemRow_0Message")
+        tryVerify(function() { return message.width > 0 })
+
+        verify(view.mapFromItem(time, 0, 0).x < view.mapFromItem(message, 0, 0).x)
+        verify(view.mapFromItem(time, 0, 0).x < view.width / 2)
+        compare(findChild(view, "debugLogTitlesHeader").LayoutMirroring.enabled, false)
+        compare(findChild(view, "debugLogSearchBar").LayoutMirroring.enabled, true)
     }
 
     function test_type_indicators_and_alternating_rows_use_theme_colors() {
