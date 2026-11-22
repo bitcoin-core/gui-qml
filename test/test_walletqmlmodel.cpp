@@ -736,6 +736,7 @@ private Q_SLOTS:
     void editedPrefilledNoteStillUpdatesLabel();
     void prefilledNoteKeepsLabelChangedBeforeSnapshot();
     void prefilledNoteWaitsForPendingSave();
+    void requestTooLongForQrIsNotEncodable();
     void sendDoesNotRelyOnAnotherTemporaryUnlock();
     void signingWaitsForTheUnlockSession();
     void passwordChangeWaitsForTheUnlockSession();
@@ -2987,6 +2988,20 @@ void WalletQmlModelTests::prefilledNoteWaitsForPendingSave()
     QVERIFY(CompleteReceive(*model, accepted));
     QCOMPARE(model->receiveOperationError(), QString{});
     QCOMPARE(model->currentPaymentRequest()->noteSelf(), QStringLiteral("Landlord"));
+}
+
+void WalletQmlModelTests::requestTooLongForQrIsNotEncodable()
+{
+    PaymentRequest request;
+    request.setDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString()));
+    QVERIFY(request.qrEncodable());
+    QString message;
+    for (int i = 0; i < 250; ++i) message += QStringLiteral("invoice line 77; ");
+    request.setMessage(message);
+    QVERIFY(!request.qrEncodable());
+    QVERIFY(request.qrPayload().size() > message.size());
+    request.setMessage(QStringLiteral("September rent"));
+    QVERIFY(request.qrEncodable());
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

@@ -28,6 +28,7 @@ class PaymentRequest : public QObject
     Q_PROPERTY(bool needsUnlock READ needsUnlock NOTIFY needsUnlockChanged)
     Q_PROPERTY(QString unlockError READ unlockError NOTIFY unlockErrorChanged)
     Q_PROPERTY(QString qrPayload READ qrPayload NOTIFY qrPayloadChanged)
+    Q_PROPERTY(bool qrEncodable READ qrEncodable NOTIFY qrPayloadChanged)
     Q_PROPERTY(QString createdIso READ createdIso NOTIFY createdIsoChanged)
     Q_PROPERTY(bool hasPaymentInfo READ hasPaymentInfo NOTIFY qrPayloadChanged)
     Q_PROPERTY(bool isEditing READ isEditing WRITE setIsEditing NOTIFY isEditingChanged)
@@ -70,6 +71,7 @@ public:
     CTxDestination destination() const;
 
     QString qrPayload() const;
+    bool qrEncodable() const;
 
     QString createdIso() const;
     QDateTime created() const;

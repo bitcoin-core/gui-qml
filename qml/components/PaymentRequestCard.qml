@@ -38,6 +38,7 @@ Pane {
     readonly property bool hasCurrentPayment: !!request && request.receivedAmountSatoshi > 0
     readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
+    readonly property bool qrShareable: sharing && request.qrEncodable
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -186,7 +187,7 @@ Pane {
         actionFailurePopup.open()
     }
     function captureQR(callback) {
-        if (!sharing || !request.qrPayload) return false
+        if (!qrShareable) return false
         if (qrImage.status !== Image.Ready) {
             showActionFailure(qsTr("QR code not ready"), qsTr("The QR code is not ready. Please try again."))
             return false
@@ -208,7 +209,7 @@ Pane {
     // What the QR save dialog would export right now. The dialog is tied to
     // the target it was opened for: it closes as soon as that changes, for
     // example when the payment arrives or another request is shown.
-    readonly property string saveQRTarget: sharing && request.qrPayload
+    readonly property string saveQRTarget: qrShareable
         ? request.id + "\n" + request.qrPayload : ""
     onSaveQRTargetChanged: {
         if (saveDialog.visible && saveQRTarget !== saveDialog.target) saveDialog.close()
@@ -414,7 +415,7 @@ Pane {
                     x: moreButton.width - width
                     y: moreButton.height + 8
                     showsQrActions: !root.paymentReceived
-                    qrActionsEnabled: root.sharing
+                    qrActionsEnabled: root.qrShareable
                     showsRequestAgain: true
                     onCopyQrRequested: root.copyQR()
                     onSaveQrRequested: root.openSaveQRDialog()
@@ -463,18 +464,30 @@ Pane {
                     objectName: "requestPaymentQRImage"
                     anchors.fill: parent
                     anchors.margins: Theme.space.l
-                    visible: root.sharing
-                    opacity: root.sharing ? 1 : 0
-                    code: root.sharing && root.request ? root.request.qrPayload : ""
+                    visible: root.qrShareable
+                    opacity: root.qrShareable ? 1 : 0
+                    code: root.qrShareable ? root.request.qrPayload : ""
                     backgroundColor: Theme.color.qrBackground
                     foregroundColor: Theme.color.qrForeground
                     Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
+                }
+                CoreText {
+                    objectName: "requestPaymentQRUnavailableText"
+                    anchors.fill: parent
+                    anchors.margins: Theme.space.l
+                    visible: root.sharing && !root.qrShareable
+                    text: qsTr("This request is too long for a QR code. Copy the payment request instead.")
+                    textStyle: Theme.text.caption
+                    color: Theme.color.qrForeground
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    wrap: true
                 }
                 MouseArea {
                     objectName: "requestPaymentQRContextArea"
                     anchors.fill: parent
                     acceptedButtons: Qt.RightButton
-                    enabled: root.sharing
+                    enabled: root.qrShareable
                     onClicked: function(mouse) {
                         qrMenu.x = mouse.x
                         qrMenu.y = mouse.y
@@ -487,13 +500,13 @@ Pane {
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextCopy"
                         text: qsTr("Copy QR code")
-                        enabled: root.sharing
+                        enabled: root.qrShareable
                         onTriggered: root.copyQR()
                     }
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextSave"
                         text: qsTr("Save QR code…")
-                        enabled: root.sharing
+                        enabled: root.qrShareable
                         onTriggered: root.openSaveQRDialog()
                     }
                 }

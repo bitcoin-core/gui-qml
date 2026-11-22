@@ -632,6 +632,7 @@ class MockPaymentRequest : public QObject
     Q_PROPERTY(QString unlockError MEMBER m_unlock_error NOTIFY unlockErrorChanged)
     Q_PROPERTY(QString createdIso MEMBER m_created_iso NOTIFY createdIsoChanged)
     Q_PROPERTY(QString qrPayload READ qrPayload NOTIFY addressChanged)
+    Q_PROPERTY(bool qrEncodable MEMBER m_qr_encodable NOTIFY qrEncodableChanged)
     Q_PROPERTY(bool paymentReceived MEMBER m_payment_received NOTIFY paymentReceivedChanged)
     Q_PROPERTY(qint64 receivedAmountSatoshi MEMBER m_received_amount NOTIFY receivedAmountChanged)
     Q_PROPERTY(bool isEditing MEMBER m_is_editing NOTIFY isEditingChanged)
@@ -647,6 +648,7 @@ public:
     QString m_address;
     QString m_address_type;
     bool m_needs_unlock{false};
+    bool m_qr_encodable{true};
     QString m_unlock_error;
     QString m_created_iso;
     bool m_is_editing{true};
@@ -658,6 +660,7 @@ public:
     Q_INVOKABLE void clear()
     {
         m_payment_received = false;
+        m_qr_encodable = true;
         m_received_amount = 0;
         Q_EMIT receivedAmountChanged();
         Q_EMIT paymentReceivedChanged();
@@ -706,6 +709,7 @@ Q_SIGNALS:
     void addressTypeChanged();
     void needsUnlockChanged();
     void unlockErrorChanged();
+    void qrEncodableChanged();
     void createdIsoChanged();
     void isEditingChanged();
 };

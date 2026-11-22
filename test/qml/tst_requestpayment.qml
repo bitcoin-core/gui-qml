@@ -597,6 +597,27 @@ TestCase {
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)
     }
 
+    function test_request_too_long_for_a_qr_offers_no_qr_actions() {
+        const page = createPage()
+        const card = createRequest(page)
+        verify(findChild(card, "requestPaymentQRImage").visible)
+        card.request.qrEncodable = false
+        verify(!findChild(card, "requestPaymentQRImage").visible)
+        verify(findChild(card, "requestPaymentQRUnavailableText").visible)
+        verify(!findChild(card, "requestPaymentQRContextArea").enabled)
+        compare(card.saveQRTarget, "")
+        verify(!card.copyQR())
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        verify(!findChild(card, "requestPaymentCopyQRMenuButton").enabled)
+        verify(!findChild(card, "requestPaymentSaveQRMenuButton").enabled)
+        findChild(card, "paymentRequestMoreMenu").close()
+        verify(findChild(card, "requestPaymentCopyButton").enabled)
+        card.request.qrEncodable = true
+        verify(findChild(card, "requestPaymentQRImage").visible)
+        verify(!findChild(card, "requestPaymentQRUnavailableText").visible)
+    }
+
     // A QR save dialog exports only the request it was opened for.
     function test_qr_save_dialog_belongs_to_the_request_it_was_opened_for() {
         const page = createPage()

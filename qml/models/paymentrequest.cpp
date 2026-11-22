@@ -5,6 +5,7 @@
 #include <qml/models/paymentrequest.h>
 
 #include <qml/models/receiverequesthistorymodel.h>
+#include <qml/qrimageprovider.h>
 
 #include <key_io.h>
 
@@ -187,6 +188,12 @@ QString PaymentRequest::qrPayload() const
     const QString addr = address();
     if (addr.isEmpty()) return {};
     return ReceiveRequestHistoryModel::BuildBitcoinUri(addr, m_amount->satoshi(), m_label, m_message);
+}
+
+bool PaymentRequest::qrEncodable() const
+{
+    const QString payload = qrPayload();
+    return !payload.isEmpty() && CanEncodeQRCode(payload);
 }
 
 QString PaymentRequest::createdIso() const
