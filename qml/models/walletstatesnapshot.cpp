@@ -88,8 +88,9 @@ WalletKeyScheme ReadWalletKeyScheme(interfaces::Wallet& wallet)
     return WalletKeyScheme::SingleKey;
 }
 
-WalletStateBackend::WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet, std::shared_ptr<WalletUnlockSession> unlock_session)
-    : m_wallet(std::move(wallet)), m_unlock_session(std::move(unlock_session)) {}
+WalletStateBackend::WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet, std::shared_ptr<WalletUnlockSession> unlock_session,
+                                       std::shared_ptr<const std::atomic<uint64_t>> notification_count)
+    : m_wallet(std::move(wallet)), m_unlock_session(std::move(unlock_session)), m_notification_count(std::move(notification_count)) {}
 
 CoinLockResult WalletStateBackend::setCoinsLocked(interfaces::Node* node, const std::vector<COutPoint>& outputs, bool locked)
 {
@@ -115,10 +116,12 @@ WalletStateSnapshot WalletStateBackend::read(interfaces::Node* node)
     // Capture the wallet's processed tip before reading. If it advances during
     // the scan, the next poll will reconcile again. Failed reads remain dirty.
     m_last_processed_block.reset();
+    const uint64_t notification_count = m_notification_count ? m_notification_count->load() : 0;
     interfaces::WalletBalances balances;
     uint256 processed_block;
     const bool have_processed_block = m_wallet->tryGetBalances(balances, processed_block);
     WalletStateSnapshot state;
+    state.notification_count = notification_count;
     state.name = QString::fromStdString(m_wallet->getWalletName());
     // Read the lock set first, so a lockunspent call before the balance read is seen by the next poll.
     std::vector<COutPoint> locked;

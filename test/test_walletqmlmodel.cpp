@@ -729,6 +729,9 @@ private Q_SLOTS:
     void externalCoinLockRefreshesAvailableBalance();
     void sendWaitsForPendingCoinLock();
     void unencryptedWalletIgnoresTheUnlockSession();
+    void ownNotificationsDoNotRereadTheWallet();
+    void failedReadsRetryWithDelay();
+    void recoveredSnapshotEndsTheRetryDelay();
     void sendDoesNotRelyOnAnotherTemporaryUnlock();
     void signingWaitsForTheUnlockSession();
     void passwordChangeWaitsForTheUnlockSession();
@@ -2757,6 +2760,112 @@ void WalletQmlModelTests::unencryptedWalletIgnoresTheUnlockSession()
     QVERIFY(signing->signMessage(VALID_MAINNET_ADDRESS, "message"));
     QTRY_VERIFY(!signing->signingPending());
     QCOMPARE(signing->signature(), QStringLiteral("fake-signature"));
+}
+
+void WalletQmlModelTests::ownNotificationsDoNotRereadTheWallet()
+{
+    struct NotifyingWallet : FakePasswordWallet {
+        std::atomic_int reads{0};
+        AddressBookChangedFn address_book_changed;
+        std::set<interfaces::WalletTx> getWalletTxs() override
+        {
+            ++reads;
+            return FakePasswordWallet::getWalletTxs();
+        }
+        std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn fn) override
+        {
+            address_book_changed = std::move(fn);
+            return MakeNoopHandler();
+        }
+        bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<wallet::AddressPurpose>& purpose) override
+        {
+            FakePasswordWallet::setAddressBook(dest, name, purpose);
+            address_book_changed(dest, name, true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
+            return true;
+        }
+    };
+    auto [wallet, model] = MakePasswordWalletModel<NotifyingWallet>();
+    QTRY_VERIFY(wallet->address_book_changed);
+    const auto destination = DecodeDestination(VALID_MAINNET_ADDRESS.toStdString());
+
+    // The command's own read already covers the notification its write emits.
+    wallet->reads = 0;
+    QVERIFY(CompleteReceive(*model, model->setAddressLabel(VALID_MAINNET_ADDRESS, "Groceries")));
+    QTest::qWait(200);
+    QCOMPARE(wallet->reads.load(), 2);
+    QCOMPARE(model->getAddressLabel(VALID_MAINNET_ADDRESS), QStringLiteral("Groceries"));
+
+    wallet->get_address_label = "Changed elsewhere";
+    wallet->address_book_changed(destination, "Changed elsewhere", true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
+    QTRY_COMPARE(model->getAddressLabel(VALID_MAINNET_ADDRESS), QStringLiteral("Changed elsewhere"));
+    QCOMPARE(wallet->reads.load(), 3);
+}
+
+void WalletQmlModelTests::failedReadsRetryWithDelay()
+{
+    struct FailingWallet : FakePasswordWallet {
+        std::atomic_int reads{0};
+        std::atomic_bool fail{false};
+        AddressBookChangedFn address_book_changed;
+        std::set<interfaces::WalletTx> getWalletTxs() override
+        {
+            ++reads;
+            if (fail) throw std::runtime_error("read failure");
+            return FakePasswordWallet::getWalletTxs();
+        }
+        std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn fn) override
+        {
+            address_book_changed = std::move(fn);
+            return MakeNoopHandler();
+        }
+    };
+    auto [wallet, model] = MakePasswordWalletModel<FailingWallet>();
+    QTRY_VERIFY(wallet->address_book_changed);
+    QSignalSpy changes{model.get(), &WalletQmlModel::walletStateChanged};
+    wallet->fail = true;
+    wallet->reads = 0;
+    wallet->address_book_changed(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString()), "", true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
+    QTRY_VERIFY(!model->walletStateError().isEmpty());
+    QTest::qWait(500);
+    QCOMPARE(wallet->reads.load(), 1);
+    QCOMPARE(changes.size(), 1);
+
+    // The refresh is still owed and runs once the wallet can be read again.
+    wallet->fail = false;
+    QTRY_VERIFY_WITH_TIMEOUT(model->walletStateError().isEmpty(), 5000);
+}
+
+void WalletQmlModelTests::recoveredSnapshotEndsTheRetryDelay()
+{
+    struct FailingWallet : FakePasswordWallet {
+        std::atomic_bool fail{false};
+        AddressBookChangedFn address_book_changed;
+        std::set<interfaces::WalletTx> getWalletTxs() override
+        {
+            if (fail) throw std::runtime_error("read failure");
+            return FakePasswordWallet::getWalletTxs();
+        }
+        std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn fn) override
+        {
+            address_book_changed = std::move(fn);
+            return MakeNoopHandler();
+        }
+    };
+    auto [wallet, model] = MakePasswordWalletModel<FailingWallet>();
+    QTRY_VERIFY(wallet->address_book_changed);
+    const auto destination = DecodeDestination(VALID_MAINNET_ADDRESS.toStdString());
+    wallet->fail = true;
+    wallet->address_book_changed(destination, "", true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
+    QTRY_VERIFY(!model->walletStateError().isEmpty());
+    QTest::qWait(1'200);
+    wallet->fail = false;
+
+    // A command's fresh snapshot recovers the state; the next change must not wait out the old delay.
+    QVERIFY(CompleteReceive(*model, model->setAddressLabel(VALID_MAINNET_ADDRESS, "Groceries")));
+    QVERIFY(model->walletStateError().isEmpty());
+    wallet->get_address_label = "Changed elsewhere";
+    wallet->address_book_changed(destination, "Changed elsewhere", true, wallet::AddressPurpose::RECEIVE, CT_UPDATED);
+    QTRY_COMPARE_WITH_TIMEOUT(model->getAddressLabel(VALID_MAINNET_ADDRESS), QStringLiteral("Changed elsewhere"), 500);
 }
 
 void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()

@@ -352,6 +352,9 @@ private:
     void startWalletStateRefresh(bool force);
     void applyWalletState(WalletStateSnapshot state);
     CAmount sendAvailableBalance() const;
+    void noteWalletNotification(uint64_t count);
+    void scheduleWalletStateRefresh();
+    bool walletStateRefreshNeeded() const;
     void refreshSelectedAvailableBalance(bool selection_changed);
     bool submitReceiveCommand(ReceiveCommand command, QString operation, PaymentRequest* request = nullptr);
     void applySavedRequest(PaymentRequest* request, const QmlRecentRequestEntry& entry);
@@ -408,6 +411,11 @@ private:
     bool m_state_refresh_pending{false};
     bool m_state_refresh_scheduled{false};
     bool m_state_refresh_requested{false};
+    std::shared_ptr<std::atomic<uint64_t>> m_notification_count{std::make_shared<std::atomic<uint64_t>>(0)};
+    uint64_t m_notified_count{0};
+    uint64_t m_snapshot_notification_count{0};
+    QTimer m_state_refresh_retry_timer;
+    int m_state_refresh_retry_ms{0};
     bool m_stopping{false};
     bool m_receive_operation_pending{false};
     QString m_receive_operation_error;

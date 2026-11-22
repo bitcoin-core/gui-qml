@@ -606,9 +606,13 @@ void WalletQmlModel::initializeWalletState()
         if (QThread::currentThread() == object->thread()) delete object;
         else object->deleteLater();
     }};
-    if (m_wallet) m_wallet_state_backend = std::make_shared<WalletStateBackend>(m_wallet, m_unlock_session);
+    if (m_wallet) m_wallet_state_backend = std::make_shared<WalletStateBackend>(m_wallet, m_unlock_session, m_notification_count);
     m_wallet_poll_timer.setInterval(1000);
     connect(&m_wallet_poll_timer, &QTimer::timeout, this, &WalletQmlModel::pollWalletState);
+    m_state_refresh_retry_timer.setSingleShot(true);
+    connect(&m_state_refresh_retry_timer, &QTimer::timeout, this, [this] {
+        if (walletStateRefreshNeeded()) scheduleWalletStateRefresh();
+    });
     if (m_wallet) m_wallet_poll_timer.start();
     connect(m_backend_executor.get(), &BackendExecutor::drained, this, [this] {
         Q_EMIT shutdownFinished();
@@ -619,7 +623,27 @@ void WalletQmlModel::requestWalletStateRefresh()
 {
     if (m_stopping || !m_wallet_state_backend) return;
     m_state_refresh_requested = true;
-    if (m_state_refresh_pending || m_state_refresh_scheduled) return;
+    scheduleWalletStateRefresh();
+}
+
+void WalletQmlModel::noteWalletNotification(uint64_t count)
+{
+    if (m_stopping) return;
+    m_notified_count = std::max(m_notified_count, count);
+    if (walletStateRefreshNeeded()) scheduleWalletStateRefresh();
+}
+
+bool WalletQmlModel::walletStateRefreshNeeded() const
+{
+    return m_state_refresh_requested || m_notified_count > m_snapshot_notification_count;
+}
+
+void WalletQmlModel::scheduleWalletStateRefresh()
+{
+    if (m_stopping || !m_wallet_state_backend) return;
+    // Running work publishes a newer snapshot; its completion checks again.
+    if (m_state_refresh_pending || m_state_refresh_scheduled || m_receive_operation_pending || m_coin_lock_pending
+        || m_state_refresh_retry_timer.isActive()) return;
     m_state_refresh_scheduled = true;
     Q_EMIT receiveRequestReconciliationPendingChanged();
     QTimer::singleShot(0, this, [this] { startWalletStateRefresh(true); });
@@ -629,6 +653,10 @@ void WalletQmlModel::startWalletStateRefresh(bool force)
 {
     m_state_refresh_scheduled = false;
     if (m_stopping || !m_wallet_state_backend) return;
+    if (force && !walletStateRefreshNeeded()) {
+        Q_EMIT receiveRequestReconciliationPendingChanged();
+        return;
+    }
     m_state_refresh_pending = true;
     m_state_refresh_requested = false;
     const auto backend = m_wallet_state_backend;
@@ -639,12 +667,18 @@ void WalletQmlModel::startWalletStateRefresh(bool force)
         }, [this](BackendExecutor::Outcome<std::optional<WalletStateSnapshot>> outcome) {
             m_state_refresh_pending = false;
             if (auto* state = std::get_if<0>(&outcome)) {
+                m_state_refresh_retry_ms = 0;
                 if (*state) applyWalletState(std::move(**state));
             } else if (std::holds_alternative<std::exception_ptr>(outcome)) {
-                m_wallet_state_error = tr("Wallet information could not be loaded. Please try again.");
-                Q_EMIT walletStateChanged();
+                m_state_refresh_retry_ms = m_state_refresh_retry_ms ? std::min(m_state_refresh_retry_ms * 2, 30'000) : 1'000;
+                m_state_refresh_retry_timer.start(m_state_refresh_retry_ms);
+                const QString error{tr("Wallet information could not be loaded. Please try again.")};
+                if (m_wallet_state_error != error) {
+                    m_wallet_state_error = error;
+                    Q_EMIT walletStateChanged();
+                }
             }
-            if (m_state_refresh_requested) requestWalletStateRefresh();
+            if (walletStateRefreshNeeded()) scheduleWalletStateRefresh();
             Q_EMIT receiveRequestReconciliationPendingChanged();
         });
 }
@@ -662,6 +696,9 @@ void WalletQmlModel::applySecurityState(bool encrypted, bool locked)
 void WalletQmlModel::applyWalletState(WalletStateSnapshot state)
 {
     if (m_stopping) return;
+    m_snapshot_notification_count = std::max(m_snapshot_notification_count, state.notification_count);
+    m_state_refresh_retry_timer.stop();
+    m_state_refresh_retry_ms = 0;
     const bool name_changed = state.name != m_wallet_state.name;
     const bool labels_changed = state.labels != m_wallet_state.labels;
     const bool balance_changed = !m_wallet_state_ready || state.balance != m_wallet_state.balance || state.available_balance != m_wallet_state.available_balance;
@@ -786,6 +823,7 @@ bool WalletQmlModel::submitReceiveCommand(ReceiveCommand command, QString operat
             Q_EMIT receiveOperationErrorChanged();
             Q_EMIT receiveRequestReconciliationPendingChanged();
             Q_EMIT receiveOperationFinished(operation, result.success);
+            if (walletStateRefreshNeeded()) scheduleWalletStateRefresh();
         });
     return true;
 }
@@ -798,6 +836,7 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     m_unload_requested->store(true);
     if (was_available) Q_EMIT availableChanged();
     m_wallet_poll_timer.stop();
+    m_state_refresh_retry_timer.stop();
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
     // Move subscriptions into the last backend job. Callback delivery targets
@@ -1425,7 +1464,8 @@ void WalletQmlModel::refreshReceiveRequestPayments()
 
 void WalletQmlModel::pollWalletState()
 {
-    if (m_stopping || m_state_refresh_pending || m_state_refresh_scheduled || m_receive_operation_pending || m_coin_lock_pending) return;
+    if (m_stopping || m_state_refresh_pending || m_state_refresh_scheduled || m_receive_operation_pending || m_coin_lock_pending
+        || m_state_refresh_retry_timer.isActive()) return;
     startWalletStateRefresh(false);
 }
 
@@ -2505,6 +2545,7 @@ bool WalletQmlModel::setCoinsLocked(std::vector<COutPoint> outputs, bool locked)
             }
             m_coin_lock_pending = false;
             Q_EMIT coinLockStateChanged();
+            if (walletStateRefreshNeeded()) scheduleWalletStateRefresh();
         });
     return true;
 }
@@ -2713,27 +2754,28 @@ void WalletQmlModel::subscribeToWalletSignals()
         }, Qt::QueuedConnection);
     });
     // Keep submit(): if the wallet closes first, the handlers must be released on the worker.
-    m_backend_executor->submit(this, [wallet = m_wallet, guard, bridge = m_notification_bridge] {
-        auto status = wallet->handleStatusChanged([guard, bridge] {
-            QMetaObject::invokeMethod(bridge.get(), [guard] {
-                if (guard) guard->requestWalletStateRefresh();
+    m_backend_executor->submit(this, [wallet = m_wallet, guard, bridge = m_notification_bridge, notifications = m_notification_count] {
+        // Count each notification where it is emitted, so a snapshot read after it covers it.
+        auto status = wallet->handleStatusChanged([guard, bridge, notifications] {
+            QMetaObject::invokeMethod(bridge.get(), [guard, count = ++*notifications] {
+                if (guard) guard->noteWalletNotification(count);
             }, Qt::QueuedConnection);
         });
-        auto address = wallet->handleAddressBookChanged([guard, bridge](const CTxDestination&, const std::string&, bool, wallet::AddressPurpose, ChangeType) {
-            QMetaObject::invokeMethod(bridge.get(), [guard] {
-                if (guard) guard->requestWalletStateRefresh();
+        auto address = wallet->handleAddressBookChanged([guard, bridge, notifications](const CTxDestination&, const std::string&, bool, wallet::AddressPurpose, ChangeType) {
+            QMetaObject::invokeMethod(bridge.get(), [guard, count = ++*notifications] {
+                if (guard) guard->noteWalletNotification(count);
             }, Qt::QueuedConnection);
         });
-        auto transaction = wallet->handleTransactionChanged([guard, bridge](const Txid& txid, ChangeType change) {
-            QMetaObject::invokeMethod(bridge.get(), [guard, txid, change] {
+        auto transaction = wallet->handleTransactionChanged([guard, bridge, notifications](const Txid& txid, ChangeType change) {
+            QMetaObject::invokeMethod(bridge.get(), [guard, txid, change, count = ++*notifications] {
                 if (!guard || guard->m_stopping) return;
-                guard->requestWalletStateRefresh();
+                guard->noteWalletNotification(count);
                 Q_EMIT guard->transactionChanged(QString::fromStdString(txid.ToString()), change);
             }, Qt::QueuedConnection);
         });
-        auto capabilities = wallet->handleCanGetAddressesChanged([guard, bridge] {
-            QMetaObject::invokeMethod(bridge.get(), [guard] {
-                if (guard) guard->requestWalletStateRefresh();
+        auto capabilities = wallet->handleCanGetAddressesChanged([guard, bridge, notifications] {
+            QMetaObject::invokeMethod(bridge.get(), [guard, count = ++*notifications] {
+                if (guard) guard->noteWalletNotification(count);
             }, Qt::QueuedConnection);
         });
         return std::make_tuple(std::move(status), std::move(address), std::move(transaction), std::move(capabilities));

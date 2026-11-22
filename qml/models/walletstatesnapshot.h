@@ -16,6 +16,8 @@
 
 #include <QString>
 
+#include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -54,6 +56,8 @@ struct WalletStateSnapshot {
     std::set<QString> observed_addresses;
     bool unconfirmed_payments{false};
     QString persistence_error;
+    // Wallet notifications already emitted when this snapshot started reading.
+    uint64_t notification_count{0};
 };
 
 struct ReceiveCommand {
@@ -88,7 +92,8 @@ struct CoinLockResult {
 class WalletStateBackend {
 public:
     explicit WalletStateBackend(std::shared_ptr<interfaces::Wallet> wallet,
-                                std::shared_ptr<WalletUnlockSession> unlock_session = std::make_shared<WalletUnlockSession>());
+                                std::shared_ptr<WalletUnlockSession> unlock_session = std::make_shared<WalletUnlockSession>(),
+                                std::shared_ptr<const std::atomic<uint64_t>> notification_count = {});
     WalletStateSnapshot read(interfaces::Node* node);
     std::optional<WalletStateSnapshot> poll(interfaces::Node* node);
     ReceiveCommandResult execute(interfaces::Node* node, ReceiveCommand command);
@@ -99,6 +104,7 @@ private:
     bool setAddressType(interfaces::Node* node, const QString& type);
     std::shared_ptr<interfaces::Wallet> m_wallet;
     std::shared_ptr<WalletUnlockSession> m_unlock_session;
+    std::shared_ptr<const std::atomic<uint64_t>> m_notification_count;
     std::set<QString> m_observed_addresses;
     std::optional<uint256> m_last_processed_block;
     std::set<Txid> m_unconfirmed_payment_txids;
