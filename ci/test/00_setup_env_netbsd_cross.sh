@@ -28,7 +28,7 @@ export DEP_OPTS="build_CC=clang build_CXX=clang++ \
  STRIP=llvm-strip-${APT_LLVM_V}"
 printf -v BITCOIN_CONFIG "%q " \
  --preset=dev-mode \
- -DBUILD_GUI=OFF \
+ -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DREDUCE_EXPORTS=ON \
  -DWITH_USDT=OFF
 export BITCOIN_CONFIG

@@ -19,7 +19,7 @@ export DEP_OPTS="DEBUG=1 NO_QT=1 CC=clang CXX=clang++ CFLAGS='${MSAN_FLAGS}' CXX
 export CI_LIMIT_STACK_SIZE=1
 printf -v BITCOIN_CONFIG "%q " \
  --preset=dev-mode \
- -DBUILD_GUI=OFF \
+ -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DCMAKE_BUILD_TYPE=Debug \
  `# Setting CMAKE_{C,CXX}_FLAGS_DEBUG flags to an empty string ensures that the flags set in MSAN_FLAGS remain unaltered` \
  -DCMAKE_C_FLAGS_DEBUG= \

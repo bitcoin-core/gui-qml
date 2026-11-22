@@ -64,6 +64,8 @@ def github_import_vs_env(_ci_type):
 
 
 def generate(ci_type):
+    # Keep generated Qt source paths short enough for the MSVC toolchain.
+    vcpkg_installed_dir = Path(os.environ["RUNNER_TEMP"]) / "v"
     command = [
         "cmake",
         "-E",
@@ -74,6 +76,7 @@ def generate(ci_type):
         "build",
         "-Werror=dev",
         "--preset=windows",
+        f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}",
         # Using x64-windows-release for both host and target triplets
         # to ensure vcpkg builds only release packages, thereby optimizing
         # build time.
