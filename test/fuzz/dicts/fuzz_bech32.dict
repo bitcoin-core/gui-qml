@@ -1,0 +1,6 @@
+# Bech32 address fuzzer dictionary
+kw1="bc1"
+kw2="bc1q"
+kw3="bc1p"
+kw4="1"
+kw5="3"
