@@ -14,6 +14,7 @@ struct BitcoinUriParseResult
     bool success{false};
     QString error;
     QString address;
+    bool is_silent_payment{false};
     CAmount amount_sats{0};
     bool has_amount{false};
     QString label;

@@ -130,6 +130,11 @@ DesignSystemSection {
             label: "enabled: false"
             LabeledTextArea { Layout.fillWidth: true; fieldSurface: true; label: "Note to self"; text: "Rent for March"; enabled: false }
         }
+        DesignSystemState {
+            width: root.fieldWidth
+            label: "inputEnabled: false"
+            LabeledTextArea { Layout.fillWidth: true; fieldSurface: true; label: "Note to self"; inputEnabled: false; supportingText: "Notes are unavailable for this payment." }
+        }
     }
 
     DesignSystemSpecimen {

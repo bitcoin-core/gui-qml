@@ -3,11 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/sendrecipientslistmodel.h>
+
+#include <common/paymentdestination.h>
+#include <qml/models/sendrecipient.h>
 #include <qml/models/walletqmlmodel.h>
 
-#include <key_io.h>
-#include <qml/models/sendrecipient.h>
-
+#include <algorithm>
 #include <set>
 
 SendRecipientsListModel::SendRecipientsListModel(QObject* parent)
@@ -175,6 +176,7 @@ void SendRecipientsListModel::connectRecipientSignals(SendRecipient* recipient)
         m_syncing_units = false;
     });
     connect(recipient, &SendRecipient::isValidChanged, this, &SendRecipientsListModel::validationChanged);
+    connect(recipient, &SendRecipient::labelChanged, this, &SendRecipientsListModel::validationChanged);
 }
 
 int SendRecipientsListModel::recipientRow(const SendRecipient* recipient) const
@@ -263,20 +265,27 @@ void SendRecipientsListModel::clearToFront()
     }
 }
 
+bool SendRecipientsListModel::hasSilentPayments() const
+{
+    return std::ranges::any_of(m_recipients, [](const auto* recipient) { return recipient && recipient->isSilentPayment(); });
+}
+
 bool SendRecipientsListModel::allValid() const
 {
     if (m_recipients.empty()) {
         return false;
     }
 
-    std::set<CTxDestination> destinations;
+    std::set<PaymentDestination> destinations;
     for (const auto* recipient : m_recipients) {
         if (recipient == nullptr || !recipient->isValid()) {
             return false;
         }
 
-        const CTxDestination destination{DecodeDestination(recipient->address()->address().toStdString())};
-        if (!destinations.insert(destination).second) {
+        const auto destination{PaymentDestination::FromString(recipient->address()->address().toStdString())};
+        if (!destination ||
+            (destination->IsSilentPayment() && !recipient->label().trimmed().isEmpty()) ||
+            !destinations.insert(*destination).second) {
             return false;
         }
     }
@@ -290,14 +299,20 @@ QString SendRecipientsListModel::validationError() const
         return tr("Enter at least one valid recipient to continue.");
     }
 
-    std::set<CTxDestination> destinations;
+    std::set<PaymentDestination> destinations;
     for (const auto* recipient : m_recipients) {
         if (recipient == nullptr || !recipient->isValid()) {
             return m_recipients.size() > 1 ? tr("Complete every recipient before continuing.") : QString{};
         }
 
-        const CTxDestination destination{DecodeDestination(recipient->address()->address().toStdString())};
-        if (!destinations.insert(destination).second) {
+        const auto destination{PaymentDestination::FromString(recipient->address()->address().toStdString())};
+        //: Send-form error when a recipient address cannot be decoded.
+        if (!destination) return tr("Invalid address format");
+        if (destination->IsSilentPayment() && !recipient->label().trimmed().isEmpty()) {
+            //: Send-form error asking the user to clear an existing private note before sending a Silent Payment.
+            return tr("Remove the note to send a silent payment.");
+        }
+        if (!destinations.insert(*destination).second) {
             return tr("Recipient addresses must be unique.");
         }
     }

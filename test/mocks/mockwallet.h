@@ -52,9 +52,9 @@ public:
     bool transactionCanBeAbandoned(const Txid&) override { return false; }
     bool abandonTransaction(const Txid&) override { return false; }
     bool transactionCanBeBumped(const Txid&) override { return false; }
-    bool createBumpTransaction(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&) override { return false; }
+    bool createBumpTransaction(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&, std::vector<bip352::SilentPaymentsDestination>&) override { return false; }
     bool signBumpTransaction(CMutableTransaction&) override { return false; }
-    bool commitBumpTransaction(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid&) override { return false; }
+    bool commitBumpTransaction(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid&, const std::vector<bip352::SilentPaymentsDestination>&) override { return false; }
     CTransactionRef getTx(const Txid&) override { return {}; }
     interfaces::WalletTx getWalletTx(const Txid&) override { return {}; }
     std::set<interfaces::WalletTx> getWalletTxs() override { return {}; }
@@ -161,9 +161,9 @@ public:
     std::function<OutputType()> get_default_address_type_fn;
     std::function<std::unique_ptr<interfaces::Handler>(TransactionChangedFn)> handle_transaction_changed_fn;
     std::function<bool(const Txid&)> transaction_can_be_bumped_fn;
-    std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&)> create_bump_transaction_fn;
+    std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&, std::vector<bip352::SilentPaymentsDestination>&)> create_bump_transaction_fn;
     std::function<bool(CMutableTransaction&)> sign_bump_transaction_fn;
-    std::function<bool(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid&)> commit_bump_transaction_fn;
+    std::function<bool(const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid&, const std::vector<bip352::SilentPaymentsDestination>&)> commit_bump_transaction_fn;
 
     struct Calls {
         CallCounter getNewDestination{"getNewDestination"};
@@ -278,10 +278,10 @@ public:
     }
 
     bool createBumpTransaction(const Txid& txid, const wallet::CCoinControl& coin_control, std::vector<bilingual_str>& errors,
-                               CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx) override
+                               CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx, std::vector<bip352::SilentPaymentsDestination>& sp_recipients) override
     {
         ++calls.createBumpTransaction;
-        return create_bump_transaction_fn ? create_bump_transaction_fn(txid, coin_control, errors, old_fee, new_fee, mtx) : false;
+        return create_bump_transaction_fn ? create_bump_transaction_fn(txid, coin_control, errors, old_fee, new_fee, mtx, sp_recipients) : false;
     }
 
     bool signBumpTransaction(CMutableTransaction& mtx) override
@@ -290,10 +290,10 @@ public:
         return sign_bump_transaction_fn ? sign_bump_transaction_fn(mtx) : false;
     }
 
-    bool commitBumpTransaction(const Txid& txid, CMutableTransaction&& mtx, std::vector<bilingual_str>& errors, Txid& bumped_txid) override
+    bool commitBumpTransaction(const Txid& txid, CMutableTransaction&& mtx, std::vector<bilingual_str>& errors, Txid& bumped_txid, const std::vector<bip352::SilentPaymentsDestination>& sp_recipients) override
     {
         ++calls.commitBumpTransaction;
-        return commit_bump_transaction_fn ? commit_bump_transaction_fn(txid, std::move(mtx), errors, bumped_txid) : false;
+        return commit_bump_transaction_fn ? commit_bump_transaction_fn(txid, std::move(mtx), errors, bumped_txid, sp_recipients) : false;
     }
 
 private:

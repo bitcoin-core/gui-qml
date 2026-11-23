@@ -19,6 +19,7 @@ class SendRecipientsListModel : public QAbstractListModel
     Q_PROPERTY(QString totalAmount READ totalAmount NOTIFY totalAmountChanged)
     Q_PROPERTY(qint64 totalAmountSatoshi READ totalAmountSatoshi NOTIFY totalAmountChanged)
     Q_PROPERTY(bool allValid READ allValid NOTIFY validationChanged)
+    Q_PROPERTY(bool hasSilentPayments READ hasSilentPayments NOTIFY validationChanged)
     Q_PROPERTY(QString validationError READ validationError NOTIFY validationChanged)
 
 public:
@@ -54,6 +55,7 @@ public:
     QString totalAmount() const;
     qint64 totalAmountSatoshi() const { return m_totalAmount; }
     bool allValid() const;
+    bool hasSilentPayments() const;
     QString validationError() const;
 
 Q_SIGNALS:

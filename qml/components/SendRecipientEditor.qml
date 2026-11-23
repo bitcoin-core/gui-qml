@@ -20,6 +20,7 @@ ColumnLayout {
     readonly property bool sendingMaximum: root.wallet && root.recipient
         && root.wallet.maximumRecipient === root.recipient
     readonly property bool selectedCoins: root.wallet && root.wallet.coinsListModel.selectedCoinsCount > 0
+    readonly property bool silentPayment: root.recipient && root.recipient.isSilentPayment === true
     signal pasteRequested(string field)
     signal edited()
     signal removeRequested()
@@ -130,7 +131,12 @@ ColumnLayout {
         objectName: "sendNoteField"
         Layout.fillWidth: true
         label: qsTr("Note to self")
-        supportingText: qsTr("Recommended")
+        supportingText: root.silentPayment
+            //: Explains that private notes cannot yet be saved for Silent Payments. An existing note can be cleared.
+            ? qsTr("Notes for silent payments are not supported yet.")
+            //: Supporting text recommending a private note to help identify an ordinary payment later.
+            : qsTr("Recommended")
+        inputEnabled: !root.silentPayment || text.length > 0
         labelSpacing: Theme.space.s
         messageSpacing: Theme.space.m
         fieldSurface: true

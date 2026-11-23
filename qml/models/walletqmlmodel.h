@@ -128,6 +128,7 @@ private:
     Q_PROPERTY(bool transactionNeedsUnlock READ transactionNeedsUnlock NOTIFY transactionNeedsUnlockChanged)
     Q_PROPERTY(bool currentTransactionCanSend READ currentTransactionCanSend NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanBroadcast READ currentTransactionCanBroadcast NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool currentTransactionCanSaveAsPsbt READ currentTransactionCanSaveAsPsbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString currentTransactionReviewMessage READ currentTransactionReviewMessage NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsErrorChanged)
     Q_PROPERTY(PsbtQmlModel* importedPsbt READ importedPsbt CONSTANT)
@@ -286,6 +287,7 @@ public:
     bool transactionNeedsUnlock() const { return m_transaction_needs_unlock; }
     bool currentTransactionCanSend() const { return m_current_transaction && m_current_transaction_can_send; }
     bool currentTransactionCanBroadcast() const { return m_current_transaction && m_current_transaction_can_broadcast; }
+    bool currentTransactionCanSaveAsPsbt() const { return m_current_transaction && m_current_transaction->silentPaymentsRecipients().empty(); }
     QString currentTransactionReviewMessage() const { return m_current_transaction_review_message; }
     QString settingsError() const { return m_settings_error; }
     void setNode(interfaces::Node* node);
