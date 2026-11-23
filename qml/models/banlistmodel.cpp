@@ -4,15 +4,19 @@
 
 #include <qml/models/banlistmodel.h>
 
+#include <qml/localeformat.h>
+
 #include <interfaces/node.h>
 #include <net_types.h>
 
 #include <QDateTime>
-#include <QLocale>
 
 BanListModel::BanListModel(interfaces::Node& node, QObject* parent, bool backend_ready)
     : QAbstractListModel(parent), m_node(node), m_backend_ready(backend_ready)
 {
+    connect(&LocaleFormat::instance(), &LocaleFormat::localeChanged, this, [this] {
+        if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {static_cast<int>(BanRoles::BanUntilRole)});
+    });
 }
 
 void BanListModel::backendInitialized()
@@ -37,7 +41,8 @@ QVariant BanListModel::data(const QModelIndex& index, int role) const
         return QString::fromStdString(entry.subnet.ToString());
     case BanRoles::BanUntilRole: {
         QDateTime dt = QDateTime::fromSecsSinceEpoch(entry.ban_entry.nBanUntil);
-        return QLocale::system().toString(dt, QStringLiteral("MMMM d, yyyy h:mm AP"));
+        //: Qt date and time format pattern for when a peer ban ends
+        return LocaleFormat::format(dt, tr("MMMM d, yyyy h:mm AP"));
     }
     }
     return {};

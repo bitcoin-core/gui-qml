@@ -443,7 +443,7 @@ Pane {
                 visible: root.saved && !!root.request.createdIso
                 Layout.fillWidth: true
                 Layout.topMargin: root.sharing ? 4 : 0
-                text: visible ? qsTr("Created %1").arg(new Date(root.request.createdIso).toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+                text: visible ? qsTr("Created %1").arg(LocaleFormat.formatDate(new Date(root.request.createdIso), LocaleFormat.shortDateTimePattern)) : ""
                 textStyle: Theme.text.caption
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignHCenter

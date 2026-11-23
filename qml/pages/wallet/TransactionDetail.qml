@@ -126,7 +126,7 @@ Page {
                     hidesAmount: true
                     amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.txIncoming : Theme.color.neutral9
                     subtitle: root.actionLabel + (root.transactionData.timestamp
-                        ? " · " + new Date(root.transactionData.timestamp * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat) : "")
+                        ? " · " + LocaleFormat.formatDate(new Date(root.transactionData.timestamp * 1000), LocaleFormat.shortDateTimePattern) : "")
                     iconComponent: ActivityIcon {
                         objectName: "transactionDetailIcon"
                         iconSize: 48

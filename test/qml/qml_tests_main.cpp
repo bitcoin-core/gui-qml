@@ -44,6 +44,14 @@
 #include <qml/controls/linegraph.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
+#include <qml/localeformat.h>
+
+class TestLocale : public QObject
+{
+    Q_OBJECT
+public:
+    Q_INVOKABLE void setLanguage(const QString& language) { LocaleFormat::setLanguage(language); }
+};
 
 class MockAppMode : public QObject
 {
@@ -4475,6 +4483,7 @@ public Q_SLOTS:
         qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
             return new MotionPreference(QStringLiteral("off"));
         });
+        qmlRegisterSingletonInstance<LocaleFormat>("org.bitcoincore.qt", 1, 0, "LocaleFormat", &LocaleFormat::instance());
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",
             1,
@@ -4541,6 +4550,8 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
         engine->rootContext()->setContextProperty(QStringLiteral("testResources"), &test_resources);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
+        static TestLocale test_locale;
+        engine->rootContext()->setContextProperty(QStringLiteral("testLocale"), &test_locale);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
 

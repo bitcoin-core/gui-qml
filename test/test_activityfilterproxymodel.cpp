@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <qml/localeformat.h>
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/transaction.h>
@@ -190,11 +191,32 @@ private Q_SLOTS:
     void refiltersWhenSourceAmountChanges();
     void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
+    void dateLabelsFollowLanguageChange();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
     void exportsCsvEscapesSignedRowsAndHandlesFailures();
     void exportsCsvNeutralizesFormulaInjection();
 };
+
+void ActivityFilterProxyModelTests::dateLabelsFollowLanguageChange()
+{
+    TestActivityModel source;
+    source.setRows({MakeRow("Coffee", Transaction::SendToAddress, TimestampForLocalDate(QDate{2026, 3, 14}))});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    proxy.setGroupBy(ActivityFilterProxyModel::Month);
+    const auto restore = qScopeGuard([] { LocaleFormat::setLanguage(QString{}); });
+    LocaleFormat::setLanguage(QStringLiteral("en"));
+    QCOMPARE(proxy.index(0, 0).data(ActivityFilterProxyModel::SectionLabelRole).toString(), QStringLiteral("March 2026"));
+
+    QSignalSpy changed(&proxy, &QAbstractItemModel::dataChanged);
+    LocaleFormat::setLanguage(QStringLiteral("es"));
+    QCOMPARE(changed.count(), 1);
+    const QList<int> roles = changed.first().at(2).value<QList<int>>();
+    QVERIFY(roles.contains(ActivityFilterProxyModel::SectionLabelRole));
+    QVERIFY(roles.contains(ActivityFilterProxyModel::DateTimeLabelRole));
+    QCOMPARE(proxy.index(0, 0).data(ActivityFilterProxyModel::SectionLabelRole).toString(), QStringLiteral("marzo 2026"));
+}
 
 void ActivityFilterProxyModelTests::searchMatchesLabelAddressAndTxid()
 {

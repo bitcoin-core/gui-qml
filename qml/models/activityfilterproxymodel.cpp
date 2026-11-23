@@ -5,6 +5,7 @@
 #include <qml/models/activityfilterproxymodel.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/localeformat.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
 
@@ -13,7 +14,6 @@
 #include <QDate>
 #include <QDateTime>
 #include <QFile>
-#include <QLocale>
 #include <QStringList>
 #include <QTextStream>
 #include <QTime>
@@ -77,6 +77,9 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
                 || roles.contains(TransactionActivityModel::NetAmountSatRole) || roles.contains(TransactionActivityModel::IsPendingRequestRole)) invalidatePendingBalance();
         });
     connect(this, &ActivityFilterProxyModel::displayUnitChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
+    connect(&LocaleFormat::instance(), &LocaleFormat::localeChanged, this, [this] {
+        if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionLabelRole, DateTimeLabelRole});
+    });
 }
 
 QHash<int, QByteArray> ActivityFilterProxyModel::roleNames() const
@@ -95,10 +98,20 @@ QVariant ActivityFilterProxyModel::data(const QModelIndex& index, int role) cons
         const bool pending = QSortFilterProxyModel::data(index, TransactionActivityModel::IsPendingRole).toBool();
         const auto date = QDateTime::fromSecsSinceEpoch(QSortFilterProxyModel::data(index, TransactionActivityModel::TimestampRole).toLongLong());
         if (role == DateTimeLabelRole) {
-            return QLocale().toString(date, m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
+            if (m_group_by == Day && !pending) {
+                //: Qt time format pattern for an Activity row grouped by day
+                return LocaleFormat::format(date, tr("h:mm AP"));
+            }
+            //: Qt date format pattern for an Activity row grouped by month
+            return LocaleFormat::format(date, tr("MMM d, h:mm AP"));
         }
         if (role == SectionKeyRole) return pending ? QStringLiteral("pending") : date.toString(m_group_by == Day ? "yyyy-MM-dd" : "yyyy-MM");
-        return pending ? tr("Pending") : QLocale().toString(date.date(), m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
+        if (pending) return tr("Pending");
+        return m_group_by == Day
+            //: Qt date format pattern for an Activity day heading
+            ? LocaleFormat::format(date.date(), tr("MMMM d, yyyy"))
+            //: Qt date format pattern for an Activity month heading
+            : LocaleFormat::format(date.date(), tr("MMMM yyyy"));
     }
     return QSortFilterProxyModel::data(index, role);
 }

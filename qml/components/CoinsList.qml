@@ -283,7 +283,14 @@ ColumnLayout {
                         CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.subheading; wrap: false; elide: Text.ElideRight }
                     }
                     CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.monoCaption; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
-                    CoreText { Layout.fillWidth: true; text: coinRow.date ? new Date(coinRow.date).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
+                    CoreText {
+                        Layout.fillWidth: true
+                        text: LocaleFormat.formatDate(coinRow.date, LocaleFormat.shortDateTimePattern)
+                        horizontalAlignment: Text.AlignLeft
+                        textStyle: Theme.text.caption
+                        color: Theme.color.neutral7
+                        wrap: false
+                    }
                 }
                 RowLayout {
                     spacing: Theme.space.s

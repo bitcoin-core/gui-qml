@@ -356,6 +356,23 @@ TestCase {
         verify(iconLeft - labelRight < 40)
     }
 
+    function test_calendarFollowsAppLanguageWithLatinDigits() {
+        testLocale.setLanguage("ar")
+        try {
+            const calendar = create(calendarComponent, rtlHost)
+            const label = findChild(calendar, "calendarMonthLabel")
+            verify(label.text.indexOf(Qt.locale("ar").monthName(5)) >= 0)
+            verify(label.text.indexOf("2026") >= 0)
+            compare(calendar.dayNameFormat, Locale.NarrowFormat)
+            compare(findChild(calendar, "calendarDayName_0").text,
+                    Qt.locale("ar").dayName(calendar.weekStart % 7, Locale.NarrowFormat))
+        } finally {
+            testLocale.setLanguage("")
+        }
+        const english = create(calendarComponent, ltrHost)
+        compare(english.dayNameFormat, Locale.ShortFormat)
+    }
+
     function test_transactionFlowStaysLeftToRight() {
         const flow = create(flowComponent, rtlHost)
         const input = findChild(flow, "transactionFlowInput_0")

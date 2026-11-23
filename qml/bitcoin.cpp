@@ -34,6 +34,7 @@
 #include <qml/fonts.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
+#include <qml/localeformat.h>
 #include <qml/onboarding_settings.h>
 #include <qml/urlopener.h>
 #ifdef __ANDROID__
@@ -344,6 +345,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return new MotionPreference(StartupMotionMode());
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
+    qmlRegisterSingletonInstance<LocaleFormat>("org.bitcoincore.qt", 1, 0, "LocaleFormat", &LocaleFormat::instance());
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
@@ -578,6 +580,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
                 { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
         }
+        LocaleFormat::setLanguage(lang);
         const bool rtl = !lang.isEmpty() && QLocale(lang).textDirection() == Qt::RightToLeft;
         const bool reverse = gArgs.GetBoolArg("-reverselayout", false);
         QGuiApplication::setLayoutDirection(rtl != reverse ? Qt::RightToLeft : Qt::LeftToRight);
