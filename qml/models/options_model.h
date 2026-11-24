@@ -25,6 +25,7 @@
 #include <QFont>
 #include <QSet>
 #include <QString>
+#include <QHash>
 #include <QStringList>
 #include <QVariantMap>
 #include <QVariantList>
@@ -171,6 +172,8 @@ public:
     QString languageSummary() const;
     QStringList availableLanguages() const { return m_available_languages; }
     Q_INVOKABLE QString languageLabel(const QString& locale_tag) const;
+    //! Empty for a fully translated language, otherwise how partial it is.
+    Q_INVOKABLE QString languageCoverageNote(const QString& locale_tag) const;
     int displayUnit() const { return m_display_unit; }
     void setDisplayUnit(int new_display_unit);
     QString displayUnitLabel() const;
@@ -292,6 +295,7 @@ private:
     QString m_initial_external_signer_path;
     QString m_language;
     QStringList m_available_languages;
+    QHash<QString, int> m_translation_coverage;
     int m_display_unit{0};
     QString m_third_party_transaction_urls;
     QString m_money_font_choice;

@@ -23,8 +23,11 @@
 #include <QDebug>
 #include <QEventLoop>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
 #include <QSettings>
@@ -735,20 +738,35 @@ void OptionsQmlModel::buildAvailableLanguages()
     m_available_languages.clear();
     m_available_languages << "";  // empty = system default
 
-    QDir translations_dir(":/translations");
-    QStringList files = translations_dir.entryList({"bitcoin_*.qm"}, QDir::Files);
+    // Core's bitcoin_<tag>.qm only covers the Widgets GUI, so list the
+    // languages that have an app translation.
+    const QString prefix{QStringLiteral("bitcoin_qml_")};
+    const QStringList files = QDir(QStringLiteral(":/translations")).entryList({prefix + "*.qm"}, QDir::Files);
     QStringList tags;
     for (const QString& file : files) {
-        // Strip "bitcoin_" prefix and ".qm" suffix to get locale tag.
-        QString tag = file;
-        tag.remove(0, 8);       // remove "bitcoin_"
-        tag.chop(3);            // remove ".qm"
-        // Skip QML-app-specific translation resources (e.g. "qml_es").
-        if (tag.startsWith(QStringLiteral("qml_"))) continue;
-        tags << tag;
+        tags << file.mid(prefix.size()).chopped(3);
     }
     tags.sort(Qt::CaseInsensitive);
     m_available_languages << tags;
+
+    QFile coverage_file(QStringLiteral(":/translations/translation_coverage.json"));
+    if (coverage_file.open(QIODevice::ReadOnly)) {
+        const QJsonObject coverage = QJsonDocument::fromJson(coverage_file.readAll()).object();
+        for (auto it = coverage.constBegin(); it != coverage.constEnd(); ++it) {
+            m_translation_coverage.insert(it.key(), it.value().toInt());
+        }
+    }
+}
+
+QString OptionsQmlModel::languageCoverageNote(const QString& locale_tag) const
+{
+    // Leaves room for text kept in English on purpose, like RPC console output.
+    constexpr int FULL_TRANSLATION_PERCENT{90};
+    if (locale_tag.isEmpty()) return {};
+    const int percent = m_translation_coverage.value(locale_tag, 0);
+    if (percent >= FULL_TRANSLATION_PERCENT) return {};
+    //: Shown under a language in the language picker. %1 is the share of translated text.
+    return tr("Partially translated (%1%)").arg(percent);
 }
 
 void OptionsQmlModel::persistGuiSetting(const QString& key, const QVariant& value)

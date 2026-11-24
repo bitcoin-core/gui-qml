@@ -146,15 +146,32 @@ target_link_libraries(bitcoinqml
 )
 
 # Compile QML-app-specific translations (.ts → .qm) and embed as resources.
-qt6_add_translation(QML_GUI_QM_FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/qml/locale/bitcoin_qml_es.ts
+file(GLOB QML_GUI_TS_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/qml/locale/bitcoin_qml_*.ts)
+qt6_add_translation(QML_GUI_QM_FILES ${QML_GUI_TS_FILES})
+foreach(qm_file IN LISTS QML_GUI_QM_FILES)
+    get_filename_component(qm_name "${qm_file}" NAME)
+    set_source_files_properties(${qm_file} PROPERTIES QT_RESOURCE_ALIAS "${qm_name}")
+endforeach()
+
+# Per-language share of translated strings, read by the language picker.
+set(QML_GUI_COVERAGE_FILE ${CMAKE_CURRENT_BINARY_DIR}/translation_coverage.json)
+list(JOIN QML_GUI_TS_FILES "|" QML_GUI_TS_FILES_ARG)
+add_custom_command(
+    OUTPUT ${QML_GUI_COVERAGE_FILE}
+    COMMAND ${CMAKE_COMMAND}
+        -DTS_FILES=${QML_GUI_TS_FILES_ARG}
+        -DOUTPUT=${QML_GUI_COVERAGE_FILE}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/script/TranslationCoverage.cmake
+    DEPENDS ${QML_GUI_TS_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/script/TranslationCoverage.cmake
+    VERBATIM
 )
-set_source_files_properties(${QML_GUI_QM_FILES} PROPERTIES
-    QT_RESOURCE_ALIAS "bitcoin_qml_es.qm"
+set_source_files_properties(${QML_GUI_COVERAGE_FILE} PROPERTIES
+    GENERATED TRUE
+    QT_RESOURCE_ALIAS "translation_coverage.json"
 )
 qt6_add_resources(bitcoinqml "qml_gui_translations"
     PREFIX "/translations"
-    FILES ${QML_GUI_QM_FILES}
+    FILES ${QML_GUI_QM_FILES} ${QML_GUI_COVERAGE_FILE}
 )
 
 # Embed bitcoin-qt translations built by the bitcoin submodule.
