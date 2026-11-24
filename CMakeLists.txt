@@ -6,8 +6,6 @@ project(BitcoinCoreApp
   LANGUAGES CXX
 )
 
-include(CMakeDependentOption)
-
 # Language setup
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_HOST_APPLE)
   # We do not use the install_name_tool when cross-compiling for macOS.
@@ -60,10 +58,9 @@ set(BUILD_UTIL OFF)
 set(BUILD_UTIL_CHAINSTATE OFF)
 set(BUILD_WALLET_TOOL OFF)
 set(USE_QRCODE TRUE)
-# We need this libraries, can ignore the executable bitcoin-qt
-set(BUILD_GUI ON)
+set(BUILD_GUI OFF)
 option(ENABLE_WALLET "Build wallet support" ON)
-cmake_dependent_option(BUILD_APP_TESTS "Build tests for the app" ON "BUILD_GUI" OFF)
+option(BUILD_APP_TESTS "Build tests for the app" ON)
 
 # Bitcoin Core codebase
 # Builds libraries: univalue, core_interface, bitcoin_node, bitcoin_wallet
@@ -240,23 +237,17 @@ qt6_add_resources(bitcoinqml "qml_gui_translations"
     FILES ${QML_GUI_QM_FILES}
 )
 
-# Embed bitcoin-qt translations built by the bitcoin submodule.
-# The submodule (BUILD_GUI=ON) compiles .ts -> .qm files into
-# ${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/ at build time. Derive the
-# embedded list from the submodule's current source list so Core translation
-# additions/removals do not leave stale resource inputs behind.
-include("${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/qt/locale/ts_files.cmake")
-set(BITCOIN_QT_QM_FILES)
-foreach(ts_file IN LISTS ts_files)
-    string(REGEX REPLACE "^bitcoin_(.+)\\.ts$" "\\1" tag "${ts_file}")
-    set(qm_file "${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/bitcoin_${tag}.qm")
-    set_source_files_properties(${qm_file} PROPERTIES
-        GENERATED TRUE
-        QT_RESOURCE_ALIAS "bitcoin_${tag}.qm"
-    )
-    list(APPEND BITCOIN_QT_QM_FILES ${qm_file})
-endforeach()
+# Build the Core catalogs directly from the pinned submodule source list.
+set(core_qt_locale_dir "${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/qt/locale")
+include("${core_qt_locale_dir}/ts_files.cmake")
+list(TRANSFORM ts_files PREPEND "${core_qt_locale_dir}/")
+qt6_add_translation(BITCOIN_QT_QM_FILES ${ts_files} OPTIONS -silent)
 unset(ts_files)
+unset(core_qt_locale_dir)
+foreach(qm_file IN LISTS BITCOIN_QT_QM_FILES)
+    get_filename_component(qm_name "${qm_file}" NAME)
+    set_source_files_properties("${qm_file}" PROPERTIES QT_RESOURCE_ALIAS "${qm_name}")
+endforeach()
 qt6_add_resources(bitcoinqml "bitcoin_qt_translations"
     PREFIX "/translations"
     FILES ${BITCOIN_QT_QM_FILES}
@@ -276,8 +267,6 @@ if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
     unset(qml_translation_srcs)
 endif()
 unset(warn_flags)
-
-add_dependencies(bitcoinqml bitcoin-qt)
 
 qt6_import_qml_plugins(bitcoinqml)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
@@ -306,7 +295,6 @@ target_link_libraries(bitcoin-core-app
     core_interface
     bitcoin_node
     bitcoinqml
-    bitcoinqt
 )
 qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
 

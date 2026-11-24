@@ -11,7 +11,6 @@
 #include <script/solver.h>
 #include <primitives/transaction.h>
 #include <wallet/wallet.h> // Public CRecipient value required by interfaces::Wallet.
-#include <qt/bitcoinunits.h>
 
 #include <QElapsedTimer>
 #include <QFile>
@@ -1070,7 +1069,7 @@ private Q_SLOTS:
         QTRY_VERIFY(wallet->isLocked());
         QTRY_COMPARE(wallet->selectedCoins()->size(), 2U);
         QVERIFY(qmltest::SetText(m_app, "sendAddressInput", setup->address));
-        const auto amount = BitcoinUnits::format(BitcoinUnits::Unit::BTC, setup->expected_amount - 100, false, BitcoinUnits::SeparatorStyle::NEVER);
+        const auto amount = QString::fromStdString(ValueFromAmount(setup->expected_amount - 100).getValStr());
         QVERIFY(qmltest::SetText(m_app, "sendAmountInput", amount));
         QTRY_COMPARE(wallet->sendRecipientList()->currentRecipient()->amount()->satoshi(), setup->expected_amount - 100);
         QVERIFY(QMetaObject::invokeMethod(qmltest::Find(m_app, "sendReviewButton"), "forceActiveFocus"));
@@ -1204,7 +1203,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
         auto* review = wallet->currentTransaction(); QVERIFY(review); const auto fee = review->feeAmount()->satoshi();
         QCOMPARE(review->amountAmount()->satoshi(), setup->expected_amount);
-        const auto btc = [](CAmount amount) -> QString { return BitcoinUnits::format(BitcoinUnits::Unit::BTC, amount, false, BitcoinUnits::SeparatorStyle::NEVER) + " BTC"; };
+        const auto btc = [](CAmount amount) -> QString { return QString::fromStdString(ValueFromAmount(amount).getValStr()) + " BTC"; };
         auto* fee_row = qmltest::Find(m_app, "sendTransactionReviewFee"); auto* total_row = qmltest::Find(m_app, "sendTransactionReviewTotal");
         QTRY_VERIFY(fee_row->property("value").toString().endsWith(" sats")); QVERIFY(total_row->property("value").toString().endsWith(" sats"));
         options->setDisplayUnit(0);

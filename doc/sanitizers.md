@@ -8,7 +8,7 @@ with Qt 6.4.2 and Qt 6.10.2.
 
 The rule uses the function's C++ symbol name and works with reduced debug
 information. It does not depend on runtime symbolization. It applies to the
-app, its tests and Core's Qt library. The remaining integer checks and Core's
+app and its tests. The remaining integer checks and Core's
 runtime suppression files retain their usual behavior.
 
 Core's current `SplitMix64` implementation is a free function, so its

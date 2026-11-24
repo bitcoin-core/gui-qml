@@ -4,7 +4,7 @@ target_include_directories(bitcoinqml_test_application PUBLIC
   ${PROJECT_SOURCE_DIR}/bitcoin/src
   ${PROJECT_BINARY_DIR}/bitcoin/src
 )
-target_link_libraries(bitcoinqml_test_application PUBLIC bitcoinqml bitcoinqt Qt6::Test)
+target_link_libraries(bitcoinqml_test_application PUBLIC bitcoinqml Qt6::Test)
 
 add_executable(bitcoinqml_integration_tests
   runner/test_main.cpp
@@ -91,8 +91,7 @@ endif()
 
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_integration_tests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
-  # Core's Widgets library and this optional remote-message service both
-  # export DebugMessageHandler. Tests capture Qt diagnostics locally.
+  # Tests capture Qt diagnostics locally.
   qt6_import_plugins(bitcoinqml_integration_tests EXCLUDE Qt6::QDebugMessageServiceFactoryPlugin)
   target_link_libraries(bitcoinqml_integration_tests PRIVATE Qt6::LabsPlatformplugin Qt6::qtquickdialogsplugin)
   if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)

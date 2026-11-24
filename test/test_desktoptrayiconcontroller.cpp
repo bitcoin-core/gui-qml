@@ -15,7 +15,6 @@
 
 #if defined(Q_OS_MACOS)
 #include <qml/models/macdockiconhandler.h>
-#include <qt/macdockiconhandler.h>
 #endif
 
 class DesktopTrayIconControllerTests : public QObject
@@ -116,9 +115,6 @@ void DesktopTrayIconControllerTests::showRestoresGeometryCapturedAtHide()
 #if defined(Q_OS_MACOS)
 void DesktopTrayIconControllerTests::dockHandoffCoexistsWithCoreAndKeepsOnlyLiveReceivers()
 {
-    // Force both real meta-objects into this native executable. The app class
-    // must not collide with Core's Qt implementation at link or at runtime.
-    QCOMPARE(QString::fromLatin1(::MacDockIconHandler::staticMetaObject.className()), QStringLiteral("MacDockIconHandler"));
     auto* handler = appdesktop::MacDockIconHandler::instance();
     QCOMPARE(QString::fromLatin1(handler->metaObject()->className()), QStringLiteral("appdesktop::MacDockIconHandler"));
     auto first = std::make_unique<DesktopTrayIconController>();

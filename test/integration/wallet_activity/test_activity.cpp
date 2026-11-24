@@ -13,7 +13,7 @@
 #include <qml/models/coinslistmodel.h>
 #include <qml/models/options_model.h>
 #include <qml/models/texteditsessionmodel.h>
-#include <qt/bitcoinunits.h>
+#include <qml/bitcoinamount.h>
 #include <core_io.h>
 
 #include <QDate>
@@ -636,7 +636,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::Click(m_app, "activityTabButton"));
 
         // Changing the unit keeps the active search and filters.
-        QTRY_COMPARE(m_filter->displayUnit(), static_cast<int>(BitcoinUnits::Unit::SAT));
+        QTRY_COMPARE(m_filter->displayUnit(), static_cast<int>(BitcoinAmount::Unit::SAT));
         QCOMPARE(m_filter->searchText(), QStringLiteral("Alice"));
         QCOMPARE(m_filter->typeFilters(), QList<int>{ActivityFilterProxyModel::PaymentRequest});
         QCOMPARE(m_filter->dateFilter(), ActivityFilterProxyModel::Today);

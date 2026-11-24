@@ -23,9 +23,7 @@ if(BUILD_APP_TESTS)
   set_tests_properties(bitcoinqml_sanitizer_suppression_tests PROPERTIES LABELS unit TIMEOUT 30)
 endif()
 
-# Include Core's Qt library as well: its inline Qt functions are instrumented
-# when compiled into the app. Core libraries without Qt keep their usual flags.
-foreach(target bitcoinqt bitcoinqml bitcoin-core-app
+foreach(target bitcoinqml bitcoin-core-app
     bitcoinqml_bootstrap_tests bitcoinqml_unit_tests bitcoinqml_qmltests
     bitcoinqml_test_application bitcoinqml_integration_tests bitcoinqml_sanitizer_probe)
   if(TARGET ${target})

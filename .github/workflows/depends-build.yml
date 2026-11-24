@@ -149,7 +149,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="${PWD}/bitcoin/depends/${HOST}/toolchain.cmake" \
             -DBUILD_APP_TESTS=ON \
-            -DBUILD_GUI=ON \
             -DENABLE_WALLET=ON \
             -DENABLE_IPC=OFF
 

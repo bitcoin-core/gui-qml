@@ -217,11 +217,6 @@ target_link_libraries(bitcoinqml_unit_tests
     Qt6::Widgets
 )
 
-if(APPLE)
-  # The native Dock regression deliberately links both app and Core metaobjects.
-  target_link_libraries(bitcoinqml_unit_tests PRIVATE bitcoinqt)
-endif()
-
 add_test(NAME bitcoinqml_unit_tests COMMAND bitcoinqml_unit_tests -platform minimal)
 if(APP_UNIT_TEST_CLASSES)
   set_tests_properties(bitcoinqml_unit_tests PROPERTIES LABELS "unit;focused-build")
