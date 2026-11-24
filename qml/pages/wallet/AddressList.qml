@@ -53,6 +53,10 @@ SettingsPage {
         if (closeAction) {
             closeAction();
         }
+        if (root.walletBusy()) {
+            root.errorText = root.walletBusyText();
+            return;
+        }
         addressModel.refresh();
         root.errorText = qsTr("This address is no longer available.");
     }
@@ -80,16 +84,25 @@ SettingsPage {
     }
 
     function updateAddressLabel(address, label) {
+        if (root.addressModel.labelChangePending) return false
         root.errorText = ""
-        if (root.addressModel.setAddressLabel(address, label)) {
-            if (root.selectedAddress === address) root.selectedLabel = label
-            root.clearPendingNote(address)
-            return true
-        }
-        root.clearPendingNote(address)
-        root.addressModel.refresh()
-        root.errorText = qsTr("This address is no longer available.")
+        if (root.addressModel.setAddressLabel(address, label)) return true
+        root.errorText = root.walletBusy() ? root.walletBusyText()
+            : qsTr("The address label could not be saved. Please try again.")
         return false
+    }
+
+    function walletBusy() { return !!root.wallet && root.wallet.receiveOperationPending }
+    function walletBusyText() { return qsTr("The wallet is saving another change. Try again in a moment.") }
+
+    Connections {
+        target: root.addressModel
+        function onLabelChangeFinished(address, label, success, error) {
+            if (success && root.selectedAddress === address) root.selectedLabel = label
+            if (success && root.pendingNotesByAddress[address] === label) root.clearPendingNote(address)
+            root.errorText = error
+            if (root.selectedAddress === address) addressDetails.noteErrorText = error
+        }
     }
 
     rightItem: OverflowMenuButton {
@@ -140,16 +153,19 @@ SettingsPage {
                 scriptType: root.selectedScriptType
                 used: root.selectedUsed
                 hasPaymentRequest: root.selectedHasPaymentRequest
+                labelChangePending: root.addressModel.labelChangePending
+                receiveOperationPending: !!root.wallet && root.wallet.receiveOperationPending
                 onCloseRequested: detailsPopup.close()
                 onCreatePaymentRequestRequested: {
                     root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
                 }
                 onEditLabelRequested: (address, label) => {
+                    if (root.addressModel.labelChangePending) return
                     if (root.updateAddressLabel(address, label)) {
-                        root.selectedLabel = label;
                         noteErrorText = "";
                     } else {
-                        noteErrorText = qsTr("This address is no longer available.");
+                        noteErrorText = root.walletBusy() ? root.walletBusyText()
+                            : qsTr("This address is no longer available.");
                     }
                 }
             }
@@ -201,6 +217,16 @@ SettingsPage {
         horizontalAlignment: Text.AlignLeft
     }
 
+    CoreText {
+        objectName: "addressLabelSavingText"
+        Layout.fillWidth: true
+        visible: root.addressModel.labelChangePending
+        text: qsTr("Saving…")
+        color: Theme.color.neutral6
+        textStyle: Theme.text.description
+        horizontalAlignment: Text.AlignLeft
+    }
+
     FormSection {
         objectName: "addressListSection"
         visible: addressModel.count > 0
@@ -220,6 +246,7 @@ SettingsPage {
             delegate: AddressRow {
                 width: ListView.view.width
                 pendingLabel: root.pendingNote(address, label)
+                labelChangePending: root.addressModel.labelChangePending
                 showDivider: index < addressList.count - 1
                 onNoteDraftEdited: (address, label) => root.updatePendingNote(address, label)
                 onNoteDraftDiscarded: (address) => root.clearPendingNote(address)

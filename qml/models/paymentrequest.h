@@ -28,6 +28,7 @@ class PaymentRequest : public QObject
     Q_PROPERTY(bool needsUnlock READ needsUnlock NOTIFY needsUnlockChanged)
     Q_PROPERTY(QString unlockError READ unlockError NOTIFY unlockErrorChanged)
     Q_PROPERTY(QString qrPayload READ qrPayload NOTIFY qrPayloadChanged)
+    Q_PROPERTY(bool qrEncodable READ qrEncodable NOTIFY qrPayloadChanged)
     Q_PROPERTY(QString createdIso READ createdIso NOTIFY createdIsoChanged)
     Q_PROPERTY(bool hasPaymentInfo READ hasPaymentInfo NOTIFY qrPayloadChanged)
     Q_PROPERTY(bool isEditing READ isEditing WRITE setIsEditing NOTIFY isEditingChanged)
@@ -37,6 +38,7 @@ class PaymentRequest : public QObject
 public:
     explicit PaymentRequest(QObject* parent = nullptr);
 
+    quint64 revision() const { return m_revision; }
     QString address() const;
     QString addressFormatted() const;
 
@@ -69,6 +71,7 @@ public:
     CTxDestination destination() const;
 
     QString qrPayload() const;
+    bool qrEncodable() const;
 
     QString createdIso() const;
     QDateTime created() const;
@@ -104,6 +107,7 @@ Q_SIGNALS:
 private:
     static QString FormatAddress(const QString& address);
 
+    quint64 m_revision{0};
     CTxDestination m_destination;
     QString m_label;
     QString m_message;

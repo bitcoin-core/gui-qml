@@ -17,6 +17,27 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#ifdef USE_QRCODE
+namespace {
+QRcode* EncodeQRCode(const QString& data)
+{
+    return QRcode_encodeString(data.toUtf8().constData(), 0, QR_ECLEVEL_L, QR_MODE_8, 1);
+}
+} // namespace
+#endif // USE_QRCODE
+
+bool CanEncodeQRCode(const QString& data)
+{
+#ifdef USE_QRCODE
+    QRcode* code = EncodeQRCode(data);
+    if (!code) return false;
+    QRcode_free(code);
+    return true;
+#else
+    return false;
+#endif // USE_QRCODE
+}
+
 QRImageProvider::QRImageProvider()
     : QQuickImageProvider{QQuickImageProvider::Image}
 {
@@ -31,7 +52,7 @@ QImage QRImageProvider::requestImage(const QString& id, QSize* size, const QSize
     const QColor fg{query.queryItemValue("fg")};
     const QColor bg{query.queryItemValue("bg")};
 
-    QRcode* code = QRcode_encodeString(data.toUtf8().constData(), 0, QR_ECLEVEL_L, QR_MODE_8, 1);
+    QRcode* code = EncodeQRCode(data);
 
     if (code) {
         QImage image{code->width, code->width, QImage::Format_ARGB32};

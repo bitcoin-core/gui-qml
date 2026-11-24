@@ -18,6 +18,10 @@ Page {
     property var presentedRequest: null
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
+    property bool addressPreparationDeferred: false
+    // The request sent to the wallet, which a retry repeats; a deferred request may replace the pending fields.
+    property bool submittedNextAddress: false
+    property string submittedAddressType: ""
     property string addressErrorText: ""
     readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
@@ -32,10 +36,18 @@ Page {
         if (!wallet) return
         pendingNextAddress = !!next
         pendingAddressType = type || ""
-        if (wallet.ensureReceivingAddress(pendingNextAddress, pendingAddressType)) root.addressErrorText = ""
-        else if (wallet.receivingAddress.needsUnlock) passphrasePopup.open()
-        //: Error shown in Receive when preparing an address for a payment request fails.
-        else root.addressErrorText = qsTr("A receiving address could not be generated. Please try again.")
+        if (wallet.receiveOperationPending) {
+            addressPreparationDeferred = true
+            return
+        }
+        addressPreparationDeferred = false
+        submittedNextAddress = pendingNextAddress
+        submittedAddressType = pendingAddressType
+        root.addressErrorText = ""
+        if (!wallet.ensureReceivingAddress(submittedNextAddress, submittedAddressType)) {
+            //: Error shown in Receive when preparing an address for a payment request fails.
+            root.addressErrorText = wallet.receiveOperationError || qsTr("A receiving address could not be generated. Please try again.")
+        }
     }
 
     function prepareReceivingAddress() {
@@ -113,7 +125,7 @@ Page {
                             subtitleRole: "description"
                             objectNameRole: "objectName"
                             subtitleObjectNameRole: "subtitleObjectName"
-                            model: root.wallet ? root.wallet.availableReceiveAddressTypes().map(function(type) {
+                            model: root.wallet ? root.wallet.receiveAddressTypes.map(function(type) {
                                 return {
                                     id: type.id,
                                     label: type.label,
@@ -124,7 +136,7 @@ Page {
                             }) : []
                             currentValue: root.wallet && root.wallet.receivingAddress
                                 ? root.wallet.receivingAddress.addressType.toLowerCase() : ""
-                            enabled: walletController.initialized
+                            enabled: walletController.initialized && (!root.wallet || !root.wallet.receiveOperationPending)
                             onActivated: function(value) {
                                 receiveAddressTypeMenu.close()
                                 root.ensureReceivingAddress(false, value)
@@ -178,10 +190,13 @@ Page {
                     request: root.request
                     addressErrorText: root.addressErrorText
                     clipboard: root.clipboard
-                    enabled: walletController.initialized
-                    onRetryAddressRequested: root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                    enabled: walletController.initialized && (!root.wallet || !root.wallet.receiveOperationPending)
+                    onRetryAddressRequested: root.ensureReceivingAddress(root.submittedNextAddress, root.submittedAddressType)
                     onCreated: function(requestId) {
+                        // Read before announcing: creating switches to Activity and hides Receive.
+                        const shown = root.visible
                         root.presentedRequest = root.request
+                        if (!shown) return
                         root.paymentRequestCreated()
                         requestModal.openRequest(requestId)
                     }
@@ -200,7 +215,7 @@ Page {
             if (root.visible) root.prepareReceivingAddress()
         }
     }
-    Connections {
+    readonly property Connections receivingAddressNotifications: Connections {
         target: root.wallet ? root.wallet.receivingAddress : null
         function onPaymentReceivedChanged() {
             if (root.wallet.receivingAddress.paymentReceived) {
@@ -211,6 +226,9 @@ Page {
     WalletPassphrasePopup {
         id: passphrasePopup
         parent: Overlay.overlay
+        popupObjectName: "receivePassphrasePopup"
+        cancelButtonObjectName: "receivePassphraseCancelButton"
+        onClosed: errorText = ""
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
         titleText: qsTr("Enter wallet password")
         //: Explains why the wallet password is needed to prepare a payment request.
@@ -218,11 +236,38 @@ Page {
         //: Button that unlocks the wallet and generates the address for a payment request.
         confirmText: qsTr("Unlock and create address")
         onSubmitted: function(passphrase) {
-            if (root.wallet.ensureReceivingAddressWithPassphrase(passphrase, root.pendingNextAddress, root.pendingAddressType)) {
-                root.addressErrorText = ""
-                close()
+            if (!root.wallet || root.wallet.receiveOperationPending) return
+            busy = root.wallet.ensureReceivingAddressWithPassphrase(passphrase, root.submittedNextAddress, root.submittedAddressType)
             //: Error shown when an address cannot be generated after unlocking the wallet.
-            } else errorText = root.wallet.receivingAddress.unlockError || qsTr("The receiving address could not be created.")
+            if (!busy) errorText = root.wallet.receiveOperationError || qsTr("The receiving address could not be created.")
+        }
+
+    }
+    readonly property Connections walletCompletion: Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (root.addressPreparationDeferred && root.visible) {
+                Qt.callLater(function() {
+                    if (!root.visible || !root.addressPreparationDeferred) return
+                    const address = root.wallet.receivingAddress
+                    // Receive asks twice on open; the first request may already cover this one.
+                    if (!root.pendingNextAddress && address.address !== ""
+                            && (!root.pendingAddressType || root.pendingAddressType === address.addressType)) {
+                        root.addressPreparationDeferred = false
+                        return
+                    }
+                    root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                })
+            } else if (operation === "rememberAddress" && root.visible && root.wallet.receivingAddress.address === "") {
+                Qt.callLater(function() { if (root.visible) root.prepareReceivingAddress() })
+                return
+            }
+            if (operation !== "address") return
+            passphrasePopup.busy = false
+            root.addressErrorText = root.wallet.receiveOperationError
+            if (success) passphrasePopup.close()
+            else if (root.wallet.receivingAddress.needsUnlock && root.visible) passphrasePopup.open()
+            else if (passphrasePopup.visible) passphrasePopup.errorText = root.wallet.receivingAddress.unlockError
         }
     }
     Connections {
@@ -236,8 +281,10 @@ Page {
         }
     }
     onWalletChanged: {
+        root.addressPreparationDeferred = false
         root.addressErrorText = ""
         passphrasePopup.close()
+        passphrasePopup.busy = false
         requestModal.close()
         if (root.request) root.request.clear()
         card.resetFields()

@@ -21,17 +21,20 @@ std::optional<PKHash> LegacyP2PKHFromAddress(const QString& address)
 }
 } // namespace
 
-SignVerifyMessageModel::SignVerifyMessageModel(interfaces::Wallet* wallet, QObject* parent)
-    : QObject(parent), m_wallet(wallet)
+SignVerifyMessageModel::SignVerifyMessageModel(QObject* parent)
+    : SignVerifyMessageModel({}, std::make_shared<BackendExecutor>(), parent)
 {
 }
 
-void SignVerifyMessageModel::setWallet(interfaces::Wallet* wallet)
+SignVerifyMessageModel::SignVerifyMessageModel(std::shared_ptr<interfaces::Wallet> wallet, std::shared_ptr<BackendExecutor> executor, QObject* parent)
+    : QObject(parent), m_wallet(std::move(wallet)), m_executor(std::move(executor))
 {
-    if (m_wallet == wallet) {
-        return;
-    }
-    m_wallet = wallet;
+}
+
+void SignVerifyMessageModel::setWallet(std::shared_ptr<interfaces::Wallet> wallet)
+{
+    if (m_wallet == wallet) return;
+    m_wallet = std::move(wallet);
     clear();
 }
 
@@ -52,59 +55,88 @@ bool SignVerifyMessageModel::signMessage(const QString& address, const QString& 
 
 bool SignVerifyMessageModel::signMessageWithPassphrase(const QString& address, const QString& message, const QString& passphrase)
 {
-    return signMessageInternal(address, message, passphrase);
+    return signMessageInternal(address, message, QmlUtil::SecureStringFromQString(passphrase));
 }
 
-bool SignVerifyMessageModel::signMessageInternal(const QString& address, const QString& message, const std::optional<QString>& passphrase)
+bool SignVerifyMessageModel::signMessageInternal(const QString& address, const QString& message, std::optional<SecureString> passphrase)
 {
+    if (m_signing_pending) return false;
     clearSigningStatus();
-    setSignature(QString());
-
-    if (!m_wallet) {
-        setSigningStatus(tr("No wallet is selected."));
-        return false;
-    }
-    const auto pkhash{LegacyP2PKHFromAddress(address)};
-    if (!pkhash) {
-        setSigningStatus(tr("Enter a legacy P2PKH bitcoin address."));
-        return false;
-    }
-
-    bool relock{false};
-    if (!unlockForSigning(passphrase, relock)) {
-        return false;
-    }
-
-    WalletRelockGuard relock_guard{*m_wallet, [this] { notifySecurityStateChanged(); }, relock};
-
-    std::string signature;
-    const SigningResult result{m_wallet->signMessage(message.toStdString(), *pkhash, signature)};
-
-    if (result != SigningResult::OK) {
-        setSigningStatus(QString::fromStdString(SigningResultString(result)));
-        return false;
-    }
-
-    setSignature(QString::fromStdString(signature));
+    setSignature({});
+    if (!m_wallet) { setSigningStatus(tr("No wallet is selected.")); return false; }
+    const auto pkhash = LegacyP2PKHFromAddress(address);
+    if (!pkhash) { setSigningStatus(tr("Enter a legacy P2PKH bitcoin address.")); return false; }
+    struct Result { QString signature; QString error; bool needs_unlock{false}; };
+    m_signing_pending = true;
+    const auto generation = ++m_signing_generation;
+    Q_EMIT signingPendingChanged();
+    const auto wallet = m_wallet;
+    m_executor->submitTask(this, [wallet, session = m_unlock_session, pkhash = *pkhash, message = message.toStdString(), passphrase = std::move(passphrase)]() mutable {
+        std::unique_lock<std::mutex> unlock_session;
+        if (passphrase || ReadSecurityState(*wallet).encrypted) unlock_session = session->acquire();
+        Result result;
+        bool relock{false};
+        const auto security = ReadSecurityState(*wallet);
+        if (security.encrypted && security.locked) {
+            if (!passphrase) {
+                result.needs_unlock = true;
+                result.error = tr("Enter your wallet password to sign this message.");
+                return result;
+            }
+            const auto unlocked = TryUnlockWithPassphrase(*wallet, *passphrase);
+            passphrase.reset();
+            if (unlocked == WalletUnlockResult::IncorrectPassphrase) { result.error = tr("The wallet password you entered was incorrect."); return result; }
+            relock = unlocked == WalletUnlockResult::UnlockedNowRelockRequired;
+        }
+        if (passphrase) { QmlUtil::ClearSecureString(*passphrase); passphrase.reset(); }
+        WalletRelockGuard guard{*wallet, [] {}, relock};
+        std::string signature;
+        const auto status = wallet->signMessage(message, pkhash, signature);
+        if (status == SigningResult::OK) result.signature = QString::fromStdString(signature);
+        else result.error = QString::fromStdString(SigningResultString(status));
+        return result;
+    }, [this, generation](BackendExecutor::Outcome<Result> outcome) {
+        m_signing_pending = false;
+        Q_EMIT signingPendingChanged();
+        notifySecurityStateChanged();
+        if (generation != m_signing_generation) return;
+        if (const auto* result = std::get_if<0>(&outcome)) {
+            setSigningStatus(result->error, result->needs_unlock);
+            setSignature(result->signature);
+            Q_EMIT signingFinished(result->error.isEmpty());
+        } else {
+            setSigningStatus(tr("The message could not be signed. Please try again."));
+            Q_EMIT signingFinished(false);
+        }
+    });
     return true;
 }
 
-bool SignVerifyMessageModel::verifyMessage(const QString& address, const QString& message, const QString& signature) const
+bool SignVerifyMessageModel::verifyMessage(const QString& address, const QString& message, const QString& signature)
 {
-    if (!LegacyP2PKHFromAddress(address)) {
-        return false;
-    }
-    if (signature.trimmed().isEmpty()) {
-        return false;
-    }
-    return MessageVerify(
-        address.trimmed().toStdString(),
-        signature.trimmed().toStdString(),
-        message.toStdString()) == MessageVerificationResult::OK;
+    if (m_verification_pending) return false;
+    const auto generation = ++m_verification_generation;
+    m_verification_pending = true;
+    m_verification_valid = false;
+    Q_EMIT verificationPendingChanged();
+    m_executor->submitTask(this, [address = address.trimmed().toStdString(), message = message.toStdString(), signature = signature.trimmed().toStdString()] {
+        return MessageVerify(address, signature, message) == MessageVerificationResult::OK;
+    }, [this, generation](BackendExecutor::Outcome<bool> outcome) {
+        m_verification_pending = false;
+        Q_EMIT verificationPendingChanged();
+        if (generation != m_verification_generation) return;
+        const auto* valid = std::get_if<0>(&outcome);
+        m_verification_valid = valid && *valid;
+        Q_EMIT verificationFinished();
+    });
+    return true;
 }
 
 void SignVerifyMessageModel::clear()
 {
+    ++m_signing_generation;
+    ++m_verification_generation;
+    m_verification_valid = false;
     clearSigningStatus();
     setSignature(QString());
 }
@@ -112,35 +144,6 @@ void SignVerifyMessageModel::clear()
 void SignVerifyMessageModel::clearSigningStatus()
 {
     setSigningStatus(QString());
-}
-
-bool SignVerifyMessageModel::unlockForSigning(const std::optional<QString>& passphrase, bool& relock)
-{
-    relock = false;
-    if (!m_wallet) {
-        return true;
-    }
-    if (!m_wallet->isCrypted() || !m_wallet->isLocked()) {
-        return true;
-    }
-    if (!passphrase.has_value()) {
-        setSigningStatus(tr("Enter your wallet password to sign this message."), true);
-        return false;
-    }
-
-    SecureString secure_passphrase{QmlUtil::SecureStringFromQString(*passphrase)};
-    switch (TryUnlockWithPassphrase(*m_wallet, secure_passphrase)) {
-    case WalletUnlockResult::IncorrectPassphrase:
-        setSigningStatus(tr("The wallet password you entered was incorrect."));
-        return false;
-    case WalletUnlockResult::AlreadyUnlocked:
-        return true;
-    case WalletUnlockResult::UnlockedNowRelockRequired:
-        relock = true;
-        notifySecurityStateChanged();
-        return true;
-    }
-    return false;
 }
 
 void SignVerifyMessageModel::setSigningStatus(const QString& error, bool needs_unlock)

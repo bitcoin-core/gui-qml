@@ -98,6 +98,7 @@ interfaces::WalletTx WalletTxFor(const std::vector<CTxDestination>& destinations
     wallet_tx.tx = TransactionWithOutputs(destinations, amounts);
     wallet_tx.txout_address = destinations;
     wallet_tx.txout_address_is_mine.assign(destinations.size(), true);
+    wallet_tx.txout_is_mine.assign(destinations.size(), true);
     wallet_tx.txout_is_change = is_change;
     return wallet_tx;
 }
@@ -112,6 +113,7 @@ private Q_SLOTS:
     void receiveAddressesHideUsedUntilEnabled();
     void labelsCanBeEdited();
     void changeAddressesComeFromUnspentChangeOutputs();
+    void unchangedSnapshotKeepsRows();
 };
 
 void AddressListModelTests::initTestCase()
@@ -132,9 +134,11 @@ void AddressListModelTests::receiveAddressesHideUsedUntilEnabled()
 
     TestAddressWallet* wallet_ptr{wallet.get()};
     WalletQmlModel wallet_model{std::move(wallet)};
+    QTRY_VERIFY(wallet_model.walletStateReady());
     AddressListModel* model{wallet_model.addressListModel()};
     wallet_ptr->m_txs.insert(WalletTxFor({used}, {COIN}, {false}));
-    model->refresh();
+    wallet_model.requestWalletStateRefresh();
+    QTRY_VERIFY(!wallet_model.receiveRequestReconciliationPending());
 
     QCOMPARE(model->rowCount(), 1);
     QCOMPARE(model->data(model->index(0), AddressListModel::LabelRole).toString(), QStringLiteral("unused"));
@@ -153,15 +157,34 @@ void AddressListModelTests::labelsCanBeEdited()
         {dest, true, wallet::AddressPurpose::RECEIVE, "first label"},
     };
     WalletQmlModel wallet_model{std::move(wallet)};
+    QTRY_VERIFY(wallet_model.walletStateReady());
     AddressListModel* model{wallet_model.addressListModel()};
-    model->refresh();
+    wallet_model.requestWalletStateRefresh();
+    QTRY_VERIFY(!wallet_model.receiveRequestReconciliationPending());
 
     const QString address{QString::fromStdString(EncodeDestination(dest))};
     QCOMPARE(model->rowCount(), 1);
     QCOMPARE(model->data(model->index(0), AddressListModel::LabelRole).toString(), QStringLiteral("first label"));
 
     QVERIFY(model->setAddressLabel(address, QStringLiteral("updated label")));
+    QTRY_VERIFY(!wallet_model.receiveOperationPending());
     QCOMPARE(model->data(model->index(0), AddressListModel::LabelRole).toString(), QStringLiteral("updated label"));
+}
+
+void AddressListModelTests::unchangedSnapshotKeepsRows()
+{
+    auto wallet{std::make_unique<TestAddressWallet>()};
+    wallet->m_addresses = {{TestDestination(1), true, wallet::AddressPurpose::RECEIVE, "label"}};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    QTRY_VERIFY(wallet_model.walletStateReady());
+    AddressListModel* model{wallet_model.addressListModel()};
+    QCOMPARE(model->rowCount(), 1);
+    QSignalSpy resets{model, &QAbstractItemModel::modelReset};
+    QSignalSpy states{&wallet_model, &WalletQmlModel::walletStateChanged};
+
+    wallet_model.requestWalletStateRefresh();
+    QTRY_COMPARE(states.count(), 1);
+    QCOMPARE(resets.count(), 0);
 }
 
 void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
@@ -182,9 +205,12 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
 
     TestAddressWallet* wallet_ptr{wallet.get()};
     WalletQmlModel wallet_model{std::move(wallet)};
+    QTRY_VERIFY(wallet_model.walletStateReady());
     AddressListModel* model{wallet_model.addressListModel()};
     wallet_ptr->m_txs.insert(change_tx);
     wallet_ptr->m_coins[receive].push_back({COutPoint{txid, 1}, change_out});
+    wallet_model.requestWalletStateRefresh();
+    QTRY_VERIFY(!wallet_model.receiveRequestReconciliationPending());
     model->setCategory(AddressListModel::Change);
 
     QCOMPARE(model->rowCount(), 1);

@@ -8,8 +8,10 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QMetaObject>
+#include <QScopeGuard>
 #include <QStringList>
 
+#include <atomic>
 #include <vector>
 #include <QThread>
 
@@ -54,31 +56,87 @@ private:
     std::map<quint64, std::function<void()>> m_retained_tasks;
 };
 
+struct BackendExecutor::ExecutorState {
+    enum class Phase { Queued, Running, Finished, Cancelled };
+    struct Control {
+        std::atomic<Phase> phase{Phase::Queued};
+        CancelPolicy policy;
+        explicit Control(CancelPolicy policy_in) : policy(policy_in) {}
+    };
+    struct Pending {
+        std::shared_ptr<Control> control;
+        std::function<void(std::optional<Cancelled>)> completion;
+    };
+
+    BackendExecutorWorker* worker{new BackendExecutorWorker};
+    QThread* worker_thread{new QThread};
+    std::map<TaskId, Pending> pending;
+    std::vector<std::pair<QPointer<QObject>, std::function<void()>>> drain_callbacks;
+    size_t active_callbacks{0};
+    bool worker_barrier{false};
+    bool finish_scheduled{false};
+    bool drained{false};
+
+    void finishShutdownIfReady()
+    {
+        if (!worker_barrier || !pending.empty() || active_callbacks || finish_scheduled) return;
+        finish_scheduled = true;
+        QMetaObject::invokeMethod(worker, [worker = worker, thread = worker_thread] {
+            worker->releaseAllTasks();
+            QMetaObject::invokeMethod(thread, &QThread::quit, Qt::QueuedConnection);
+        }, Qt::QueuedConnection);
+    }
+
+    void complete(TaskId id)
+    {
+        Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+        const auto it = pending.find(id);
+        if (it == pending.end()) return;
+        auto task = std::move(it->second);
+        pending.erase(it);
+        ++active_callbacks;
+        const auto cleanup = qScopeGuard([&] {
+            task.completion = {};
+            QMetaObject::invokeMethod(worker, [worker = worker, id] { worker->releaseTask(id); }, Qt::QueuedConnection);
+            --active_callbacks;
+            finishShutdownIfReady();
+        });
+        const bool cancelled = task.control->phase.load() == Phase::Cancelled;
+        task.completion(cancelled ? std::make_optional(Cancelled{Cancelled::Reason::Requested}) : std::nullopt);
+    }
+};
+
 BackendExecutor::BackendExecutor(QObject* parent)
-    : QObject(parent), m_worker(new BackendExecutorWorker), m_thread(new QThread)
+    : QObject(parent), m_state(std::make_shared<ExecutorState>())
 {
     Q_ASSERT(QCoreApplication::instance());
     Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    auto* const worker = m_state->worker;
+    auto* const worker_thread = m_state->worker_thread;
     // Keep the name on the thread so cleanup remains identifiable after its owner is destroyed.
-    connect(this, &QObject::objectNameChanged, m_thread, [thread = m_thread](const QString& name) {
+    connect(this, &QObject::objectNameChanged, worker_thread, [thread = worker_thread](const QString& name) {
         thread->setObjectName(name);
     });
     setObjectName(QStringLiteral("backend"));
-    GetExecutorRegistry().owners_by_thread.emplace(m_thread, this);
-    connect(m_thread, &QThread::finished, QCoreApplication::instance(), [thread = m_thread, owner = QPointer<BackendExecutor>{this}] {
-        JoinThreadAsync(thread, QCoreApplication::instance(), [thread, owner] {
+    GetExecutorRegistry().owners_by_thread.emplace(worker_thread, this);
+    connect(worker_thread, &QThread::finished, QCoreApplication::instance(), [thread = worker_thread, owner = QPointer<BackendExecutor>{this}, state = m_state] {
+        JoinThreadAsync(thread, QCoreApplication::instance(), [thread, owner, state] {
             GetExecutorRegistry().owners_by_thread.erase(thread);
-            if (owner) {
-                owner->m_drained = true;
-                owner->m_worker = nullptr;
-                owner->m_thread = nullptr;
-                Q_EMIT owner->drained();
+            state->drained = true;
+            state->worker = nullptr;
+            state->worker_thread = nullptr;
+            if (owner) Q_EMIT owner->drained();
+            auto callbacks = std::move(state->drain_callbacks);
+            for (auto& [receiver, done] : callbacks) {
+                if (receiver) QMetaObject::invokeMethod(receiver, std::move(done), Qt::QueuedConnection);
             }
             GetExecutorRegistry().notifyIfDrained();
         });
     }, Qt::QueuedConnection);
-    m_worker->moveToThread(m_thread);
-    connect(m_worker, &BackendExecutorWorker::completed, this, [this](quint64 id) {
+    worker->moveToThread(worker_thread);
+    connect(worker, &BackendExecutorWorker::completed, QCoreApplication::instance(),
+            [state = m_state](TaskId id) { state->complete(id); }, Qt::QueuedConnection);
+    connect(worker, &BackendExecutorWorker::completed, this, [this](quint64 id) {
         const auto it = m_gui_completions.find(id);
         if (it == m_gui_completions.end()) return;
         auto gui_completion = std::move(it->second);
@@ -87,15 +145,15 @@ BackendExecutor::BackendExecutor(QObject* parent)
         gui_completion();
         gui_completion = {};
         if (!owner_guard || m_stopping) return;
-        QMetaObject::invokeMethod(m_worker, [worker = m_worker, id] { worker->releaseTask(id); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(m_state->worker, [worker = m_state->worker, id] { worker->releaseTask(id); }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
-    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(worker_thread, &QThread::finished, worker, &QObject::deleteLater);
 #ifdef Q_OS_MACOS
     // Core startup can exceed macOS's 512 KiB worker stack, especially under
     // sanitizers (e.g. RandAddStaticEnv). Match the 8 MiB main-thread stack.
-    m_thread->setStackSize(8 * 1024 * 1024);
+    worker_thread->setStackSize(8 * 1024 * 1024);
 #endif
-    m_thread->start();
+    worker_thread->start();
 }
 
 BackendExecutor::~BackendExecutor()
@@ -109,10 +167,70 @@ bool BackendExecutor::enqueue(std::function<void()> work, std::function<void()> 
     if (m_stopping) return false;
     const quint64 id{++m_next_task_id};
     m_gui_completions.emplace(id, std::move(gui_completion));
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, id, work = std::move(work)] {
+    QMetaObject::invokeMethod(m_state->worker, [worker = m_state->worker, id, work = std::move(work)] {
         worker->runTask(id, work);
     }, Qt::QueuedConnection);
     return true;
+}
+
+BackendExecutor::TaskId BackendExecutor::enqueueTask(std::function<void(bool)> work, std::function<void(std::optional<Cancelled>)> gui_completion, CancelPolicy policy)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const TaskId id{++m_next_task_id};
+    if (m_stopping) {
+        work(false);
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [completion = std::move(gui_completion)] {
+            completion(Cancelled{Cancelled::Reason::Rejected});
+        }, Qt::QueuedConnection);
+        return id;
+    }
+    auto control = std::make_shared<ExecutorState::Control>(policy);
+    m_state->pending.emplace(id, ExecutorState::Pending{control, std::move(gui_completion)});
+    QMetaObject::invokeMethod(m_state->worker, [worker = m_state->worker, id, control, work = std::move(work)] {
+        worker->runTask(id, [control, work] {
+            auto expected = ExecutorState::Phase::Queued;
+            const bool run = control->phase.compare_exchange_strong(expected, ExecutorState::Phase::Running);
+            work(run);
+            if (run) {
+                expected = ExecutorState::Phase::Running;
+                control->phase.compare_exchange_strong(expected, ExecutorState::Phase::Finished);
+            }
+        });
+    }, Qt::QueuedConnection);
+    return id;
+}
+
+bool BackendExecutor::cancel(TaskId id)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const auto it = m_state->pending.find(id);
+    if (it == m_state->pending.end()) return false;
+    auto& control = *it->second.control;
+    auto expected = ExecutorState::Phase::Queued;
+    if (control.phase.compare_exchange_strong(expected, ExecutorState::Phase::Cancelled)) {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [state = m_state, id] {
+            state->complete(id);
+        }, Qt::QueuedConnection);
+        return true;
+    }
+    if (control.policy != CancelPolicy::DiscardRunningResult || expected != ExecutorState::Phase::Running) return false;
+    return control.phase.compare_exchange_strong(expected, ExecutorState::Phase::Cancelled);
+}
+
+void BackendExecutor::whenDrained(QObject* receiver, std::function<void()> done)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(receiver && receiver->thread() == thread());
+    if (m_state->drained) {
+        QMetaObject::invokeMethod(receiver, std::move(done), Qt::QueuedConnection);
+    } else {
+        m_state->drain_callbacks.emplace_back(receiver, std::move(done));
+    }
+}
+
+bool BackendExecutor::isDrained() const
+{
+    return m_state->drained;
 }
 
 void BackendExecutor::shutdown()
@@ -120,12 +238,16 @@ void BackendExecutor::shutdown()
     Q_ASSERT(QThread::currentThread() == thread());
     if (m_stopping) return;
     m_stopping = true;
-    qDebug() << __func__ << ": Stopping thread" << m_thread;
+    qDebug() << __func__ << ": Stopping thread" << m_state->worker_thread;
     m_gui_completions.clear();
-    disconnect(m_worker, nullptr, this, nullptr);
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, gui_owned_thread = m_thread] {
-        worker->releaseAllTasks();
-        QMetaObject::invokeMethod(gui_owned_thread, &QThread::quit, Qt::QueuedConnection);
+    disconnect(m_state->worker, nullptr, this, nullptr);
+    // A completion can enter a nested event loop, so reaching the worker barrier
+    // alone does not mean that GUI callbacks have released their task state.
+    QMetaObject::invokeMethod(m_state->worker, [state = m_state] {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [state] {
+            state->worker_barrier = true;
+            state->finishShutdownIfReady();
+        }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
 }
 

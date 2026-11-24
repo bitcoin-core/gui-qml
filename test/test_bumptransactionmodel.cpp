@@ -180,6 +180,42 @@ private Q_SLOTS:
         QCOMPARE(model.state(), BumpTransactionModel::Failed);
     }
 
+    void confirmFeeBump_canRetryAfterBusyUnlockSession()
+    {
+        struct EncryptedWallet : MockWallet {
+            bool isCrypted() override { return true; }
+        };
+        auto wallet = std::make_unique<EncryptedWallet>();
+        wallet->transaction_can_be_bumped_fn = [](const Txid&) { return true; };
+        wallet->create_bump_transaction_fn = [](const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&,
+                                                CAmount& old_fee, CAmount& new_fee, CMutableTransaction&) {
+            old_fee = 500;
+            new_fee = 1000;
+            return true;
+        };
+        wallet->sign_bump_transaction_fn = [](CMutableTransaction&) { return true; };
+        wallet->commit_bump_transaction_fn = [](const Txid&, CMutableTransaction&&, std::vector<bilingual_str>&, Txid& bumped_txid) {
+            bumped_txid = Txid::FromUint256(*uint256::FromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+            return true;
+        };
+        auto session = std::make_shared<WalletUnlockSession>();
+
+        BumpTransactionModel model(wallet.get());
+        model.setUnlockSession(session);
+        model.prepareFeeBump(TEST_TXID, 1);
+        {
+            const auto held = session->acquire();
+            QVERIFY(!model.confirmFeeBump());
+        }
+        QCOMPARE(model.state(), BumpTransactionModel::NeedsConfirmation);
+        QVERIFY(!model.needsUnlock());
+        QVERIFY(!model.errorText().isEmpty());
+        QCOMPARE(wallet->calls.commitBumpTransaction.load(), 0);
+
+        QVERIFY(model.confirmFeeBump());
+        QCOMPARE(model.state(), BumpTransactionModel::Succeeded);
+    }
+
     void reset_clearsState()
     {
         auto wallet = MakeBumpableWallet();

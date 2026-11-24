@@ -27,10 +27,18 @@ Pane {
     onAmountUnitChanged: {
         if (amountInput && amountInSatoshis(amountInput.text) >= 0) amountErrorText = ""
     }
+    property string pendingOperation: ""
+    property string pendingRequestId: ""
+    // Numbered so a late result only affects the opening that started it.
+    property int opening: 0
+    property int pendingOpening: 0
+    property int deleteOpening: 0
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
+    readonly property bool hasCurrentPayment: !!request && request.receivedAmountSatoshi > 0
     readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
+    readonly property bool qrShareable: sharing && request.qrEncodable
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -42,7 +50,8 @@ Pane {
     signal requestAgain(string requestId)
     signal created(string requestId)
     signal closeRequested()
-    signal deleted(string requestId)
+    signal deleted(string requestId, var requestWallet)
+    signal deletedInEarlierOpening(string requestId, var requestWallet)
 
     padding: modalView ? (width < 480 ? 16 : 24) : 0
     implicitWidth: 560
@@ -91,10 +100,15 @@ Pane {
         if (request.label.trim() !== "") showRecipientName = true
     }
     onRequestChanged: {
+        pendingOperation = ""
+        pendingRequestId = ""
         resetFields()
         if (request && request.label.trim() !== "") showRecipientName = true
         revealTemplateFields()
     }
+    onWalletChanged: { pendingOperation = ""; pendingRequestId = "" }
+    property int saveOpening: -1
+    function beginOpening() { opening++ }
     Component.onCompleted: resetFields()
 
     function amountInSatoshis(text) {
@@ -135,7 +149,9 @@ Pane {
                 actionErrorText = qsTr("The changes could not be saved. Please try again.")
                 return false
             }
-            resetFields()
+            pendingOperation = "update"
+            pendingRequestId = request.id
+            pendingOpening = opening
             return true
         }
         return saveField("amount", amountInput) && saveField("label", labelInput)
@@ -152,7 +168,10 @@ Pane {
     function createRequest() {
         if (!wallet || !request || saved || !saveFields()) return
         actionErrorText = ""
-        if (wallet.commitReceivingPaymentRequest()) created(request.id)
+        if (wallet.commitReceivingPaymentRequest()) {
+            pendingOperation = "save"
+            pendingOpening = opening
+        }
         else actionErrorText = qsTr("The payment request could not be created. Please try again.")
     }
     function copyRequest() {
@@ -168,7 +187,7 @@ Pane {
         actionFailurePopup.open()
     }
     function captureQR(callback) {
-        if (!sharing || !request.qrPayload) return false
+        if (!qrShareable) return false
         if (qrImage.status !== Image.Ready) {
             showActionFailure(qsTr("QR code not ready"), qsTr("The QR code is not ready. Please try again."))
             return false
@@ -190,7 +209,7 @@ Pane {
     // What the QR save dialog would export right now. The dialog is tied to
     // the target it was opened for: it closes as soon as that changes, for
     // example when the payment arrives or another request is shown.
-    readonly property string saveQRTarget: sharing && request.qrPayload
+    readonly property string saveQRTarget: qrShareable
         ? request.id + "\n" + request.qrPayload : ""
     onSaveQRTargetChanged: {
         if (saveDialog.visible && saveQRTarget !== saveDialog.target) saveDialog.close()
@@ -203,14 +222,19 @@ Pane {
     }
 
     function saveQRToFile(fileUrl) {
+        const opening = root.opening
         return captureQR(function(result) {
-            if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
+            if (root.opening !== opening) return
+            if (imageSave.save(result.image, fileUrl))
+                root.saveOpening = opening
+            else
                 root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
         })
     }
     // Asks first; the request is deleted once the user confirms.
     function deleteRequest() {
         if (!wallet || !saved) return false
+        deleteOpening = opening
         deleteConfirmation.confirmDelete(wallet, request.id)
         return true
     }
@@ -229,10 +253,46 @@ Pane {
     PaymentRequestDeleteConfirmation {
         id: deleteConfirmation
         objectName: "requestPaymentDeleteConfirmation"
-        onDeleted: function(requestId) {
+        reportsFailures: false
+        onDeleted: function(requestId, requestWallet) {
+            if (root.deleteOpening !== root.opening || requestWallet !== root.wallet) {
+                root.deletedInEarlierOpening(requestId, requestWallet)
+                return
+            }
             // Discard local edits so closing the modal cannot try to save a deleted request.
             root.resetFields()
-            root.deleted(requestId)
+            root.deleted(requestId, requestWallet)
+        }
+        onDeleteFailed: function(requestId, error, requestWallet) {
+            if (root.deleteOpening === root.opening && requestWallet === root.wallet) deleteConfirmation.showFailure(error)
+        }
+    }
+
+    ImageSaveModel {
+        id: imageSave
+        objectName: "requestPaymentImageSave"
+        onFinished: function(success) {
+            if (!success && root.saveOpening === root.opening)
+                root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
+        }
+    }
+    // Keep notification handlers owned by the card when their targets change.
+    readonly property Connections walletCompletion: Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (root.pendingOperation !== operation) return
+            root.pendingOperation = ""
+            if (root.pendingOpening !== root.opening) {
+                root.pendingRequestId = ""
+                return
+            }
+            const operationError = root.wallet.receiveOperationError
+            root.actionErrorText = operationError
+            if (!success) return
+            if (operation === "save") root.created(root.request.id)
+            else if (operation === "update") root.resetFields()
+            root.pendingRequestId = ""
+            root.actionErrorText = operationError
         }
     }
 
@@ -246,7 +306,7 @@ Pane {
         satoshi: root.request ? root.request.receivedAmountSatoshi : 0
         unit: optionsModel.displayUnit
     }
-    Connections {
+    readonly property Connections requestNotifications: Connections {
         target: root.request
         function onIsEditingChanged() { root.revealTemplateFields() }
         function onLabelChanged() {
@@ -324,6 +384,7 @@ Pane {
     }
 
     contentItem: ColumnLayout {
+        enabled: !root.wallet || !root.wallet.receiveOperationPending
         spacing: Theme.space.l
         RowLayout {
             visible: root.modalView
@@ -354,7 +415,7 @@ Pane {
                     x: moreButton.width - width
                     y: moreButton.height + 8
                     showsQrActions: !root.paymentReceived
-                    qrActionsEnabled: root.sharing
+                    qrActionsEnabled: root.qrShareable
                     showsRequestAgain: true
                     onCopyQrRequested: root.copyQR()
                     onSaveQrRequested: root.openSaveQRDialog()
@@ -403,18 +464,30 @@ Pane {
                     objectName: "requestPaymentQRImage"
                     anchors.fill: parent
                     anchors.margins: Theme.space.l
-                    visible: root.sharing
-                    opacity: root.sharing ? 1 : 0
-                    code: root.sharing && root.request ? root.request.qrPayload : ""
+                    visible: root.qrShareable
+                    opacity: root.qrShareable ? 1 : 0
+                    code: root.qrShareable ? root.request.qrPayload : ""
                     backgroundColor: Theme.color.qrBackground
                     foregroundColor: Theme.color.qrForeground
                     Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
+                }
+                CoreText {
+                    objectName: "requestPaymentQRUnavailableText"
+                    anchors.fill: parent
+                    anchors.margins: Theme.space.l
+                    visible: root.sharing && !root.qrShareable
+                    text: qsTr("This request is too long for a QR code. Copy the payment request instead.")
+                    textStyle: Theme.text.caption
+                    color: Theme.color.qrForeground
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    wrap: true
                 }
                 MouseArea {
                     objectName: "requestPaymentQRContextArea"
                     anchors.fill: parent
                     acceptedButtons: Qt.RightButton
-                    enabled: root.sharing
+                    enabled: root.qrShareable
                     onClicked: function(mouse) {
                         qrMenu.x = mouse.x
                         qrMenu.y = mouse.y
@@ -427,13 +500,13 @@ Pane {
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextCopy"
                         text: qsTr("Copy QR code")
-                        enabled: root.sharing
+                        enabled: root.qrShareable
                         onTriggered: root.copyQR()
                     }
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextSave"
                         text: qsTr("Save QR code…")
-                        enabled: root.sharing
+                        enabled: root.qrShareable
                         onTriggered: root.openSaveQRDialog()
                     }
                 }
@@ -454,8 +527,8 @@ Pane {
                 visible: root.saved
                 Layout.alignment: Qt.AlignHCenter
                 showDot: false
-                text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
-                accentColor: root.paymentReceived ? Theme.color.success : Theme.color.paymentRequest
+                text: root.hasCurrentPayment ? qsTr("Payment received") : qsTr("Awaiting payment")
+                accentColor: root.hasCurrentPayment ? Theme.color.success : Theme.color.paymentRequest
             }
             AddressLabel {
                 objectName: "requestPaymentAddressText"

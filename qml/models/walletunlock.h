@@ -8,6 +8,7 @@
 #include <support/allocators/secure.h>
 
 #include <functional>
+#include <mutex>
 
 namespace interfaces {
 class Wallet;
@@ -19,9 +20,28 @@ enum class WalletUnlockResult {
     IncorrectPassphrase,
 };
 
+struct WalletSecurityState {
+    bool encrypted;
+    bool locked;
+};
+
+//! Read the encryption and lock state under cs_wallet, which EncryptWallet() holds while adding the master keys.
+WalletSecurityState ReadSecurityState(interfaces::Wallet& wallet);
+
 //! Try to unlock `wallet` with `passphrase`. `passphrase` is wiped on every return path.
 WalletUnlockResult TryUnlockWithPassphrase(interfaces::Wallet& wallet,
                                            SecureString& passphrase);
+
+//! Hold from checking the lock state until relocking; take it before cs_wallet.
+class WalletUnlockSession
+{
+public:
+    std::unique_lock<std::mutex> acquire() { return std::unique_lock{m_mutex}; }
+    std::unique_lock<std::mutex> tryAcquire() { return std::unique_lock{m_mutex, std::try_to_lock}; }
+
+private:
+    std::mutex m_mutex;
+};
 
 class WalletRelockGuard
 {

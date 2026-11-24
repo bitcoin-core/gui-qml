@@ -27,8 +27,15 @@ TestCase {
         property string signature: ""
         property string signingError: ""
         property bool signingNeedsUnlock: false
+        property bool signingPending: false
+        property bool verificationPending: false
+        property bool verificationValid: false
+        property int generation: 0
+        signal signingFinished(bool success)
+        signal verificationFinished()
 
         function clear() {
+            ++generation
             mockSignVerifyModel.signature = ""
             mockSignVerifyModel.signingError = ""
             mockSignVerifyModel.signingNeedsUnlock = false
@@ -39,19 +46,36 @@ TestCase {
         }
 
         function signMessage(address, message) {
-            if (!isLegacyP2PKHAddress(address) || message.length === 0) return false
-            mockSignVerifyModel.signature = "test-signature"
+            if (signingPending || !isLegacyP2PKHAddress(address) || message.length === 0) return false
+            signingPending = true
+            const revision = generation
+            Qt.callLater(function() {
+                signingPending = false
+                if (revision !== generation) return
+                signature = "test-signature"
+                signingFinished(true)
+            })
             return true
         }
 
         function signMessageWithPassphrase(address, message, passphrase) {
-            return signMessage(address, message) && passphrase.length > 0
+            return passphrase.length > 0 && signMessage(address, message)
         }
 
         function verifyMessage(address, message, candidateSignature) {
-            return isLegacyP2PKHAddress(address)
+            if (verificationPending) return false
+            verificationPending = true
+            const revision = generation
+            const valid = isLegacyP2PKHAddress(address)
                 && message === "Signed statement"
                 && candidateSignature === "test-signature"
+            Qt.callLater(function() {
+                verificationPending = false
+                if (revision !== generation) return
+                verificationValid = valid
+                verificationFinished()
+            })
+            return true
         }
     }
 
@@ -96,6 +120,25 @@ TestCase {
         compare(reopenedAddress.readOnly, false)
         compare(reopenedMessage.text, "")
         compare(reopenedMessage.readOnly, false)
+    }
+
+    function test_hiddenPageDoesNotPromptForSigningPassphrase() {
+        testCase.visible = true
+        const page = createPage()
+        const popup = findChild(page, "signMessagePassphrasePopup")
+        verify(popup !== null)
+        verify(page.visible)
+        page.visible = false
+        mockSignVerifyModel.signingNeedsUnlock = true
+        mockSignVerifyModel.signingFinished(false)
+        verify(!popup.visible)
+        page.visible = true
+        mockSignVerifyModel.signingFinished(false)
+        tryCompare(popup, "visible", true)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        mockSignVerifyModel.signingNeedsUnlock = false
+        testCase.visible = false
     }
 
     function test_initialTabSelectsRequestedMode() {
@@ -272,7 +315,7 @@ TestCase {
         compare(verifyButton.background.color, Theme.color.accent)
         compare(verifyButton.opacity, 1.0)
         page.submitVerify()
-        compare(page.verifyResultSuccess, true)
+        tryCompare(page, "verifyResultSuccess", true)
         compare(resultText.text, "Message verified successfully.")
         compare(resultBanner.radius, Theme.radius.card)
         compare(resultBanner.implicitHeight, 40)
@@ -291,11 +334,34 @@ TestCase {
 
         verifyMessage.text = "Changed statement"
         page.submitVerify()
-        compare(resultText.text, "Message verification failed.")
+        tryCompare(resultText, "text", "Message verification failed.")
         compare(resultBanner.tintColor, Theme.color.danger)
         compare(resultBanner.backgroundColor, Theme.color.dangerTint)
         compare(resultBanner.iconColor, Theme.color.danger)
         compare(resultBanner.textColor, Theme.color.dangerText)
         tryCompare(resultText, "color", Theme.color.dangerText)
+    }
+
+    function test_modePickerWaitsForPendingOperation() {
+        const page = createPage()
+        const picker = findChild(page, "signVerifyMessageModePicker")
+        verify(picker.enabled)
+        mockSignVerifyModel.signingPending = true
+        verify(!picker.enabled)
+        mockSignVerifyModel.signingPending = false
+        mockSignVerifyModel.verificationPending = true
+        verify(!picker.enabled)
+        mockSignVerifyModel.verificationPending = false
+        verify(picker.enabled)
+    }
+
+    function test_verificationClearsPreviousResultWhilePending() {
+        const page = createPage({initialTab: SignVerifyMessage.VerifyTab})
+        page.submitVerify()
+        tryCompare(page, "verifyResultText", "Message verification failed.")
+        page.submitVerify()
+        compare(page.verifyResultText, "")
+        verify(mockSignVerifyModel.verificationPending)
+        tryCompare(page, "verifyResultText", "Message verification failed.")
     }
 }

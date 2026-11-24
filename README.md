@@ -77,6 +77,7 @@ sudo apt install \
   qt6-tools-dev-tools \
   qt6-declarative-dev \
   qt6-svg-dev \
+  qml6-module-qt-labs-folderlistmodel \
   qml6-module-qt-labs-platform \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick \

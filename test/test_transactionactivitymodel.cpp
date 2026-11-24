@@ -12,6 +12,7 @@
 #include <core_io.h>
 #include <key_io.h>
 #include <script/solver.h>
+#include <util/string.h>
 
 #include <QAbstractItemModelTester>
 #include <QFile>
@@ -20,10 +21,10 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
+#include <chrono>
 #include <thread>
 #include <atomic>
 #include <QSemaphore>
-#include <QScopeGuard>
 #include <stdexcept>
 
 namespace {
@@ -77,13 +78,32 @@ QmlRecentRequestEntry Request(int id, const QString& address, const QString& lab
 struct ReadGate {
     QSemaphore entered, release;
     std::atomic_bool enabled{true};
-    void wait() { if (enabled.exchange(false)) { entered.release(); release.acquire(); } }
+    std::chrono::milliseconds after_release_delay{0};
+    void wait() {
+        if (enabled.exchange(false)) {
+            entered.release();
+            release.acquire();
+            if (after_release_delay.count() > 0) std::this_thread::sleep_for(after_release_delay);
+        }
+    }
 };
 
 class ActivityWallet : public StubWallet
 {
 public:
     std::map<Txid, interfaces::WalletTx> transactions;
+    std::map<std::string, std::string> requests;
+    std::vector<std::string> getAddressReceiveRequests() override {
+        std::vector<std::string> result;
+        result.reserve(requests.size());
+        for (const auto& [id, value] : requests) result.push_back(value);
+        return result;
+    }
+    bool setAddressReceiveRequest(const CTxDestination&, const std::string& id, const std::string& value) override {
+        if (value.empty()) requests.erase(id);
+        else requests[id] = value;
+        return true;
+    }
     std::map<Txid, interfaces::WalletTxStatus> statuses;
     std::map<std::string, std::string> labels;
     std::vector<TransactionChangedFn> callbacks;
@@ -230,19 +250,21 @@ struct Fixture {
         auto backend = std::make_unique<ActivityWallet>();
         state = backend.get();
         wallet = std::make_unique<WalletQmlModel>(std::move(backend));
+        if (!QTest::qWaitFor([&] { return wallet->walletStateReady(); })) qFatal("Initial wallet snapshot did not finish");
         // Scope the thread assertion to activity operations, after the existing
         // address-book model has loaded during wallet construction.
         state->blocking_read_on_gui = false;
     }
-    ~Fixture()
-    {
-        if (!wallet) return;
-        QSignalSpy drained{wallet.get(), &WalletQmlModel::shutdownFinished};
-        wallet->beginShutdown();
-        if (!wallet->backendExecutor()->isDrained() && drained.empty()) QVERIFY(drained.wait(10000));
-    }
     Model* model() { auto* result = wallet->transactionActivityModel(); Wait(result); return result; }
-    void request(const QmlRecentRequestEntry& request) { wallet->receiveRequests()->prependOrReplace(request); }
+    void request(const QmlRecentRequestEntry& request) {
+        state->requests[util::ToString(request.id)] = ReceiveRequestHistoryModel::SerializeEntry(request);
+        wallet->receiveRequests()->prependOrReplace(request);
+    }
+    ~Fixture() {
+        if (!wallet) return;
+        wallet->beginShutdown();
+        if (!QTest::qWaitFor([&] { return wallet->backendExecutor()->isDrained(); })) qFatal("Wallet did not drain");
+    }
 };
 
 QModelIndex Find(const QAbstractItemModel& model, const QString& txid)
@@ -260,6 +282,7 @@ class TransactionActivityModelTests : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void historyReadsLeaveTheEventLoopFreeAndDiscardStaleSnapshots();
+    void receiveHistoryRebuildsWhileActivitySnapshotIsInFlight();
     void detailReadsDiscardPreviousSelectionsAndHandleMissingTransactions();
     void largeDetailPreviewDoesNotWaitForInputReads();
     void bumpEligibilityIsOnlyReadForTheSelectedTransaction();
@@ -356,6 +379,42 @@ void TransactionActivityModelTests::historyReadsLeaveTheEventLoopFreeAndDiscardS
     Wait(model);
     QVERIFY(!inserted_stale);
     QVERIFY(Find(*model, Id(new_tx)).isValid());
+    QVERIFY(!f.state->blocking_read_on_gui);
+}
+
+void TransactionActivityModelTests::receiveHistoryRebuildsWhileActivitySnapshotIsInFlight()
+{
+    Fixture f;
+    auto gate = std::make_shared<ReadGate>();
+    gate->enabled = false;
+    // Widen the interval between releasing the wallet read and the worker's
+    // map writes. There is deliberately no synchronization after the GUI
+    // projection, so ThreadSanitizer also checks the snapshot handoff.
+    gate->after_release_delay = std::chrono::milliseconds{20};
+    f.state->history_gate = gate;
+    for (int i = 0; i < 64; ++i) {
+        f.state->put(MakeTx({{50'000 + i, false}}, {{49'000 + i, true}}));
+    }
+    auto* model = f.model();
+    QCOMPARE(model->transactionCount(), 64);
+    const QPersistentModelIndex index{model->index(0)};
+    const auto txid = index.data(Model::TxidRole);
+    const auto release = qScopeGuard([&] { gate->release.release(); });
+    for (int i = 0; i < 4; ++i) {
+        gate->enabled = true;
+        model->reload();
+        QTRY_VERIFY(gate->entered.available() > 0);
+        gate->entered.acquire();
+        gate->release.release();
+        // This is the same GUI projection triggered by a wallet snapshot's
+        // receive-history result, while activity work owns its earlier copy.
+        f.wallet->receiveRequests()->setEntries({});
+        QCOMPARE(model->transactionCount(), 64);
+        QCOMPARE(index.data(Model::TxidRole), txid);
+        Wait(model);
+        QCOMPARE(model->transactionCount(), 64);
+        QCOMPARE(index.data(Model::TxidRole), txid);
+    }
     QVERIFY(!f.state->blocking_read_on_gui);
 }
 
@@ -843,6 +902,8 @@ void TransactionActivityModelTests::filtersWholeTransactionsAndExportsParentImpa
     QTemporaryDir dir;
     const auto path = dir.filePath("activity.csv");
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto csv = file.readAll();
@@ -872,6 +933,8 @@ void TransactionActivityModelTests::exportsBatchActionsWithoutDuplicatingFees()
     QTemporaryDir dir;
     const auto path = dir.filePath("batch.csv");
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto csv = file.readAll();
@@ -1039,6 +1102,8 @@ void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplaceme
     const auto path = dir.filePath("replaced.csv");
     proxy.setDisplayUnit(3);
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto csv = file.readAll();
@@ -1062,6 +1127,8 @@ void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplaceme
     source->refreshStatuses();
     Wait(source);
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto confirmed_csv = file.readAll();
     const QByteArray confirmed_parent = "\"-101000\",\"" + Id(original).toUtf8() + "\",\"Transaction\",\"\",\"Confirmed\"";

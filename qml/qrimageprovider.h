@@ -13,6 +13,9 @@ class QSize;
 class QString;
 QT_END_NAMESPACE
 
+//! Whether `data` fits in the QR codes the provider draws.
+bool CanEncodeQRCode(const QString& data);
+
 class QRImageProvider : public QQuickImageProvider
 {
 public:

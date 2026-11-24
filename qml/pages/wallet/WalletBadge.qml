@@ -13,6 +13,11 @@ Button {
     objectName: "walletBadge"
 
     property string balance: ""
+    property string errorText: ""
+    // A warning keeps the balance, which loaded correctly.
+    property string warningText: ""
+    ToolTip.visible: hovered && (errorText.length > 0 || warningText.length > 0)
+    ToolTip.text: errorText || warningText
     property var balanceSatoshi: 0
     property bool loading: false
     property bool noWalletLoaded: false
@@ -93,10 +98,19 @@ Button {
                 wrap: false
                 elide: Text.ElideRight
             }
+            CoreText {
+                visible: !root.noWalletLoaded && root.errorText.length > 0
+                text: qsTr("Wallet information unavailable")
+                color: Theme.color.neutral8
+                font: Theme.text.description.font
+                wrap: false
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
             BitcoinAmountDisplayLabel {
                 objectName: "walletBadgeBalanceText"
                 Layout.fillWidth: true
-                visible: !root.loading && !root.noWalletLoaded
+                visible: !root.loading && !root.noWalletLoaded && !root.errorText
                 hidesAmount: true
                 amount: root.balance
                 unit: optionsModel.displayUnit === BitcoinAmount.SAT

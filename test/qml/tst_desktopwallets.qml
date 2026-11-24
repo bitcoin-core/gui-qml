@@ -119,6 +119,18 @@ TestCase {
         compare(balanceText.font.weight, optionsModel.moneyFont.weight)
     }
 
+    function test_wallet_badge_keeps_balance_with_a_warning() {
+        const page = createDesktopWallets()
+        const badge = findChild(page, "walletBadge")
+        const balanceText = findChild(page, "walletBadgeBalanceText")
+        badge.warningText = "The received-payment status could not be saved."
+        verify(balanceText.visible)
+        compare(badge.ToolTip.text, badge.warningText)
+        badge.errorText = "Wallet information could not be loaded."
+        verify(!balanceText.visible)
+        compare(badge.ToolTip.text, badge.errorText)
+    }
+
     function test_wallet_badge_balance_updates_unit_suffix() {
         const originalUnit = optionsModel.displayUnit
         const page = createDesktopWallets()

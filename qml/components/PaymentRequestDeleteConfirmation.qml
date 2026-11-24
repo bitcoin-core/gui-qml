@@ -14,10 +14,15 @@ AlertPopup {
 
     property var wallet: null
     property string requestId: ""
+    property string pendingRequestId: ""
+    property bool reportsFailures: true
+    property bool reportPendingFailure: false
 
-    signal deleted(string requestId)
+    signal deleted(string requestId, var requestWallet)
+    signal deleteFailed(string requestId, string error, var requestWallet)
 
     function confirmDelete(requestWallet, id) {
+        if (wallet !== requestWallet) pendingRequestId = ""
         wallet = requestWallet
         requestId = id
         open()
@@ -25,12 +30,39 @@ AlertPopup {
 
     function deleteRequest() {
         const id = requestId
+        reportPendingFailure = true
         if (!wallet || !wallet.removeReceiveRequest(id)) {
-            failurePopup.open()
+            fail(id, "")
             return false
         }
-        deleted(id)
+        pendingRequestId = id
         return true
+    }
+
+    // For a host that is hidden while the delete runs.
+    function stopReporting() {
+        reportPendingFailure = false
+    }
+
+    function fail(id, error) {
+        deleteFailed(id, error, wallet)
+        if (reportsFailures && reportPendingFailure) showFailure(error)
+    }
+
+    function showFailure(error) {
+        failurePopup.message = error || qsTr("The payment request could not be deleted. Please try again.")
+        failurePopup.open()
+    }
+
+    readonly property Connections walletCompletion: Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (operation !== "remove" || !root.pendingRequestId) return
+            const id = root.pendingRequestId
+            root.pendingRequestId = ""
+            if (success) root.deleted(id, root.wallet)
+            else root.fail(id, root.wallet.receiveOperationError)
+        }
     }
 
     title: qsTr("Delete payment request?")
@@ -54,7 +86,6 @@ AlertPopup {
         objectName: root.objectName.length > 0 ? root.objectName + "Error" : ""
         parent: root.parent
         title: qsTr("Payment request not deleted")
-        message: qsTr("The payment request could not be deleted. Please try again.")
         messageObjectName: "deletePaymentRequestErrorMessage"
 
         AlertAction {

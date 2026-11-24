@@ -25,6 +25,7 @@ AbstractButton {
 
     property bool showDivider: true
     property string pendingLabel: root.label
+    property bool labelChangePending: false
 
     signal noteDraftEdited(string address, string label)
     signal noteDraftDiscarded(string address)
@@ -92,7 +93,7 @@ AbstractButton {
                 placeholderTextColor: Theme.color.placeholder
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
                 font: Theme.text.description.font
-                readOnly: !root.canEditLabel
+                readOnly: !root.canEditLabel || root.labelChangePending
                 activeFocusOnPress: root.canEditLabel
                 activeFocusOnTab: root.canEditLabel
                 selectByMouse: root.canEditLabel
@@ -117,10 +118,13 @@ AbstractButton {
                 onActiveFocusChanged: {
                     if (noteField.activeFocus) noteField.submittedText = root.label
                 }
-                onTextEdited: root.noteDraftEdited(root.address, noteField.text)
+                onTextEdited: {
+                    if (noteField.text === root.label) root.noteDraftDiscarded(root.address)
+                    else root.noteDraftEdited(root.address, noteField.text)
+                }
                 onAccepted: noteField.focus = false
                 onEditingFinished: {
-                    if (noteField.text !== root.label
+                    if (!root.labelChangePending && noteField.text !== root.label
                             && noteField.text !== noteField.submittedText) {
                         noteField.submittedText = noteField.text
                         root.editLabelRequested(root.address, noteField.text)
