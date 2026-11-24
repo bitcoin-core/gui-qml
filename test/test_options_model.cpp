@@ -177,6 +177,7 @@ private Q_SLOTS:
     void revertingToConfigValueDeletesRwOverride();
     void revertingToDefaultValueDeletesRwOverride();
     void languageCommandLineOverrideDoesNotPersist();
+    void availableLanguagesHaveAppTranslations();
     void legacyQtSettingsMigrateToCoreSettings();
     void legacyQtSettingsPreviewDoesNotRemoveQSettings();
     void legacyQtSettingsCommandLineOverrideStillMigratesPersistentValue();
@@ -3407,6 +3408,29 @@ void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     const auto mempool_write = ReadRwSetting(args, "maxmempool");
     QVERIFY(mempool_write.isNull());
+}
+
+void OptionsModelTests::availableLanguagesHaveAppTranslations()
+{
+    ArgsManager args;
+    args.SelectConfigNetwork("main");
+    MockNode node;
+    InstallPersistentSettings(node, args);
+    OptionsQmlModel model(node, args);
+
+    const QStringList languages = model.availableLanguages();
+    QVERIFY(languages.size() > 1);
+    QCOMPARE(languages.first(), QString());
+    for (const QString& tag : languages.mid(1)) {
+        QVERIFY2(QFile::exists(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(tag)), qPrintable(tag));
+    }
+    // Core ships German for the Widgets GUI only.
+    QVERIFY(QFile::exists(QStringLiteral(":/translations/bitcoin_de.qm")));
+    QVERIFY(!languages.contains(QStringLiteral("de")));
+
+    QVERIFY(QFile::exists(QStringLiteral(":/translations/translation_coverage.json")));
+    QVERIFY(model.languageCoverageNote(QString()).isEmpty());
+    QCOMPARE(model.languageCoverageNote(QStringLiteral("de")), QStringLiteral("Partially translated (0%)"));
 }
 
 void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()

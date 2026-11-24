@@ -59,9 +59,12 @@ SettingsPage {
                     objectName: "language_" + delegate.modelData
                     width: parent.width
                     title: optionsModel.languageLabel(delegate.modelData)
+                    description: optionsModel.languageCoverageNote(delegate.modelData)
                     enabled: root.languageStatus.canEdit !== false
                     showDivider: delegate.index < root.languages.length - 1
-                    Accessible.description: delegate.current ? qsTr("Selected") : ""
+                    Accessible.description: delegate.current
+                        ? [delegate.description, qsTr("Selected")].filter(text => text.length > 0).join(", ")
+                        : delegate.description
                     trailingItem: Icon {
                         visible: delegate.current
                         source: "image://images/check"

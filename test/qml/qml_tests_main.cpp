@@ -2633,6 +2633,9 @@ public:
         if (tag == "fr") return "Français — French";
         return tag;
     }
+    Q_INVOKABLE QString languageCoverageNote(const QString& tag) const {
+        return tag == "es" ? QStringLiteral("Partially translated (34%)") : QString();
+    }
 
     void syncCoreSettingsFromDocument() {
         if (m_listen != m_core_settings.listen()) {
