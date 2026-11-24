@@ -1085,6 +1085,11 @@ bool WalletQmlModel::backupWallet(const QString& path)
         setSettingsError(tr("Choose a location for the wallet backup."));
         return false;
     }
+    // A backup restored elsewhere loses the state that finishes the import.
+    if (!m_history_recovery.isEmpty()) {
+        setSettingsError(tr("This wallet's import hasn't finished, so a backup could be missing older transactions. Back it up once the import is done."));
+        return false;
+    }
 
     if (!m_wallet->backupWallet(path.toStdString())) {
         setSettingsError(tr("The wallet could not be backed up."));
@@ -1092,6 +1097,14 @@ bool WalletQmlModel::backupWallet(const QString& path)
     }
 
     return true;
+}
+
+void WalletQmlModel::setHistoryRecovery(const QString& state, int progress)
+{
+    if (m_history_recovery == state && m_history_recovery_progress == progress) return;
+    m_history_recovery = state;
+    m_history_recovery_progress = progress;
+    Q_EMIT historyRecoveryChanged();
 }
 
 void WalletQmlModel::clearSettingsError()

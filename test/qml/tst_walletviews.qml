@@ -197,6 +197,20 @@ TestCase {
         compare(backup.visible, false)
     }
 
+    function test_backup_waits_for_an_unfinished_import() {
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        page.openSettingsRoute("wallet")
+        tryVerify(function() { return page.walletSettingsHost !== null })
+        tryCompare(first.settingsStack, "parent", page.walletSettingsHost)
+        const settings = first.settingsStack.currentItem
+        testWalletModel.historyRecovery = "running"
+        findChild(settings, "walletBackupRow").clicked()
+        verify(settings.errorText.indexOf("hasn't finished") >= 0)
+        compare(findChild(first.settingsStack, "walletSettingsBackupDialog").visible, false)
+        testWalletModel.historyRecovery = ""
+    }
+
     function test_settings_stack_follows_active_wallet() {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)

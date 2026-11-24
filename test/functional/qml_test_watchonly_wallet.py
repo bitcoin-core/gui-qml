@@ -272,6 +272,64 @@ def case_pruned_blocks_are_checked_before_creating(harness):
     print("  A later date reuses the name")
 
 
+def gui_settings_file(harness):
+    """The GUI's QSettings file, <org>/<app>.ini, with the org directory named per platform."""
+    paths = [os.path.join(harness.config_home, org_dir, "BitcoinCore-App-regtest.ini") for org_dir in ("BitcoinCore", "bitcoincore.org")]
+    return next(path for path in paths if os.path.exists(path))
+
+
+def case_interrupted_import_is_finished_on_restart(harness):
+    """A crash after an import saves its descriptors, but before its rescan ends, is finished on the next start."""
+    harness.start_gui()
+    gui = harness.driver
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    # A wallet skips blocks from before its keys, so it is created at the old time too.
+    rpc_call(port, "setmocktime", [int(time.time()) - 30 * 24 * 60 * 60])
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    segwit = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "generatetoaddress", [101, segwit])
+    rpc_call(port, "setmocktime", [0])
+    # Enough new blocks that the median time, which "now" means to the import, is recent.
+    rpc_call(port, "generatetoaddress", [11, rpc_call(port, "getnewaddress", ["", "bech32m"], wallet="hot")])
+    received = rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="hot")
+    assert received > 0, received
+
+    # What a crashed import leaves: its descriptors saved, the best block at the tip, the rescan not done.
+    keys = ("desc", "active", "internal", "range", "next_index")
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+    requests = [dict({key: item[key] for key in keys if key in item}, timestamp="now") for item in listed]
+    # Where the interrupted import's rescan started: the creation time of the descriptors.
+    start = min(item["timestamp"] for item in listed)
+    rpc_call(port, "createwallet", {"wallet_name": "watch_resumed", "disable_private_keys": True, "blank": True,
+                                    "load_on_startup": True})
+    rpc_call(port, "importdescriptors", [requests], wallet="watch_resumed")
+    assert rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="watch_resumed") == 0
+    harness.stop_gui()
+    settings_path = gui_settings_file(harness)
+    # Keyed by the wallet's canonical path.
+    marker = os.path.realpath(os.path.join(harness.gui_wallets_path, "watch_resumed")).encode().hex()
+    with open(settings_path, "a", encoding="utf-8") as settings:
+        settings.write(f"\n[pendingViewOnlyImports]\n{marker}\\start={start}\n{marker}\\installed=true\n")
+
+    harness.start_gui()
+    wait_for_rpc(port, timeout=60)
+    deadline = time.time() + 60
+    while rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="watch_resumed") != received:
+        assert time.time() < deadline, "the interrupted import was not finished"
+        time.sleep(0.5)
+
+    def pending():
+        with open(settings_path, encoding="utf-8") as settings:
+            return marker in settings.read()
+    deadline = time.time() + 10
+    while pending():
+        assert time.time() < deadline, "the finished import is still pending"
+        time.sleep(0.2)
+    print("  An interrupted import is rescanned from its start on the next start")
+
+
 def case_type_selector_regular_flow(harness):
     """Test that regular wallet flow still works through type selector."""
     harness.start_gui()
@@ -380,6 +438,12 @@ def run_tests():
         "pruned_blocks",
         port_offset=150,
         case_body=case_pruned_blocks_are_checked_before_creating,
+    )
+
+    failures += run_case(
+        "interrupted_import",
+        port_offset=160,
+        case_body=case_interrupted_import_is_finished_on_restart,
     )
 
     failures += run_case(

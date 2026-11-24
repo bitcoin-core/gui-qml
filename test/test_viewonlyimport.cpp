@@ -5,7 +5,11 @@
 #include <qml/viewonlyimport.h>
 
 #include <chainparams.h>
+#include <interfaces/chain.h>
+#include <node/context.h>
 #include <script/descriptor.h>
+#include <wallet/wallet.h>
+#include <wallet/sqlite.h>
 
 #include <QtTest/QtTest>
 
@@ -57,6 +61,8 @@ private Q_SLOTS:
     void malformedJsonIsRejected();
     void rowsGroupReceiveAndChangeOfOneKey();
     void missingChangeIsExplained();
+    void nowIsTheGivenChainTime();
+    void savedDescriptorsAreCheckedPerPath();
 };
 
 void ViewOnlyImportTests::initTestCase()
@@ -359,6 +365,41 @@ void ViewOnlyImportTests::missingChangeIsExplained()
     const QString inactive_change{QStringLiteral(R"([{"desc": "%1", "timestamp": 0, "active": true}, {"desc": "%2", "timestamp": 0, "internal": true}])")
                                       .arg(Desc("wpkh", "0/*"), Desc("wpkh", "1/*"))};
     QVERIFY(DescribeViewOnlyImport(inactive_change).value("warning").toString().contains("No change descriptor is active"));
+}
+
+void ViewOnlyImportTests::savedDescriptorsAreCheckedPerPath()
+{
+    node::NodeContext node_context;
+    auto chain{interfaces::MakeChain(node_context)};
+    wallet::CWallet wallet{chain.get(), "imported", wallet::MakeInMemoryWalletDatabase()};
+    wallet.SetWalletFlag(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    const ViewOnlyImport receive{ParseViewOnlyImport(Desc("wpkh", "0/*"))};
+    const ViewOnlyImport both{ParseViewOnlyImport(Desc("wpkh", "<0;1>/*"))};
+    QVERIFY(!DescriptorsSaved(wallet, receive.requests));
+    {
+        FlatSigningProvider keys;
+        std::string error;
+        auto parsed{Parse(receive.requests.front().descriptor, keys, error, /*require_checksum=*/true)};
+        QCOMPARE(parsed.size(), size_t{1});
+        LOCK(wallet.cs_wallet);
+        wallet::WalletDescriptor saved{std::move(parsed.front()), 0, 0, 10, 0};
+        QVERIFY(wallet.AddWalletDescriptor(saved, keys, "", false));
+    }
+    QVERIFY(DescriptorsSaved(wallet, receive.requests));
+    // The change path of the multipath descriptor is still missing.
+    QVERIFY(!DescriptorsSaved(wallet, both.requests));
+}
+
+void ViewOnlyImportTests::nowIsTheGivenChainTime()
+{
+    std::vector<wallet::ImportDescriptorRequest> requests(3);
+    requests[1].timestamp = 1'500'000'000;
+    QCOMPARE(ResolveImportTimes(requests, 1'700'000'000), int64_t{1'500'000'000});
+    QCOMPARE(requests[0].timestamp, std::optional<int64_t>{1'700'000'000});
+    QCOMPARE(requests[2].timestamp, std::optional<int64_t>{1'700'000'000});
+    std::vector<wallet::ImportDescriptorRequest> now_only(1);
+    // Earlier than the wall clock, like a chain whose median time lags.
+    QCOMPARE(ResolveImportTimes(now_only, 1'000), int64_t{1'000});
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

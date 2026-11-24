@@ -629,6 +629,27 @@ TestCase {
         verify(findChild(page, "activityRetryButton").visible)
     }
 
+    function test_history_recovery_banner() {
+        const page = createPage()
+        const banner = findChild(page, "activityHistoryRecoveryBanner")
+        verify(!banner.visible)
+        testWalletModel.historyRecoveryProgress = 40
+        testWalletModel.historyRecovery = "running"
+        verify(banner.visible)
+        verify(findChild(page, "activityHistoryRecoveryMessage").text.indexOf("40% done") > 0)
+        verify(!findChild(page, "activityHistoryRecoveryBannerPrimaryButton").visible)
+        testWalletModel.historyRecovery = "failed"
+        const retry = findChild(page, "activityHistoryRecoveryBannerPrimaryButton")
+        tryVerify(function() { return retry.visible })
+        mouseClick(retry)
+        compare(walletController.retryHistoryRecoveryCalls, 1)
+        testWalletModel.historyRecovery = "incomplete"
+        verify(findChild(page, "activityHistoryRecoveryMessage").text.indexOf("Import it again") > 0)
+        testWalletModel.historyRecovery = ""
+        testWalletModel.historyRecoveryProgress = -1
+        verify(!banner.visible)
+    }
+
     function test_amount_filter_and_empty_states() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")

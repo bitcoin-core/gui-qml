@@ -573,3 +573,28 @@ QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_t
     }
     return result;
 }
+
+int64_t ResolveImportTimes(std::vector<ImportDescriptorRequest>& requests, int64_t now)
+{
+    int64_t oldest{now};
+    for (ImportDescriptorRequest& request : requests) {
+        request.timestamp = request.timestamp.value_or(now);
+        oldest = std::min(oldest, *request.timestamp);
+    }
+    return oldest;
+}
+
+bool DescriptorsSaved(const wallet::CWallet& wallet, const std::vector<ImportDescriptorRequest>& requests)
+{
+    LOCK(wallet.cs_wallet);
+    for (const ImportDescriptorRequest& request : requests) {
+        FlatSigningProvider keys;
+        std::string error;
+        auto parsed{Parse(request.descriptor, keys, error, /*require_checksum=*/false)};
+        if (parsed.empty()) return false;
+        for (auto& descriptor : parsed) {
+            if (!wallet.GetDescriptorScriptPubKeyMan(wallet::WalletDescriptor{std::move(descriptor), 0, 0, 0, 0})) return false;
+        }
+    }
+    return true;
+}

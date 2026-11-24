@@ -12,6 +12,7 @@
 #include <QVariantMap>
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 struct ViewOnlyImport {
@@ -61,5 +62,12 @@ ViewOnlyImport ParseViewOnlyImport(const QString& text, const QString& address_t
 //! type and key ({addressType, key, receive, change, active, ranged,
 //! createdTime}).
 QVariantMap DescribeViewOnlyImport(const QString& text, const QString& address_type = {});
+
+//! Gives requests without a timestamp the wallet's now (the tip's median time),
+//! as the wallet would, and returns the oldest timestamp.
+int64_t ResolveImportTimes(std::vector<wallet::ImportDescriptorRequest>& requests, int64_t now);
+
+//! Whether the wallet has every descriptor the requests import, each path of a multipath one too.
+bool DescriptorsSaved(const wallet::CWallet& wallet, const std::vector<wallet::ImportDescriptorRequest>& requests);
 
 #endif // BITCOIN_QML_VIEWONLYIMPORT_H

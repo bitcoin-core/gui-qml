@@ -20,12 +20,16 @@
 #include <wallet/types.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
+#include <util/fs.h>
 
 #include <QDir>
 #include <QFile>
+#include <QStandardPaths>
 #include <QFileInfo>
+#include <QByteArray>
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <atomic>
 #include <mutex>
@@ -342,6 +346,45 @@ void ConfigureExpectedControllerInitialization(MockNode& node, FakeWalletLoader&
     node.ExpectExactly(node.calls.listExternalSigners, 1);
 }
 
+// Where the controller keeps an interrupted import, by the wallet's canonical path.
+QString PendingImportKey(const QString& wallet_name, const std::string& wallet_dir = {})
+{
+    std::error_code error;
+    const fs::path path{fs::weakly_canonical(fs::PathFromString(wallet_dir) / fs::PathFromString(wallet_name.toStdString()), error)};
+    return QStringLiteral("pendingViewOnlyImports/%1").arg(QString::fromLatin1(QByteArray::fromStdString(fs::PathToString(path)).toHex()));
+}
+
+QVariant PendingImportTime(const QString& wallet_name, const std::string& wallet_dir = {})
+{
+    return QSettings{}.value(PendingImportKey(wallet_name, wallet_dir) + "/start");
+}
+
+bool PendingImportInstalled(const QString& wallet_name)
+{
+    return QSettings{}.value(PendingImportKey(wallet_name) + "/installed").toBool();
+}
+
+auto SeedPendingImport(const QString& wallet_name, int64_t start, bool installed = true, const std::string& wallet_dir = {})
+{
+    QSettings settings;
+    settings.setValue(PendingImportKey(wallet_name, wallet_dir) + "/start", qlonglong(start));
+    settings.setValue(PendingImportKey(wallet_name, wallet_dir) + "/installed", installed);
+    return qScopeGuard([key = PendingImportKey(wallet_name, wallet_dir)] { QSettings{}.remove(key); });
+}
+
+std::vector<std::unique_ptr<interfaces::Wallet>> OneWallet(const std::string& name, FakeWallet::State& state)
+{
+    std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
+    wallets.emplace_back(std::make_unique<FakeWallet>(name, &state));
+    return wallets;
+}
+
+QString HistoryRecovery(WalletQmlController& controller)
+{
+    const QList<QObject*> wallets{controller.openWallets()};
+    return wallets.isEmpty() ? QString{} : wallets.front()->property("historyRecovery").toString();
+}
+
 const QString VALID_XPUB{
     "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"};
 } // namespace
@@ -363,8 +406,15 @@ private Q_SLOTS:
     void createWatchOnlyNeedsBirthTimeForUndatedInput();
     void createWatchOnlyImportsFromBirthTime();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
-    void createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport();
+    void createWatchOnlyKeepsWalletWhenShutdownInterruptsImport();
     void createWatchOnlyDeletesTheFilesOfAFailedImport();
+    void createWatchOnlyStopsWhenItCantSaveTheMarker();
+    void interruptedImportResumesWhenTheWalletLoads();
+    void interruptedImportStaysPendingWhenItsWalletCloses();
+    void interruptedImportContinuesFromWhereItStopped();
+    void interruptedImportFailureCanBeRetried();
+    void interruptedInstallIsReportedNotRescanned();
+    void interruptedImportBelongsToItsWalletDirectory();
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
@@ -711,10 +761,21 @@ void WalletQmlControllerTests::createWatchOnlyImportsFromBirthTime()
             std::make_unique<FakeWallet>(name, &wallet_state)};
     };
 
+    QVariant pending_during_import;
+    bool installed_during_import{true};
+    wallet_state.on_import = [&] {
+        pending_during_import = PendingImportTime("watch_wallet");
+        installed_during_import = PendingImportInstalled("watch_wallet");
+    };
+
     QSignalSpy create_spy(&controller, &WalletQmlController::walletCreateSucceeded);
     controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 1'700'000'000, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(create_spy.count(), 1, 5000);
+    QCOMPARE(pending_during_import.toLongLong(), 1'700'000'000);
+    // No rescan has started.
+    QVERIFY(!installed_during_import);
+    QVERIFY(!PendingImportTime("watch_wallet").isValid());
     QVERIFY(create_flags & wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
     std::lock_guard lock(wallet_state.mutex);
     QCOMPARE(wallet_state.imported.size(), size_t{1});
@@ -766,7 +827,7 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
     QVERIFY(!controller.walletLoadInProgress());
 }
 
-void WalletQmlControllerTests::createWatchOnlyDiscardsWalletWhenShutdownInterruptsImport()
+void WalletQmlControllerTests::createWatchOnlyKeepsWalletWhenShutdownInterruptsImport()
 {
     FakeWallet::State wallet_state;
     wallet_state.import_succeeds = true;
@@ -795,8 +856,12 @@ void WalletQmlControllerTests::createWatchOnlyDiscardsWalletWhenShutdownInterrup
     controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
-    QVERIFY(controller.walletLoadError().contains("interrupted"));
-    QCOMPARE(wallet_state.remove_calls.load(), 1);
+    const auto cleanup{qScopeGuard([] { QSettings{}.remove(PendingImportKey("watch_wallet")); })};
+    // Recovery finishes it on the next start.
+    QVERIFY(controller.walletLoadError().contains("next time"));
+    QCOMPARE(wallet_state.remove_calls.load(), 0);
+    QCOMPARE(PendingImportTime("watch_wallet").toLongLong(), 0);
+    QVERIFY(PendingImportInstalled("watch_wallet"));
     QCOMPARE(create_spy.count(), 0);
     QVERIFY(!controller.isWalletLoaded());
 }
@@ -843,12 +908,225 @@ void WalletQmlControllerTests::createWatchOnlyDeletesTheFilesOfAFailedImport()
     QCOMPARE(wallet_state.remove_calls.load(), 1);
     QVERIFY(!QFileInfo::exists(path));
     QVERIFY(wallet::GetWallets(context).empty());
+    QVERIFY(!PendingImportTime("watch_wallet").isValid());
 
     // The name and its directory are free again.
     wallet_state.import_succeeds = true;
     controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
     QTRY_COMPARE_WITH_TIMEOUT(create_spy.count(), 1, 5000);
     QVERIFY(QFileInfo::exists(path));
+}
+
+void WalletQmlControllerTests::createWatchOnlyStopsWhenItCantSaveTheMarker()
+{
+    QTemporaryDir settings_dir;
+    QVERIFY(settings_dir.isValid());
+    QVERIFY(QFile::setPermissions(settings_dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settings_dir.path());
+    const auto restore{qScopeGuard([&] {
+        QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope,
+                           QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
+        QFile::setPermissions(settings_dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    })};
+    {
+        QSettings probe;
+        probe.setValue("probe", 1);
+        probe.sync();
+        if (probe.status() == QSettings::NoError) QSKIP("The read-only settings directory is still writable.");
+    }
+
+    FakeWallet::State wallet_state;
+    wallet_state.import_succeeds = true;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+    loader.create_wallet_fn = [&](const std::string& name, const SecureString&, uint64_t, std::vector<bilingual_str>&) {
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{std::make_unique<FakeWallet>(name, &wallet_state)};
+    };
+    std::atomic_bool imported{false};
+    wallet_state.on_import = [&] { imported = true; };
+
+    QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
+    controller.createWatchOnlyWallet("watch_wallet", VALID_XPUB, 0, "bech32");
+    QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
+    QVERIFY(controller.walletLoadError().contains("couldn't save its settings"));
+    QVERIFY(!imported);
+    QCOMPARE(wallet_state.remove_calls.load(), 1);
+}
+
+void WalletQmlControllerTests::interruptedImportResumesWhenTheWalletLoads()
+{
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000)};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] {
+        std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
+        wallets.emplace_back(std::make_unique<FakeWallet>("pending_wallet", &wallet_state));
+        wallets.emplace_back(std::make_unique<FakeWallet>("other_wallet", &wallet_state));
+        return wallets;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    std::mutex mutex;
+    std::vector<std::pair<std::string, int64_t>> resumed;
+    QSemaphore finish;
+    controller.setResumeImportFnForTesting([&](const std::string& name, int64_t time, RescanControl&, const std::function<void(int)>& progress) {
+        {
+            std::lock_guard lock{mutex};
+            resumed.emplace_back(name, time);
+        }
+        progress(30);
+        finish.tryAcquire(1, 5000);
+        return ImportRescanResult{ImportRescanResult::Status::Done};
+    });
+    controller.initialize();
+
+    QCOMPARE(HistoryRecovery(controller), QString{"running"});
+    QTRY_COMPARE_WITH_TIMEOUT(controller.openWallets().front()->property("historyRecoveryProgress").toInt(), 30, 5000);
+    finish.release();
+    QTRY_VERIFY_WITH_TIMEOUT(!PendingImportTime("pending_wallet").isValid(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(HistoryRecovery(controller), QString{}, 5000);
+    std::lock_guard lock{mutex};
+    QCOMPARE(resumed.size(), size_t{1});
+    QCOMPARE(resumed.front().first, std::string{"pending_wallet"});
+    QCOMPARE(resumed.front().second, int64_t{1'600'000'000});
+}
+
+void WalletQmlControllerTests::interruptedImportStaysPendingWhenItsWalletCloses()
+{
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000)};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] { return OneWallet("pending_wallet", wallet_state); };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    QSemaphore started;
+    std::atomic_bool aborted{false};
+    controller.setResumeImportFnForTesting([&](const std::string&, int64_t, RescanControl& control, const std::function<void(int)>&) {
+        if (!control.attach([&] { aborted = true; })) return ImportRescanResult{};
+        started.release();
+        // Like a rescan, it runs until it is aborted.
+        while (!aborted) QThread::msleep(5);
+        control.detach();
+        return ImportRescanResult{};
+    });
+    controller.initialize();
+    QVERIFY(started.tryAcquire(1, 5000));
+
+    controller.closeWallet("pending_wallet");
+    QTRY_COMPARE_WITH_TIMEOUT(wallet_state.remove_calls.load(), 1, 5000);
+    QVERIFY(aborted);
+    QCOMPARE(PendingImportTime("pending_wallet").toLongLong(), 1'600'000'000);
+}
+
+void WalletQmlControllerTests::interruptedImportContinuesFromWhereItStopped()
+{
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000)};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] { return OneWallet("pending_wallet", wallet_state); };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    std::atomic<int> calls{0};
+    controller.setResumeImportFnForTesting([&](const std::string&, int64_t time, RescanControl&, const std::function<void(int)>&) {
+        // A stop before the start, as block times allow, keeps the start.
+        return ImportRescanResult{ImportRescanResult::Status::Stopped, ++calls == 1 ? 1'650'000'000 : time - 100};
+    });
+    controller.initialize();
+
+    QTRY_COMPARE_WITH_TIMEOUT(PendingImportTime("pending_wallet").toLongLong(), 1'650'000'000, 5000);
+    QVERIFY(PendingImportInstalled("pending_wallet"));
+}
+
+void WalletQmlControllerTests::interruptedImportFailureCanBeRetried()
+{
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000)};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] { return OneWallet("pending_wallet", wallet_state); };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    std::atomic<int> calls{0};
+    controller.setResumeImportFnForTesting([&](const std::string&, int64_t, RescanControl& control, const std::function<void(int)>&) {
+        if (++calls == 1) {
+            control.attach([] {});
+            // Like a failed database write during the rescan.
+            throw std::runtime_error{"write failed"};
+        }
+        return ImportRescanResult{ImportRescanResult::Status::Done};
+    });
+    controller.initialize();
+
+    QTRY_COMPARE_WITH_TIMEOUT(HistoryRecovery(controller), QString{"failed"}, 5000);
+    QCOMPARE(PendingImportTime("pending_wallet").toLongLong(), 1'600'000'000);
+    controller.retryHistoryRecovery(qobject_cast<WalletQmlModel*>(controller.openWallets().front()));
+    QTRY_COMPARE_WITH_TIMEOUT(HistoryRecovery(controller), QString{}, 5000);
+    QCOMPARE(calls.load(), 2);
+    QVERIFY(!PendingImportTime("pending_wallet").isValid());
+}
+
+void WalletQmlControllerTests::interruptedInstallIsReportedNotRescanned()
+{
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000, /*installed=*/false)};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] { return OneWallet("pending_wallet", wallet_state); };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    std::atomic<int> calls{0};
+    controller.setResumeImportFnForTesting([&](const std::string&, int64_t, RescanControl&, const std::function<void(int)>&) {
+        ++calls;
+        return ImportRescanResult{ImportRescanResult::Status::Done};
+    });
+    controller.initialize();
+
+    QCOMPARE(HistoryRecovery(controller), QString{"incomplete"});
+    QCOMPARE(calls.load(), 0);
+    QVERIFY(PendingImportTime("pending_wallet").isValid());
+}
+
+void WalletQmlControllerTests::interruptedImportBelongsToItsWalletDirectory()
+{
+    QTemporaryDir other_dir;
+    QVERIFY(other_dir.isValid());
+    const auto cleanup{SeedPendingImport("pending_wallet", 1'600'000'000, /*installed=*/true, other_dir.path().toStdString())};
+    FakeWallet::State wallet_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&] { return OneWallet("pending_wallet", wallet_state); };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    std::atomic<int> calls{0};
+    controller.setResumeImportFnForTesting([&](const std::string&, int64_t, RescanControl&, const std::function<void(int)>&) {
+        ++calls;
+        return ImportRescanResult{ImportRescanResult::Status::Done};
+    });
+    controller.initialize();
+
+    QCOMPARE(HistoryRecovery(controller), QString{});
+    QCOMPARE(calls.load(), 0);
+    QVERIFY(PendingImportTime("pending_wallet", other_dir.path().toStdString()).isValid());
 }
 
 void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()

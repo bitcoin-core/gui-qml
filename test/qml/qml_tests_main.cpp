@@ -1165,6 +1165,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool available MEMBER m_available NOTIFY availableChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
+    Q_PROPERTY(QString historyRecovery MEMBER m_history_recovery NOTIFY historyRecoveryChanged)
+    Q_PROPERTY(int historyRecoveryProgress MEMBER m_history_recovery_progress NOTIFY historyRecoveryChanged)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
@@ -1677,7 +1679,11 @@ public:
         return true;
     }
 
+    QString m_history_recovery;
+    int m_history_recovery_progress{-1};
+
 Q_SIGNALS:
+    void historyRecoveryChanged();
     void availableChanged();
     void nameChanged();
     void balanceChanged();
@@ -1834,8 +1840,11 @@ class MockWalletController : public QObject
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
     Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
+    Q_PROPERTY(int retryHistoryRecoveryCalls MEMBER m_retry_history_recovery_calls)
 
 public:
+    int m_retry_history_recovery_calls{0};
+    Q_INVOKABLE void retryHistoryRecovery(QObject*) { ++m_retry_history_recovery_calls; }
     bool m_initialized{true};
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
@@ -2021,6 +2030,7 @@ public:
         m_external_signer_name.clear();
         m_external_signer_error.clear();
         m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");
+        m_retry_history_recovery_calls = 0;
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();

@@ -901,6 +901,12 @@ void WalletQmlModelTests::backupWalletForwardsPath()
     QCOMPARE(wallet->backup_calls, 1);
     QCOMPARE(wallet->last_backup_path, std::string("/tmp/fake-wallet.bak"));
     QVERIFY(model->settingsError().isEmpty());
+
+    // A backup would not carry the state that finishes an interrupted import.
+    model->setHistoryRecovery(QStringLiteral("failed"));
+    QVERIFY(!model->backupWallet("/tmp/fake-wallet.bak"));
+    QCOMPARE(wallet->backup_calls, 1);
+    QVERIFY(model->settingsError().contains("hasn't finished"));
 }
 
 void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()

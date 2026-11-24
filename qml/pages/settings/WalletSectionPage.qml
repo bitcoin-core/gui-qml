@@ -56,6 +56,11 @@ SettingsPage {
         if (!root.wallet) return
         root.errorText = ""
         root.wallet.clearSettingsError()
+        // A backup restored elsewhere loses the state that finishes the import.
+        if (root.wallet.historyRecovery) {
+            root.errorText = qsTr("This wallet's import hasn't finished, so a backup could be missing older transactions. Back it up once the import is done.")
+            return
+        }
         if (backupAutomationPath.text.length > 0) {
             const automatedPath = root.resolvedBackupPath(backupAutomationPath.text)
             backupAutomationPath.text = ""
