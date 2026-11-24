@@ -3902,34 +3902,40 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
 <context>
     <name>OptionsQmlModel</name>
     <message>
-        <location filename="../models/options_model.cpp" line="307"/>
+        <location filename="../models/options_model.cpp" line="310"/>
         <source>Unable to load or save settings.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="553"/>
+        <location filename="../models/options_model.cpp" line="556"/>
         <source>The configured signer path does not exist.</source>
         <translation type="unfinished">La ruta configurada del firmante no existe.</translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="554"/>
+        <location filename="../models/options_model.cpp" line="557"/>
         <source>The configured signer path is not a file.</source>
         <translation type="unfinished">La ruta configurada del firmante no es un archivo.</translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="555"/>
+        <location filename="../models/options_model.cpp" line="558"/>
         <source>The configured signer path is not executable.</source>
         <translation type="unfinished">La ruta configurada del firmante no es ejecutable.</translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="627"/>
+        <location filename="../models/options_model.cpp" line="630"/>
         <source>Unable to validate the signer path.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="687"/>
-        <location filename="../models/options_model.cpp" line="716"/>
+        <location filename="../models/options_model.cpp" line="690"/>
+        <location filename="../models/options_model.cpp" line="719"/>
         <source>Unable to select the data directory.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../models/options_model.cpp" line="769"/>
+        <source>Partially translated (%1%)</source>
+        <extracomment>Shown under a language in the language picker. %1 is the share of translated text.</extracomment>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -5283,12 +5289,12 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../models/options_model.cpp" line="570"/>
+        <location filename="../models/options_model.cpp" line="573"/>
         <source>Unable to save application settings.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="782"/>
+        <location filename="../models/options_model.cpp" line="800"/>
         <source>System default</source>
         <translation type="unfinished">Predeterminado del sistema</translation>
     </message>
@@ -6987,12 +6993,12 @@ Results without keys can be queried with an integer in brackets.
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../pages/settings/SettingsLanguage.qml" line="64"/>
+        <location filename="../pages/settings/SettingsLanguage.qml" line="66"/>
         <source>Selected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../pages/settings/SettingsLanguage.qml" line="85"/>
+        <location filename="../pages/settings/SettingsLanguage.qml" line="88"/>
         <source>No languages match your search.</source>
         <translation type="unfinished"></translation>
     </message>
