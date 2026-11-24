@@ -5,7 +5,7 @@
 #define BITCOIN_QML_DESKTOPINTENTTRANSPORT_H
 
 #include <qml/atomicsharedptr.h>
-#include <qml/desktopintentowner.h>
+#include <qml/desktopintentservice.h>
 
 #include <chrono>
 #include <functional>
@@ -46,9 +46,9 @@ struct Limits {
  */
 class Service final {
 public:
-    static std::shared_ptr<Service> Create(std::shared_ptr<Owner> owner, Limits limits = {});
+    static std::shared_ptr<Service> Create(std::shared_ptr<desktopintent::Service> owner, Limits limits = {});
     ~Service();
-    // One existing-instance-only attempt. Missing leaves the original Owner
+    // One existing-instance-only attempt. Missing leaves the original desktopintent::Service
     // and inputs untouched and permits start() at the later final profile.
     // Other outcomes are terminal for this Service; Unknown cannot fall back.
     execution::SubmitResult probeExisting(QString profile_directory, QString network, const std::vector<Input>& inputs,

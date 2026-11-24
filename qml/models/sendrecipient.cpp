@@ -4,7 +4,7 @@
 
 #include <qml/models/sendrecipient.h>
 #include <qml/guipresentation.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/retainedvalue.h>
 #include <key_io.h>
 #include <policy/feerate.h>
@@ -31,7 +31,7 @@ struct SendRecipient::Retired {
     std::shared_ptr<const Snapshot> validated;
     QString address_error, amount_error, label, message, request_label, request_address;
 };
-SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
+SendRecipient::SendRecipient(WalletModel* wallet, QObject* parent)
     : QObject(parent), m_wallet(wallet), m_identity(++NEXT_RECIPIENT), m_input(std::make_shared<Input>()),
       m_address(new BitcoinAddress(this)), m_amount(new BitcoinAmount(this))
 {
@@ -57,9 +57,9 @@ SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
     connect(m_amount, &BitcoinAmount::amountChanged, this, &SendRecipient::requestValidation);
     connect(m_amount, &BitcoinAmount::inputChanged, this, &SendRecipient::requestValidation);
     if (m_wallet) {
-        connect(m_wallet, &WalletQmlModel::balanceChanged, this, &SendRecipient::requestValidation);
-        connect(m_wallet, &WalletQmlModel::balanceObservationChanged, this, &SendRecipient::requestValidation);
-        connect(m_wallet, &WalletQmlModel::sendFactsChanged, this, &SendRecipient::requestValidation);
+        connect(m_wallet, &WalletModel::balanceChanged, this, &SendRecipient::requestValidation);
+        connect(m_wallet, &WalletModel::balanceObservationChanged, this, &SendRecipient::requestValidation);
+        connect(m_wallet, &WalletModel::sendFactsChanged, this, &SendRecipient::requestValidation);
     }
 }
 SendRecipient::~SendRecipient() { close(); }

@@ -6,10 +6,10 @@
 
 #include <utility>
 
-WalletSelectionModel::WalletSelectionModel(WalletQmlModel* empty, Contains contains, QObject* parent)
+WalletSelectionModel::WalletSelectionModel(WalletModel* empty, Contains contains, QObject* parent)
     : QObject(parent), m_empty(empty), m_contains(std::move(contains)) {}
 
-bool WalletSelectionModel::available(WalletQmlModel* wallet) const
+bool WalletSelectionModel::available(WalletModel* wallet) const
 {
     return wallet && wallet != m_empty && wallet->available() && m_contains && m_contains(wallet);
 }
@@ -27,7 +27,7 @@ void WalletSelectionModel::observeSelected()
     disconnect(m_destroyed_connection);
     if (!m_selected) return;
     auto* wallet = m_selected.data();
-    m_available_connection = connect(wallet, &WalletQmlModel::availableChanged, this, [this, wallet] {
+    m_available_connection = connect(wallet, &WalletModel::availableChanged, this, [this, wallet] {
         if (m_selected == wallet && !available(wallet)) clear();
     });
     m_destroyed_connection = connect(wallet, &QObject::destroyed, this, [this] {
@@ -38,7 +38,7 @@ void WalletSelectionModel::observeSelected()
     });
 }
 
-bool WalletSelectionModel::select(WalletQmlModel* wallet)
+bool WalletSelectionModel::select(WalletModel* wallet)
 {
     if (m_closed || !available(wallet)) {
         const auto error = m_closed ? tr("Wallet selection is stopping.") : tr("This wallet opening is no longer available.");
@@ -92,14 +92,14 @@ void WalletSelectionModel::finishSelection(quint64 expected_revision)
     Q_EMIT pendingChanged();
 }
 
-void WalletSelectionModel::prepareForget(WalletQmlModel* wallet)
+void WalletSelectionModel::prepareForget(WalletModel* wallet)
 {
     if (m_selected != wallet) return;
     disconnect(m_available_connection);
     disconnect(m_destroyed_connection);
 }
 
-void WalletSelectionModel::forget(WalletQmlModel* wallet, WalletQmlModel* successor)
+void WalletSelectionModel::forget(WalletModel* wallet, WalletModel* successor)
 {
     if (m_selected != wallet) return;
     if (!m_closed && available(successor)) select(successor);

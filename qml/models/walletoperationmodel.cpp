@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/walletoperationmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <QScopeGuard>
 #include <QQmlEngine>
 #include <utility>
@@ -12,9 +12,9 @@
 namespace {
 // A read-only terminal projection over the legacy Open writer's exact receipt.
 // It does not admit a second command, retain a backend handle, or call Core.
-class OpenNoticeOwner final : public walletcreation::OperationOwner {
+class OpenNoticeService final : public walletcreation::OperationService {
 public:
-    OpenNoticeOwner(walletcreation::Frame value, QString text, std::shared_ptr<const void> lifetime) : frame(std::move(value)), warnings(std::move(text)), owner(std::move(lifetime)) {}
+    OpenNoticeService(walletcreation::Frame value, QString text, std::shared_ptr<const void> lifetime) : frame(std::move(value)), warnings(std::move(text)), owner(std::move(lifetime)) {}
     void start() override {} void cancel() override {} void detach() override {}
     walletcreation::Frame snapshot() const override { return frame; }
     QString errorText() const override { return {}; }
@@ -30,24 +30,24 @@ private:
 };
 } // namespace
 WalletOperationModel::WalletOperationModel(Services services) : QObject(nullptr), m_services(std::move(services)), m_kind(Open) {}
-WalletOperationModel* WalletOperationModel::OpenNotice(Services services, quint64 id, QString target, QString warnings, std::shared_ptr<const void> lifetime, WalletQmlModel* original)
+WalletOperationModel* WalletOperationModel::OpenNotice(Services services, quint64 id, QString target, QString warnings, std::shared_ptr<const void> lifetime, WalletModel* original)
 {
     const QPointer<QObject> parent = services.projection_parent;
-    const QPointer<WalletQmlModel> exact{original};
+    const QPointer<WalletModel> exact{original};
     auto* model = new WalletOperationModel(std::move(services));
     model->m_request.id = id; model->m_frame.target_id = std::move(target); model->m_frame.phase = walletcreation::Phase::Succeeded;
     model->m_frame.outcome_known = true; model->m_frame.result.result_id = QString::number(id) + QStringLiteral(":opened");
     model->m_frame.result.wallet_id = model->m_frame.target_id; model->m_frame.result.effect = WalletOperationResult::WalletOpened;
     model->m_frame.result.warnings = {warnings.left(1024)}; model->m_frame.result.warnings_truncated = warnings.size() > 1024;
-    model->m_owner = model->m_services.native.retain<OpenNoticeOwner>(
-        [frame = model->m_frame, warnings = std::move(warnings), lifetime = std::move(lifetime)]() mutable { return std::make_unique<OpenNoticeOwner>(std::move(frame), std::move(warnings), std::move(lifetime)); });
+    model->m_owner = model->m_services.native.retain<OpenNoticeService>(
+        [frame = model->m_frame, warnings = std::move(warnings), lifetime = std::move(lifetime)]() mutable { return std::make_unique<OpenNoticeService>(std::move(frame), std::move(warnings), std::move(lifetime)); });
     if (model->m_owner) model->m_warnings.bind(model->m_owner);
     else {
         model->m_frame.error = {QStringLiteral("WarningDetailsUnavailable"), tr("Full warning details could not be shown. Read debug.log before closing the wallet."), {}, {}};
         model->m_frame.error_title = tr("Wallet opened with warnings"); model->m_frame.error_description = model->m_frame.error.message;
     }
     model->m_result_wallet = exact; model->m_finished = true;
-    if (exact) { model->m_available = connect(exact, &WalletQmlModel::availableChanged, model, &WalletOperationModel::changed); model->m_destroyed = connect(exact, &QObject::destroyed, model, &WalletOperationModel::changed); }
+    if (exact) { model->m_available = connect(exact, &WalletModel::availableChanged, model, &WalletOperationModel::changed); model->m_destroyed = connect(exact, &QObject::destroyed, model, &WalletOperationModel::changed); }
     if (parent) model->setParent(parent);
     QQmlEngine::setObjectOwnership(model, QQmlEngine::CppOwnership);
     return model;
@@ -77,7 +77,7 @@ QVariant WalletOperationText::data(const QModelIndex& index, int role) const
     return text().mid(index.row() * 1024, 1024);
 }
 QHash<int, QByteArray> WalletOperationText::roleNames() const { return {{Qt::UserRole + 1, "content"}}; }
-void WalletOperationText::bind(std::shared_ptr<walletcreation::OperationOwner> owner) { m_owner = std::move(owner); }
+void WalletOperationText::bind(std::shared_ptr<walletcreation::OperationService> owner) { m_owner = std::move(owner); }
 void WalletOperationText::refresh() { const QPointer<WalletOperationText> guard{this}; beginResetModel(); if (guard) endResetModel(); }
 WalletOperationModel* WalletOperationModel::Make(Services services, walletcreation::Request request)
 {
@@ -113,7 +113,7 @@ WalletOperationModel::WalletOperationModel(Services services, walletrestoration:
     if (needs_admission) m_ticket = m_services.publisher ? m_services.publisher->reserveCreation(operationId()) : nullptr;
     if ((needs_admission && !m_ticket) || (needs_parent && !parent)) { rejected({QStringLiteral("PublicationUnavailable"), tr("The wallet action could not start. Nothing was changed."), {}, {}}); return; }
     const QPointer<WalletOperationModel> guard{this};
-    m_owner = walletrestoration::Owner::Make(m_services.native, std::move(request), [guard, post = m_services.native.gui_post] { post([guard] { if (guard) guard->publish(); }); },
+    m_owner = walletrestoration::Service::Make(m_services.native, std::move(request), [guard, post = m_services.native.gui_post] { post([guard] { if (guard) guard->publish(); }); },
         m_ticket ? m_ticket->backend_release : nullptr, m_ticket ? m_ticket->observation : nullptr);
     if (!m_owner) { rejected({QStringLiteral("TransportRejected"), tr("The wallet action could not start. Nothing was changed."), {}, {}}); return; }
     if (parent) { setParent(parent); QQmlEngine::setObjectOwnership(this, QQmlEngine::CppOwnership); }
@@ -162,7 +162,7 @@ WalletOperationModel::WalletOperationModel(Services services, walletcreation::Re
         rejected_projection(); return;
     }
     const QPointer<WalletOperationModel> guard{this};
-    m_owner = walletcreation::Owner::Make(m_services.native, std::move(native_request),
+    m_owner = walletcreation::Service::Make(m_services.native, std::move(native_request),
         [guard, post = m_services.native.gui_post] { post([guard] { if (guard) guard->publish(); }); }, m_ticket->backend_release, m_ticket->observation);
     if (!m_owner) {
         m_accepted = false; m_services.native.admission->presentationConsumed(m_request.id);
@@ -200,11 +200,11 @@ void WalletOperationModel::close()
     m_errors.bind({}); m_warnings.bind({}); m_owner.reset();
     m_ticket.reset(); m_services.publisher.reset(); m_services.native.open_names.reset();
 }
-WalletQmlModel* WalletOperationModel::resultWallet() const { return m_result_wallet; }
-QQmlListProperty<WalletQmlModel> WalletOperationModel::resultWallets()
+WalletModel* WalletOperationModel::resultWallet() const { return m_result_wallet; }
+QQmlListProperty<WalletModel> WalletOperationModel::resultWallets()
 {
-    return {this, this, nullptr, [](QQmlListProperty<WalletQmlModel>* value) -> qsizetype { const auto* model = static_cast<WalletOperationModel*>(value->data); return qsizetype(model->m_result_wallets.size()) + (model->m_result_wallet ? 1 : 0); },
-        [](QQmlListProperty<WalletQmlModel>* value, qsizetype index) -> WalletQmlModel* { const auto* model = static_cast<WalletOperationModel*>(value->data); if (model->m_result_wallet) { if (!index) return model->m_result_wallet; --index; } return index >= 0 && size_t(index) < model->m_result_wallets.size() ? model->m_result_wallets[size_t(index)].data() : nullptr; }, nullptr};
+    return {this, this, nullptr, [](QQmlListProperty<WalletModel>* value) -> qsizetype { const auto* model = static_cast<WalletOperationModel*>(value->data); return qsizetype(model->m_result_wallets.size()) + (model->m_result_wallet ? 1 : 0); },
+        [](QQmlListProperty<WalletModel>* value, qsizetype index) -> WalletModel* { const auto* model = static_cast<WalletOperationModel*>(value->data); if (model->m_result_wallet) { if (!index) return model->m_result_wallet; --index; } return index >= 0 && size_t(index) < model->m_result_wallets.size() ? model->m_result_wallets[size_t(index)].data() : nullptr; }, nullptr};
 }
 bool WalletOperationModel::canOpenResult() const
 {
@@ -238,13 +238,13 @@ void WalletOperationModel::publish()
                 if (m_result_wallet && published.wallet && m_result_wallet != published.wallet) published = {{}, walletpublication::Availability::Unavailable, tr("Finish with this wallet result before opening another wallet.")};
                 else if (!m_result_wallet && published.wallet) {
                     m_result_wallet = published.wallet;
-                    m_available = connect(published.wallet, &WalletQmlModel::availableChanged, this, &WalletOperationModel::changed);
+                    m_available = connect(published.wallet, &WalletModel::availableChanged, this, &WalletOperationModel::changed);
                     m_destroyed = connect(published.wallet, &QObject::destroyed, this, &WalletOperationModel::changed);
                 }
             } else if (published.wallet) {
                 if (std::find(m_result_wallets.begin(), m_result_wallets.end(), published.wallet) == m_result_wallets.end()) {
                     m_result_wallets.push_back(published.wallet);
-                    connect(published.wallet, &WalletQmlModel::availableChanged, this, &WalletOperationModel::changed);
+                    connect(published.wallet, &WalletModel::availableChanged, this, &WalletOperationModel::changed);
                     connect(published.wallet, &QObject::destroyed, this, &WalletOperationModel::changed);
                 }
             }

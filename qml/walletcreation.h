@@ -199,9 +199,9 @@ struct Services {
 };
 // Common value/effect contract. Creation and restore/migration remain separate
 // Native owners; a GUI projection cannot execute or inspect their Core work.
-class OperationOwner {
+class OperationService {
 public:
-    virtual ~OperationOwner() = default;
+    virtual ~OperationService() = default;
     virtual void start() = 0;
     virtual void cancel() = 0;
     virtual void detach() = 0;
@@ -225,11 +225,11 @@ public:
     virtual void answer(QString, QString, std::shared_ptr<walletpublication::Release>, std::shared_ptr<walletpublication::NativeObservation>, secretinput::Captured) {}
 };
 // Domain/Core owner; no GUI object, registry, publisher or selection dependency.
-class Owner final : public OperationOwner, public std::enable_shared_from_this<Owner> {
+class Service final : public OperationService, public std::enable_shared_from_this<Service> {
 public:
     using Notify = std::function<void()>;
-    static std::shared_ptr<Owner> Make(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation);
-    ~Owner() override;
+    static std::shared_ptr<Service> Make(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation);
+    ~Service() override;
     void start() override;
     void preparePublication(std::shared_ptr<walletpublication::Release> release);
     void publicationConsumed(walletpublication::Availability availability, QString error) override;
@@ -245,7 +245,7 @@ public:
     bool encrypted() const { return m_request.kind == Kind::Software && m_request.encrypt; }
     Kind kind() const { return m_request.kind; }
 private:
-    Owner(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation);
+    Service(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation);
     void factsReady();
     void created();
     void setupReady();
@@ -260,7 +260,7 @@ private:
     const std::shared_ptr<walletpublication::NativeObservation> m_observation;
     mutable std::mutex m_mutex;
     Frame m_frame;
-    std::shared_ptr<Owner> m_keep_alive;
+    std::shared_ptr<Service> m_keep_alive;
     std::shared_ptr<execution::OwnedCommand<Facts>> m_facts;
     std::shared_ptr<execution::OwnedCommand<NativeResult>> m_create;
     std::shared_ptr<execution::OwnedCommand<QString>> m_setup;

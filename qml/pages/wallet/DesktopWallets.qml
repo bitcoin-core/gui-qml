@@ -54,7 +54,7 @@ WalletShellPage {
     onNetworkTrafficRequested: root.openNetworkTraffic()
     onPeersRequested: root.openPeers()
     onSettingsRequested: function(section) { root.openSettings(section) }
-    onPresentWalletRequested: function(wallet) { root.openWallet(wallet as WalletQmlModel) }
+    onPresentWalletRequested: function(wallet) { root.openWallet(wallet as WalletModel) }
     onContinueImportRequested: function(mailbox) { root.continueDesktopImport(mailbox) }
 
     function viewForWallet(wallet) {
@@ -549,7 +549,7 @@ WalletShellPage {
             readonly property alias confirmation: closeConfirmationPopup
             AlertPopup {
                 id: closeConfirmationPopup
-                readonly property WalletQmlModel targetWallet: questionContext.modelData.wallet
+                readonly property WalletModel targetWallet: questionContext.modelData.wallet
                 readonly property WalletCloseQuestion question: questionContext.modelData.question
                 readonly property string walletName: targetWallet ? targetWallet.displayName : ""
                 objectName: "walletCloseConfirmationPopup"

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/models/requestdeletecontroller.h>
+#include <qml/models/paymentrequestdeletecontroller.h>
 #include <test/mocks/receiveeditortest.h>
 #include <test/qt_test_registry.h>
 #include <QtTest/QtTest>
@@ -14,7 +14,7 @@ struct Fixture {
     Fixture() { ports.drain(); }
     ~Fixture() { receive.reset(); ports.drain(); QVERIFY(ports.quiescent()); }
     void ready() { QVERIFY(receive->ensureAddress()); ports.drain(); QVERIFY(receive->reservation()->available()); QVERIFY(receive->editor()->canSave()); }
-    std::unique_ptr<RequestOpenOperation> open(const QString& id) { return std::unique_ptr<RequestOpenOperation>{receive->openRequest(id, nullptr)}; }
+    std::unique_ptr<PaymentRequestOpenOperation> open(const QString& id) { return std::unique_ptr<PaymentRequestOpenOperation>{receive->openRequest(id, nullptr)}; }
     void discardClose()
     {
         ports.drain(); QVERIFY(receive->editor()->closePrompt());
@@ -67,7 +67,7 @@ private Q_SLOTS:
         f.ports.execution.drain(); f.ports.publish();
         // The source read is known, but the newly created facade has not yet
         // consumed its own Domain projection. A modal cannot consume it yet.
-        QVERIFY(open->pending()); f.ports.drain(); QCOMPARE(open->state(), RequestOpenOperation::State::Opened);
+        QVERIFY(open->pending()); f.ports.drain(); QCOMPARE(open->state(), PaymentRequestOpenOperation::State::Opened);
         auto* editor = open->editor(); QVERIFY(editor);
         QCOMPARE(editor->requestId(), QStringLiteral("17")); QCOMPARE(editor->phase(), PaymentRequestEditorModel::Editing);
         QCOMPARE(editor->message()->text(), QStringLiteral("original message")); QCOMPARE(f.ports.writes, 0);
@@ -78,7 +78,7 @@ private Q_SLOTS:
         const auto open = f.open("17"); QVERIFY(open);
         f.ports.execution.drain(); // Hold the old source's GUI delivery.
         f.ports.records.at(17).current = true; f.ports.epoch->advance(); f.receive->refresh();
-        f.ports.drain(); QCOMPARE(open->state(), RequestOpenOperation::State::Opened);
+        f.ports.drain(); QCOMPARE(open->state(), PaymentRequestOpenOperation::State::Opened);
         QCOMPARE(f.ports.writes, 0); QCOMPARE(f.ports.generations, 0);
     }
     void blankDraftReplacementDoesNotInventAnUnsavedFieldsQuestion()
@@ -92,16 +92,16 @@ private Q_SLOTS:
     {
         Fixture f; f.ports.records.at(17).current = false;
         auto first = f.open("17"); QVERIFY(first); f.ports.drain();
-        first->cancel(); QCOMPARE(first->state(), RequestOpenOperation::State::Cancelled);
+        first->cancel(); QCOMPARE(first->state(), PaymentRequestOpenOperation::State::Cancelled);
         const auto second = f.open("17"); QVERIFY(second); QVERIFY(second->pending());
         first->cancel(); first.reset(); f.ports.drain(); QVERIFY(second->pending());
         f.ports.records.at(17).current = true; f.receive->refresh(); f.ports.drain();
-        QCOMPARE(second->state(), RequestOpenOperation::State::Opened); QCOMPARE(f.ports.writes, 0);
+        QCOMPARE(second->state(), PaymentRequestOpenOperation::State::Opened); QCOMPARE(f.ports.writes, 0);
     }
     void aRefusedDeleteReportsWhy()
     {
-        Fixture f; RequestDeleteController deletion; deletion.setReceive(f.receive.get());
-        QSignalSpy changed{&deletion, &RequestDeleteController::changed};
+        Fixture f; PaymentRequestDeleteController deletion; deletion.setReceive(f.receive.get());
+        QSignalSpy changed{&deletion, &PaymentRequestDeleteController::changed};
         QVERIFY(!deletion.request(QStringLiteral("not-an-id")));
         QVERIFY(deletion.failed()); QVERIFY(!deletion.asking()); QVERIFY(!deletion.error().isEmpty()); QVERIFY(changed.count() > 0);
         deletion.dismiss(); QVERIFY(!deletion.failed()); QVERIFY(deletion.error().isEmpty());
@@ -123,7 +123,7 @@ private Q_SLOTS:
         first.reset();
         const auto second = f.open("17"); QVERIFY(second);
         f.ports.records.at(17).current = true; f.receive->refresh(); f.ports.drain();
-        QCOMPARE(second->state(), RequestOpenOperation::State::Opened);
+        QCOMPARE(second->state(), PaymentRequestOpenOperation::State::Opened);
     }
     void rejectedTypeDisarmsThePreviouslyDisplayedReservationImmediately()
     {
@@ -228,7 +228,7 @@ private Q_SLOTS:
         QVERIFY(f.receive->ensureAddress()); f.ports.drain();
         auto* reservation = f.receive->reservation(); QVERIFY(reservation->prompt());
         QPointer<ReceiveAuthorizationPrompt> old{reservation->prompt()}; QVERIFY(!old->errorText().isEmpty());
-        old->cancel(); f.ports.drain(); QCOMPARE(reservation->phase(), ReceiveReservationModel::Cancelled); QVERIFY(reservation->error().message.isEmpty());
+        old->cancel(); f.ports.drain(); QCOMPARE(reservation->phase(), AddressReservationModel::Cancelled); QVERIFY(reservation->error().message.isEmpty());
         QVERIFY(!f.receive->ensureAddress()); f.ports.drain(); QCOMPARE(f.ports.generations, 0); QCOMPARE(f.ports.authorizations, 0);
         if (old) old->answer("stale answer");
         f.ports.drain(); QCOMPARE(f.ports.authorizations, 0);
@@ -245,7 +245,7 @@ private Q_SLOTS:
     void failedOpenDoesNotPublishAPhantomEditor()
     {
         Fixture f; f.ports.records.erase(17); const auto open = f.open("17"); QVERIFY(open); f.ports.drain();
-        QCOMPARE(open->state(), RequestOpenOperation::State::Failed); QVERIFY(!open->editor());
+        QCOMPARE(open->state(), PaymentRequestOpenOperation::State::Failed); QVERIFY(!open->editor());
         QVERIFY(!open->error().message.isEmpty()); QCOMPARE(f.ports.writes, 0);
     }
     void requestAgainGuardsBothOriginalModalAndExistingCreationDraft()

@@ -9,7 +9,7 @@
 
 #ifdef ENABLE_WALLET
 #include <qml/models/walletlistmodel.h>
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 #endif
 #include <util/translation.h>
 
@@ -111,7 +111,7 @@ bool TestApplication::waitForWallets()
 {
     if (m_wallet_mode == WalletMode::Disabled) return true;
 #ifdef ENABLE_WALLET
-    auto* controller = qobject_cast<WalletQmlController*>(engine().rootContext()->contextProperty("walletController").value<QObject*>());
+    auto* controller = qobject_cast<WalletController*>(engine().rootContext()->contextProperty("walletController").value<QObject*>());
     auto* wallets = qobject_cast<WalletListModel*>(engine().rootContext()->contextProperty("walletListModel").value<QObject*>());
     return controller && wallets && QTest::qWaitFor([&] {
         return controller->initialized() && wallets->walletDirLoaded();

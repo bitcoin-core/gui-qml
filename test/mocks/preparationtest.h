@@ -5,20 +5,20 @@
 #ifndef BITCOIN_QML_TEST_MOCKS_PREPARATIONTEST_H
 #define BITCOIN_QML_TEST_MOCKS_PREPARATIONTEST_H
 
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <QtTest/QtTest>
 
 // Integration/compatibility assertions wait for an actual result, never
 // interpret command admission as a prepared review. Controlled unit schedules
 // exercise Core/outcome/presentation separately without this convenience wait.
-inline bool AwaitPreparation(WalletQmlModel& model, std::optional<QString> passphrase = {}, std::function<void()> pump = {})
+inline bool AwaitPreparation(WalletModel& model, std::optional<QString> passphrase = {}, std::function<void()> pump = {})
 {
-    const QPointer<WalletQmlModel> guard{&model};
+    const QPointer<WalletModel> guard{&model};
     if (!QTest::qWaitFor([&] { if (pump) pump(); return !guard || (!guard->coinSelectionPending() && !guard->sendRecipientList()->validationPending() && !guard->customFeeTargetPending()); }, 5000) || !guard) return false;
     const auto ticket = passphrase ? model.requestPrepareTransactionWithPassphrase(*passphrase) : model.requestPrepareTransaction();
     if (!ticket) return false;
     return QTest::qWaitFor([&] { if (pump) pump(); return !guard || !guard->preparationBusy(); }, 5000) && guard &&
-        guard->preparationId() == ticket && guard->preparationState() == WalletQmlModel::PreparationState::PreparationReady;
+        guard->preparationId() == ticket && guard->preparationState() == WalletModel::PreparationState::PreparationReady;
 }
 
 #endif // BITCOIN_QML_TEST_MOCKS_PREPARATIONTEST_H

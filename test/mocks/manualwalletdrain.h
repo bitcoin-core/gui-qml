@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_TEST_MOCKS_MANUALWALLETDRAIN_H
 #define BITCOIN_QML_TEST_MOCKS_MANUALWALLETDRAIN_H
 
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <test/mocks/manualexecutionenvironment.h>
 
 #include <QCoreApplication>
@@ -18,7 +18,7 @@
 
 // Like the registry, keep the completion receiver alive even if the wallet
 // model is destroyed while its accepted work is finishing.
-inline std::shared_ptr<const bool> WatchWalletNativeDrain(WalletQmlModel& wallet)
+inline std::shared_ptr<const bool> WatchWalletNativeDrain(WalletModel& wallet)
 {
     auto drained = std::make_shared<bool>(false);
     wallet.whenNativeDrained(*QCoreApplication::instance(), [drained] { *drained = true; });
@@ -32,12 +32,12 @@ template <typename Execution>
 class ManualWalletDrain
 {
 public:
-    ManualWalletDrain(Execution& execution, WalletQmlModel* model)
+    ManualWalletDrain(Execution& execution, WalletModel* model)
         : m_execution(execution)
     {
         add(model);
     }
-    void add(WalletQmlModel* model)
+    void add(WalletModel* model)
     {
         m_models.emplace_back(model);
         m_native_drains.push_back(WatchWalletNativeDrain(*model));
@@ -76,7 +76,7 @@ public:
     }
 private:
     Execution& m_execution;
-    std::vector<QPointer<WalletQmlModel>> m_models;
+    std::vector<QPointer<WalletModel>> m_models;
     std::vector<std::shared_ptr<const bool>> m_native_drains;
 };
 

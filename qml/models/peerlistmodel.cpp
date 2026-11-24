@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/peerlistmodel.h>
 #include <qml/peerstatsutil.h>
-#include <qml/peercommandport.h>
+#include <qml/peercommandinterface.h>
 #include <interfaces/node.h>
 #include <QTimer>
 #include <QPointer>
@@ -120,8 +120,8 @@ void PeerListModel::close() {
     if (!m_destroying) Q_EMIT commandsChanged();
 }
 void PeerListModel::refresh() { if (m_backend_ready) refreshNative(); }
-PeerCommandPort* PeerListModel::commands() const { return !stopping() && m_commands_object ? m_commands : nullptr; }
-void PeerListModel::setCommands(PeerCommandPort* commands)
+PeerCommandInterface* PeerListModel::commands() const { return !stopping() && m_commands_object ? m_commands : nullptr; }
+void PeerListModel::setCommands(PeerCommandInterface* commands)
 {
     if (stopping() || !commands || !commands->observerObject() || m_commands_object) return;
     disconnect(m_commands_change); disconnect(m_commands_destroyed);

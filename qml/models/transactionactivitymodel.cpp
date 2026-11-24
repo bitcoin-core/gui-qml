@@ -18,7 +18,7 @@
 
 #include <qml/bitcoinunits.h>
 #include <qml/models/transactionflow.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
 #include <core_io.h>
 
@@ -110,7 +110,7 @@ bool SameRowInput(const activitystore::Record& a, const activitystore::Record& b
 }
 } // namespace
 
-struct TransactionActivityModel::Owner {
+struct TransactionActivityModel::State {
     enum class ProjectionStep {
         Initialize,
         IndexRequests,
@@ -145,7 +145,7 @@ struct TransactionActivityModel::Owner {
     }
 };
 struct TransactionActivityModel::Job {
-    std::shared_ptr<Owner> owner;
+    std::shared_ptr<State> owner;
     std::shared_ptr<void> lease;
     std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<Mailbox> mailbox;
@@ -171,10 +171,10 @@ struct TransactionActivityModel::Mailbox {
     }
 };
 
-TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet)
+TransactionActivityModel::TransactionActivityModel(WalletModel* wallet)
     : TransactionActivityModel(wallet, Services{}) {}
 
-TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet, Services services)
+TransactionActivityModel::TransactionActivityModel(WalletModel* wallet, Services services)
     : QAbstractListModel(wallet), m_wallet_model(wallet), m_display_unit(wallet->displayUnit()),
       m_opening(wallet->opening()), m_services(std::move(services)),
       m_export_installs(wallet->fileInstallCoordinator() ? wallet->fileInstallCoordinator() : std::make_shared<backup::InstallCoordinator>()), m_mailbox(std::make_shared<Mailbox>())
@@ -188,8 +188,8 @@ TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet, Servi
     if (!m_services.cancel_poll) m_services.cancel_poll = [this] { m_timer.stop(); };
     m_apply_timer.setSingleShot(true);
     connect(&m_apply_timer, &QTimer::timeout, this, &TransactionActivityModel::applyPatches);
-    connect(wallet, &WalletQmlModel::transactionChanged, this, &TransactionActivityModel::updateTransaction);
-    connect(wallet, &WalletQmlModel::addressListChanged, this, [this] {
+    connect(wallet, &WalletModel::transactionChanged, this, &TransactionActivityModel::updateTransaction);
+    connect(wallet, &WalletModel::addressListChanged, this, [this] {
         ++m_generation; ++m_reader_revisions.labels; m_pending.labels = true; schedule();
     });
     auto* requests = wallet->receiveRequests();
@@ -198,8 +198,8 @@ TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet, Servi
     connect(requests, &QAbstractItemModel::rowsInserted, this, rebuild);
     connect(requests, &QAbstractItemModel::rowsRemoved, this, rebuild);
     connect(requests, &QAbstractItemModel::dataChanged, this, rebuild);
-    connect(wallet, &WalletQmlModel::displayUnitChanged, this, &TransactionActivityModel::setDisplayUnit);
-    connect(wallet, &WalletQmlModel::walletUnloaded, this, &TransactionActivityModel::stop);
+    connect(wallet, &WalletModel::displayUnitChanged, this, &TransactionActivityModel::setDisplayUnit);
+    connect(wallet, &WalletModel::walletUnloaded, this, &TransactionActivityModel::stop);
     reload(); armPoll();
 }
 
@@ -301,7 +301,7 @@ bool TransactionActivityModel::publishDetailModels()
 void TransactionActivityModel::schedulePreview()
 {
     if (m_detail_txid.isEmpty() || !m_core_state || !m_published || !m_opening || !m_opening->available()) return;
-    auto owner = std::make_shared<Owner>(); auto held = m_opening->holdValues([owner] { owner->clear(); }); if (!held) return;
+    auto owner = std::make_shared<State>(); auto held = m_opening->holdValues([owner] { owner->clear(); }); if (!held) return;
     auto job = std::make_shared<Job>(); job->owner = owner; job->opening = m_opening; job->mailbox = m_mailbox; job->cancelled = m_cancelled;
     job->lease = std::move(held); job->selected = m_detail_txid; job->unit = m_display_unit;
     job->detail_generation = m_detail_generation; job->projection_generation = m_projection_generation;
@@ -362,7 +362,7 @@ void TransactionActivityModel::startWork()
 {
     m_scheduled = false;
     if (m_stopped || m_work_pending || m_pending.empty()) return;
-    auto owner = std::make_shared<Owner>();
+    auto owner = std::make_shared<State>();
     auto held = m_opening->holdValues([owner] { owner->clear(); });
     if (!held) { m_loading = false; m_load_error = tr("Activity presentation is unavailable."); Q_EMIT loadingChanged(); return; }
     auto job = std::make_shared<Job>();
@@ -423,7 +423,7 @@ void TransactionActivityModel::readCompleted(const std::shared_ptr<Job>& job)
 }
 void TransactionActivityModel::project(const std::shared_ptr<Job>& job)
 {
-    using Step = Owner::ProjectionStep;
+    using Step = State::ProjectionStep;
     auto& owner = *job->owner;
     if (job->cancelled->load()) return;
     int budget{128};
@@ -744,7 +744,7 @@ QString TransactionActivityModel::paymentRequestUri(const QString& id) const
 quint64 TransactionActivityModel::requestCopyRawTransaction(const QString& txid)
 {
     if (m_stopped || !m_opening || !m_opening->available() || txid.size() != 64 || !m_detail_hold || !m_detail_hold->snapshot->raw) return 0;
-    auto owner = std::make_shared<Owner>();
+    auto owner = std::make_shared<State>();
     auto held = m_opening->holdValues([owner] { owner->clear(); });
     if (!held) return 0;
     auto job = std::make_shared<Job>(); job->owner = owner; job->lease = std::move(held);
@@ -771,7 +771,7 @@ quint64 TransactionActivityModel::requestEntryDetails(const QString& side, int r
     const auto& snapshot = *m_detail_hold->snapshot;
     const auto entries = side == QLatin1String("inputs") ? snapshot.full_inputs : side == QLatin1String("outputs") ? snapshot.full_outputs : snapshot.full_actions;
     if (!entries || row >= entries->size()) return 0;
-    auto owner = std::make_shared<Owner>();
+    auto owner = std::make_shared<State>();
     auto held = m_opening->holdValues([owner] { owner->clear(); }); if (!held) return 0;
     auto job = std::make_shared<Job>(); job->owner = owner; job->opening = m_opening; job->mailbox = m_mailbox;
     job->lease = std::move(held); job->detail_generation = m_detail_generation;

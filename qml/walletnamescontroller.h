@@ -19,7 +19,7 @@
 #include <QString>
 #include <QUrl>
 
-class WalletQmlModel;
+class WalletModel;
 namespace interfaces { class Node; }
 namespace execution { class SerialQueue; }
 
@@ -44,9 +44,9 @@ public:
         interfaces::Node* node{nullptr};
         presentation::Post post;
         //! The open wallet after \p wallet, or the first for null; null at the end.
-        std::function<WalletQmlModel*(WalletQmlModel* wallet)> next_wallet;
+        std::function<WalletModel*(WalletModel* wallet)> next_wallet;
         //! The controller's placeholder for "no wallet".
-        WalletQmlModel* empty_wallet{nullptr};
+        WalletModel* empty_wallet{nullptr};
         std::shared_ptr<execution::SerialQueue> utility;
         std::shared_ptr<execution::SerialQueue> outcomes;
     };
@@ -63,7 +63,7 @@ public:
     QString nameWriteError() const;
 
     //! Shows \p wallet's file location in the system file browser.
-    Q_INVOKABLE bool openLocation(WalletQmlModel* wallet);
+    Q_INVOKABLE bool openLocation(WalletModel* wallet);
     Q_INVOKABLE void clearLocationError();
     bool locationPending() const { return m_location_pending; }
     QString locationError() const { return m_location_error; }
@@ -71,7 +71,7 @@ public:
     //! Reads the saved names again and applies them to the open wallets.
     void refresh();
     //! Applies the saved display name to one wallet.
-    void apply(WalletQmlModel* wallet) const;
+    void apply(WalletModel* wallet) const;
     void close();
     void setOpenLocalPathForTesting(OpenLocalPath open) { m_open_local_path = std::move(open); }
 
@@ -97,14 +97,14 @@ private:
     QString m_home_path;
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const Aliases>>> m_query;
     std::shared_ptr<const Aliases> m_names;
-    std::optional<WalletQmlModel*> m_cursor;
+    std::optional<WalletModel*> m_cursor;
     quint64 m_generation{0}, m_write_id{0}, m_location_id{0};
     std::shared_ptr<execution::OwnedCommand<WriteResult>> m_write;
     std::shared_ptr<WriteReceipt> m_write_receipt;
     bool m_write_pending{false};
     QString m_write_error;
     std::shared_ptr<execution::OwnedCommand<LocationResult>> m_location;
-    QPointer<WalletQmlModel> m_location_wallet;
+    QPointer<WalletModel> m_location_wallet;
     bool m_location_pending{false};
     QString m_location_error;
     OpenLocalPath m_open_local_path;

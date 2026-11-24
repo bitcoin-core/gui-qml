@@ -19,7 +19,7 @@ namespace execution { class Executor; }
 
 struct BitcoinUriOperations;
 class BitcoinUriModel;
-class WalletQmlModel;
+class WalletModel;
 class SendRecipient;
 
 /** Recognizes pasted payment URIs and starts payment request and PSBT
@@ -44,11 +44,11 @@ public:
     Q_INVOKABLE QString pastedPaymentUri(const QString& previous, const QString& current, const QString& clipboard) const;
 #ifdef ENABLE_WALLET
     void setExportCoordinator(std::shared_ptr<backup::InstallCoordinator> coordinator);
-    Q_INVOKABLE PaymentImportOperation* requestImportText(const QString& text, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
-    Q_INVOKABLE PaymentImportOperation* requestImportFile(const QString& path, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
-    Q_INVOKABLE PaymentImportOperation* captureImport(WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
-    Q_INVOKABLE PaymentImportOperation* requestImportDrop(int urlCount, const QUrl& firstUrl, const QString& text, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
-    Q_INVOKABLE PaymentImportOperation* requestImportPaste(const QString& text, InputField field, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner);
+    Q_INVOKABLE PaymentImportOperation* requestImportText(const QString& text, WalletModel* wallet, SendRecipient* recipient, QObject* owner);
+    Q_INVOKABLE PaymentImportOperation* requestImportFile(const QString& path, WalletModel* wallet, SendRecipient* recipient, QObject* owner);
+    Q_INVOKABLE PaymentImportOperation* captureImport(WalletModel* wallet, SendRecipient* recipient, QObject* owner);
+    Q_INVOKABLE PaymentImportOperation* requestImportDrop(int urlCount, const QUrl& firstUrl, const QString& text, WalletModel* wallet, SendRecipient* recipient, QObject* owner);
+    Q_INVOKABLE PaymentImportOperation* requestImportPaste(const QString& text, InputField field, WalletModel* wallet, SendRecipient* recipient, QObject* owner);
     PaymentImportOperation* requestImport(paymentimport::Input input, std::shared_ptr<const paymentimport::TargetPort> target, QObject* owner,
                                           std::shared_ptr<paymentimport::CreationReceipt> creation = {});
 #endif

@@ -2,10 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_OPTIONS_MODEL_H
-#define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#ifndef BITCOIN_QML_MODELS_SETTINGSMODEL_H
+#define BITCOIN_QML_MODELS_SETTINGSMODEL_H
 #include <qml/presentationservices.h>
-#include <qml/models/settingseditorsource.h>
+#include <qml/models/settingseditorfactoryinterface.h>
 #include <qml/preferenceswatch.h>
 #include <limits>
 #include <algorithm>
@@ -47,14 +47,14 @@ class Node;
 namespace execution { class ValueCleanupQueue; }
 
 class SignerDiscoveryModel;
-class OptionsQmlModel;
+class SettingsModel;
 struct OptionsLinksState;
 class OptionsTransactionLinks : public QAbstractListModel
 {
     Q_OBJECT
     //! The options whose third-party URLs build the links. QML declares the
     //! view and binds this; the view registers with the options it reads.
-    Q_PROPERTY(OptionsQmlModel* source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(SettingsModel* source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QString txid READ txid WRITE setTxid NOTIFY txidChanged)
     Q_PROPERTY(QAbstractItemModel* links READ links CONSTANT)
     Q_PROPERTY(bool pending READ pending NOTIFY resultChanged)
@@ -62,8 +62,8 @@ class OptionsTransactionLinks : public QAbstractListModel
 public:
     explicit OptionsTransactionLinks(QObject* parent=nullptr);
     ~OptionsTransactionLinks() override;
-    OptionsQmlModel* source() const {return m_source;}
-    void setSource(OptionsQmlModel* source);
+    SettingsModel* source() const {return m_source;}
+    void setSource(SettingsModel* source);
     QString txid() const {return m_txid;}
     void setTxid(const QString& txid);
     enum Role {HostRole=Qt::UserRole,UrlRole};
@@ -78,12 +78,12 @@ Q_SIGNALS:
     void txidChanged();
     void resultChanged();
 private:
-    friend class OptionsQmlModel;
+    friend class SettingsModel;
     void refresh();
     void applyRows(quint64 revision);
     int m_visible{0};
     bool m_clearing{false};
-    QPointer<OptionsQmlModel> m_source;
+    QPointer<SettingsModel> m_source;
     std::weak_ptr<OptionsLinksState> m_state;
     quint64 m_id{0},m_revision{0};
     QString m_txid,m_error;
@@ -91,7 +91,7 @@ private:
 };
 
 /** Model for Bitcoin client options. */
-class OptionsQmlModel : public SettingsEditorSource
+class SettingsModel : public SettingsEditorFactoryInterface
 {
     Q_OBJECT
     Q_PROPERTY(bool settingsReady READ settingsReady NOTIFY settingsReadyChanged)
@@ -144,12 +144,12 @@ class OptionsQmlModel : public SettingsEditorSource
     Q_PROPERTY(bool hideAmounts READ hideAmounts WRITE setHideAmounts NOTIFY hideAmountsChanged)
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs,
+    explicit SettingsModel(interfaces::Node& node, ArgsManager& args = gArgs,
                              presentation::Post post = {}, execution::Executor* executor = nullptr, PresentationServices* presentation = nullptr,
                              execution::Lane lane = execution::Lane::Core);
 
     Q_INVOKABLE void refreshDisplaySettings();
-    ~OptionsQmlModel() override;
+    ~SettingsModel() override;
     bool presentationOpen() const {return !m_stopping;}
     enum SettingsOperationState {SettingsIdle,SettingsPending,SettingsApplied,SettingsFailed,SettingsUncertain};
     Q_ENUM(SettingsOperationState)
@@ -418,4 +418,4 @@ private:
     static QStringList buildAvailableLanguages();
 };
 
-#endif // BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#endif // BITCOIN_QML_MODELS_SETTINGSMODEL_H

@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H
-#define BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H
+#ifndef BITCOIN_QML_MODELS_PEERLISTPROXYMODEL_H
+#define BITCOIN_QML_MODELS_PEERLISTPROXYMODEL_H
 
 #include <QByteArray>
 #include <QHash>
@@ -15,7 +15,7 @@
 
 class PeerDetailsModel;
 
-class PeerListSortProxy : public NativeListModel
+class PeerListProxyModel : public NativeListModel
 {
     Q_OBJECT
     Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
@@ -28,8 +28,8 @@ class PeerListSortProxy : public NativeListModel
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
-    explicit PeerListSortProxy(QObject* parent);
-    ~PeerListSortProxy() override;
+    explicit PeerListProxyModel(QObject* parent);
+    ~PeerListProxyModel() override;
     void setSourceModel(QAbstractItemModel* source) override;
     QModelIndex mapToSource(const QModelIndex& index) const override;
     QModelIndex mapFromSource(const QModelIndex& index) const override;
@@ -86,4 +86,4 @@ private:
     bool m_destroying{false};
 };
 
-#endif // BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H
+#endif // BITCOIN_QML_MODELS_PEERLISTPROXYMODEL_H

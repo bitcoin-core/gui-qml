@@ -4,10 +4,10 @@
 #ifndef BITCOIN_QML_MODELS_PEERCOMMANDMODEL_H
 #define BITCOIN_QML_MODELS_PEERCOMMANDMODEL_H
 #include <qml/guipresentation.h>
-#include <qml/peercommandport.h>
+#include <qml/peercommandinterface.h>
 
 /** Application command/outcome owner, independent of selected detail/view. */
-class PeerCommandModel final : public QObject, public PeerCommandPort {
+class PeerCommandModel final : public QObject, public PeerCommandInterface {
     Q_OBJECT
     Q_PROPERTY(bool pending READ pending NOTIFY changed)
     Q_PROPERTY(bool canStart READ canStart NOTIFY changed)

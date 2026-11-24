@@ -2,16 +2,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/requestviewcontroller.h>
+#include <qml/models/paymentrequestviewcontroller.h>
 
 #include <qml/models/paymentrequesteditormodel.h>
 #include <qml/models/walletreceivemodel.h>
 
-RequestViewController::RequestViewController(QObject* parent) : QObject(parent) {}
+PaymentRequestViewController::PaymentRequestViewController(QObject* parent) : QObject(parent) {}
 
-RequestViewController::~RequestViewController() { cancel(); }
+PaymentRequestViewController::~PaymentRequestViewController() { cancel(); }
 
-void RequestViewController::setReceive(WalletReceiveModel* receive)
+void PaymentRequestViewController::setReceive(WalletReceiveModel* receive)
 {
     if (m_receive == receive) return;
     cancel();
@@ -20,7 +20,7 @@ void RequestViewController::setReceive(WalletReceiveModel* receive)
     Q_EMIT receiveChanged();
 }
 
-void RequestViewController::setActive(bool active)
+void PaymentRequestViewController::setActive(bool active)
 {
     if (m_active == active) return;
     m_active = active;
@@ -31,12 +31,12 @@ void RequestViewController::setActive(bool active)
     Q_EMIT activeChanged();
 }
 
-PaymentRequestEditorModel* RequestViewController::editor() const
+PaymentRequestEditorModel* PaymentRequestViewController::editor() const
 {
     return m_editor_receive ? m_editor.data() : nullptr;
 }
 
-bool RequestViewController::open(const QString& id)
+bool PaymentRequestViewController::open(const QString& id)
 {
     if (!m_active || !m_receive) return false;
     cancel();
@@ -48,10 +48,10 @@ bool RequestViewController::open(const QString& id)
         return false;
     }
     m_open = operation;
-    connect(operation, &RequestOpenOperation::changed, this, &RequestViewController::openChanged);
+    connect(operation, &PaymentRequestOpenOperation::changed, this, &PaymentRequestViewController::openChanged);
     // The open can finish before it is returned.
     if (!operation->pending()) {
-        const bool opened = operation->state() == RequestOpenOperation::State::Opened;
+        const bool opened = operation->state() == PaymentRequestOpenOperation::State::Opened;
         openChanged();
         return opened;
     }
@@ -59,7 +59,7 @@ bool RequestViewController::open(const QString& id)
     return true;
 }
 
-void RequestViewController::cancel()
+void PaymentRequestViewController::cancel()
 {
     if (!m_open) return;
     const auto operation = m_open;
@@ -69,7 +69,7 @@ void RequestViewController::cancel()
     Q_EMIT changed();
 }
 
-void RequestViewController::release()
+void PaymentRequestViewController::release()
 {
     if (!m_editor && !m_editor_receive) return;
     m_editor = nullptr;
@@ -77,23 +77,23 @@ void RequestViewController::release()
     Q_EMIT changed();
 }
 
-void RequestViewController::dismissFailure()
+void PaymentRequestViewController::dismissFailure()
 {
     if (m_failure.isEmpty()) return;
     m_failure.clear();
     Q_EMIT changed();
 }
 
-void RequestViewController::openChanged()
+void PaymentRequestViewController::openChanged()
 {
     const auto operation = m_open;
     if (!operation || operation->pending()) return;
     m_open = nullptr;
     operation->deleteLater();
-    if (operation->state() == RequestOpenOperation::State::Opened && m_active && operation->editor()) {
+    if (operation->state() == PaymentRequestOpenOperation::State::Opened && m_active && operation->editor()) {
         m_editor = operation->editor();
         m_editor_receive = m_receive;
-    } else if (operation->state() == RequestOpenOperation::State::Failed) {
+    } else if (operation->state() == PaymentRequestOpenOperation::State::Failed) {
         m_failure = operation->error().message;
     }
     Q_EMIT changed();

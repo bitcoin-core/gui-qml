@@ -8,7 +8,7 @@
 #include <qml/models/fileexportoperation.h>
 #include <qml/models/sendimportports.h>
 class BitcoinUriModel;
-class WalletQmlModel;
+class WalletModel;
 class SendRecipient;
 /** Bounded GUI projection of one independently owned import. Commands retain
  * the original source, wallet opening and recipient; no selection lookup. */
@@ -74,7 +74,7 @@ public:
     QString exportToken() const;
     FileExportOperationModel* fileExportOperation() const { return m_export; }
     Q_INVOKABLE bool requestSaveOriginal(const QString& token, const QString& path);
-    Q_INVOKABLE void chooseTarget(WalletQmlModel* wallet, SendRecipient* recipient);
+    Q_INVOKABLE void chooseTarget(WalletModel* wallet, SendRecipient* recipient);
     Q_INVOKABLE void retry();
     Q_INVOKABLE void use() override;
     Q_INVOKABLE void apply();
@@ -93,10 +93,10 @@ private:
     const quint64 m_identity;
     bool m_closed{false}, m_input_started{false};
     QString m_transport_error;
-    void command(const std::function<execution::SubmitResult(paymentimport::Owner&)>& submit);
+    void command(const std::function<execution::SubmitResult(paymentimport::Service&)>& submit);
     backup::Services m_export_services;
     FileExportOperationModel* m_export{nullptr};
     paymentimport::Snapshot m_snapshot;
-    std::shared_ptr<paymentimport::Owner> m_owner;
+    std::shared_ptr<paymentimport::Service> m_owner;
 };
 #endif // BITCOIN_QML_MODELS_PAYMENTIMPORTOPERATION_H

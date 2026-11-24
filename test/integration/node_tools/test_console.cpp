@@ -189,7 +189,7 @@ private Q_SLOTS:
         const auto loaded = qmltest::Rpc(m_app, "loadwallet", load_params);
         QCOMPARE(loaded.find_value("name").get_str(), std::string{});
         QVERIFY(QTest::qWaitFor([&] { return qmltest::Rpc(m_app, "listwallets").size() == 1; }, 10'000));
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController");
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController");
         QVERIFY(controller);
         QVERIFY(QTest::qWaitFor([&] { return controller->walletForName(QString{}) != nullptr; }, 10'000));
 
@@ -289,7 +289,7 @@ private Q_SLOTS:
 #else
         if (m_mode != WalletMode::Enabled) QSKIP("This integration case requires wallet support");
         auto* model = qmltest::Model<RpcConsoleModel>(m_app, "rpcConsoleModel"); QVERIFY(model);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         auto* console = qmltest::Find(m_app, "rpcConsole"); QVERIFY(console);
         const QString target{QStringLiteral("console-target")}, outside{QStringLiteral("console-outside")}, typed{QStringLiteral("console-typed")};
         const auto unload = qScopeGuard([&] { for (const auto& name : {target, outside, typed}) { UniValue params{UniValue::VARR}; params.push_back(name.toStdString()); try { qmltest::Rpc(m_app, "unloadwallet", params); } catch (const std::exception&) {} } });
@@ -382,12 +382,12 @@ private Q_SLOTS:
         QFETCH(QString, method); QFETCH(QString, arguments); QFETCH(bool, sensitive);
         const bool wallet_enabled = m_mode == WalletMode::Enabled;
 #ifdef ENABLE_WALLET
-        WalletQmlModel* wallet{nullptr};
+        WalletModel* wallet{nullptr};
         UniValue loaded_before;
         if (wallet_enabled) {
             wallet = qmltest::CreateWallet(m_app, "privacy-rpc"); QVERIFY(wallet);
             QVERIFY(wallet->encryptWallet("owned test fixture password"));
-            QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
+            QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
             // Success precedes the refreshed lock observation; wait for it.
             QTRY_VERIFY(wallet->isLocked());
             loaded_before = qmltest::Rpc(m_app, "listwallets");

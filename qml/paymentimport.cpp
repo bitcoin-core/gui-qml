@@ -120,12 +120,12 @@ Inspection AnalyzeSource(const Inspection& source, const psbtfee::Lookup& lookup
     return result;
 }
 
-struct Owner::Reply {
+struct Service::Reply {
     std::optional<Target> target;
     std::optional<ChildReply> child;
     std::exception_ptr error;
 };
-struct Owner::Delivery {
+struct Service::Delivery {
     struct Cell {
         std::mutex mutex;
         bool ready{false};
@@ -150,7 +150,7 @@ struct Owner::Delivery {
         release.reset();
     }
 };
-struct Owner::State {
+struct Service::State {
     Flow flow;
     std::shared_ptr<const Input> input;
     std::shared_ptr<const Inspection> inspection;
@@ -163,20 +163,20 @@ struct Owner::State {
     bool closing{false}, retired{false}, wake_pending{false}, use_requested{false};
     std::chrono::steady_clock::time_point retry_at{};
 };
-Owner::Owner(uint64_t identity, Services services, Notify notify, Retired retired, std::shared_ptr<State> state)
+Service::Service(uint64_t identity, Services services, Notify notify, Retired retired, std::shared_ptr<State> state)
     : m_identity(identity), m_services(std::move(services)),
       m_outcomes(std::make_shared<execution::ValueCleanupQueue>(m_services.outcomes)), m_notify(std::move(notify)),
       m_retired(std::move(retired)), m_state(std::move(state)) {}
 
-std::shared_ptr<Owner> Owner::Create(uint64_t identity, Services services, Notify notify, Retired retired)
+std::shared_ptr<Service> Service::Create(uint64_t identity, Services services, Notify notify, Retired retired)
 {
     if (!identity || !services.reads || !services.outcomes) return {};
     if (!services.read) services.read = ReadSource;
     if (!services.analyze) services.analyze = [](const Inspection& source) { return AnalyzeSource(source); };
     if (!services.now) services.now = std::chrono::steady_clock::now;
-    auto owner = std::shared_ptr<Owner>{new Owner(identity, std::move(services), std::move(notify),
+    auto owner = std::shared_ptr<Service>{new Service(identity, std::move(services), std::move(notify),
         std::move(retired), std::make_shared<State>())};
-    auto closing = std::make_shared<std::shared_ptr<Owner>>();
+    auto closing = std::make_shared<std::shared_ptr<Service>>();
     auto reservation = owner->m_outcomes->hold([closing] {
         if (*closing) (*closing)->closeOnQueue();
     });
@@ -188,7 +188,7 @@ std::shared_ptr<Owner> Owner::Create(uint64_t identity, Services services, Notif
     return owner;
 }
 
-execution::SubmitResult Owner::submit(std::function<void()> decision)
+execution::SubmitResult Service::submit(std::function<void()> decision)
 {
     auto run = [self = shared_from_this(), decision = std::move(decision)] {
         decision(); self->publish();
@@ -197,7 +197,7 @@ execution::SubmitResult Owner::submit(std::function<void()> decision)
     return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
 }
 
-void Owner::publish()
+void Service::publish()
 {
     auto& state = *m_state;
     Snapshot snapshot;
@@ -220,7 +220,7 @@ void Owner::publish()
     }
 }
 
-execution::SubmitResult Owner::inspect(Input input)
+execution::SubmitResult Service::inspect(Input input)
 {
     if (input.value.size() > MAX_TEXT) return {{}, execution::Rejection::Capacity};
     auto retained = std::make_shared<Input>(std::move(input));
@@ -233,7 +233,7 @@ execution::SubmitResult Owner::inspect(Input input)
     });
 }
 
-execution::SubmitResult Owner::retry()
+execution::SubmitResult Service::retry()
 {
     return submit([self = shared_from_this()] {
         auto& state = *self->m_state;
@@ -246,7 +246,7 @@ execution::SubmitResult Owner::retry()
 }
 
 template <bool Analysis>
-void Owner::consumed(uint64_t source, std::shared_ptr<const Inspection> output, std::exception_ptr error)
+void Service::consumed(uint64_t source, std::shared_ptr<const Inspection> output, std::exception_ptr error)
 {
     auto& state = *m_state;
     if (source != state.flow.source()) return;
@@ -265,7 +265,7 @@ void Owner::consumed(uint64_t source, std::shared_ptr<const Inspection> output, 
 }
 
 template <bool Analysis>
-void Owner::read(uint64_t source)
+void Service::read(uint64_t source)
 {
     auto output = std::make_shared<Inspection>();
     const auto input = m_state->input;
@@ -284,7 +284,7 @@ void Owner::read(uint64_t source)
     if (!submitted) completed(std::make_exception_ptr(execution::NotStarted{execution::NotStarted::Cause::Transport}));
 }
 
-std::shared_ptr<Owner::Delivery> Owner::reserve(ReplyKind kind, std::optional<Child> child)
+std::shared_ptr<Service::Delivery> Service::reserve(ReplyKind kind, std::optional<Child> child)
 {
     auto& state = *m_state;
     if (state.delivery_sequence == std::numeric_limits<uint64_t>::max()) return {};
@@ -319,7 +319,7 @@ std::shared_ptr<Owner::Delivery> Owner::reserve(ReplyKind kind, std::optional<Ch
     return delivery;
 }
 
-execution::SubmitResult Owner::chooseTarget(std::shared_ptr<const TargetPort> target)
+execution::SubmitResult Service::chooseTarget(std::shared_ptr<const TargetPort> target)
 {
     return submit([self = shared_from_this(), target = std::move(target)] {
         auto& state = *self->m_state;
@@ -330,7 +330,7 @@ execution::SubmitResult Owner::chooseTarget(std::shared_ptr<const TargetPort> ta
     });
 }
 
-void Owner::observe()
+void Service::observe()
 {
     auto& state = *m_state;
     if (state.closing || !state.target || !state.target->observe || !state.inspection) return;
@@ -342,11 +342,11 @@ void Owner::observe()
     catch (...) { failed(std::current_exception()); }
 }
 
-execution::SubmitResult Owner::use()
+execution::SubmitResult Service::use()
 {
     return submit([self = shared_from_this()] { self->m_state->use_requested = true; self->useReady(); });
 }
-void Owner::useReady()
+void Service::useReady()
 {
     auto& state = *m_state;
     if (!state.use_requested || state.closing || state.flow.phase() != Phase::Inspecting ||
@@ -355,12 +355,12 @@ void Owner::useReady()
     const auto child = state.flow.kind() == Kind::Payment ? state.flow.apply() : state.flow.openReview();
     if (child) dispatch(*child);
 }
-execution::SubmitResult Owner::apply() { return submit([self = shared_from_this()] { if (const auto child = self->m_state->flow.apply()) self->dispatch(*child); }); }
-execution::SubmitResult Owner::replace(uint64_t prompt) { return submit([self = shared_from_this(), prompt] { if (const auto child = self->m_state->flow.replace(prompt)) self->dispatch(*child); }); }
-execution::SubmitResult Owner::keepDraft(uint64_t prompt) { return submit([self = shared_from_this(), prompt] { self->m_state->flow.keepDraft(prompt); }); }
-execution::SubmitResult Owner::openReview() { return submit([self = shared_from_this()] { if (const auto child = self->m_state->flow.openReview()) self->dispatch(*child); }); }
+execution::SubmitResult Service::apply() { return submit([self = shared_from_this()] { if (const auto child = self->m_state->flow.apply()) self->dispatch(*child); }); }
+execution::SubmitResult Service::replace(uint64_t prompt) { return submit([self = shared_from_this(), prompt] { if (const auto child = self->m_state->flow.replace(prompt)) self->dispatch(*child); }); }
+execution::SubmitResult Service::keepDraft(uint64_t prompt) { return submit([self = shared_from_this(), prompt] { self->m_state->flow.keepDraft(prompt); }); }
+execution::SubmitResult Service::openReview() { return submit([self = shared_from_this()] { if (const auto child = self->m_state->flow.openReview()) self->dispatch(*child); }); }
 
-void Owner::dispatch(Child child)
+void Service::dispatch(Child child)
 {
     auto& state = *m_state;
     const auto delivery = reserve(ReplyKind::Dispatch, child);
@@ -378,7 +378,7 @@ void Owner::dispatch(Child child)
     wake();
 }
 
-void Owner::finish(Reply reply, ReplyKind kind, uint64_t source, uint64_t target, std::optional<Child> child, uint64_t delivery)
+void Service::finish(Reply reply, ReplyKind kind, uint64_t source, uint64_t target, std::optional<Child> child, uint64_t delivery)
 {
     auto& state = *m_state;
     const bool established = reply.child && reply.child->receipt.outcome != Outcome::Unknown;
@@ -417,7 +417,7 @@ void Owner::finish(Reply reply, ReplyKind kind, uint64_t source, uint64_t target
     useReady(); account(); cancelObsolete(); publish();
 }
 
-void Owner::account()
+void Service::account()
 {
     auto& state = *m_state;
     if (!state.flow.child() || !state.flow.result() || state.flow.result()->outcome == Outcome::Unknown) return;
@@ -430,7 +430,7 @@ void Owner::account()
     if (state.flow.child()) { state.retry_at = m_services.now() + RETRY; wake(); }
 }
 
-void Owner::query()
+void Service::query()
 {
     auto& state = *m_state;
     if (!state.flow.child()) return;
@@ -448,7 +448,7 @@ void Owner::query()
     catch (...) { failed(std::current_exception()); }
 }
 
-void Owner::cancelObsolete()
+void Service::cancelObsolete()
 {
     const auto& state = *m_state;
     std::vector<std::shared_ptr<Delivery>> obsolete;
@@ -461,14 +461,14 @@ void Owner::cancelObsolete()
     for (const auto& delivery : obsolete) delivery->complete(Reply{{}, {}, std::make_exception_ptr(std::runtime_error{"Retired import delivery"})});
 }
 
-void Owner::wake()
+void Service::wake()
 {
     if (m_state->wake_pending || !m_services.wake || !m_state->flow.child()) return;
     m_state->wake_pending = true;
     try { m_services.wake(RETRY, [self = shared_from_this()] { self->tick(); }); }
     catch (...) { m_state->wake_pending = false; m_state->flow.acknowledgmentLost(*m_state->flow.child()); }
 }
-void Owner::poll()
+void Service::poll()
 {
     auto& state = *m_state;
     state.wake_pending = false;
@@ -483,9 +483,9 @@ void Owner::poll()
     }
     wake(); cancelObsolete();
 }
-execution::SubmitResult Owner::tick() { return submit([self = shared_from_this()] { self->poll(); }); }
-execution::SubmitResult Owner::reconcile() { return submit([self = shared_from_this()] { self->query(); }); }
-execution::SubmitResult Owner::close()
+execution::SubmitResult Service::tick() { return submit([self = shared_from_this()] { self->poll(); }); }
+execution::SubmitResult Service::reconcile() { return submit([self = shared_from_this()] { self->query(); }); }
+execution::SubmitResult Service::close()
 {
     m_presentation_allowed->store(false);
     if (!m_close_requested.exchange(true)) {
@@ -496,7 +496,7 @@ execution::SubmitResult Owner::close()
     }
     return {{}, execution::Rejection::None};
 }
-void Owner::closeOnQueue()
+void Service::closeOnQueue()
 {
     auto& state = *m_state;
     state.closing = true;

@@ -2,11 +2,11 @@
   "review": "R00-B01 baseline applicability plus R10 reviewed removal of two obsolete Send/review cycles. Pinned Core definitions remain unchanged.",
   "boost_includes": [],
   "existing_cycles": [
-    "qml/models/addresslistmodel -> qml/models/walletqmlmodel -> qml/models/addresslistmodel",
-    "qml/models/coinslistmodel -> qml/models/walletqmlmodel -> qml/models/coinslistmodel",
-    "qml/models/sendrecipient -> qml/models/walletqmlmodel -> qml/models/sendrecipient",
-    "qml/models/sendrecipientslistmodel -> qml/models/walletqmlmodel -> qml/models/sendrecipientslistmodel",
-    "qml/models/transactionactivitymodel -> qml/models/walletqmlmodel -> qml/models/transactionactivitymodel"
+    "qml/models/addresslistmodel -> qml/models/walletmodel -> qml/models/addresslistmodel",
+    "qml/models/coinslistmodel -> qml/models/walletmodel -> qml/models/coinslistmodel",
+    "qml/models/sendrecipient -> qml/models/walletmodel -> qml/models/sendrecipient",
+    "qml/models/sendrecipientslistmodel -> qml/models/walletmodel -> qml/models/sendrecipientslistmodel",
+    "qml/models/transactionactivitymodel -> qml/models/walletmodel -> qml/models/transactionactivitymodel"
   ],
   "cycle_owner": "Original consumer orders and R41/R42 architecture audit. Reject unreviewed additions and removals.",
   "cleanup_exception": {

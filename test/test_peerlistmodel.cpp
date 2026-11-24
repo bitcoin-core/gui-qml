@@ -10,7 +10,7 @@
 #include <test/mocks/nativelistqueues.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/peerdetailsmodel.h>
-#include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peerlistproxymodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/peerstatsutil.h>
 #include <QPersistentModelIndex>
@@ -103,10 +103,10 @@ void PeerListModelTests::displayedPeerIdSearchPreservesOrdinaryText()
         MakeNodeStats(9,"10.0.0.9:8333",false,ConnectionType::MANUAL,NET_IPV4)});
     std::get<0>(stats[2]).cleanSubVer = "/ordinary #peer text/";
     MockNode node; node.get_nodes_stats_fn = [&](auto& out) { out = stats; return true; };
-    std::unique_ptr<PeerListModel> model; std::unique_ptr<PeerListSortProxy> proxy;
+    std::unique_ptr<PeerListModel> model; std::unique_ptr<PeerListProxyModel> proxy;
     const auto cleanup = qScopeGuard([&] { proxy.reset(); model.reset(); transport.drain(); while (!gui.empty()) { auto callback = std::move(gui.front()); gui.pop_front(); callback(); } transport.drain(); });
     model = std::make_unique<PeerListModel>(node,nullptr,true,[&](auto callback) { gui.push_back(std::move(callback)); }, [] { return NodeClock::now(); }, NativeListQueues(transport.executor()));
-    proxy = std::make_unique<PeerListSortProxy>(nullptr); proxy->setSourceModel(model.get());
+    proxy = std::make_unique<PeerListProxyModel>(nullptr); proxy->setSourceModel(model.get());
     const auto settle = [&] {
         for (int turn = 0; turn < 20; ++turn) {
             transport.drain(); while (!gui.empty()) { auto callback = std::move(gui.front()); gui.pop_front(); callback(); }
@@ -280,7 +280,7 @@ void PeerListModelTests::sharedQueuesDeliverListsAndFinishAcceptedUnbanAfterClos
     node.unban_fn = [&](const auto& value) { unbanned = value; return true; };
     PeerListModel peers{node, nullptr, true, post, [] { return NodeClock::now(); }, queues};
     BanListModel bans{node, nullptr, true, post, queues};
-    PeerListSortProxy sorted{nullptr};
+    PeerListProxyModel sorted{nullptr};
     sorted.setSourceModel(&peers);
     QObject receiver;
     bool drained{false};
@@ -563,7 +563,7 @@ void PeerListModelTests::sortProxySortsByRoles()
 
     PeerListModel model{node, nullptr};
     QTRY_COMPARE(model.rowCount(), 3);
-    PeerListSortProxy proxy{nullptr};
+    PeerListProxyModel proxy{nullptr};
     proxy.setSourceModel(&model);
 
     const auto assert_sort = [&](const QString& role_name, auto less_than) {
@@ -711,7 +711,7 @@ void PeerListModelTests::manualFilterStaleAndQuietClose()
     PeerListModel model{node,nullptr,true,[&](auto turn) { gui.push_back(std::move(turn)); }, [] { return NodeClock::now(); }, NativeListQueues(transport.executor())};
     auto publish=[&] { if(gui.empty())return false;auto turn=std::move(gui.front());gui.pop_front();turn();return true; };
     QVERIFY(transport.step(execution::Lane::Core)); QVERIFY(transport.step(execution::Lane::Utility)); QVERIFY(publish());
-    PeerListSortProxy proxy{nullptr}; proxy.setSourceModel(&model);
+    PeerListProxyModel proxy{nullptr}; proxy.setSourceModel(&model);
     QVERIFY(transport.step(execution::Lane::Utility)); while (transport.step(execution::Lane::Utility)) {} QVERIFY(publish());
     QCOMPARE(proxy.rowCount(),2); QCOMPARE(proxy.indexOfNodeId(large_id),1);
     QPersistentModelIndex persistent{proxy.index(proxy.indexOfNodeId(large_id))};

@@ -6,7 +6,7 @@
 #define BITCOIN_QML_MODELS_PEERCOMMANDCONTROLLER_H
 
 #include <qml/models/peercommandoperation.h>
-#include <qml/models/peercommandtarget.h>
+#include <qml/models/peeractionsinterface.h>
 
 #include <QObject>
 #include <QPointer>
@@ -48,9 +48,9 @@ public:
     void setPresenting(bool presenting);
 
     //! Asks to disconnect \p peer.
-    Q_INVOKABLE bool disconnectPeer(PeerCommandTarget* peer);
+    Q_INVOKABLE bool disconnectPeer(PeerActionsInterface* peer);
     //! Asks to ban \p peer for \p duration.
-    Q_INVOKABLE bool banPeer(PeerCommandTarget* peer, PeerCommandOperation::BanDuration duration);
+    Q_INVOKABLE bool banPeer(PeerActionsInterface* peer, PeerCommandOperation::BanDuration duration);
     Q_INVOKABLE void confirm();
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void reconcile();

@@ -18,7 +18,7 @@ Button {
     property bool loading: false
     property bool noWalletLoaded: false
     property bool noWalletsFound: false
-    property int keySchemeKind: WalletQmlModel.SingleKey
+    property int keySchemeKind: WalletModel.SingleKey
     property string walletType: ""
 
     implicitWidth: 240
@@ -74,8 +74,8 @@ Button {
             Layout.preferredHeight: 24
             size: 24
             source: {
-                if (root.keySchemeKind === WalletQmlModel.WatchOnly) return "image://images/visible-filled"
-                if (root.keySchemeKind === WalletQmlModel.MultiKey) return "image://images/two-keys-filled"
+                if (root.keySchemeKind === WalletModel.WatchOnly) return "image://images/visible-filled"
+                if (root.keySchemeKind === WalletModel.MultiKey) return "image://images/two-keys-filled"
                 return "image://images/key-filled"
             }
             color: Theme.color.neutral9

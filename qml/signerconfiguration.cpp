@@ -28,9 +28,9 @@ QString PathError(const QString& command)
     if (!executable.contains(QLatin1Char('/')) && !executable.contains(QLatin1Char('\\'))) executable = QStandardPaths::findExecutable(executable);
     if (executable.isEmpty()) return Text("The signer executable was not found in PATH.");
     const QFileInfo info{executable};
-    if (!info.exists()) return QCoreApplication::translate("OptionsQmlModel", "The configured signer path does not exist.");
-    if (!info.isFile()) return QCoreApplication::translate("OptionsQmlModel", "The configured signer path is not a file.");
-    if (!info.isExecutable()) return QCoreApplication::translate("OptionsQmlModel", "The configured signer path is not executable.");
+    if (!info.exists()) return QCoreApplication::translate("SettingsModel", "The configured signer path does not exist.");
+    if (!info.isFile()) return QCoreApplication::translate("SettingsModel", "The configured signer path is not a file.");
+    if (!info.isExecutable()) return QCoreApplication::translate("SettingsModel", "The configured signer path is not executable.");
     return {};
 }
 } // namespace signerdiscovery

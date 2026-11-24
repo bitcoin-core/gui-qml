@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_REQUESTVIEWCONTROLLER_H
-#define BITCOIN_QML_MODELS_REQUESTVIEWCONTROLLER_H
+#ifndef BITCOIN_QML_MODELS_PAYMENTREQUESTVIEWCONTROLLER_H
+#define BITCOIN_QML_MODELS_PAYMENTREQUESTVIEWCONTROLLER_H
 
 #include <qml/models/paymentrequesteditormodel.h>
 #include <qml/models/walletreceivemodel.h>
@@ -17,7 +17,7 @@
  * the view going inactive cancels it, and only the request it asked for
  * opens. The opened request stays bound, with its wallet's receive model,
  * until the view is done with it. */
-class RequestViewController : public QObject
+class PaymentRequestViewController : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(WalletReceiveModel* receive READ receive WRITE setReceive NOTIFY receiveChanged)
@@ -30,8 +30,8 @@ class RequestViewController : public QObject
     Q_PROPERTY(QString failure READ failure NOTIFY changed)
 
 public:
-    explicit RequestViewController(QObject* parent = nullptr);
-    ~RequestViewController() override;
+    explicit PaymentRequestViewController(QObject* parent = nullptr);
+    ~PaymentRequestViewController() override;
 
     WalletReceiveModel* receive() const { return m_receive; }
     void setReceive(WalletReceiveModel* receive);
@@ -61,10 +61,10 @@ private:
     QPointer<WalletReceiveModel> m_receive;
     bool m_active{true};
     //! The open this view started; it owns it.
-    QPointer<RequestOpenOperation> m_open;
+    QPointer<PaymentRequestOpenOperation> m_open;
     QPointer<PaymentRequestEditorModel> m_editor;
     QPointer<WalletReceiveModel> m_editor_receive;
     QString m_failure;
 };
 
-#endif // BITCOIN_QML_MODELS_REQUESTVIEWCONTROLLER_H
+#endif // BITCOIN_QML_MODELS_PAYMENTREQUESTVIEWCONTROLLER_H

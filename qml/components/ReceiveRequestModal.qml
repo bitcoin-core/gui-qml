@@ -9,11 +9,11 @@ import "../controls"
 Popup {
     id: root
     objectName: "paymentRequestModal"
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     property bool contextActive: true
     // Opens the saved request this modal shows. Another wallet or an inactive
     // context cancels an open in progress.
-    RequestViewController {
+    PaymentRequestViewController {
         id: requestView
         objectName: "receiveRequestView"
         receive: root.wallet ? root.wallet.receive : null

@@ -11,7 +11,7 @@
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/coinslistmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/texteditsessionmodel.h>
 #include <qml/bitcoinamount.h>
 #include <core_io.h>
@@ -75,7 +75,7 @@ class ActivityIntegrationTests : public QObject
 {
     Q_OBJECT
     BitcoinQmlApplication& m_app;
-    WalletQmlModel* m_wallet{nullptr};
+    WalletModel* m_wallet{nullptr};
     ActivityFilterProxyModel* m_filter{nullptr};
     QString m_request_address;
     QString m_request_id;
@@ -491,7 +491,7 @@ private Q_SLOTS:
     {
         const auto payer = fundPayer(); QCOMPARE(qmltest::SelectOpenWalletForSetup(m_app, m_wallet->name()), m_wallet);
         QStringList addresses; for (int i{0}; i < 40; ++i) addresses << qmltest::NewAddress(m_app, m_wallet->name());
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
         auto* model = m_wallet->addressListModel(); QVERIFY(model);
         QVERIFY(qmltest::SelectSettings(m_app, "wallet")); QVERIFY(qmltest::Click(m_app, "walletAddressesRow"));
@@ -585,7 +585,7 @@ private Q_SLOTS:
         for (int i{0}; i < 40; ++i) outputs.pushKV(qmltest::NewAddress(m_app, m_wallet->name()).toStdString(), ValueFromAmount(100'000 + i * 1'000));
         UniValue send{UniValue::VARR}; send.push_back(""); send.push_back(outputs); for (int i{0}; i < 6; ++i) send.push_back(UniValue{}); send.push_back(1);
         qmltest::Rpc(m_app, "sendmany", send, "payer"); mineBlockToAddress(payer);
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
         auto* coins = m_wallet->coinsListModel(); QVERIFY(coins);
         QPointer<QObject> popup;

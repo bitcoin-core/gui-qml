@@ -14,7 +14,7 @@
 struct OpenWalletListModel::State {
     struct Node {
         uint64_t key{0};
-        WalletQmlModel* wallet{nullptr};
+        WalletModel* wallet{nullptr};
         Node* left{nullptr};
         Node* right{nullptr};
         int height{1};
@@ -23,16 +23,16 @@ struct OpenWalletListModel::State {
     WalletNameRegistry registry;
     std::deque<Node> arena;
     std::deque<Node*> free;
-    std::map<WalletQmlModel*, uint64_t> keys;
+    std::map<WalletModel*, uint64_t> keys;
     Node* root{nullptr};
     uint64_t next{0};
     bool transaction{false};
     bool closed{false};
     bool reconciling{false};
     bool scheduled{false};
-    WalletQmlModel* inserting{nullptr};
-    std::set<WalletQmlModel*> removals;
-    std::map<WalletQmlModel*, QPointer<WalletQmlModel>> observers;
+    WalletModel* inserting{nullptr};
+    std::set<WalletModel*> removals;
+    std::map<WalletModel*, QPointer<WalletModel>> observers;
     static int Size(const Node* node) { return node ? node->size : 0; }
     static int Height(const Node* node) { return node ? node->height : 0; }
     static void UpdateMetadata(Node* node)
@@ -175,16 +175,16 @@ QModelIndex OpenWalletListModel::index(int row, int column, const QModelIndex& p
 QVariant OpenWalletListModel::data(const QModelIndex& index, int role) const
 {
     if (!index.isValid() || index.model() != this || index.row() < 0 || index.row() >= rowCount() || role != Qt::UserRole + 1) return {};
-    const auto found = m_state->observers.find(static_cast<WalletQmlModel*>(index.internalPointer()));
+    const auto found = m_state->observers.find(static_cast<WalletModel*>(index.internalPointer()));
     return found == m_state->observers.end() ? QVariant{} : QVariant::fromValue(found->second.data());
 }
 QHash<int, QByteArray> OpenWalletListModel::roleNames() const { return {{Qt::UserRole + 1, "wallet"}}; }
-int OpenWalletListModel::rowForWallet(WalletQmlModel* wallet) const
+int OpenWalletListModel::rowForWallet(WalletModel* wallet) const
 {
     if (!m_state) return -1;
     const auto key = m_state->keys.find(wallet); return key == m_state->keys.end() ? -1 : m_state->Rank(key->second);
 }
-bool OpenWalletListModel::addWallet(WalletQmlModel* wallet)
+bool OpenWalletListModel::addWallet(WalletModel* wallet)
 {
     if (!m_state || m_state->closed || m_state->transaction || !wallet || !wallet->available()) return false;
     if (m_state->keys.contains(wallet)) return true;
@@ -192,7 +192,7 @@ bool OpenWalletListModel::addWallet(WalletQmlModel* wallet)
     if (row == std::numeric_limits<int>::max() || m_state->next == std::numeric_limits<uint64_t>::max()) return false;
     auto state = m_state;
     const QPointer<OpenWalletListModel> guard{this};
-    const QPointer<WalletQmlModel> original{wallet};
+    const QPointer<WalletModel> original{wallet};
     state->transaction = true;
     state->inserting = wallet;
     beginInsertRows({}, row, row);
@@ -223,13 +223,13 @@ bool OpenWalletListModel::addWallet(WalletQmlModel* wallet)
     reconcile();
     return guard && m_state == state && state->keys.contains(wallet);
 }
-void OpenWalletListModel::removeWallet(WalletQmlModel* wallet)
+void OpenWalletListModel::removeWallet(WalletModel* wallet)
 {
     const QPointer<OpenWalletListModel> guard{this};
     const bool removed = removeWalletRow(wallet);
     if (guard && removed) reconcile();
 }
-bool OpenWalletListModel::removeWalletRow(WalletQmlModel* wallet)
+bool OpenWalletListModel::removeWalletRow(WalletModel* wallet)
 {
     if (!m_state || m_state->closed) return false;
     if (m_state->transaction) {
@@ -303,7 +303,7 @@ void WalletRegistry::Retirement::pruneAdoptions()
     }
 }
 
-void WalletRegistry::Retirement::watch(WalletQmlModel* model)
+void WalletRegistry::Retirement::watch(WalletModel* model)
 {
     if (!model || !values || values->alive.contains(model)) return;
     values->alive.emplace(model, model);
@@ -317,7 +317,7 @@ void WalletRegistry::Retirement::watch(WalletQmlModel* model)
     });
 }
 
-bool WalletRegistry::Retirement::adopt(WalletQmlModel* model, bool remove)
+bool WalletRegistry::Retirement::adopt(WalletModel* model, bool remove)
 {
     if (!model || !values || values->retiring.contains(model)) return false;
     if (!values->alive.contains(model)) watch(model);
@@ -326,7 +326,7 @@ bool WalletRegistry::Retirement::adopt(WalletQmlModel* model, bool remove)
     const auto name = model->name();
     if (model != empty) values->retiring_names.insert(name);
     const auto self = shared_from_this();
-    const QPointer<WalletQmlModel> original{model};
+    const QPointer<WalletModel> original{model};
     const auto completed = std::make_shared<std::atomic_bool>(false);
     const auto shutdown_done = std::make_shared<bool>(false); // GUI bridge only.
     const auto found_adoption = values->adoptions.find(model);
@@ -345,7 +345,7 @@ bool WalletRegistry::Retirement::adopt(WalletQmlModel* model, bool remove)
     };
     if (const auto adoption = weak_adoption.lock()) adoption->retirement_ready = retired;
     const auto drained = [shutdown_done, retired] { *shutdown_done = true; retired(); };
-    QObject::connect(model, &WalletQmlModel::shutdownFinished, bridge.get(), drained);
+    QObject::connect(model, &WalletModel::shutdownFinished, bridge.get(), drained);
     if (model->shutdownComplete()) post(drained);
     if (const auto opening = model->opening()) opening->retire(remove);
     return target;
@@ -377,7 +377,7 @@ void WalletRegistry::Retirement::pump()
         auto* raw = values->pending.front(); values->pending.pop_front();
         const auto found = values->alive.find(raw);
         if (found == values->alive.end() || !found->second) continue;
-        const QPointer<WalletQmlModel> model = found->second;
+        const QPointer<WalletModel> model = found->second;
         const auto name = model->name();
         const bool target = adopt(model, false);
         model->beginShutdown(); // Actual original-opening retirement is retained independently.
@@ -421,11 +421,11 @@ void WalletRegistry::Retirement::notifyRetired()
     keep_alive.reset();
 }
 
-bool WalletRegistry::registerModel(WalletQmlModel* wallet_model, std::shared_ptr<OpeningAdoption> adoption)
+bool WalletRegistry::registerModel(WalletModel* wallet_model, std::shared_ptr<OpeningAdoption> adoption)
 {
     const auto registry_lifetime = shared_from_this();
     const QPointer<QObject> observer{m_host->owner};
-    const QPointer<WalletQmlModel> original{wallet_model};
+    const QPointer<WalletModel> original{wallet_model};
     if (!adoption) adoption = retain<OpeningAdoption>([] { return std::make_unique<OpeningAdoption>(); });
     if (!adoption || !observer || m_host->stopping() || !original) return false;
     adoption->facade = wallet_model;
@@ -434,7 +434,7 @@ bool WalletRegistry::registerModel(WalletQmlModel* wallet_model, std::shared_ptr
     m_retirement->watch(wallet_model); // Covers both initial handoff and notification-created originals.
     const std::weak_ptr<WalletRegistry> weak = registry_lifetime;
     const auto host = m_host;
-    QObject::connect(wallet_model, &WalletQmlModel::availableChanged, observer, [weak, host, wallet_model] {
+    QObject::connect(wallet_model, &WalletModel::availableChanged, observer, [weak, host, wallet_model] {
         if (const auto registry = weak.lock(); registry && host->owner) {
             if (wallet_model->available() && !host->stopping()) registry->m_open_wallet_model->addWallet(wallet_model);
             else {
@@ -443,20 +443,20 @@ bool WalletRegistry::registerModel(WalletQmlModel* wallet_model, std::shared_ptr
             }
         }
     });
-    QObject::connect(wallet_model, &WalletQmlModel::walletUnloaded, observer,
+    QObject::connect(wallet_model, &WalletModel::walletUnloaded, observer,
         [weak, host, original, post = m_services.post] {
             post([weak, host, original] { if (const auto registry = weak.lock(); registry && host->owner && original) registry->removeModel(original, false); });
         });
-    QObject::connect(wallet_model, &WalletQmlModel::closeConfirmed, observer, [weak, host, wallet_model] {
+    QObject::connect(wallet_model, &WalletModel::closeConfirmed, observer, [weak, host, wallet_model] {
         if (const auto registry = weak.lock(); registry && host->owner) registry->removeModel(wallet_model, true);
     });
-    QObject::connect(wallet_model, &WalletQmlModel::closeQuestionChanged, observer, [host, wallet_model] {
+    QObject::connect(wallet_model, &WalletModel::closeQuestionChanged, observer, [host, wallet_model] {
         if (host->owner) host->closeQuestionChanged(wallet_model);
     });
     return true;
 }
 
-void WalletRegistry::removeModel(WalletQmlModel* wallet_model, bool remove)
+void WalletRegistry::removeModel(WalletModel* wallet_model, bool remove)
 {
     const auto registry_lifetime = shared_from_this();
     if (!wallet_model || wallet_model == m_services.empty) {
@@ -468,7 +468,7 @@ void WalletRegistry::removeModel(WalletQmlModel* wallet_model, bool remove)
     closeOpening(wallet_model);
     if (!observer || m_host->stopping()) return;
     QString wallet_name;
-    WalletQmlModel* next_selected_wallet{nullptr};
+    WalletModel* next_selected_wallet{nullptr};
     {
         QMutexLocker locker(&m_wallets_mutex);
         const auto position = m_wallet_positions.find(wallet_model);
@@ -499,13 +499,13 @@ void WalletRegistry::removeModel(WalletQmlModel* wallet_model, bool remove)
     if (loaded_changed) m_host->notice(Notice::LoadedChanged);
 }
 
-WalletQmlModel* WalletRegistry::adoptWallet(std::unique_ptr<interfaces::Wallet>& wallet, const QString& name)
+WalletModel* WalletRegistry::adoptWallet(std::unique_ptr<interfaces::Wallet>& wallet, const QString& name)
 {
     if (!wallet) return nullptr;
     return adoptWallet([&wallet](auto&) { return std::move(wallet); }, name, {}, 0, {});
 }
 
-WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, const std::optional<QString>& captured_name,
+WalletModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, const std::optional<QString>& captured_name,
                                           std::shared_ptr<AdoptionOrigin> origin, uint64_t ingress_sequence,
                                           walletopening::NativeEvents observation)
 {
@@ -524,7 +524,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
     const auto current = [&] {
         return guard && !m_host->stopping() && state->values == values && m_host->publicationCurrent(publication);
     };
-    if (!captured_name) { m_host->loadError(QCoreApplication::translate("WalletQmlController", "Wallet information is unavailable.")); return nullptr; }
+    if (!captured_name) { m_host->loadError(QCoreApplication::translate("WalletController", "Wallet information is unavailable.")); return nullptr; }
     const QString& name = *captured_name;
     if (!origin) origin = m_publishing_origin ? m_publishing_origin : m_notification_origin;
     if (!origin) { m_host->adoptionUnavailable(false); return nullptr; }
@@ -565,7 +565,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
             return nullptr;
         }
     }
-    WalletQmlModel* model{adoption ? adoption->facade.data() : nullptr};
+    WalletModel* model{adoption ? adoption->facade.data() : nullptr};
     bool mismatched_opening{false};
     {
         QMutexLocker locker(&m_wallets_mutex);
@@ -628,7 +628,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
     // Bind the original command's release fence before any row/info observer
     // can close this opening, including callback-before-result delivery.
     if (origin->result_lifetime) retainResult(model, origin->result_lifetime);
-    const QPointer<WalletQmlModel> original{model};
+    const QPointer<WalletModel> original{model};
     const auto still_adopted = [&] {
         return current() && original && !adoption->closed && original->available()
             && original->opening()->identity() == adoption->identity && m_wallet_positions.contains(original)
@@ -664,7 +664,7 @@ WalletQmlModel* WalletRegistry::adoptWallet(walletpublication::TakeWallet take, 
 }
 
 void WalletRegistry::observeOpening(const std::shared_ptr<AdoptionOrigin>& source, const std::shared_ptr<AdoptionOrigin>& intent,
-                                   const QString& name, WalletQmlModel* facade, uint64_t notification_sequence, uint64_t ingress_sequence)
+                                   const QString& name, WalletModel* facade, uint64_t notification_sequence, uint64_t ingress_sequence)
 {
     const auto registry_lifetime = shared_from_this();
     const QPointer<QObject> observer{m_host->owner};
@@ -748,7 +748,7 @@ std::shared_ptr<WalletRegistry::AdoptionOrigin> WalletRegistry::newOrigin()
     return origin;
 }
 
-void WalletRegistry::closeOpening(WalletQmlModel* wallet)
+void WalletRegistry::closeOpening(WalletModel* wallet)
 {
     const auto registry_lifetime = shared_from_this();
     const QPointer<QObject> observer{m_host->owner};
@@ -819,23 +819,23 @@ execution::ValueCleanup WalletRegistry::valueCleanup() const
     return [queue = m_retirement->value_cleanup](auto cleanup) { return queue->hold(std::move(cleanup)); };
 }
 
-bool WalletRegistry::containsExact(WalletQmlModel* wallet) const
+bool WalletRegistry::containsExact(WalletModel* wallet) const
 {
     return wallet && m_wallet_positions.contains(wallet);
 }
-WalletQmlModel* WalletRegistry::walletForName(const QString& name) const
+WalletModel* WalletRegistry::walletForName(const QString& name) const
 {
     const auto found = m_wallet_names.find(name);
     return found != m_wallet_names.end() && found->second->available() ? found->second : nullptr;
 }
-WalletQmlModel* WalletRegistry::firstAvailable(WalletQmlModel* except) const
+WalletModel* WalletRegistry::firstAvailable(WalletModel* except) const
 {
     if (!m_open_wallet_model) return nullptr;
     // The ordered row tree already excludes unavailable facades. Looking at
     // its first two rows avoids scanning the entire live opening inventory.
     for (int row = 0; row < 2; ++row) {
         const auto index = m_open_wallet_model->index(row);
-        auto* wallet = m_open_wallet_model->data(index, Qt::UserRole + 1).value<WalletQmlModel*>();
+        auto* wallet = m_open_wallet_model->data(index, Qt::UserRole + 1).value<WalletModel*>();
         if (wallet != except && containsExact(wallet) && wallet->available()) return wallet;
     }
     return nullptr;
@@ -845,11 +845,11 @@ QList<QObject*> WalletRegistry::openWallets() const
     QMutexLocker locker(&m_wallets_mutex);
     return QList<QObject*>(m_wallets.begin(), m_wallets.end());
 }
-void WalletRegistry::rememberInformation(WalletQmlModel* wallet, WalletInformation information)
+void WalletRegistry::rememberInformation(WalletModel* wallet, WalletInformation information)
 {
     if (containsExact(wallet)) m_wallet_information.insert_or_assign(wallet, std::move(information));
 }
-void WalletRegistry::insert(WalletQmlModel* wallet, const QString& name)
+void WalletRegistry::insert(WalletModel* wallet, const QString& name)
 {
     QMutexLocker locker(&m_wallets_mutex);
     m_wallets.push_back(wallet); m_wallet_positions.emplace(wallet, std::prev(m_wallets.end())); m_wallet_names.insert_or_assign(name, wallet);
@@ -861,7 +861,7 @@ void WalletRegistry::close()
     clearOrigins();
     m_names_registry.reset();
 }
-bool WalletRegistry::adoptRetirement(WalletQmlModel* model, bool remove)
+bool WalletRegistry::adoptRetirement(WalletModel* model, bool remove)
 {
     m_wallet_information.erase(model);
     return m_retirement->adopt(model, remove);
@@ -905,7 +905,7 @@ void WalletRegistry::forgetForm(QObject* form)
     if (m_retirement->values) m_retirement->values->forms.erase(form);
 }
 
-void WalletRegistry::retainResult(WalletQmlModel* wallet, const std::shared_ptr<ResultLifetime>& lifetime)
+void WalletRegistry::retainResult(WalletModel* wallet, const std::shared_ptr<ResultLifetime>& lifetime)
 {
     const auto state = m_retirement;
     if (!state->values || !lifetime) return;

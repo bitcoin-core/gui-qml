@@ -30,7 +30,7 @@
 #include <QPersistentModelIndex>
 #include <QQmlEngine>
 #include <qml/models/texteditsessionmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <streams.h>
 #include <core_io.h>
 #include <rpc/util.h>
@@ -75,7 +75,7 @@ class ReceiveIntegrationTests : public QObject
         return nullptr;
     }
 
-    bool hasTransaction(WalletQmlModel& wallet, const QString& txid)
+    bool hasTransaction(WalletModel& wallet, const QString& txid)
     {
         auto* activity = wallet.transactionActivityModel();
         for (int row{0}; row < activity->rowCount(); ++row) {
@@ -131,12 +131,12 @@ class ReceiveIntegrationTests : public QObject
     // Saves the typed editor's request and starts a fresh one; returns its id.
     QString saveTypedRequest(WalletReceiveModel* receive, CAmount amount)
     {
-        auto* wallet = receive ? qobject_cast<WalletQmlModel*>(receive->parent()) : nullptr;
+        auto* wallet = receive ? qobject_cast<WalletModel*>(receive->parent()) : nullptr;
         if (!wallet) return {};
         const auto saved = SaveTypedRequest(*wallet, [amount](PaymentRequestEditorModel& request) { if (amount > 0) request.amount()->setSatoshi(amount); });
         return saved ? saved->id : QString{};
     }
-    std::vector<std::string> storedRequests(WalletQmlModel& wallet)
+    std::vector<std::string> storedRequests(WalletModel& wallet)
     {
         const auto opening = wallet.opening();
         const auto native = opening ? opening->borrow() : nullptr;
@@ -144,7 +144,7 @@ class ReceiveIntegrationTests : public QObject
         return qmltest::Call(m_app, [native](interfaces::Node*) { return native->getAddressReceiveRequests(); });
     }
 
-    std::optional<CAmount> persistedAmount(WalletQmlModel& wallet, const QString& address)
+    std::optional<CAmount> persistedAmount(WalletModel& wallet, const QString& address)
     {
         const auto blobs = storedRequests(wallet);
         for (const auto& entry : walletrequests::Decode(blobs).entries) if (QString::fromStdString(entry.recipient.address) == address) return entry.recipient.amount;
@@ -186,7 +186,7 @@ class ReceiveIntegrationTests : public QObject
         if (!QTest::qWaitFor([&] { return receive->editor() && receive->ensureAddress() && receive->reservation()->available() && receive->editor()->canSave(); }, 30'000)) return {};
         receive->editor()->message()->edit(message); return saveTypedRequest(receive, 0);
     }
-    QObject* viewFor(WalletQmlModel* wallet)
+    QObject* viewFor(WalletModel* wallet)
     {
         auto* page = qmltest::Find(m_app, "desktopWalletsPage"); QVariant view;
         if (!page || !QMetaObject::invokeMethod(page, "viewForWallet", Q_RETURN_ARG(QVariant, view), Q_ARG(QVariant, QVariant::fromValue<QObject*>(wallet)))) return nullptr;
@@ -268,7 +268,7 @@ private Q_SLOTS:
         auto* wallet = encrypted ? qmltest::CreateLockedHardenedWallet(m_app, "typed-roundtrip", "roundtrip password")
                                  : qmltest::CreateWallet(m_app, "typed-roundtrip");
         QVERIFY(wallet); auto* receive = wallet->receive(); QVERIFY(receive);
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(0);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(0);
         QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
         QVERIFY(qmltest::WaitForVisible(m_app, "receivePage"));
         QTRY_VERIFY(receive->reservation()->available() && receive->editor()->canSave());
@@ -410,7 +410,7 @@ private Q_SLOTS:
         }
         QVERIFY(saw_unknown); QVERIFY(saw_proven);
         QVERIFY(receive->chooseAddressType("bech32")); QVERIFY(!receive->editor()->canSave());
-        QTRY_COMPARE(receive->reservation()->phase(), ReceiveReservationModel::Failed);
+        QTRY_COMPARE(receive->reservation()->phase(), AddressReservationModel::Failed);
         QVERIFY(!receive->reservation()->available()); QVERIFY(!receive->reservation()->prompt()); QCOMPARE(receive->reservation()->address(), original);
         receive->editor()->save(); QTRY_VERIFY(!receive->editor()->busy());
         const auto stored = qmltest::Call(m_app, [name](interfaces::Node* node) {
@@ -593,10 +593,10 @@ private Q_SLOTS:
         QTRY_COMPARE(ReviewSendState(*sender), SendOperation::State::Committed);
         QVERIFY(qmltest::WaitForVisible(m_app, "sendCompletePage"));
         auto* complete = qmltest::Find(m_app, "sendCompletePage"); QVERIFY(complete);
-        const auto expected = scenario == 0 ? WalletQmlModel::SendSubmission::SubmissionMempool : WalletQmlModel::SendSubmission::SubmissionNotInMempool;
+        const auto expected = scenario == 0 ? WalletModel::SendSubmission::SubmissionMempool : WalletModel::SendSubmission::SubmissionNotInMempool;
         QCOMPARE(sender->property("submission").toInt(), static_cast<int>(expected)); QCOMPARE(complete->property("submissionState").toInt(), static_cast<int>(expected));
-        QCOMPARE(sender->property("record").toInt(), static_cast<int>(WalletQmlModel::SendRecord::SendRecordRecorded));
-        QCOMPARE(complete->property("recordState").toInt(), static_cast<int>(WalletQmlModel::SendRecord::SendRecordRecorded));
+        QCOMPARE(sender->property("record").toInt(), static_cast<int>(WalletModel::SendRecord::SendRecordRecorded));
+        QCOMPARE(complete->property("recordState").toInt(), static_cast<int>(WalletModel::SendRecord::SendRecordRecorded));
         QCOMPARE(complete->property("titleText").toString(), scenario == 0 ? QString{"Transaction submitted"} : QString{"Transaction saved"});
         if (scenario != 0) QVERIFY(complete->property("descriptionText").toString().contains("not in the mempool"));
         const auto txid = QString::fromStdString(approved->GetHash().GetHex()); QCOMPARE(sender->property("txid").toString(), txid);
@@ -812,8 +812,8 @@ private Q_SLOTS:
         UniValue persisted;
         QVERIFY(persisted.read(file.readAll().toStdString()));
         QCOMPARE(persisted["qml_receive_address_types"]["preference"].get_str(), std::string{"legacy"});
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController");
-        QPointer<WalletQmlModel> original{wallet};
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController");
+        QPointer<WalletModel> original{wallet};
         controller->closeWallet("preference"); QTRY_VERIFY(original.isNull());
         controller->setSelectedWallet("preference");
         auto* reopened = qmltest::WaitForOpenWallet(m_app, "preference");
@@ -834,9 +834,9 @@ private Q_SLOTS:
         UniValue persisted; QVERIFY(persisted.read(file.readAll().toStdString()));
         const auto saved = [&](const char* name) { const auto& value = persisted["qml_receive_address_types"][name]; return value.isStr() ? value.get_str() : std::string{"<missing>"}; };
         QCOMPARE(saved("default-first"), std::string{"legacy"}); QCOMPARE(saved("default-second"), std::string{"p2sh-segwit"});
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         for (const auto& [name, type] : {std::pair{QStringLiteral("default-first"), QStringLiteral("legacy")}, std::pair{QStringLiteral("default-second"), QStringLiteral("p2sh-segwit")}}) {
-            QPointer<WalletQmlModel> original{controller->walletForName(name)}; QVERIFY(original);
+            QPointer<WalletModel> original{controller->walletForName(name)}; QVERIFY(original);
             controller->closeWallet(name); QTRY_VERIFY(original.isNull());
             controller->setSelectedWallet(name);
             auto* reopened = qmltest::WaitForOpenWallet(m_app, name); QVERIFY(reopened); QTRY_VERIFY(reopened->capabilitiesKnown());
@@ -875,7 +875,7 @@ private Q_SLOTS:
         const auto restore = qScopeGuard([previous] { QLocale::setDefault(previous); });
         QLocale::setDefault(QLocale("de_DE"));
         auto* wallet = qmltest::CreateWallet(m_app); QVERIFY(wallet);
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
         QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
         QVERIFY(qmltest::WaitForVisible(m_app, "receivePage"));
         QTRY_VERIFY(wallet->receive()->reservation()->available());
@@ -1325,7 +1325,7 @@ private Q_SLOTS:
     {
         QFETCH(bool, prior_signature); auto* wallet = qmltest::CreateWallet(m_app, "auth-message"); QVERIFY(wallet);
         const auto address = qmltest::NewAddress(m_app, wallet->name(), "legacy");
-        QVERIFY(wallet->encryptWallet("signing password")); QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
+        QVERIFY(wallet->encryptWallet("signing password")); QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
         QVERIFY(openMessages()); QVERIFY(qmltest::SetText(m_app, "signMessageAddressField", address));
         QVERIFY(qmltest::SetText(m_app, "signMessageMessageField", "Exact signing statement"));
         auto* model = wallet->signVerifyMessageModel(); QString earlier;
@@ -1413,7 +1413,7 @@ private Q_SLOTS:
         // No dialog-close command precedes unload. The retained projection is
         // deliberately detached; Core must not wait for its GUI destruction.
         qmltest::Rpc(m_app, "unloadwallet", unload);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QTRY_VERIFY(!controller->walletForName(name)); QTRY_VERIFY(!editor->available());
         UniValue load{UniValue::VARR}; load.push_back(name.toStdString()); qmltest::Rpc(m_app, "loadwallet", load);
         QTRY_VERIFY(controller->walletForName(name) && controller->walletForName(name)->available());
@@ -1431,7 +1431,7 @@ private Q_SLOTS:
         QVERIFY(wallet);
         const auto address = qmltest::NewAddress(m_app, wallet->name(), "legacy");
         QVERIFY(wallet->encryptWallet("signing password"));
-        QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
+        QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
         auto* signer = wallet->signVerifyMessageModel();
         QVERIFY(!AwaitMessageSigning(*signer, address, "integration message"));
         QVERIFY(signer->signingNeedsUnlock());
@@ -1475,7 +1475,7 @@ private Q_SLOTS:
         QVERIFY(qmltest::Click(m_app, "activityTabButton"));
         QVERIFY(qmltest::Click(m_app, "receiveTabButton"));
         QVERIFY(!popup->property("opened").toBool());
-        QCOMPARE(wallet->receive()->reservation()->phase(), ReceiveReservationModel::Cancelled);
+        QCOMPARE(wallet->receive()->reservation()->phase(), AddressReservationModel::Cancelled);
         QVERIFY(qmltest::Click(m_app, "receiveRetryAddressButton"));
         QTRY_VERIFY(popup->property("opened").toBool());
         QVERIFY(qmltest::SetText(m_app, "receivePassphraseField", "wrong password"));
@@ -1616,7 +1616,7 @@ private Q_SLOTS:
         auto* view = viewFor(wallet); QVERIFY(view && view != other_view);
         auto* modal = qmltest::Find(view, "paymentRequestModal"); QVERIFY(modal && modal->property("opened").toBool());
         auto* card = modal->property("card").value<QObject*>(); QVERIFY(card);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QVERIFY(controller->selectWallet(other));
         QElapsedTimer fade; fade.start();
         do {
@@ -1647,7 +1647,7 @@ private Q_SLOTS:
         QPointer<QObject> detail{stack->property("currentItem").value<QObject*>()}; QVERIFY(detail); QCOMPARE(detail->objectName(), QStringLiteral("activityDetailsPage"));
         QVERIFY(QMetaObject::invokeMethod(detail, "openPaymentRequestDetail", Q_ARG(QVariant, id)));
         auto* host = qmltest::Find(detail, "transactionPaymentRequestModal"); QVERIFY(host); QTRY_VERIFY(host->property("opened").toBool());
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QVERIFY(controller->selectWallet(other)); QTRY_COMPARE(controller->selectedWallet(), other);
         QTRY_VERIFY(!host->property("visible").toBool()); QTest::qWait(300);
         QVERIFY(detail); QCOMPARE(stack->property("depth").toInt(), 2); QCOMPARE(stack->property("currentItem").value<QObject*>(), detail.data());
@@ -1666,14 +1666,14 @@ private Q_SLOTS:
         QPointer<PaymentRequestEditorModel> deletion{wallet->receive()->deleteRequest(id)}; QVERIFY(deletion);
         QTRY_VERIFY(deletion && deletion->closePrompt()); deletion->closePrompt()->answer(TextEditClosePrompt::Save);
         QTRY_VERIFY(deletion && deletion->saveResult().erased); QTRY_COMPARE(wallet->receiveRequests()->count(), 0);
-        const auto stored = [&](WalletQmlModel* owner) {
+        const auto stored = [&](WalletModel* owner) {
             return walletrequests::Decode(storedRequests(*owner)).entries;
         };
         QVERIFY(stored(wallet).empty());
         const auto kept = stored(other); QCOMPARE(kept.size(), size_t{1}); QCOMPARE(QString::number(kept.front().id), other_id);
         QCOMPARE(QString::fromStdString(kept.front().recipient.message), QStringLiteral("other wallet request"));
         QCOMPARE(other->receiveRequests()->count(), 1);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QVERIFY(controller->selectWallet(other)); QTRY_COMPARE(controller->selectedWallet(), other);
         auto* modal = qmltest::Find(viewFor(other), "paymentRequestModal"); QVERIFY(modal); QTRY_VERIFY(!modal->property("visible").toBool());
         auto* reopened = openFromActivity(other_id); QVERIFY(reopened); QCOMPARE(reopened->message()->text(), QStringLiteral("other wallet request"));
@@ -1779,7 +1779,7 @@ private Q_SLOTS:
         // Reload the wallet while the request is still open.
         UniValue unload{UniValue::VARR}; unload.push_back(name.toStdString());
         qmltest::Rpc(m_app, "unloadwallet", unload);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QTRY_VERIFY(!controller->walletForName(name));
         QTRY_VERIFY(status_text() != QStringLiteral("Payment received"));
         qmltest::Rpc(m_app, "loadwallet", unload);
@@ -1838,7 +1838,7 @@ private Q_SLOTS:
         }
         UniValue unload{UniValue::VARR}; unload.push_back(name.toStdString());
         qmltest::Rpc(m_app, "unloadwallet", unload);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QTRY_VERIFY(!controller->walletForName(name));
         // Reload is a real persisted Wallet boundary, not a new fake ledger.
         // Process restart is independently exercised by the functional case.

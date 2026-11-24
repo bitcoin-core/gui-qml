@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/feebumpcontroller.h>
-#include <qml/models/feebumps.h>
+#include <qml/models/feebumpmodel.h>
 #include <qml/models/walletpagecontroller.h>
 #include <test/qt_test_registry.h>
 
@@ -14,10 +14,10 @@
 #include <memory>
 
 namespace {
-class TestWalletInterface : public WalletInterface
+class TestWalletInterface : public WalletAvailabilityInterface
 {
 public:
-    TestWalletInterface() : WalletInterface(nullptr) {}
+    TestWalletInterface() : WalletAvailabilityInterface(nullptr) {}
     bool available() const override { return true; }
 };
 
@@ -70,7 +70,7 @@ public:
 struct Wallet {
     bool available{true};
     QList<QPointer<FakeAttempt>> created;
-    std::unique_ptr<FeeBumps> bumps{std::make_unique<FeeBumps>([this] { return available; }, [this](QObject* parent) {
+    std::unique_ptr<FeeBumpModel> bumps{std::make_unique<FeeBumpModel>([this] { return available; }, [this](QObject* parent) {
         auto* attempt = new FakeAttempt(parent); created.append(attempt); return attempt;
     }, nullptr)};
     FakeAttempt* last() const { return created.isEmpty() ? nullptr : created.last().data(); }

@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_REQUESTDELETECONTROLLER_H
-#define BITCOIN_QML_MODELS_REQUESTDELETECONTROLLER_H
+#ifndef BITCOIN_QML_MODELS_PAYMENTREQUESTDELETECONTROLLER_H
+#define BITCOIN_QML_MODELS_PAYMENTREQUESTDELETECONTROLLER_H
 
 #include <qml/models/paymentrequesteditormodel.h>
 #include <qml/models/walletreceivemodel.h>
@@ -15,7 +15,7 @@
 /** Deleting a saved payment request: the question that confirms it, the
  * delete and its outcome. A view that offers "Delete payment request"
  * declares one; each owns its own question. */
-class RequestDeleteController : public QObject
+class PaymentRequestDeleteController : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(WalletReceiveModel* receive READ receive WRITE setReceive NOTIFY receiveChanged)
@@ -27,8 +27,8 @@ class RequestDeleteController : public QObject
     Q_PROPERTY(bool failed READ failed NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
 public:
-    explicit RequestDeleteController(QObject* parent = nullptr);
-    ~RequestDeleteController() override;
+    explicit PaymentRequestDeleteController(QObject* parent = nullptr);
+    ~PaymentRequestDeleteController() override;
 
     WalletReceiveModel* receive() const { return m_receive; }
     void setReceive(WalletReceiveModel* receive);
@@ -64,4 +64,4 @@ private:
     QPointer<PaymentRequestEditorModel> m_deletion;
 };
 
-#endif // BITCOIN_QML_MODELS_REQUESTDELETECONTROLLER_H
+#endif // BITCOIN_QML_MODELS_PAYMENTREQUESTDELETECONTROLLER_H

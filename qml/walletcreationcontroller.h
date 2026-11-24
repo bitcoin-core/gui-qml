@@ -21,7 +21,7 @@
 #include <QString>
 #include <QUrl>
 
-class WalletQmlModel;
+class WalletModel;
 class WalletRegistry;
 namespace interfaces { class Node; }
 

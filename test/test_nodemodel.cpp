@@ -3159,12 +3159,12 @@ void NodeModelTests::fatalExceptionExitsWithoutDraining()
     NodeModel model{node, backend_ready};
     execution::Executor worker{execution::Executor::Config{}};
     QmlInitExecutor executor{node, std::make_shared<execution::SerialQueue>(worker.makeQueue(execution::Lane::Priority))};
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     QmlQuitHandler quit_handler;
     connect(&quit_handler, &QmlQuitHandler::quitRequested, &model, &NodeModel::requestShutdown);
-    connect(&model, &NodeModel::requestedShutdown, &coordinator, &QmlShutdownCoordinator::requestShutdown);
+    connect(&model, &NodeModel::requestedShutdown, &coordinator, &ShutdownCoordinator::requestShutdown);
     connect(&executor, &QmlInitExecutor::runawayException, &model, &NodeModel::handleRunawayException);
-    connect(&coordinator, &QmlShutdownCoordinator::finished, this, [] { std::_Exit(86); });
+    connect(&coordinator, &ShutdownCoordinator::finished, this, [] { std::_Exit(86); });
 
     QSemaphore entered, release;
     auto stalled = worker.makeQueue(execution::Lane::Utility);

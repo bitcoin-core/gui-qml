@@ -2,16 +2,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_SETTINGSEDITORSOURCE_H
-#define BITCOIN_QML_MODELS_SETTINGSEDITORSOURCE_H
+#ifndef BITCOIN_QML_MODELS_SETTINGSEDITORFACTORYINTERFACE_H
+#define BITCOIN_QML_MODELS_SETTINGSEDITORFACTORYINTERFACE_H
 
 #include <QObject>
 
 class SettingsEditorModel;
 
 /** What a SettingsNavigationController needs from the options: new settings
- * editors. OptionsQmlModel implements it; QML tests use a fake. */
-class SettingsEditorSource : public QObject
+ * editors. SettingsModel implements it; QML tests use a fake. */
+class SettingsEditorFactoryInterface : public QObject
 {
     Q_OBJECT
 public:
@@ -21,4 +21,4 @@ public:
     virtual SettingsEditorModel* createSettingsEditor() = 0;
 };
 
-#endif // BITCOIN_QML_MODELS_SETTINGSEDITORSOURCE_H
+#endif // BITCOIN_QML_MODELS_SETTINGSEDITORFACTORYINTERFACE_H

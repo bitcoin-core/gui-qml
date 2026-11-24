@@ -17,7 +17,7 @@ PageStack {
     id: root
     objectName: "walletSettingsStack"
 
-    required property WalletQmlModel wallet
+    required property WalletModel wallet
 
     signal selectWalletRequested()
     signal receiveRequested()

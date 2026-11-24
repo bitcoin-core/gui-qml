@@ -123,7 +123,7 @@ private Q_SLOTS:
 
     void loadFailureClearsOneCoherentTuple()
     {
-        psbtdocument::Owner owner{9};
+        psbtdocument::Store owner{9};
         auto facts = Analysis();
         const auto first = owner.consume(1, psbtwork::Kind::Load, Result(facts));
         QVERIFY(first.snapshot);
@@ -144,7 +144,7 @@ private Q_SLOTS:
 
     void olderOutcomeCannotMixWithTheCurrentAnalysis()
     {
-        psbtdocument::Owner owner{11};
+        psbtdocument::Store owner{11};
         const auto current = owner.consume(2, psbtwork::Kind::Load, Result(Analysis()));
         const auto accepted = owner.snapshot().analysis;
         QVERIFY(current.snapshot);
@@ -161,7 +161,7 @@ private Q_SLOTS:
 
     void withdrawnOwnerKeepsEffectReceiptWithoutRetargeting()
     {
-        psbtdocument::Owner owner{12};
+        psbtdocument::Store owner{12};
         owner.withdraw();
         auto completed = Result(Analysis());
         completed.submitted = true;
@@ -179,7 +179,7 @@ private Q_SLOTS:
         execution::Executor executor{execution::Executor::Config{}};
         auto core = executor.makeQueue(execution::Lane::Core);
         auto utility = executor.makeQueue(execution::Lane::Utility);
-        auto owner = std::make_shared<psbtdocument::Owner>(3);
+        auto owner = std::make_shared<psbtdocument::Store>(3);
         const auto gui = QThread::currentThread();
         std::atomic<QThread*> native_thread{nullptr}, domain_thread{nullptr};
         std::atomic_bool qualified{false};

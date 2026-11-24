@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_FEEBUMPS_H
-#define BITCOIN_QML_MODELS_FEEBUMPS_H
+#ifndef BITCOIN_QML_MODELS_FEEBUMPMODEL_H
+#define BITCOIN_QML_MODELS_FEEBUMPMODEL_H
 
 #include <qml/models/feebumpinterface.h>
 
@@ -16,13 +16,13 @@
 /** A wallet's fee bumps (FeeBumpInterface). It owns every attempt it
  * creates, forwards the wallet's display unit and publication retries to
  * them, and closes them when the wallet unloads. */
-class FeeBumps final : public FeeBumpInterface
+class FeeBumpModel final : public FeeBumpInterface
 {
     Q_OBJECT
 public:
     //! Creates a configured attempt owned by `parent`.
     using Create = std::function<FeeBumpOperation*(QObject* parent)>;
-    FeeBumps(std::function<bool()> available, Create create, QObject* parent);
+    FeeBumpModel(std::function<bool()> available, Create create, QObject* parent);
 
     bool available() const override { return !m_closed && m_available && m_available(); }
     FeeBumpOperation* openFeeBump(const QString& txid, unsigned target_blocks) override;
@@ -54,4 +54,4 @@ private:
     bool m_closed{false};
 };
 
-#endif // BITCOIN_QML_MODELS_FEEBUMPS_H
+#endif // BITCOIN_QML_MODELS_FEEBUMPMODEL_H

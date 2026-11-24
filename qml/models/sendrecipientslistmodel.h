@@ -16,7 +16,7 @@
 
 namespace paymentimport { struct TargetPort; }
 
-class WalletQmlModel;
+class WalletModel;
 class SendRecipientsListModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -114,7 +114,7 @@ private:
     void retireRecipients(std::shared_ptr<Rows> rows);
     void trimToFront(quint64 generation);
     SendRecipient* createRecipient();
-    WalletQmlModel* m_wallet;
+    WalletModel* m_wallet;
     const senddraft::Limits m_limits;
     size_t m_pending_row_creations{0};
     const quint64 m_identity;

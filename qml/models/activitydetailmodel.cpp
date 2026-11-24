@@ -4,7 +4,7 @@
 #include <qml/models/activitydetailmodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/transactionflow.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/flowpresentation.h>
 #include <qml/guipresentation.h>
 #include <qml/retainedvalue.h>
@@ -88,7 +88,7 @@ m_document(std::make_unique<ActivityValueListModel>(ActivityValueListModel::Kind
         }
     });
     connect(&source, &QObject::destroyed, this, &ActivityDetailModel::close);
-    connect(source.m_wallet_model, &WalletQmlModel::availableChanged, this, [this] {
+    connect(source.m_wallet_model, &WalletModel::availableChanged, this, [this] {
         if (!m_opening || !m_opening->observationOpen()) close();
     });
 }

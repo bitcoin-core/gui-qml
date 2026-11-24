@@ -31,7 +31,7 @@ class TransactionReviewController : public QObject
     Q_PROPERTY(bool signOnly READ signOnly NOTIFY sendChanged)
     Q_PROPERTY(QString sendError READ sendError NOTIFY sendChanged)
     Q_PROPERTY(QString txid READ txid NOTIFY sendChanged)
-    //! WalletQmlModel::SendSubmission and SendRecord values.
+    //! WalletModel::SendSubmission and SendRecord values.
     Q_PROPERTY(int submission READ submission NOTIFY sendChanged)
     Q_PROPERTY(int record READ record NOTIFY sendChanged)
     //! The latest PSBT action on this page: save, broadcast or recheck.

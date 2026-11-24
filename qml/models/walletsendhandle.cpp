@@ -2,14 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/walletsendoperation.h>
+#include <qml/models/walletsendhandle.h>
 
 #include <qml/models/coinslistmodel.h>
 #include <qml/models/psbtqmlmodel.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletpsbtoperation.h>
-#include <qml/models/walletqmlmodel.h>
-#include <qml/models/walletqmlmodeltransaction.h>
+#include <qml/models/walletmodel.h>
+#include <qml/models/transactionreviewmodel.h>
 #include <qml/secretinput.h>
 #include <qml/walletsend.h>
 
@@ -26,8 +26,8 @@ SendResultText DescribeSendResult(const walletsend::Result& result, bool sign_on
     if (sign_only && result.document && !result.quarantined_document &&
         result.error == walletsend::Error::None && !result.relock_failed) {
         return result.partial
-            ? SendResultText{State::PartiallySigned, WalletQmlModel::tr("Some PSBT inputs were signed. The transaction was not sent.")}
-            : SendResultText{State::SignedOnly, WalletQmlModel::tr("The transaction was signed. It was not sent.")};
+            ? SendResultText{State::PartiallySigned, WalletModel::tr("Some PSBT inputs were signed. The transaction was not sent.")}
+            : SendResultText{State::SignedOnly, WalletModel::tr("The transaction was signed. It was not sent.")};
     }
     using Error = walletsend::Error;
     State state = result.error == Error::NeedsUnlock || result.error == Error::IncorrectPassphrase ? State::NeedsUnlock
@@ -36,32 +36,32 @@ SendResultText DescribeSendResult(const walletsend::Result& result, bool sign_on
     QString message;
     if (sign_only && result.error == Error::Uncertain) {
         message = result.relock_failed
-            ? WalletQmlModel::tr("The signed PSBT was not sent, but the wallet could not be relocked. Check wallet status before continuing.")
-            : WalletQmlModel::tr("Signing may not have finished. The transaction was not sent; check the PSBT before trying again.");
+            ? WalletModel::tr("The signed PSBT was not sent, but the wallet could not be relocked. Check wallet status before continuing.")
+            : WalletModel::tr("Signing may not have finished. The transaction was not sent; check the PSBT before trying again.");
     } else if (sign_only && result.error == Error::Signer) {
-        message = WalletQmlModel::tr("Signing did not finish. Signatures that were verified are kept. The transaction was not sent.");
+        message = WalletModel::tr("Signing did not finish. Signatures that were verified are kept. The transaction was not sent.");
     } else switch (result.error) {
-    case Error::InvalidStructure: message = WalletQmlModel::tr("This PSBT has duplicate inputs and cannot be signed or sent."); break;
-    case Error::NeedsUnlock: message = sign_only ? WalletQmlModel::tr("Enter your wallet password to sign this PSBT. The transaction will not be sent.") : WalletQmlModel::tr("Enter your wallet password to send this transaction."); break;
-    case Error::IncorrectPassphrase: message = WalletQmlModel::tr("The wallet password is incorrect."); break;
-    case Error::CannotSign: message = WalletQmlModel::tr("This wallet cannot sign transactions."); break;
-    case Error::InvalidFee: message = WalletQmlModel::tr("The transaction fee is missing or changed after review."); break;
-    case Error::ChangedTransaction: message = WalletQmlModel::tr("External signer changed the reviewed transaction."); break;
-    case Error::Incomplete: message = WalletQmlModel::tr("Only PSBTs this wallet can fully sign are supported right now."); break;
-    case Error::NeedsSignerApproval: message = WalletQmlModel::tr("Approve this transaction on the signing device before sending it."); break;
-    case Error::InvalidSignature: message = WalletQmlModel::tr("The returned signatures could not be verified for the reviewed transaction. Check the signing device and try again."); break;
-    case Error::UnverifiedSignatures: message = WalletQmlModel::tr("The signer returned a PSBT that cannot be verified yet. The reviewed transaction is unchanged. Export the result to check it elsewhere."); break;
-    case Error::UncommittedOutputs: message = WalletQmlModel::tr("The signatures do not cover every recipient of the reviewed transaction. Nothing was sent. Sign again with the default signature type."); break;
-    case Error::Signer: message = result.signer_error ? PsbtQmlModel::PsbtErrorText(*result.signer_error) : WalletQmlModel::tr("Signing failed."); break;
-    case Error::Uncertain: message = WalletQmlModel::tr("The transaction result could not be confirmed. Check wallet activity before retrying."); break;
-    case Error::Cancelled: message = WalletQmlModel::tr("The transaction confirmation was cancelled."); break;
-    case Error::Rejected: message = WalletQmlModel::tr("The transaction could not be sent. Try again."); break;
+    case Error::InvalidStructure: message = WalletModel::tr("This PSBT has duplicate inputs and cannot be signed or sent."); break;
+    case Error::NeedsUnlock: message = sign_only ? WalletModel::tr("Enter your wallet password to sign this PSBT. The transaction will not be sent.") : WalletModel::tr("Enter your wallet password to send this transaction."); break;
+    case Error::IncorrectPassphrase: message = WalletModel::tr("The wallet password is incorrect."); break;
+    case Error::CannotSign: message = WalletModel::tr("This wallet cannot sign transactions."); break;
+    case Error::InvalidFee: message = WalletModel::tr("The transaction fee is missing or changed after review."); break;
+    case Error::ChangedTransaction: message = WalletModel::tr("External signer changed the reviewed transaction."); break;
+    case Error::Incomplete: message = WalletModel::tr("Only PSBTs this wallet can fully sign are supported right now."); break;
+    case Error::NeedsSignerApproval: message = WalletModel::tr("Approve this transaction on the signing device before sending it."); break;
+    case Error::InvalidSignature: message = WalletModel::tr("The returned signatures could not be verified for the reviewed transaction. Check the signing device and try again."); break;
+    case Error::UnverifiedSignatures: message = WalletModel::tr("The signer returned a PSBT that cannot be verified yet. The reviewed transaction is unchanged. Export the result to check it elsewhere."); break;
+    case Error::UncommittedOutputs: message = WalletModel::tr("The signatures do not cover every recipient of the reviewed transaction. Nothing was sent. Sign again with the default signature type."); break;
+    case Error::Signer: message = result.signer_error ? PsbtQmlModel::PsbtErrorText(*result.signer_error) : WalletModel::tr("Signing failed."); break;
+    case Error::Uncertain: message = WalletModel::tr("The transaction result could not be confirmed. Check wallet activity before retrying."); break;
+    case Error::Cancelled: message = WalletModel::tr("The transaction confirmation was cancelled."); break;
+    case Error::Rejected: message = WalletModel::tr("The transaction could not be sent. Try again."); break;
     case Error::NodePolicy: message = result.policy_error; break;
-    case Error::None: message = WalletQmlModel::tr("The transaction was not committed."); break;
+    case Error::None: message = WalletModel::tr("The transaction was not committed."); break;
     }
     if (result.relock_failed) {
         state = State::Uncertain;
-        message = WalletQmlModel::tr("The wallet could not be relocked. Check wallet status before retrying.");
+        message = WalletModel::tr("The wallet could not be relocked. Check wallet status before retrying.");
     }
     if (result.quarantined_document && state != State::Uncertain) state = State::Unverified;
     return {state, message};
@@ -70,7 +70,7 @@ SendResultText DescribeSendResult(const walletsend::Result& result, bool sign_on
 namespace {
 int SubmissionOf(walletsend::Submission submission)
 {
-    using S = WalletQmlModel::SendSubmission;
+    using S = WalletModel::SendSubmission;
     switch (submission) {
     case walletsend::Submission::Unknown: return int(S::SubmissionUnknown);
     case walletsend::Submission::Mempool: return int(S::SubmissionMempool);
@@ -83,7 +83,7 @@ int SubmissionOf(walletsend::Submission submission)
 }
 int SendRecordOf(walletsend::Record record)
 {
-    using R = WalletQmlModel::SendRecord;
+    using R = WalletModel::SendRecord;
     switch (record) {
     case walletsend::Record::Unknown: return int(R::SendRecordUnknown);
     case walletsend::Record::AbsentAtObservation: return int(R::SendRecordAbsentAtObservation);
@@ -93,7 +93,7 @@ int SendRecordOf(walletsend::Record record)
 }
 } // namespace
 
-WalletSendOperation::WalletSendOperation(WalletQmlModel& wallet, bool sign_only, QObject* parent)
+WalletSendHandle::WalletSendHandle(WalletModel& wallet, bool sign_only, QObject* parent)
     : SendOperation(sign_only, parent), m_wallet{&wallet}
 {
     // Without its wallet nobody can report on the work any more; the work
@@ -104,15 +104,15 @@ WalletSendOperation::WalletSendOperation(WalletQmlModel& wallet, bool sign_only,
     });
 }
 
-WalletSendOperation::~WalletSendOperation()
+WalletSendHandle::~WalletSendHandle()
 {
     // Its owner went away: an open prompt is answered with no.
     if (!finished()) cancel();
 }
 
-bool WalletSendOperation::start(std::optional<QString> passphrase)
+bool WalletSendHandle::start(std::optional<QString> passphrase)
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || !wallet->observationsAllowed()) return false;
     const bool sign_only = signOnly();
     const auto intent = sign_only ? walletsend::Intent::SignOnly : walletsend::Intent::Submit;
@@ -133,8 +133,8 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     m_attempt_id = ++wallet->m_send_request_id;
     const auto gate = wallet->m_sending_commit;
     auto rejected = qScopeGuard([gate] { gate->store(false); });
-    const QPointer<WalletQmlModel> self{wallet};
-    const QPointer<WalletQmlModelTransaction> approved{wallet->m_current_transaction};
+    const QPointer<WalletModel> self{wallet};
+    const QPointer<TransactionReviewModel> approved{wallet->m_current_transaction};
     const auto approved_revision = wallet->m_preparation_projection.intent_revision;
     m_review = approved;
     wallet->clearTransactionStatus();
@@ -150,44 +150,44 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
         publish(state, message);
         wallet->setTransactionStatus(message);
     };
-    if (wallet->signerApprovalState() == WalletQmlModel::ApprovalState::ApprovalUncertain ||
-        wallet->signerApprovalState() == WalletQmlModel::ApprovalState::ApprovalUnverified) {
+    if (wallet->signerApprovalState() == WalletModel::ApprovalState::ApprovalUncertain ||
+        wallet->signerApprovalState() == WalletModel::ApprovalState::ApprovalUnverified) {
         wallet->m_send_review = wallet->m_current_transaction;
-        fail(State::Uncertain, WalletQmlModel::tr("It is not known what the signer did. Check the PSBT before trying again."));
+        fail(State::Uncertain, WalletModel::tr("It is not known what the signer did. Check the PSBT before trying again."));
         return true;
     }
     auto* review = wallet->m_current_transaction;
     if (!wallet->available() || !review || !review->getWtx()) {
-        if (wallet->available()) fail(State::Failed, WalletQmlModel::tr("Review a transaction before sending it."));
+        if (wallet->available()) fail(State::Failed, WalletModel::tr("Review a transaction before sending it."));
         else publish(State::Cancelled);
         return true;
     }
     if (wallet->currentTransactionNeedsRevalidation()) {
-        fail(State::Failed, WalletQmlModel::tr("The reviewed transaction no longer matches the current draft. Prepare it again."));
+        fail(State::Failed, WalletModel::tr("The reviewed transaction no longer matches the current draft. Prepare it again."));
         return true;
     }
     const bool can_start = sign_only ? wallet->currentTransactionCanSignOnly() : review->canSend();
     if (!can_start) {
         const QString reason = sign_only && (!review->psbt() || !wallet->m_metadata_known || wallet->m_private_keys_disabled)
-            ? WalletQmlModel::tr("This wallet cannot sign this PSBT locally.")
+            ? WalletModel::tr("This wallet cannot sign this PSBT locally.")
             : !review->reviewMessage().isEmpty() ? review->reviewMessage() :
             (wallet->m_metadata_known && wallet->m_private_keys_disabled && !wallet->m_external_signer
-                ? WalletQmlModel::tr("This wallet cannot sign transactions.") : WalletQmlModel::tr("This transaction is not ready to send."));
+                ? WalletModel::tr("This wallet cannot sign transactions.") : WalletModel::tr("This transaction is not ready to send."));
         fail(State::Failed, reason);
         return true;
     }
     const auto action = wallet->m_opening->startAction();
     if (!action) {
-        fail(State::Failed, WalletQmlModel::tr("The transaction could not be sent. Try again."));
+        fail(State::Failed, WalletModel::tr("The transaction could not be sent. Try again."));
         return true;
     }
-    auto notes = intent == walletsend::Intent::Submit ? wallet->captureSentRecipientLabels(action) : WalletQmlModel::SentLabelCapture{};
+    auto notes = intent == walletsend::Intent::Submit ? wallet->captureSentRecipientLabels(action) : WalletModel::SentLabelCapture{};
     if (notes.ticket && !notes.valid) {
-        fail(State::Failed, WalletQmlModel::tr("Outgoing notes could not be saved. Try again."));
+        fail(State::Failed, WalletModel::tr("Outgoing notes could not be saved. Try again."));
         return true;
     }
     if (wallet->m_current_review_identity == std::numeric_limits<quint64>::max()) {
-        fail(State::Failed, WalletQmlModel::tr("This review can no longer be used. Prepare the transaction again before sending."));
+        fail(State::Failed, WalletModel::tr("This review can no longer be used. Prepare the transaction again before sending."));
         return true;
     }
     walletsend::Request request;
@@ -203,7 +203,7 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     if (passphrase) {
         auto captured = secretinput::Capture(wallet->m_opening, *passphrase);
         if (!captured) {
-            fail(State::Failed, WalletQmlModel::tr("The password could not be used. The transaction was not sent."));
+            fail(State::Failed, WalletModel::tr("The password could not be used. The transaction was not sent."));
             return true;
         }
         request.captured_passphrase = std::move(captured.input);
@@ -217,9 +217,9 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     if (notes.labels) request.notes = *notes.labels;
     // The work reports back to the wallet, which applies its effects, and to
     // this operation while it exists.
-    const QPointer<WalletSendOperation> operation{this};
-    const QPointer<WalletQmlModelTransaction> reviewed{review};
-    auto work_handle = std::make_shared<std::weak_ptr<walletsend::Operation>>();
+    const QPointer<WalletSendHandle> operation{this};
+    const QPointer<TransactionReviewModel> reviewed{review};
+    auto work_handle = std::make_shared<std::weak_ptr<walletsend::SendTask>>();
     auto notify = [gate, post = wallet->m_fee_read_services.post, self, operation, reviewed, sign_only, work_handle](walletsend::Notice notice) {
         if (notice == walletsend::Notice::Finished) gate->store(false);
         post([self, operation, reviewed, sign_only, work_handle, notice] {
@@ -240,13 +240,13 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     // The draft this send was reviewed from; a commit clears it if unchanged.
     wallet->m_send_draft_revision = wallet->m_send_recipients->revision();
     wallet->m_send_sign_only = sign_only;
-    m_work = std::make_shared<walletsend::Operation>(wallet->m_opening, wallet->m_request_store, std::move(notify));
+    m_work = std::make_shared<walletsend::SendTask>(wallet->m_opening, wallet->m_request_store, std::move(notify));
     *work_handle = m_work;
     wallet->m_send_operation = m_work;
     const auto submitted = m_work->start(std::move(request), action);
     if (!submitted) {
         m_work.reset();
-        fail(State::Failed, WalletQmlModel::tr("The transaction could not be sent. Try again."));
+        fail(State::Failed, WalletModel::tr("The transaction could not be sent. Try again."));
         return true;
     }
     rejected.dismiss();
@@ -255,9 +255,9 @@ bool WalletSendOperation::start(std::optional<QString> passphrase)
     return true;
 }
 
-void WalletSendOperation::promptChanged()
+void WalletSendHandle::promptChanged()
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || !wallet->observationsAllowed() || !m_work || finished()) return;
     // A prompt answers for the review the send was started for.
     if (!m_review || m_review != wallet->m_current_transaction || m_review_id != wallet->m_current_review_identity) {
@@ -272,7 +272,7 @@ void WalletSendOperation::promptChanged()
         return;
     case walletsend::Stage::AwaitingCredentials: {
         const QString message = m_work->promptError() == walletsend::Error::IncorrectPassphrase
-            ? WalletQmlModel::tr("The wallet password is incorrect.") : WalletQmlModel::tr("Enter your wallet password to send this transaction.");
+            ? WalletModel::tr("The wallet password is incorrect.") : WalletModel::tr("Enter your wallet password to send this transaction.");
         publish(State::NeedsUnlock, message);
         wallet->setSendRunning(false);
         wallet->setTransactionStatus(message, true);
@@ -289,9 +289,9 @@ void WalletSendOperation::promptChanged()
     }
 }
 
-void WalletSendOperation::confirm()
+void WalletSendHandle::confirm()
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || state() != State::NeedsConfirmation || !m_work || !m_review ||
         m_review != wallet->m_current_transaction || m_review_id != wallet->m_current_review_identity) return;
     if (!m_work->confirmSweep(m_attempt_id, m_review_id)) return;
@@ -300,16 +300,16 @@ void WalletSendOperation::confirm()
     wallet->clearTransactionStatus();
 }
 
-void WalletSendOperation::unlock(const QString& passphrase)
+void WalletSendHandle::unlock(const QString& passphrase)
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || state() != State::NeedsUnlock || !m_review || m_review != wallet->m_current_transaction) return;
     if (!m_work || m_work->stage() != walletsend::Stage::AwaitingCredentials) {
         // The work finished needing the password: send again with it.
-        if (!start(passphrase)) publish(State::Failed, WalletQmlModel::tr("The transaction could not be sent. Try again."));
+        if (!start(passphrase)) publish(State::Failed, WalletModel::tr("The transaction could not be sent. Try again."));
         return;
     }
-    const QString unusable = WalletQmlModel::tr("The password could not be used. The transaction was not sent.");
+    const QString unusable = WalletModel::tr("The password could not be used. The transaction was not sent.");
     auto captured = secretinput::Capture(wallet->m_opening, passphrase);
     if (!captured || !m_work->providePassphrase(m_attempt_id, m_review_id, std::move(captured.input))) {
         publish(State::NeedsUnlock, unusable);
@@ -321,7 +321,7 @@ void WalletSendOperation::unlock(const QString& passphrase)
     wallet->clearTransactionStatus();
 }
 
-void WalletSendOperation::cancel()
+void WalletSendHandle::cancel()
 {
     if (finished()) return;
     const bool prompt = state() == State::NeedsConfirmation || state() == State::NeedsUnlock;
@@ -336,14 +336,14 @@ void WalletSendOperation::cancel()
     // A finished operation lets go of its work, which keeps the wallet open;
     // the wallet keeps work that is still running.
     const auto work = std::exchange(m_work, nullptr);
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || !prompt || !work) return;
     const auto stage = work->stage();
     if (stage != walletsend::Stage::AwaitingSweepConsent && stage != walletsend::Stage::AwaitingCredentials) return;
     if (work->cancelPrompt(m_attempt_id, m_review_id)) wallet->setSendRunning(true);
 }
 
-void WalletSendOperation::workFinished(const walletsend::Result& result, bool review_current)
+void WalletSendHandle::workFinished(const walletsend::Result& result, bool review_current)
 {
     m_work.reset();
     if (!review_current) {
@@ -359,107 +359,107 @@ void WalletSendOperation::workFinished(const walletsend::Result& result, bool re
     }
 }
 
-WalletTransactionReviewInterface::WalletTransactionReviewInterface(WalletQmlModel& wallet)
+WalletTransactionReview::WalletTransactionReview(WalletModel& wallet)
     : TransactionReviewInterface(&wallet), m_wallet{&wallet}
 {
-    connect(&wallet, &WalletQmlModel::preparationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
-    connect(&wallet, &WalletQmlModel::currentTransactionChanged, this, &TransactionReviewInterface::currentReviewChanged);
-    connect(&wallet, &WalletQmlModel::availableChanged, this, &TransactionReviewInterface::availableChanged);
-    connect(&wallet, &WalletQmlModel::unverifiedSigningResultChanged, this, &TransactionReviewInterface::unverifiedSignerResultChanged);
-    connect(&wallet, &WalletQmlModel::signerApprovalChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
-    connect(&wallet, &WalletQmlModel::fileExportOperationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
-    connect(&wallet, &WalletQmlModel::transactionErrorChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletModel::preparationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletModel::currentTransactionChanged, this, &TransactionReviewInterface::currentReviewChanged);
+    connect(&wallet, &WalletModel::availableChanged, this, &TransactionReviewInterface::availableChanged);
+    connect(&wallet, &WalletModel::unverifiedSigningResultChanged, this, &TransactionReviewInterface::unverifiedSignerResultChanged);
+    connect(&wallet, &WalletModel::signerApprovalChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletModel::fileExportOperationChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
+    connect(&wallet, &WalletModel::transactionErrorChanged, this, &TransactionReviewInterface::reviewDetailsChanged);
 }
 
-bool WalletTransactionReviewInterface::currentTransactionIsImportedPsbt() const
+bool WalletTransactionReview::currentTransactionIsImportedPsbt() const
 {
     return m_wallet && m_wallet->currentTransactionIsImportedPsbt();
 }
 
-bool WalletTransactionReviewInterface::currentTransactionCanSend() const
+bool WalletTransactionReview::currentTransactionCanSend() const
 {
     return m_wallet && m_wallet->currentTransactionCanSend();
 }
 
-bool WalletTransactionReviewInterface::currentTransactionCanSignOnly() const
+bool WalletTransactionReview::currentTransactionCanSignOnly() const
 {
     return m_wallet && m_wallet->currentTransactionCanSignOnly();
 }
 
-bool WalletTransactionReviewInterface::currentTransactionNeedsRevalidation() const
+bool WalletTransactionReview::currentTransactionNeedsRevalidation() const
 {
     return m_wallet && m_wallet->currentTransactionNeedsRevalidation();
 }
 
-bool WalletTransactionReviewInterface::transactionFeePending() const
+bool WalletTransactionReview::transactionFeePending() const
 {
     return m_wallet && m_wallet->transactionFeePending();
 }
 
-bool WalletTransactionReviewInterface::currentTransactionCanBroadcast() const
+bool WalletTransactionReview::currentTransactionCanBroadcast() const
 {
     return m_wallet && m_wallet->currentTransactionCanBroadcast();
 }
 
-QString WalletTransactionReviewInterface::currentTransactionReviewMessage() const
+QString WalletTransactionReview::currentTransactionReviewMessage() const
 {
     return m_wallet ? m_wallet->currentTransactionReviewMessage() : QString{};
 }
 
-QObject* WalletTransactionReviewInterface::currentReview() const
+QObject* WalletTransactionReview::currentReview() const
 {
     return m_wallet ? m_wallet->currentTransaction() : nullptr;
 }
 
-bool WalletTransactionReviewInterface::available() const
+bool WalletTransactionReview::available() const
 {
     return m_wallet && m_wallet->available();
 }
 
-QString WalletTransactionReviewInterface::unverifiedSignerResult() const
+QString WalletTransactionReview::unverifiedSignerResult() const
 {
     return m_wallet ? m_wallet->signerUnverifiedResultToken() : QString{};
 }
 
-int WalletTransactionReviewInterface::signerApprovalState() const
+int WalletTransactionReview::signerApprovalState() const
 {
     return m_wallet ? static_cast<int>(m_wallet->signerApprovalState()) : 0;
 }
 
-QString WalletTransactionReviewInterface::signerApprovalError() const
+QString WalletTransactionReview::signerApprovalError() const
 {
     return m_wallet ? m_wallet->signerApprovalError() : QString{};
 }
 
-bool WalletTransactionReviewInterface::signerNotFound() const
+bool WalletTransactionReview::signerNotFound() const
 {
     return m_wallet && m_wallet->signerApprovalSignerNotFound();
 }
 
-void WalletTransactionReviewInterface::approveSigner()
+void WalletTransactionReview::approveSigner()
 {
     if (m_wallet) m_wallet->approveExternalSignerTransaction();
 }
 
-FileSaveOperation* WalletTransactionReviewInterface::fileExportOperation() const
+FileSaveOperation* WalletTransactionReview::fileExportOperation() const
 {
     return m_wallet ? m_wallet->fileExportOperation() : nullptr;
 }
 
-QString WalletTransactionReviewInterface::reviewError() const
+QString WalletTransactionReview::reviewError() const
 {
     return m_wallet ? m_wallet->transactionError() : QString{};
 }
 
-SendOperation* WalletTransactionReviewInterface::startSend(bool sign_only)
+SendOperation* WalletTransactionReview::startSend(bool sign_only)
 {
     if (!m_wallet) return nullptr;
-    auto operation = std::make_unique<WalletSendOperation>(*m_wallet, sign_only);
+    auto operation = std::make_unique<WalletSendHandle>(*m_wallet, sign_only);
     if (!operation->start()) return nullptr;
     return operation.release();
 }
 
-PsbtOperation* WalletTransactionReviewInterface::startPsbt(PsbtOperation::Kind kind, const QString& path, const QString& signer_result)
+PsbtOperation* WalletTransactionReview::startPsbt(PsbtOperation::Kind kind, const QString& path, const QString& signer_result)
 {
     if (!m_wallet) return nullptr;
     auto operation = std::make_unique<WalletPsbtOperation>(*m_wallet, kind);
@@ -467,17 +467,17 @@ PsbtOperation* WalletTransactionReviewInterface::startPsbt(PsbtOperation::Kind k
     return operation.release();
 }
 
-// WalletQmlModel members that only its sends use.
+// WalletModel members that only its sends use.
 
-TransactionReviewInterface* WalletQmlModel::transactionReview() const
+TransactionReviewInterface* WalletModel::transactionReview() const
 {
-    if (!m_transaction_review) m_transaction_review = new WalletTransactionReviewInterface(*const_cast<WalletQmlModel*>(this));
+    if (!m_transaction_review) m_transaction_review = new WalletTransactionReview(*const_cast<WalletModel*>(this));
     return m_transaction_review;
 }
 
-void WalletQmlModel::clearSentDraft()
+void WalletModel::clearSentDraft()
 {
-    const QPointer<WalletQmlModel> self{this};
+    const QPointer<WalletModel> self{this};
     m_send_recipients->clear();
     if (!self) return;
     m_coins_list_model->setManualInputSelection(false);
@@ -486,13 +486,13 @@ void WalletQmlModel::clearSentDraft()
     Q_EMIT sentDraftCleared();
 }
 
-void WalletQmlModel::finishSendWork(const std::shared_ptr<walletsend::Operation>& work, const QPointer<WalletQmlModelTransaction>& review,
-                                    bool sign_only, const QPointer<WalletSendOperation> &operation)
+void WalletModel::finishSendWork(const std::shared_ptr<walletsend::SendTask>& work, const QPointer<TransactionReviewModel>& review,
+                                    bool sign_only, const QPointer<WalletSendHandle> &operation)
 {
     if (!observationsAllowed() || m_closed || !work) return;
     const auto result = work->result();
     if (!result) return;
-    const QPointer<WalletQmlModel> self{this};
+    const QPointer<WalletModel> self{this};
     if (work == m_send_operation) setSendRunning(false);
     if (!self) return;
     const auto [outcome, message] = DescribeSendResult(*result, sign_only);

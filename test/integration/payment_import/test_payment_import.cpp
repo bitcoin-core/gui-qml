@@ -26,7 +26,7 @@ class PaymentImportIntegrationTests : public QObject
 {
     Q_OBJECT
     BitcoinQmlApplication& m_app;
-    WalletQmlModel* m_wallet{nullptr};
+    WalletModel* m_wallet{nullptr};
     QString m_address;
     QString importDiagnostic(QObject* original) const {
         auto* page = qmltest::Find(m_app, "walletSendPage");
@@ -364,7 +364,7 @@ private Q_SLOTS:
 
     void lockedWalletImportsOnlyLocalDraftValues() {
         QVERIFY(m_wallet->encryptWallet(QStringLiteral("local-import-only")));
-        QTRY_COMPARE_WITH_TIMEOUT(m_wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
+        QTRY_COMPARE_WITH_TIMEOUT(m_wallet->securityState(), WalletModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
         QTRY_VERIFY(m_wallet->isLocked());
         auto* recipient = m_wallet->sendRecipientList()->currentRecipient();
         QVERIFY(recipient->editPrivateNote(QStringLiteral("Private locked note")));

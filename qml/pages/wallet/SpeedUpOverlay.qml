@@ -15,7 +15,7 @@ DialogPopup {
     objectName: "speedUpOverlay"
 
     property string txid: ""
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property FeeBumpOperation operation: bump.operation
     readonly property bool readyToConfirm: bump.readyToConfirm
     readonly property bool readyToPrepareAgain: bump.readyToPrepareAgain

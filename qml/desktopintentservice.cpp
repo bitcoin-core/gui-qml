@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/desktopintentowner.h>
+#include <qml/desktopintentservice.h>
 #include <qml/executor.h>
 
 #include <limits>
@@ -10,7 +10,7 @@
 #include <utility>
 
 namespace desktopintent {
-struct Owner::ReplyCell {
+struct Service::ReplyCell {
     std::mutex mutex;
     bool ready{false};
     Sink::Completed deliver;
@@ -27,7 +27,7 @@ struct Owner::ReplyCell {
         if (completed) completed(value);
     }
 };
-struct Owner::State {
+struct Service::State {
     Queue queue;
     std::shared_ptr<const Sink> sink;
     std::shared_ptr<const Sink> receiver;
@@ -36,16 +36,16 @@ struct Owner::State {
     uint64_t sequence{0}, query_reply{0}, publication{0};
     bool wake_pending{false};
 };
-Owner::Owner(Services services, std::shared_ptr<State> state, Notify notify, std::shared_ptr<execution::SerialQueue> queue)
+Service::Service(Services services, std::shared_ptr<State> state, Notify notify, std::shared_ptr<execution::SerialQueue> queue)
     : m_services(std::move(services)), m_queue(std::move(queue)),
       m_state(std::move(state)), m_notify(std::move(notify)) {}
 
-std::shared_ptr<Owner> Owner::Create(Services services, Notify notify, std::shared_ptr<execution::SerialQueue> queue)
+std::shared_ptr<Service> Service::Create(Services services, Notify notify, std::shared_ptr<execution::SerialQueue> queue)
 {
     if (!queue || !services.now || services.receipt_timeout <= std::chrono::milliseconds::zero() ||
         services.receipt_timeout > std::chrono::seconds{30}) return {};
-    return {new Owner(std::move(services), std::make_shared<State>(), std::move(notify), queue),
-        [queue](Owner* owner) {
+    return {new Service(std::move(services), std::make_shared<State>(), std::move(notify), queue),
+        [queue](Service* owner) {
             const auto retire = [queue, owner] {
                 delete owner;
                 queue->close();
@@ -54,7 +54,7 @@ std::shared_ptr<Owner> Owner::Create(Services services, Notify notify, std::shar
         }};
 }
 
-bool Owner::post(std::function<void()> decision, bool must_deliver)
+bool Service::post(std::function<void()> decision, bool must_deliver)
 {
     const auto turn = [self = shared_from_this(), decision = std::move(decision)] {
         std::lock_guard lock{self->m_decision_mutex};
@@ -65,7 +65,7 @@ bool Owner::post(std::function<void()> decision, bool must_deliver)
     return must_deliver;
 }
 
-execution::SubmitResult Owner::submit(std::function<void()> decision)
+execution::SubmitResult Service::submit(std::function<void()> decision)
 {
     const auto turn = [self = shared_from_this(), decision = std::move(decision)] {
         decision(); self->retireObsolete(); self->pump(); self->publish();
@@ -73,7 +73,7 @@ execution::SubmitResult Owner::submit(std::function<void()> decision)
     return {{}, post(turn) ? execution::Rejection::None : execution::Rejection::Transport};
 }
 
-void Owner::publish()
+void Service::publish()
 {
     if (m_state->publication == std::numeric_limits<uint64_t>::max()) return;
     auto snapshot = m_state->queue.snapshot();
@@ -81,7 +81,7 @@ void Owner::publish()
     try { if (m_notify) m_notify(std::move(snapshot)); } catch (...) {}
 }
 
-execution::SubmitResult Owner::admit(std::vector<Input> inputs, std::function<void(Acceptance)> done)
+execution::SubmitResult Service::admit(std::vector<Input> inputs, std::function<void(Acceptance)> done)
 {
     std::lock_guard lock{m_admission_mutex};
     if (m_closed->load() || m_forwarding_closed.load()) return {{}, execution::Rejection::Closed};
@@ -98,7 +98,7 @@ execution::SubmitResult Owner::admit(std::vector<Input> inputs, std::function<vo
     });
 }
 
-execution::SubmitResult Owner::prepareForwarding(std::vector<Input> arguments, std::function<void(ForwardingSnapshot)> done)
+execution::SubmitResult Service::prepareForwarding(std::vector<Input> arguments, std::function<void(ForwardingSnapshot)> done)
 {
     std::lock_guard lock{m_admission_mutex};
     if (m_closed->load() || m_forwarding_closed.load()) return {{}, execution::Rejection::Closed};
@@ -118,7 +118,7 @@ execution::SubmitResult Owner::prepareForwarding(std::vector<Input> arguments, s
     return admitted;
 }
 
-execution::SubmitResult Owner::readiness(uint64_t revision, bool ready)
+execution::SubmitResult Service::readiness(uint64_t revision, bool ready)
 {
     std::lock_guard lock{m_admission_mutex};
     if (m_forwarding_closed.load()) return {{}, execution::Rejection::Closed};
@@ -127,7 +127,7 @@ execution::SubmitResult Owner::readiness(uint64_t revision, bool ready)
     });
 }
 
-std::shared_ptr<Owner::ReplyCell> Owner::reserve(ReplyKind kind, DeliveryKey key)
+std::shared_ptr<Service::ReplyCell> Service::reserve(ReplyKind kind, DeliveryKey key)
 {
     auto& state = *m_state;
     if (state.sequence == std::numeric_limits<uint64_t>::max()) return {};
@@ -149,17 +149,17 @@ std::shared_ptr<Owner::ReplyCell> Owner::reserve(ReplyKind kind, DeliveryKey key
     return cell;
 }
 
-execution::SubmitResult Owner::review(std::shared_ptr<const Sink> sink)
+execution::SubmitResult Service::review(std::shared_ptr<const Sink> sink)
 {
     return submit([self = shared_from_this(), sink = std::move(sink)] { self->deliver(sink); });
 }
-execution::SubmitResult Owner::registerReceiver(std::shared_ptr<const Sink> sink)
+execution::SubmitResult Service::registerReceiver(std::shared_ptr<const Sink> sink)
 {
     return submit([self = shared_from_this(), sink = std::move(sink)] {
         if (!self->m_closed->load() && sink && sink->identity && sink->inspect && sink->query) self->m_state->receiver = sink;
     });
 }
-execution::SubmitResult Owner::releasePresentation(DeliveryKey key)
+execution::SubmitResult Service::releasePresentation(DeliveryKey key)
 {
     {
         std::lock_guard lock{m_presentation_mutex};
@@ -169,13 +169,13 @@ execution::SubmitResult Owner::releasePresentation(DeliveryKey key)
     post([self = shared_from_this(), key] { self->presentationReleased(key); }, /*must_deliver=*/true);
     return {};
 }
-bool Owner::reservePresentation(DeliveryKey key)
+bool Service::reservePresentation(DeliveryKey key)
 {
     std::lock_guard lock{m_presentation_mutex};
     m_presentation_release = key;
     return true;
 }
-void Owner::presentationReleased(DeliveryKey key)
+void Service::presentationReleased(DeliveryKey key)
 {
     {
         std::lock_guard lock{m_presentation_mutex};
@@ -188,12 +188,12 @@ void Owner::presentationReleased(DeliveryKey key)
     }
     pump(); publish();
 }
-void Owner::pump()
+void Service::pump()
 {
     const auto snapshot = m_state->queue.snapshot();
     if (m_state->receiver && !m_state->presented && snapshot.phase == Phase::Ready && snapshot.pending) deliver(m_state->receiver);
 }
-void Owner::deliver(std::shared_ptr<const Sink> sink)
+void Service::deliver(std::shared_ptr<const Sink> sink)
 {
     auto& state = *m_state;
     if (m_closed->load() || m_forwarding_closed.load() || state.presented || !sink || !sink->identity || !sink->inspect || !sink->query) return;
@@ -220,7 +220,7 @@ void Owner::deliver(std::shared_ptr<const Sink> sink)
     } catch (...) { cell->complete({}); }
     wake();
 }
-void Owner::received(uint64_t reply, ReplyKind kind, DeliveryKey key, InspectionReceipt receipt)
+void Service::received(uint64_t reply, ReplyKind kind, DeliveryKey key, InspectionReceipt receipt)
 {
     auto& state = *m_state;
     state.replies.erase(reply);
@@ -243,7 +243,7 @@ void Owner::received(uint64_t reply, ReplyKind kind, DeliveryKey key, Inspection
     retireObsolete(); wake(); pump(); publish();
 }
 
-void Owner::query()
+void Service::query()
 {
     auto& state = *m_state;
     const auto current = state.queue.snapshot();
@@ -256,7 +256,7 @@ void Owner::query()
     } catch (...) { cell->complete({}); }
     wake();
 }
-void Owner::retireObsolete()
+void Service::retireObsolete()
 {
     const auto active = m_state->queue.snapshot().active;
     for (const auto& [identity, cell] : m_state->replies) {
@@ -265,7 +265,7 @@ void Owner::retireObsolete()
     }
 }
 
-void Owner::wake()
+void Service::wake()
 {
     if (m_state->wake_pending || !m_state->queue.snapshot().active || !m_services.wake) return;
     m_state->wake_pending = true;
@@ -279,7 +279,7 @@ void Owner::wake()
     }
 }
 
-execution::SubmitResult Owner::tick()
+execution::SubmitResult Service::tick()
 {
     return submit([self = shared_from_this()] {
         auto& state = *self->m_state;
@@ -295,21 +295,21 @@ execution::SubmitResult Owner::tick()
     });
 }
 
-execution::SubmitResult Owner::reconcile() { return submit([self = shared_from_this()] { self->query(); }); }
-execution::SubmitResult Owner::dismiss() { return submit([self = shared_from_this()] { self->m_state->queue.dismiss(); }); }
-execution::SubmitResult Owner::lookup(QString producer_key, std::function<void(std::optional<Receipt>)> done)
+execution::SubmitResult Service::reconcile() { return submit([self = shared_from_this()] { self->query(); }); }
+execution::SubmitResult Service::dismiss() { return submit([self = shared_from_this()] { self->m_state->queue.dismiss(); }); }
+execution::SubmitResult Service::lookup(QString producer_key, std::function<void(std::optional<Receipt>)> done)
 {
     if (producer_key.size() > Queue::MAX_KEY_CHARS) return {{}, execution::Rejection::Invalid};
     return submit([self = shared_from_this(), producer_key = std::move(producer_key), done = std::move(done)] {
         try { if (done) done(self->m_state->queue.lookup(producer_key)); } catch (...) {}
     });
 }
-execution::SubmitResult Owner::stop()
+execution::SubmitResult Service::stop()
 {
     if (!m_closed->exchange(true)) post([self = shared_from_this()] { self->stopped(); }, /*must_deliver=*/true);
     return {};
 }
-void Owner::stopped()
+void Service::stopped()
 {
     auto& state = *m_state;
     const auto active = state.queue.snapshot().active;

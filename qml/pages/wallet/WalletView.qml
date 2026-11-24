@@ -22,7 +22,7 @@ Item {
         Receive
     }
 
-    required property WalletQmlModel wallet
+    required property WalletModel wallet
     property int currentTab: WalletView.Activity
     // True while this is the wallet shown in the window.
     property bool active: false

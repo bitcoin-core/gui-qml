@@ -5,16 +5,16 @@
 #ifndef BITCOIN_QML_MODELS_PEERDETAILSMODEL_H
 #define BITCOIN_QML_MODELS_PEERDETAILSMODEL_H
 
-#include <qml/models/peercommandtarget.h>
+#include <qml/models/peeractionsinterface.h>
 #include <qml/models/peerrecord.h>
-#include <qml/peercommandport.h>
+#include <qml/peercommandinterface.h>
 
 #include <QObject>
 #include <QPointer>
 
 class PeerListModel;
 
-class PeerDetailsModel : public PeerCommandTarget, public PeerPresentationObserver
+class PeerDetailsModel : public PeerActionsInterface, public PeerPresentationObserver
 {
     Q_OBJECT
     Q_PROPERTY(qint64 nodeId READ nodeId NOTIFY dataChanged)

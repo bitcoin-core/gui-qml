@@ -16,7 +16,7 @@ SettingsPage {
     title: qsTr("Wallet settings")
     showBackButton: false
 
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property string errorText: root.wallet
         ? (root.wallet.settingsError.length > 0 ? root.wallet.settingsError : backup.error)
         : ""

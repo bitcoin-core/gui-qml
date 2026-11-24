@@ -7,7 +7,7 @@
 #include <test/integration/fixture/test_wallet.h>
 #include <test/mocks/messagebumptest.h>
 #include <rpc/util.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -26,7 +26,7 @@ std::set<std::string> Mempool(BitcoinQmlApplication& app)
     for (const auto& id : mempool.getValues()) ids.insert(id.get_str());
     return ids;
 }
-QString SendReplaceable(BitcoinQmlApplication& app, WalletQmlModel& wallet, const QString& destination)
+QString SendReplaceable(BitcoinQmlApplication& app, WalletModel& wallet, const QString& destination)
 {
     UniValue params{UniValue::VOBJ};
     params.pushKV("address", destination.toStdString());
@@ -222,7 +222,7 @@ private Q_SLOTS:
         auto* keys = qmltest::CreateWallet(m_app, "signer_keys"); QVERIFY(keys);
         auto family = SignerFamily(m_app, keys->name());
         FailingSigner signer; QVERIFY(signer.install()); QVERIFY(signer.set(family));
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         auto* discovery = controller->creation()->signers(); QVERIFY(discovery); QTRY_VERIFY(discovery->configurationKnown());
         discovery->editPath(signer.command()); QVERIFY(discovery->apply()); QTRY_VERIFY(!discovery->pending()); QVERIFY(discovery->fresh());
         UniValue create{UniValue::VOBJ}; create.pushKV("wallet_name", "signer_device"); create.pushKV("disable_private_keys", true); create.pushKV("external_signer", true);
@@ -255,7 +255,7 @@ private Q_SLOTS:
     // and follows a global display-unit change while it is open.
     void speedUpFeesFollowTheGlobalDisplayUnit()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
         auto* destination = qmltest::CreateWallet(m_app, "unit_destination"); QVERIFY(destination);
         const auto address = qmltest::NewAddress(m_app, destination->name());

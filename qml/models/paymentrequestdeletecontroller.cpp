@@ -2,13 +2,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/requestdeletecontroller.h>
+#include <qml/models/paymentrequestdeletecontroller.h>
 
 #include <QQmlEngine>
 
-RequestDeleteController::RequestDeleteController(QObject* parent) : QObject(parent) {}
+PaymentRequestDeleteController::PaymentRequestDeleteController(QObject* parent) : QObject(parent) {}
 
-RequestDeleteController::~RequestDeleteController()
+PaymentRequestDeleteController::~PaymentRequestDeleteController()
 {
     if (!m_deletion) return;
     disconnect(m_deletion, nullptr, this, nullptr);
@@ -16,7 +16,7 @@ RequestDeleteController::~RequestDeleteController()
     QQmlEngine::setObjectOwnership(m_deletion, QQmlEngine::JavaScriptOwnership);
 }
 
-void RequestDeleteController::setReceive(WalletReceiveModel* receive)
+void PaymentRequestDeleteController::setReceive(WalletReceiveModel* receive)
 {
     if (m_receive == receive) return;
     reset();
@@ -24,12 +24,12 @@ void RequestDeleteController::setReceive(WalletReceiveModel* receive)
     Q_EMIT receiveChanged();
 }
 
-bool RequestDeleteController::asking() const
+bool PaymentRequestDeleteController::asking() const
 {
     return m_deletion && m_deletion->closePrompt() && !m_deletion->busy();
 }
 
-bool RequestDeleteController::failed() const
+bool PaymentRequestDeleteController::failed() const
 {
     if (!m_refusal.isEmpty()) return true;
     if (!m_deletion || m_deletion->busy() || m_deletion->closePrompt()) return false;
@@ -37,7 +37,7 @@ bool RequestDeleteController::failed() const
     return (result.present && !result.erased) || m_deletion->error().code != TextEditError::None;
 }
 
-QString RequestDeleteController::error() const
+QString PaymentRequestDeleteController::error() const
 {
     if (!failed()) return {};
     if (!m_refusal.isEmpty()) return m_refusal;
@@ -45,7 +45,7 @@ QString RequestDeleteController::error() const
     return !result.errorText.isEmpty() ? result.errorText : m_deletion->error().message;
 }
 
-bool RequestDeleteController::request(const QString& id)
+bool PaymentRequestDeleteController::request(const QString& id)
 {
     // A question already open stays the one on screen.
     if (m_deletion) return false;
@@ -59,10 +59,10 @@ bool RequestDeleteController::request(const QString& id)
     // QML does not collect the question while this controller follows it.
     QQmlEngine::setObjectOwnership(deletion, QQmlEngine::CppOwnership);
     m_deletion = deletion;
-    connect(deletion, &PaymentRequestEditorModel::changed, this, &RequestDeleteController::changed);
-    connect(deletion, &PaymentRequestEditorModel::keptEditing, this, &RequestDeleteController::release);
-    connect(deletion, &PaymentRequestEditorModel::closed, this, &RequestDeleteController::release);
-    connect(deletion, &QObject::destroyed, this, &RequestDeleteController::changed);
+    connect(deletion, &PaymentRequestEditorModel::changed, this, &PaymentRequestDeleteController::changed);
+    connect(deletion, &PaymentRequestEditorModel::keptEditing, this, &PaymentRequestDeleteController::release);
+    connect(deletion, &PaymentRequestEditorModel::closed, this, &PaymentRequestDeleteController::release);
+    connect(deletion, &QObject::destroyed, this, &PaymentRequestDeleteController::changed);
     connect(deletion, &PaymentRequestEditorModel::persisted, this, [this](const RequestSaveResult& result) {
         if (result.erased) Q_EMIT deleted(result.requestId);
     });
@@ -70,24 +70,24 @@ bool RequestDeleteController::request(const QString& id)
     return true;
 }
 
-void RequestDeleteController::confirm()
+void PaymentRequestDeleteController::confirm()
 {
     if (asking()) m_deletion->closePrompt()->answer(TextEditClosePrompt::Save);
 }
 
-void RequestDeleteController::cancel()
+void PaymentRequestDeleteController::cancel()
 {
     if (asking()) m_deletion->closePrompt()->answer(TextEditClosePrompt::KeepEditing);
 }
 
-bool RequestDeleteController::refuse(QString reason)
+bool PaymentRequestDeleteController::refuse(QString reason)
 {
     m_refusal = std::move(reason);
     Q_EMIT changed();
     return false;
 }
 
-void RequestDeleteController::dismiss()
+void PaymentRequestDeleteController::dismiss()
 {
     if (!failed()) return;
     if (!m_refusal.isEmpty()) { m_refusal.clear(); Q_EMIT changed(); return; }
@@ -95,7 +95,7 @@ void RequestDeleteController::dismiss()
     release();
 }
 
-void RequestDeleteController::reset()
+void PaymentRequestDeleteController::reset()
 {
     if (!m_refusal.isEmpty()) { m_refusal.clear(); Q_EMIT changed(); }
     if (!m_deletion) return;
@@ -104,7 +104,7 @@ void RequestDeleteController::reset()
     release();
 }
 
-void RequestDeleteController::release()
+void PaymentRequestDeleteController::release()
 {
     if (!m_deletion) return;
     disconnect(m_deletion, nullptr, this, nullptr);

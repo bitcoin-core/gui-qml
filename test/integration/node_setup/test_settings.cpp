@@ -7,7 +7,7 @@
 #include <qml/models/core_settings_model.h>
 #include <qml/models/settingseditormodel.h>
 #include <qml/models/desktopwindowbehaviormodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <qml/models/settings_keys.h>
 #include <node/caches.h>
@@ -77,7 +77,7 @@ public Q_SLOTS:
 private Q_SLOTS:
     void acceptedSettingsWritePersistsWhenQuittingDuringRuntimeQuestion()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel");
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel");
         auto& node_model = m_app.nodeModel();
         QVERIFY(options);
         QTRY_VERIFY(options->settingsReady());
@@ -110,7 +110,7 @@ private Q_SLOTS:
 
     void acceptedSettingsWritePersistsWhenQuittingDuringBlockingRpc()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel");
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel");
         auto* console = qmltest::Model<RpcConsoleModel>(m_app, "rpcConsoleModel");
         QVERIFY(options && console);
         QTRY_VERIFY(options->settingsReady());
@@ -170,7 +170,7 @@ private Q_SLOTS:
 
     void databaseCacheUsesCoreDefaultAndKeepsExplicitOverride()
     {
-        auto* options=qmltest::Model<OptionsQmlModel>(m_app,"optionsModel");QVERIFY(options);QTRY_VERIFY(options->settingsReady());QTRY_VERIFY(!options->settingsPending());
+        auto* options=qmltest::Model<SettingsModel>(m_app,"optionsModel");QVERIFY(options);QTRY_VERIFY(options->settingsReady());QTRY_VERIFY(!options->settingsPending());
         const auto expected=node::GetDefaultDBCache()/1_MiB;
         QCOMPARE(options->dbcacheSizeMiB(),int(expected));QVERIFY(options->maxDbcacheSizeMiB()>=1636);
         QVERIFY(qmltest::Call(m_app,&interfaces::Node::getPersistentSetting,"dbcache").isNull());
@@ -274,7 +274,7 @@ private Q_SLOTS:
 
     void externalPreferencesRefreshTheOpenDisplayAndWindowModels()
     {
-        auto* options=qmltest::Model<OptionsQmlModel>(m_app,"optionsModel");
+        auto* options=qmltest::Model<SettingsModel>(m_app,"optionsModel");
         auto* behavior=qmltest::Model<DesktopWindowBehaviorModel>(m_app,"desktopWindowBehaviorModel");QVERIFY(options);QVERIFY(behavior);
         QTRY_VERIFY(options->settingsReady());QTRY_VERIFY(behavior->settingsReady());
         QVERIFY(qmltest::SelectSettings(m_app,"display"));auto* picker=qmltest::WaitForVisible(m_app,"displayUnitPicker");QVERIFY(picker);
@@ -515,7 +515,7 @@ private Q_SLOTS:
     // back to bitcoin.conf on the next start.
     void returningBooleanSettingToDefaultOverConfigPersistsExplicitOverride()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         QTRY_VERIFY(options->settingsReady() && !options->settingsPending());
         QVERIFY(qmltest::SelectSettings(m_app, "connection"));
         QPointer<SettingsEditorModel> editor{settingsEditor()}; QVERIFY(editor);

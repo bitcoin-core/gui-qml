@@ -48,7 +48,7 @@ void psbtdocument::Qualify(psbtwork::Snapshot& snapshot)
     else snapshot.status = Tr("This wallet does not have the right keys to sign this PSBT.");
 }
 
-psbtwork::Result psbtdocument::Owner::consume(std::uint64_t operation, psbtwork::Kind kind, psbtwork::Result result)
+psbtwork::Result psbtdocument::Store::consume(std::uint64_t operation, psbtwork::Kind kind, psbtwork::Result result)
 {
     if (m_withdrawn.load() || operation <= m_snapshot.operation) {
         // A completed effect keeps its scalar receipt. Structural data from a

@@ -10,7 +10,7 @@
 #include <key_io.h>
 #include <qml/bitcoinunits.h>
 #include <qml/models/bitcoinaddress.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/retainedvalue.h>
 #include <wallet/types.h>
 
@@ -329,14 +329,14 @@ struct AddressListModel::LabelJob {
     }
 };
 
-AddressListModel::AddressListModel(WalletQmlModel* parent)
+AddressListModel::AddressListModel(WalletModel* parent)
     : QAbstractListModel(parent)
     , m_wallet_model(parent)
 {
     if (m_wallet_model) {
-        connect(m_wallet_model, &WalletQmlModel::addressInventoryChanged, this, &AddressListModel::refresh);
-        connect(m_wallet_model, &WalletQmlModel::addressLabelsChanged, this, &AddressListModel::refreshLabels);
-        connect(m_wallet_model, &WalletQmlModel::walletContentsChanged, this, &AddressListModel::refresh);
+        connect(m_wallet_model, &WalletModel::addressInventoryChanged, this, &AddressListModel::refresh);
+        connect(m_wallet_model, &WalletModel::addressLabelsChanged, this, &AddressListModel::refreshLabels);
+        connect(m_wallet_model, &WalletModel::walletContentsChanged, this, &AddressListModel::refresh);
     }
     refresh();
 }

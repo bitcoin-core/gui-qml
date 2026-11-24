@@ -60,7 +60,7 @@ public:
         auto* open = m_receive->openRequest(QStringLiteral("17"), this);
         if (!open) return false;
         const auto take = [this, open] { if (open->editor()) { m_saved = open->editor(); Q_EMIT changed(); } };
-        connect(open, &RequestOpenOperation::changed, this, take);
+        connect(open, &PaymentRequestOpenOperation::changed, this, take);
         take();
         return true;
     }

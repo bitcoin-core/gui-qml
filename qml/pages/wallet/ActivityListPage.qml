@@ -13,7 +13,7 @@ import "../../components"
 Page {
     id: root
     objectName: "activityPage"
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property FileSaveOperation csvExport: activityFilterProxy.exportOperation
     property bool ready: false
     readonly property bool activitySourceEmpty: !wallet || wallet.transactionActivityModel.count === 0

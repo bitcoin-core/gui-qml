@@ -14,12 +14,12 @@ AlertPopup {
     id: root
 
     property WalletReceiveModel receive: null
-    readonly property RequestDeleteController controller: deletion
+    readonly property PaymentRequestDeleteController controller: deletion
 
     //! Asks whether to delete saved request \p id.
     function confirmDelete(id) { return deletion.request(id) }
 
-    RequestDeleteController {
+    PaymentRequestDeleteController {
         id: deletion
         receive: root.receive
     }

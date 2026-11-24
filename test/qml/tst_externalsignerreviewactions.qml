@@ -22,7 +22,7 @@ TestCase {
 
         QtObject {
             property int approveCalls: 0
-            property int signerApprovalState: WalletQmlModel.ApprovalInitial
+            property int signerApprovalState: WalletModel.ApprovalInitial
             property string signerApprovalError: ""
             property bool signerApprovalSignerNotFound: false
             property string currentTransactionReviewMessage: ""
@@ -30,18 +30,18 @@ TestCase {
             signal externalSignerApprovalSucceeded()
             signal externalSignerApprovalPartiallySucceeded()
             signal externalSignerApprovalFailed(string message, bool signerNotFound)
-            onExternalSignerApprovalSucceeded: signerApprovalState = WalletQmlModel.ApprovalSigned
-            onExternalSignerApprovalPartiallySucceeded: signerApprovalState = WalletQmlModel.ApprovalPartiallySigned
+            onExternalSignerApprovalSucceeded: signerApprovalState = WalletModel.ApprovalSigned
+            onExternalSignerApprovalPartiallySucceeded: signerApprovalState = WalletModel.ApprovalPartiallySigned
             onExternalSignerApprovalFailed: (message, signerNotFound) => {
                 signerApprovalSignerNotFound = signerNotFound
                 signerApprovalError = message
-                signerApprovalState = WalletQmlModel.ApprovalFailed
+                signerApprovalState = WalletModel.ApprovalFailed
             }
 
             function approveExternalSignerTransaction() {
-                if (signerApprovalState === WalletQmlModel.ApprovalWaiting) return
+                if (signerApprovalState === WalletModel.ApprovalWaiting) return
                 signerApprovalSignerNotFound = false
-                signerApprovalState = WalletQmlModel.ApprovalWaiting
+                signerApprovalState = WalletModel.ApprovalWaiting
                 approveCalls += 1
             }
         }
@@ -131,7 +131,7 @@ TestCase {
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet, canSend: true})
         verify(review !== null)
         wallet.signerApprovalError = "Reconcile the PSBT before retrying."
-        wallet.signerApprovalState = WalletQmlModel.ApprovalUncertain
+        wallet.signerApprovalState = WalletModel.ApprovalUncertain
         compare(review.reviewState, "uncertain")
         compare(review.statusText, wallet.signerApprovalError)
         const button = findObjectByName(review, "externalSignerApproveButton")
@@ -142,7 +142,7 @@ TestCase {
 
     function test_unverified_result_blocks_approval_and_remains_visible() {
         const wallet = createTemporaryObject(walletComponent, this)
-        wallet.signerApprovalState = WalletQmlModel.ApprovalUnverified
+        wallet.signerApprovalState = WalletModel.ApprovalUnverified
         wallet.signerApprovalError = "Export unverified result to reconcile it."
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet, canSend: false})
         compare(review.reviewState, "unverified")
@@ -232,7 +232,7 @@ TestCase {
         wait(50)
 
         compare(wallet.approveCalls, 1)
-        compare(wallet.signerApprovalState, WalletQmlModel.ApprovalWaiting)
+        compare(wallet.signerApprovalState, WalletModel.ApprovalWaiting)
     }
 
     function test_rapid_clicks_only_start_one_approval() {

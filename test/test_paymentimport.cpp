@@ -66,7 +66,7 @@ struct Fixture {
     paymentimport::Snapshot snapshot;
     std::chrono::steady_clock::time_point now{};
     std::vector<std::function<void()>> wakes;
-    std::shared_ptr<paymentimport::Owner> owner;
+    std::shared_ptr<paymentimport::Service> owner;
     std::shared_ptr<paymentimport::TargetPort> port{std::make_shared<paymentimport::TargetPort>()};
     paymentimport::Target facts{Target()};
     int reads{0}, analyses{0}, writes{0}, dispatches{0}, queries{0}, acks{0}, retired{0};
@@ -98,7 +98,7 @@ struct Fixture {
         services.read = [this](const auto& input) { ++reads; if (read_fail) { paymentimport::Inspection failed; failed.error = "read unavailable"; return failed; } return paymentimport::ReadSource(input); };
         services.analyze = [this](const auto& input) { ++analyses; return paymentimport::AnalyzeSource(input); };
         services.now = [this] { return now; }; services.wake = [this](auto, auto wake) { wakes.push_back(std::move(wake)); };
-        owner = paymentimport::Owner::Create(42, services, [this](auto value) { snapshot = std::move(value); }, [this](auto) { ++retired; });
+        owner = paymentimport::Service::Create(42, services, [this](auto value) { snapshot = std::move(value); }, [this](auto) { ++retired; });
     }
     ~Fixture() {
         owner->close(); drain();
@@ -706,10 +706,10 @@ private Q_SLOTS:
         services.outcomes = std::make_shared<execution::SerialQueue>(refused.executor().makeQueue(execution::Lane::Utility));
         services.outcomes->close();
         int publications{0};
-        auto rejected = paymentimport::Owner::Create(89, services, [&](auto) { ++publications; });
+        auto rejected = paymentimport::Service::Create(89, services, [&](auto) { ++publications; });
         QVERIFY(rejected);
         QCOMPARE(rejected->inspect({paymentimport::Input::Kind::Text, Uri()}).rejection, execution::Rejection::Transport);
-        const std::weak_ptr<paymentimport::Owner> original_rejected{rejected};
+        const std::weak_ptr<paymentimport::Service> original_rejected{rejected};
         rejected.reset();
         refused.drain();
         QCOMPARE(publications, 0);
@@ -718,9 +718,9 @@ private Q_SLOTS:
         ManualStartupExecution unused;
         services.reads = std::make_shared<execution::SerialQueue>(unused.executor().makeQueue(execution::Lane::Utility));
         services.outcomes = std::make_shared<execution::SerialQueue>(unused.executor().makeQueue(execution::Lane::Utility));
-        auto owner = paymentimport::Owner::Create(90, std::move(services), {});
+        auto owner = paymentimport::Service::Create(90, std::move(services), {});
         QVERIFY(owner);
-        const std::weak_ptr<paymentimport::Owner> original{owner};
+        const std::weak_ptr<paymentimport::Service> original{owner};
         owner.reset();
         unused.drain();
         QVERIFY(original.expired());
@@ -751,7 +751,7 @@ private Q_SLOTS:
             release.acquire();
             return paymentimport::ReadSource(input);
         };
-        auto owner = paymentimport::Owner::Create(73, services, [&](auto snapshot) {
+        auto owner = paymentimport::Service::Create(73, services, [&](auto snapshot) {
             decision = QThread::currentThread();
             QMetaObject::invokeMethod(&receiver, [&, snapshot = std::move(snapshot)] { observed = snapshot; }, Qt::QueuedConnection);
         });
@@ -795,7 +795,7 @@ private Q_SLOTS:
         std::deque<std::function<void()>> target_gui, source_gui;
         FeeReadServices fees; fees.post = [&](auto post) { target_gui.push_back(std::move(post)); };
         auto wallet = std::make_shared<MockWallet>();
-        WalletQmlModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
+        WalletModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
         ManualWalletDrain drain{commands, &model};
         BitcoinUriModel importer; QObject view;
         importer.setServices([&](auto post) { source_gui.push_back(std::move(post)); }, &sources.executor());
@@ -846,7 +846,7 @@ private Q_SLOTS:
         ManualStartupExecution sources; std::deque<std::function<void()>> target_gui, source_gui;
         FeeReadServices fees; fees.post = [&](auto post) { target_gui.push_back(std::move(post)); };
         auto wallet = std::make_shared<MockWallet>();
-        WalletQmlModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
+        WalletModel model{WalletWithQueues(wallet, commands.executor()), nullptr, fees, {}, {}};
         ManualWalletDrain drain{commands, &model}; BitcoinUriModel importer; QObject view;
         importer.setServices([&](auto post) { source_gui.push_back(std::move(post)); }, &sources.executor());
         const auto publish = [](auto& queue) { while (!queue.empty()) { auto turn = std::move(queue.front()); queue.pop_front(); turn(); } };
@@ -879,7 +879,7 @@ private Q_SLOTS:
     void appliedDraftReceiptStaysOnOriginalUtilityQueueThroughClose()
     {
         const auto node_free_wallet = std::make_shared<MockWallet>();
-        WalletQmlModel model{WalletQmlModel::SharedWallet{node_free_wallet}, nullptr, {}, {}, {}};
+        WalletModel model{WalletModel::SharedWallet{node_free_wallet}, nullptr, {}, {}, {}};
         const auto native_drained = WatchWalletNativeDrain(model);
         const auto cleanup = qScopeGuard([&] {
             model.beginShutdown();

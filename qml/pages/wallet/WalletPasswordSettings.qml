@@ -16,7 +16,7 @@ SettingsPage {
     objectName: "walletPasswordSettingsPage"
 
     required property bool updating
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property WalletSecurityInterface security: wallet ? wallet.security : null
     readonly property bool waitingForSave: password.saving
     readonly property bool securityBusy: security !== null && security.busy

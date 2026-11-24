@@ -142,12 +142,12 @@ private Q_SLOTS:
         QmlInitExecutor executor{node, makePriorityQueue()};
         auto core = m_executor.makeQueue(execution::Lane::Core);
         const auto unblock = qScopeGuard([&] { write_release.release(); interrupt.release(); });
-        QmlShutdownCoordinator coordinator{executor};
+        ShutdownCoordinator coordinator{executor};
         coordinator.addBeforeInterruptTask([&](auto done) {
             core.close();
             core.whenDrained(std::move(done));
         });
-        QSignalSpy finished{&coordinator, &QmlShutdownCoordinator::finished};
+        QSignalSpy finished{&coordinator, &ShutdownCoordinator::finished};
         executor.initialize();
         QVERIFY(init_entered.tryAcquire(1, SIGNAL_TIMEOUT));
         QVERIFY(core.post([&] {
@@ -420,7 +420,7 @@ void QmlInitExecutorApiTests::fatalInitializationRejectsPendingAndLaterShutdown(
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
     QmlInitExecutor executor{node, makePriorityQueue()};
     const auto release_workers = qScopeGuard([&] { release_init.release(); release_interrupt.release(); });
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
     QSignalSpy interrupt_spy(&executor, &QmlInitExecutor::interruptResult);
     QSignalSpy shutdown_spy(&executor, &QmlInitExecutor::shutdownResult);
@@ -476,12 +476,12 @@ void QmlInitExecutorApiTests::queuedShutdownAfterInitialization()
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
     QmlInitExecutor executor{node, makePriorityQueue()};
     const auto unblock = qScopeGuard([&] { release.release(); });
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     QSignalSpy initialized{&executor, &QmlInitExecutor::initializeResult};
     QSignalSpy interrupted{&executor, &QmlInitExecutor::interruptResult};
     QSignalSpy runaway{&executor, &QmlInitExecutor::runawayException};
     QSignalSpy shutdown{&executor, &QmlInitExecutor::shutdownResult};
-    QSignalSpy finished{&coordinator, &QmlShutdownCoordinator::finished};
+    QSignalSpy finished{&coordinator, &ShutdownCoordinator::finished};
     executor.initialize();
     executor.initialize();
     QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, SIGNAL_TIMEOUT);
@@ -674,7 +674,7 @@ void QmlInitExecutorApiTests::asynchronousRetirementPrecedesInterrupt()
     node.app_shutdown_fn = [] {};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
     QmlInitExecutor executor{node, makePriorityQueue()};
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     bool fenced{false}, began{false};
     std::function<void()> acknowledge;
     coordinator.addStopHook([&] { executor.close(); });
@@ -726,12 +726,12 @@ void QmlInitExecutorApiTests::shutdownWaitsForInterruptionAndEveryParticipant()
     QVERIFY(worker_entered->tryAcquire(1, SIGNAL_TIMEOUT));
     deferred_worker.close();
     deferred_worker.whenDrained([deferred_drained] { deferred_drained->store(true); });
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     ShutdownParticipant first, second;
     coordinator.addParticipant(&first, &ShutdownParticipant::drained, [&] { first.started = true; });
     coordinator.addParticipant(&second, &ShutdownParticipant::drained, [&] { second.started = true; });
     QSignalSpy finished{&executor, &QmlInitExecutor::shutdownResult};
-    QSignalSpy coordinator_finished{&coordinator, &QmlShutdownCoordinator::finished};
+    QSignalSpy coordinator_finished{&coordinator, &ShutdownCoordinator::finished};
     coordinator.requestShutdown();
     coordinator.requestShutdown();
     QTRY_VERIFY_WITH_TIMEOUT(hook_entered.load(), SIGNAL_TIMEOUT);
@@ -768,13 +768,13 @@ void QmlInitExecutorApiTests::portMappingDrainsBeforeSingleInterruption()
     node.app_shutdown_fn = [] {};
     const auto drain_retired = qScopeGuard([] { DrainRetiredExecutors(); });
     QmlInitExecutor executor{node, makePriorityQueue()};
-    QmlShutdownCoordinator coordinator{executor};
+    ShutdownCoordinator coordinator{executor};
     ShutdownParticipant settings;
     int fences{0};
     coordinator.addStopHook([&] { ++fences; });
     coordinator.addStopHook([&] { ++fences; });
     bool ui_notified{false};
-    connect(&coordinator, &QmlShutdownCoordinator::shutdownStarted, this, [&] {
+    connect(&coordinator, &ShutdownCoordinator::shutdownStarted, this, [&] {
         QCOMPARE(fences, 2);
         QVERIFY(!settings.started);
         QCOMPARE(node.calls.startShutdown.load(), 0);

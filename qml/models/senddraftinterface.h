@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_SENDDRAFTINTERFACE_H
 #define BITCOIN_QML_MODELS_SENDDRAFTINTERFACE_H
 
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 #include <qml/models/preparationoperation.h>
 #include <qml/models/psbtoperation.h>
 
@@ -15,13 +15,13 @@
 #include <optional>
 
 /** What a SendDraftController needs from a wallet: its send draft and the
- * actions that turn it into a review. WalletQmlModel implements it; tests use
+ * actions that turn it into a review. WalletModel implements it; tests use
  * a fake. */
-class SendDraftInterface : public WalletInterface
+class SendDraftInterface : public WalletAvailabilityInterface
 {
     Q_OBJECT
 public:
-    using WalletInterface::WalletInterface;
+    using WalletAvailabilityInterface::WalletAvailabilityInterface;
 
     //! Changes whenever the user changes the draft or its coin selection.
     virtual QString draftRevision() const = 0;

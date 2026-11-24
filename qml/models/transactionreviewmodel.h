@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
-#define BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
+#ifndef BITCOIN_QML_MODELS_TRANSACTIONREVIEWMODEL_H
+#define BITCOIN_QML_MODELS_TRANSACTIONREVIEWMODEL_H
 
 #include <qml/bitcoinamount.h>
 #include <qml/models/psbtfee.h>
@@ -20,7 +20,7 @@
 #include <optional>
 #include <vector>
 
-class WalletQmlModelTransaction : public QObject
+class TransactionReviewModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BitcoinAmount* amountAmount READ amountAmount CONSTANT)
@@ -44,14 +44,14 @@ public:
     //! Where the reviewed transaction came from.
     enum class Source { None, SendDraft, ImportedPsbt };
 
-    WalletQmlModelTransaction(std::shared_ptr<const walletreview::Snapshot> snapshot,
+    TransactionReviewModel(std::shared_ptr<const walletreview::Snapshot> snapshot,
         std::shared_ptr<walletopening::Session> opening, std::function<void(std::function<void()>)> post,
         QObject* parent = nullptr);
-    WalletQmlModelTransaction(const walletreview::Snapshot& snapshot,
+    TransactionReviewModel(const walletreview::Snapshot& snapshot,
         std::shared_ptr<walletopening::Session> opening, std::function<void(std::function<void()>)> post,
         QObject* parent = nullptr);
 
-    WalletQmlModelTransaction(const WalletQmlModelTransaction& reviewed, CAmount authenticated_fee, QObject* parent);
+    TransactionReviewModel(const TransactionReviewModel& reviewed, CAmount authenticated_fee, QObject* parent);
 
     BitcoinAmount* amountAmount() const;
     BitcoinAmount* feeAmount() const;
@@ -137,7 +137,7 @@ private:
     };
     static ConstructionInput prepareConstruction(const walletreview::Snapshot&, std::shared_ptr<walletopening::Session>,
         std::function<void(std::function<void()>)>, QObject*);
-    explicit WalletQmlModelTransaction(ConstructionInput input);
+    explicit TransactionReviewModel(ConstructionInput input);
     static QString formatWithUnit(CAmount value, int display_unit);
 
     // Declared before cached aliases so they release before the cleanup lease.
@@ -187,4 +187,4 @@ private:
     int m_requested_display_unit{0};
 };
 
-#endif // BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
+#endif // BITCOIN_QML_MODELS_TRANSACTIONREVIEWMODEL_H

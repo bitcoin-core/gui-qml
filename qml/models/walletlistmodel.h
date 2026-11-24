@@ -13,8 +13,8 @@
 #include <QPointer>
 #include <QString>
 
-class WalletQmlModel;
-Q_MOC_INCLUDE("qml/models/walletqmlmodel.h")
+class WalletModel;
+Q_MOC_INCLUDE("qml/models/walletmodel.h")
 
 namespace interfaces {
 class Node;
@@ -89,14 +89,14 @@ public Q_SLOTS:
     void refreshDisplayNames();
     void refresh();
     void setBackendAvailability(BackendAvailability availability);
-    void setOpenWallet(const QString& walletId, WalletQmlModel* wallet);
+    void setOpenWallet(const QString& walletId, WalletModel* wallet);
     void setOperationId(const QString& walletId, const QString& operationId);
 
 private:
     WalletListModel(interfaces::Node& node, execution::Executor* executor, presentation::Post post, QObject* parent);
     struct OpenWalletBinding {
-        QPointer<WalletQmlModel> wallet;
-        const WalletQmlModel* identity{nullptr};
+        QPointer<WalletModel> wallet;
+        const WalletModel* identity{nullptr};
         QMetaObject::Connection destroyed;
     };
     void enqueue(walletcatalog::Input input);

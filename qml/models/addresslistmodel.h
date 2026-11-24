@@ -20,7 +20,7 @@
 #include <exception>
 #include <vector>
 
-class WalletQmlModel;
+class WalletModel;
 namespace interfaces { class Wallet; }
 
 class AddressListModel : public QAbstractListModel
@@ -55,7 +55,7 @@ public:
         CanCreatePaymentRequestRole
     };
 
-    explicit AddressListModel(WalletQmlModel* parent = nullptr);
+    explicit AddressListModel(WalletModel* parent = nullptr);
     ~AddressListModel() override;
     void close();
     QString readError() const { return m_read_error; }
@@ -129,7 +129,7 @@ private:
     quint64 m_query_generation{0};
     QString m_read_error;
     bool m_stopping{false}, m_dirty{true}, m_labels_dirty{false}, m_pending_labels{false}, m_refresh_pending{false}, m_inventory_failed{false}, m_notifying{false};
-    WalletQmlModel* m_wallet_model{nullptr};
+    WalletModel* m_wallet_model{nullptr};
     QHash<QString, QPointer<TextEditSessionModel>> m_label_editors;
     Category m_category{SingleUse};
     bool m_show_used{false};

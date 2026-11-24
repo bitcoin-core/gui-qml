@@ -10,7 +10,7 @@ import "../pages/wallet"
 DialogPopup {
     id: root
     objectName: "walletCreationModal"
-    signal finished(bool openActivity, WalletQmlModel wallet)
+    signal finished(bool openActivity, WalletModel wallet)
     property bool onboardingEntry: false
 
     function openForOnboarding() {

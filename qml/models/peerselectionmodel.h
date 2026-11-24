@@ -4,7 +4,7 @@
 #ifndef BITCOIN_QML_MODELS_PEERSELECTIONMODEL_H
 #define BITCOIN_QML_MODELS_PEERSELECTIONMODEL_H
 #include <qml/models/peerdetailsmodel.h>
-#include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peerlistproxymodel.h>
 #include <QObject>
 #include <QPointer>
 
@@ -12,7 +12,7 @@
  * substitutes a different connection just because its numeric ID is equal. */
 class PeerSelectionModel : public QObject {
     Q_OBJECT
-    Q_PROPERTY(PeerListSortProxy* source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(PeerListProxyModel* source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(bool autoSelectFirst READ autoSelectFirst WRITE setAutoSelectFirst NOTIFY autoSelectFirstChanged)
     Q_PROPERTY(PeerDetailsModel* selectedDetails READ selectedDetails NOTIFY changed)
     Q_PROPERTY(QString connectionId READ connectionId NOTIFY changed)
@@ -24,8 +24,8 @@ public:
     enum class Phase { NoSelection, Connected, Disconnected, Stopped };
     Q_ENUM(Phase)
     explicit PeerSelectionModel(QObject* parent = nullptr) : QObject(parent) {}
-    PeerListSortProxy* source() const { return m_source; }
-    void setSource(PeerListSortProxy* source);
+    PeerListProxyModel* source() const { return m_source; }
+    void setSource(PeerListProxyModel* source);
     bool autoSelectFirst() const { return m_auto; }
     void setAutoSelectFirst(bool value);
     PeerDetailsModel* selectedDetails() const { return m_selected; }
@@ -44,7 +44,7 @@ Q_SIGNALS:
 private:
     void reconcile();
     void detach();
-    QPointer<PeerListSortProxy> m_source;
+    QPointer<PeerListProxyModel> m_source;
     QPointer<PeerDetailsModel> m_selected;
     PeerConnection m_target;
     QList<QMetaObject::Connection> m_source_connections, m_detail_connections;

@@ -15,7 +15,7 @@
 #include <QString>
 
 /** A fee bump attempt (FeeBumpOperation) on one wallet opening. The wallet's
- * FeeBumps creates one per review. Attempt and commit ids are C++-only. */
+ * FeeBumpModel creates one per review. Attempt and commit ids are C++-only. */
 class BumpTransactionModel : public FeeBumpOperation
 {
     Q_OBJECT
@@ -88,7 +88,7 @@ private:
     std::shared_ptr<walletopening::Session> m_opening;
     presentation::Post m_post;
     walletbump::Services m_bump_services;
-    std::shared_ptr<transactionattempt::Owner> m_attempt_owner;
+    std::shared_ptr<transactionattempt::Store> m_attempt_owner;
     transactionattempt::Snapshot m_attempt_snapshot;
     transactionattempt::Ticket m_attempt_ticket{};
     std::shared_ptr<const walletbump::Prepared> m_review;

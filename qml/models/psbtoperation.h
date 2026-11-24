@@ -20,7 +20,7 @@ class PsbtOperation : public QObject
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(QString savedPath READ savedPath NOTIFY changed)
     Q_PROPERTY(QString txid READ txid NOTIFY changed)
-    //! For an import: WalletQmlModel::PsbtImportResult.
+    //! For an import: WalletModel::PsbtImportResult.
     Q_PROPERTY(int importResult READ importResult NOTIFY changed)
 
 public:

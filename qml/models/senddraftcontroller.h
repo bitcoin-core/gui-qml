@@ -29,7 +29,7 @@ class SendDraftController : public QObject
     Q_PROPERTY(QString preparationError READ preparationError NOTIFY preparationChanged)
     Q_PROPERTY(PsbtOperation::State importState READ importState NOTIFY importChanged)
     Q_PROPERTY(bool importing READ importing NOTIFY importChanged)
-    //! WalletQmlModel::PsbtImportResult of a finished import.
+    //! WalletModel::PsbtImportResult of a finished import.
     Q_PROPERTY(int importResult READ importResult NOTIFY importChanged)
     //! The user is asked to confirm a draft that sends all available funds.
     Q_PROPERTY(bool sweepConsentRequested READ sweepConsentRequested NOTIFY sweepConsentChanged)

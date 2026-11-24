@@ -21,7 +21,7 @@
 #include <qml/models/activitydetailmodel.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/guipresentation.h>
 #include <test/mocks/mockwallet.h>
 
@@ -404,11 +404,11 @@ bool Export(Proxy& proxy, const QString& path) {
 struct Fixture {
     ActivityWallet* state;
     std::weak_ptr<interfaces::Wallet> native_lifetime;
-    std::unique_ptr<WalletQmlModel> wallet;
+    std::unique_ptr<WalletModel> wallet;
     explicit Fixture(std::shared_ptr<ActivityWallet> backend=std::make_shared<ActivityWallet>())
     {
         state = backend.get(); native_lifetime = backend;
-        wallet = std::make_unique<WalletQmlModel>(WalletQmlModel::SharedWallet{backend}, nullptr,
+        wallet = std::make_unique<WalletModel>(WalletModel::SharedWallet{backend}, nullptr,
             FeeReadServices{}, psbtfee::Services{}, backup::Services{});
         // Scope the thread assertion to activity operations, after the existing
         // address-book model has loaded during wallet construction.
@@ -417,7 +417,7 @@ struct Fixture {
     ~Fixture()
     {
         if (!wallet) return;
-        QSignalSpy drained{wallet.get(), &WalletQmlModel::shutdownFinished};
+        QSignalSpy drained{wallet.get(), &WalletModel::shutdownFinished};
         const auto native_drained = WatchWalletNativeDrain(*wallet);
         wallet->beginShutdown();
         QVERIFY2(QTest::qWaitFor([&] {
@@ -473,7 +473,7 @@ struct ManualActivityFixture {
     ManualExecutionEnvironment& environment;
     ManualStartupExecution worker;
     std::shared_ptr<ActivityWallet> state;
-    std::unique_ptr<WalletQmlModel> wallet;
+    std::unique_ptr<WalletModel> wallet;
     std::unique_ptr<Model> activity;
     std::shared_ptr<const bool> native_drained;
     ManualPollClock poll_clock;
@@ -482,7 +482,7 @@ struct ManualActivityFixture {
         : environment(env), state(std::move(original)) {
         const auto post = [&env](auto callback) { env.post(std::move(callback)); };
         FeeReadServices fees; fees.post = post; fees.timer = std::shared_ptr<FeeReadTimer>(&env, [](auto*) {});
-        wallet = std::make_unique<WalletQmlModel>(WalletWithQueues(state, worker.executor()), nullptr, std::move(fees), psbtfee::Services{}, backup::Services{});
+        wallet = std::make_unique<WalletModel>(WalletWithQueues(state, worker.executor()), nullptr, std::move(fees), psbtfee::Services{}, backup::Services{});
         native_drained = WatchWalletNativeDrain(*wallet);
         if (!QTest::qWaitFor([&] { settle(); return wallet->capabilitiesKnown() && wallet->property("receiveRequestsLoaded").toBool() && !wallet->receiveRequestReconciliationPending(); }, 5000)) QTest::qFail("Manual activity opening did not settle", __FILE__, __LINE__);
         Model::Services services; services.post = post;
@@ -1057,7 +1057,7 @@ void TransactionActivityModelTests::detailRefreshResumesAfterStoreCatchesUp()
     QVERIFY(detail->pending());
 
     const auto old_revision = f.wallet->opening()->transactionRevision();
-    QSignalSpy transaction_changed{f.wallet.get(), &WalletQmlModel::transactionChanged};
+    QSignalSpy transaction_changed{f.wallet.get(), &WalletModel::transactionChanged};
     f.state->put(tx, 5);
     f.state->notify(tx, CT_UPDATED);
     QVERIFY(f.wallet->opening()->transactionRevision() > old_revision);
@@ -1638,7 +1638,7 @@ void TransactionActivityModelTests::loadsFlowLazilyAndRefreshesOutputAssociation
     QVERIFY(output.value("amount").toString().endsWith(" sats"));
     QCOMPARE(f.state->locked()->parent_reads, 1);
     QCOMPARE(f.state->locked()->address_writes, 0);
-    QSignalSpy notification(f.wallet.get(), &WalletQmlModel::transactionChanged);
+    QSignalSpy notification(f.wallet.get(), &WalletModel::transactionChanged);
     f.state->notify(tx, CT_UPDATED);
     // Request/display edits already emitted detail changes. Wait for the
     // actual background notification before joining its Activity refresh.
@@ -1729,9 +1729,9 @@ void TransactionActivityModelTests::savesBatchRecipientNotesWhenSending()
     QVERIFY2(AwaitPreparation(*f.wallet), qPrintable(f.wallet->transactionError()));
     QCOMPARE(f.state->locked()->address_writes, 0); // Reviewing/cancelling must not save notes.
     if (externalSigner) {
-        QSignalSpy approved(f.wallet.get(), &WalletQmlModel::externalSignerApprovalSucceeded);
+        QSignalSpy approved(f.wallet.get(), &WalletModel::externalSignerApprovalSucceeded);
         QVERIFY(AwaitSignerApprovalOutcome(*f.wallet));
-        QVERIFY2(f.wallet->signerApprovalState() == WalletQmlModel::ApprovalState::ApprovalSigned, qPrintable(f.wallet->signerApprovalError()));
+        QVERIFY2(f.wallet->signerApprovalState() == WalletModel::ApprovalState::ApprovalSigned, qPrintable(f.wallet->signerApprovalError()));
         QCOMPARE(approved.count(), 1);
     }
     // A new intent must pass the current-review guard. Once admitted, its
@@ -1929,7 +1929,7 @@ void TransactionActivityModelTests::malformedStoredRequestStillDrainsTheLivePare
     QCOMPARE(f.wallet->receiveRequests()->count(), 0);
     auto* activity = f.model(); QCOMPARE(activity->requestCount(), 0); QCOMPARE(activity->rowCount(), 0);
     const auto opening = f.wallet->opening();
-    QSignalSpy finished{f.wallet.get(), &WalletQmlModel::shutdownFinished};
+    QSignalSpy finished{f.wallet.get(), &WalletModel::shutdownFinished};
     const auto native_drained = WatchWalletNativeDrain(*f.wallet);
     f.wallet->beginShutdown();
     // Keep the parent facade alive: destruction must not be needed to release
@@ -2106,7 +2106,7 @@ void TransactionActivityModelTests::pendingTotalTracksReplacementRoleChangesWith
     const auto replacement_id = Id(MakeTx({{120'000, true}}, {{118'000, false}}));
     transaction.replaced_by_txid = Txid::FromHex(replacement_id.toStdString());
     f.state->put(transaction, 0);
-    QSignalSpy transaction_changed{f.wallet.get(), &WalletQmlModel::transactionChanged};
+    QSignalSpy transaction_changed{f.wallet.get(), &WalletModel::transactionChanged};
     f.state->notify(transaction, CT_UPDATED);
     QTRY_COMPARE(transaction_changed.count(), 1);
     QTRY_VERIFY(!source->loading());

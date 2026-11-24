@@ -6,7 +6,7 @@
 #define BITCOIN_QML_TEST_MOCKS_WALLETCREATIONTEST_H
 
 #include <qml/walletcreationcontroller.h>
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 
 #include <QList>
 #include <QPointer>
@@ -32,9 +32,9 @@ inline QString OperationError(const WalletCreationController* creation) { return
 inline QString OperationMessage(const WalletCreationController* creation) { return creation->operation() ? creation->operation()->error().message : QString{}; }
 
 //! The active operation's state in the wallet list's terms.
-inline WalletQmlController::WalletOperationState CreationState(const WalletCreationController* creation)
+inline WalletController::WalletOperationState CreationState(const WalletCreationController* creation)
 {
-    using State = WalletQmlController::WalletOperationState;
+    using State = WalletController::WalletOperationState;
     const auto* operation = creation->operation();
     if (!operation) return State::WalletOperationIdle;
     switch (operation->phase()) {
@@ -47,7 +47,7 @@ inline WalletQmlController::WalletOperationState CreationState(const WalletCreat
     default: return State::WalletOperationPending;
     }
 }
-inline WalletQmlModel* CreationResult(const WalletCreationController* creation) { return creation->operation() ? creation->operation()->resultWallet() : nullptr; }
+inline WalletModel* CreationResult(const WalletCreationController* creation) { return creation->operation() ? creation->operation()->resultWallet() : nullptr; }
 inline bool CreationCanOpen(const WalletCreationController* creation) { return creation->operation() && creation->operation()->canOpenResult(); }
 inline QString OperationWarnings(const WalletCreationController* creation) { return creation->operation() ? creation->operation()->warningText() : QString{}; }
 

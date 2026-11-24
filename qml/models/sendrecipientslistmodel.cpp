@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/guipresentation.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/retainedvalue.h>
 #include <qml/paymentimportports.h>
 #include <QPointer>
@@ -68,7 +68,7 @@ struct SendRecipientsListModel::Retired {
     std::shared_ptr<execution::SnapshotQuery<std::shared_ptr<const DraftSnapshot>>> query;
 };
 SendRecipientsListModel::SendRecipientsListModel(QObject* parent, senddraft::Limits limits)
-    : QAbstractListModel(parent), m_wallet(qobject_cast<WalletQmlModel*>(parent)),
+    : QAbstractListModel(parent), m_wallet(qobject_cast<WalletModel*>(parent)),
       m_limits{std::clamp(limits.recipients, 1, 256)}, m_identity(++NEXT_DRAFT)
 {
     m_recipient_owner = presentation::MakeGuiObject();

@@ -4,9 +4,9 @@
 
 #include <qml/models/walletpsbtoperation.h>
 
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
-WalletPsbtOperation::WalletPsbtOperation(WalletQmlModel& wallet, Kind kind, QObject* parent)
+WalletPsbtOperation::WalletPsbtOperation(WalletModel& wallet, Kind kind, QObject* parent)
     : PsbtOperation(kind, parent), m_wallet{&wallet}
 {
     connect(&wallet, &QObject::destroyed, this, [this] { publish(State::Cancelled); });
@@ -14,10 +14,10 @@ WalletPsbtOperation::WalletPsbtOperation(WalletQmlModel& wallet, Kind kind, QObj
 
 bool WalletPsbtOperation::start(const QString& path, const QString& signer_result)
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet) return false;
     // Follow before starting: the wallet can report the outcome at once.
-    connect(wallet, &WalletQmlModel::psbtActionChanged, this, &WalletPsbtOperation::follow);
+    connect(wallet, &WalletModel::psbtActionChanged, this, &WalletPsbtOperation::follow);
     switch (kind()) {
     case Kind::Save:
         m_action = signer_result.isEmpty() ? wallet->requestSaveCurrentTransactionAsPsbt(path)
@@ -39,20 +39,20 @@ void WalletPsbtOperation::cancel()
 {
     // A save that still waits for its destination ends with the operation.
     if (kind() == Kind::Save && m_wallet && m_action) m_wallet->retirePsbtFileExport(m_action);
-    if (m_wallet) disconnect(m_wallet, &WalletQmlModel::psbtActionChanged, this, &WalletPsbtOperation::follow);
+    if (m_wallet) disconnect(m_wallet, &WalletModel::psbtActionChanged, this, &WalletPsbtOperation::follow);
     publish(State::Cancelled);
 }
 
 void WalletPsbtOperation::follow()
 {
-    WalletQmlModel* wallet = m_wallet.data();
+    WalletModel* wallet = m_wallet.data();
     if (!wallet || finished() || !m_action) return;
     // The wallet started another action; this one's outcome is not known here.
     if (wallet->psbtActionId() != m_action) {
         publish(State::Stale);
         return;
     }
-    using A = WalletQmlModel::PsbtActionState;
+    using A = WalletModel::PsbtActionState;
     switch (wallet->psbtActionState()) {
     case A::PsbtIdle:
     case A::PsbtPending: return;

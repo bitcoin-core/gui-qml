@@ -58,7 +58,7 @@ def main():
             'import org.bitcoincore.qt 1.0\nimport "../controls"\n'
             'Base { id: root; property WalletOperationModel operation: null; '
             'property string originalId: root.operation ? root.operation.operationId : ""; '
-            'property WalletQmlModel originalResult: root.operation ? root.operation.resultWallet : null; '
+            'property WalletModel originalResult: root.operation ? root.operation.resultWallet : null; '
             'property bool canOpen: root.operation ? root.operation.canOpenResult : false }', 0),
         "typed-sharing-interest-and-intent": (
             'import org.bitcoincore.qt 1.0\nimport "../controls"\n'
@@ -69,7 +69,7 @@ def main():
         "typed-selection-intent": (
             'import org.bitcoincore.qt 1.0\nimport "../controls"\n'
             'Base { id: root; property WalletSelectionModel selection: null; '
-            'property WalletQmlModel original: root.selection ? root.selection.selectedWallet : null; '
+            'property WalletModel original: root.selection ? root.selection.selectedWallet : null; '
             'function choose() { if (root.selection) root.selection.select(root.original) } }', 0),
         "reject-editor-state-writer": (
             'import org.bitcoincore.qt 1.0\nimport "../controls"\n'

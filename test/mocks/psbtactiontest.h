@@ -3,11 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_TEST_MOCKS_PSBTACTIONTEST_H
 #define BITCOIN_QML_TEST_MOCKS_PSBTACTIONTEST_H
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <QtTest/QtTest>
-inline bool AwaitPsbtAction(WalletQmlModel& model, quint64 ticket)
+inline bool AwaitPsbtAction(WalletModel& model, quint64 ticket)
 {
-    const QPointer<WalletQmlModel> guard{&model};
+    const QPointer<WalletModel> guard{&model};
     if (!ticket) return false;
     if (!QTest::qWaitFor([&] { return !guard || !guard->psbtActionBusy(); }, 5000) || !guard || guard->psbtActionId() != ticket) {
         QTest::qFail("PSBT action did not reach its original matching terminal outcome", __FILE__, __LINE__);
@@ -15,26 +15,26 @@ inline bool AwaitPsbtAction(WalletQmlModel& model, quint64 ticket)
     }
     return true;
 }
-inline WalletQmlModel::PsbtImportResult AwaitPsbtImport(WalletQmlModel& model, const QString& path)
+inline WalletModel::PsbtImportResult AwaitPsbtImport(WalletModel& model, const QString& path)
 {
     if (!AwaitPsbtAction(model, model.requestImportPsbtFromFile(path))) {
         QTest::qFail("PSBT import did not reach a matching terminal outcome", __FILE__, __LINE__);
-        return WalletQmlModel::PsbtImportResult::PsbtUnsupported;
+        return WalletModel::PsbtImportResult::PsbtUnsupported;
     }
     return model.psbtImportResult();
 }
-inline bool AwaitPsbtSave(WalletQmlModel& model, const QString& path)
+inline bool AwaitPsbtSave(WalletModel& model, const QString& path)
 {
-    return AwaitPsbtAction(model, model.requestSaveCurrentTransactionAsPsbt(path)) && model.psbtActionState() == WalletQmlModel::PsbtActionState::PsbtSaved;
+    return AwaitPsbtAction(model, model.requestSaveCurrentTransactionAsPsbt(path)) && model.psbtActionState() == WalletModel::PsbtActionState::PsbtSaved;
 }
-inline QString AwaitPsbtSaveError(WalletQmlModel& model, const QString& path)
+inline QString AwaitPsbtSaveError(WalletModel& model, const QString& path)
 {
     if (!AwaitPsbtAction(model, model.requestSaveCurrentTransactionAsPsbt(path))) return QStringLiteral("PSBT save did not complete");
-    if (model.psbtActionState() == WalletQmlModel::PsbtActionState::PsbtSaved) return {};
+    if (model.psbtActionState() == WalletModel::PsbtActionState::PsbtSaved) return {};
     return model.psbtActionError().isEmpty() ? QStringLiteral("PSBT save did not succeed") : model.psbtActionError();
 }
-inline bool AwaitPsbtBroadcast(WalletQmlModel& model)
+inline bool AwaitPsbtBroadcast(WalletModel& model)
 {
-    return AwaitPsbtAction(model, model.requestBroadcastCurrentTransaction()) && model.psbtActionState() == WalletQmlModel::PsbtActionState::PsbtSubmitted;
+    return AwaitPsbtAction(model, model.requestBroadcastCurrentTransaction()) && model.psbtActionState() == WalletModel::PsbtActionState::PsbtSubmitted;
 }
 #endif // BITCOIN_QML_TEST_MOCKS_PSBTACTIONTEST_H

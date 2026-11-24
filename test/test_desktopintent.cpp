@@ -1,7 +1,7 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#include <qml/desktopintentowner.h>
+#include <qml/desktopintentservice.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 #include <qml/desktopintentargs.h>
 #include <qml/models/desktopintentmodel.h>
@@ -54,7 +54,7 @@ private Q_SLOTS:
     {
         ManualStartupExecution transport;
         auto queue = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
-        auto owner = desktopintent::Owner::Create({}, {}, queue); QVERIFY(owner);
+        auto owner = desktopintent::Service::Create({}, {}, queue); QVERIFY(owner);
         bool early_admitted{false};
         QVERIFY(owner->admit({Input(1)}, [&](auto admitted) { early_admitted = static_cast<bool>(admitted); }));
         desktopintent::ForwardingSnapshot captured;
@@ -154,12 +154,12 @@ private Q_SLOTS:
         model.setReady(true); drain();
         QVERIFY(model.state() == DesktopIntentModel::State::Ready);
         if (hold_factory) {
-            QVERIFY(model.owner()->admit({Input(1)}, {}));
+            QVERIFY(model.service()->admit({Input(1)}, {}));
             worker.drain(); // Utility has posted the factory handoff; GUI remains held.
             QVERIFY(!model.hasInspection()); QVERIFY(!gui.empty());
         }
         native_closed->store(true); // The terminal phase's GUI notification is deliberately held.
-        if (!hold_factory) QVERIFY(model.owner()->admit({Input(1)}, {}));
+        if (!hold_factory) QVERIFY(model.service()->admit({Input(1)}, {}));
         drain();
         QVERIFY(!model.hasInspection()); QCOMPARE(model.pendingCount(), 1);
         QVERIFY(model.state() == DesktopIntentModel::State::WaitingReady);
@@ -187,7 +187,7 @@ private Q_SLOTS:
         BitcoinUriModel factory; factory.setServices(post, &commands.executor());
         DesktopIntentModel model{worker.executor(), post, true}; model.setFactory(&factory);
         const auto finish = qScopeGuard([&] { model.close(); factory.close(); drain(); });
-        QVERIFY(model.owner()->admit({Input(1)}, {})); model.setReady(true); drain();
+        QVERIFY(model.service()->admit({Input(1)}, {})); model.setReady(true); drain();
         model.inspectNext(); drain(); QVERIFY(model.inspection());
         const QPointer<PaymentImportOperation> inspection{model.inspection()};
         QSignalSpy changed{&model, &DesktopIntentModel::changed};
@@ -237,7 +237,7 @@ private Q_SLOTS:
         BitcoinUriModel factory; factory.setServices(post, &commands.executor());
         DesktopIntentModel model{worker.executor(), post, true}; model.setFactory(&factory);
         const auto finish = qScopeGuard([&] { model.close(); factory.close(); drain(); });
-        QVERIFY(model.owner()->admit({Input(1)}, {})); drain();
+        QVERIFY(model.service()->admit({Input(1)}, {})); drain();
         QCOMPARE(model.pendingCount(), 1); QVERIFY(!model.canInspect()); model.inspectNext(); drain();
         QVERIFY(!model.inspection());
         model.setReady(true); drain(); QVERIFY(model.inspection()); QCOMPARE(model.pendingCount(), 0);
@@ -245,7 +245,7 @@ private Q_SLOTS:
         QObject recipient_view;
         auto* operation = model.takeInspection(&recipient_view); QVERIFY(operation); QCOMPARE(operation->requestId(), original);
         QVERIFY(!model.inspection());
-        auto original_owner = model.owner();
+        auto original_owner = model.service();
         model.close(); factory.close(); delete operation; drain();
         std::optional<desktopintent::Receipt> receipt;
         QVERIFY(original_owner->lookup(QStringLiteral("1"), [&](auto value) { receipt = value; })); drain();
@@ -282,7 +282,7 @@ private Q_SLOTS:
                 retired_first = true; first = model.inspection()->requestId(); model.closeInspection();
             }
         });
-        QVERIFY(model.owner()->admit({Input(1), Input(2)}, {})); model.setReady(true); drain();
+        QVERIFY(model.service()->admit({Input(1), Input(2)}, {})); model.setReady(true); drain();
         if (!before_ack) {
             QVERIFY(model.inspection()); first = model.inspection()->requestId();
             QCOMPARE(model.pendingCount(), 1); model.inspectNext(); drain();
@@ -357,7 +357,7 @@ private Q_SLOTS:
         desktopintent::Sink::Completed original_reply, query_reply;
         ManualStartupExecution worker;
         auto queue = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
-        auto owner = desktopintent::Owner::Create({}, [&](auto value) { snapshot = value; }, queue);
+        auto owner = desktopintent::Service::Create({}, [&](auto value) { snapshot = value; }, queue);
         auto sink = std::make_shared<desktopintent::Sink>();
         sink->identity = 1;
         sink->inspect = [&](desktopintent::Delivery, auto done) {
@@ -416,7 +416,7 @@ private Q_SLOTS:
         auto queue = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
         desktopintent::Services::Time now{};
         desktopintent::Snapshot snapshot;
-        auto actor = desktopintent::Owner::Create({[&] { return now; }, {}, std::chrono::milliseconds{10}},
+        auto actor = desktopintent::Service::Create({[&] { return now; }, {}, std::chrono::milliseconds{10}},
             [&](auto value) { snapshot = value; }, queue);
         QVERIFY(actor);
         auto sink = std::make_shared<desktopintent::Sink>();

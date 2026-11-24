@@ -7,7 +7,7 @@
 
 #include <util/string.h>
 #include <test/integration/fixture/test_util.h>
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 #include <script/descriptor.h>
 #include <consensus/amount.h>
 
@@ -40,9 +40,9 @@ inline UniValue Json(const std::string& text)
     return value;
 }
 
-inline WalletQmlModel* WaitForWallet(BitcoinQmlApplication& app, const QString& name)
+inline WalletModel* WaitForWallet(BitcoinQmlApplication& app, const QString& name)
 {
-    auto* controller = Model<WalletQmlController>(app, "walletController");
+    auto* controller = Model<WalletController>(app, "walletController");
     if (!controller || !QTest::qWaitFor([&] {
             return controller->isWalletLoaded() && !controller->walletLoadInProgress() &&
                    controller->selectedWallet()->name() == name && controller->selectedWallet()->capabilitiesKnown();
@@ -54,9 +54,9 @@ inline WalletQmlModel* WaitForWallet(BitcoinQmlApplication& app, const QString& 
 // override a newer GUI selection. Test setup can select this exact facade
 // explicitly when later steps require it; behavior assertions should continue
 // to use WaitForWallet() so they verify the actual selected wallet.
-inline WalletQmlModel* WaitForOpenWallet(BitcoinQmlApplication& app, const QString& name)
+inline WalletModel* WaitForOpenWallet(BitcoinQmlApplication& app, const QString& name)
 {
-    auto* controller = Model<WalletQmlController>(app, "walletController");
+    auto* controller = Model<WalletController>(app, "walletController");
     if (!controller || !QTest::qWaitFor([&] {
             auto* wallet = controller->walletForName(name);
             return wallet && wallet->available() && wallet->name() == name && wallet->capabilitiesKnown();
@@ -66,16 +66,16 @@ inline WalletQmlModel* WaitForOpenWallet(BitcoinQmlApplication& app, const QStri
 
 // Fixture setup makes selection an explicit operation rather than inferring it
 // from the Core load result.
-inline WalletQmlModel* SelectOpenWalletForSetup(BitcoinQmlApplication& app, const QString& name)
+inline WalletModel* SelectOpenWalletForSetup(BitcoinQmlApplication& app, const QString& name)
 {
-    auto* controller = Model<WalletQmlController>(app, "walletController");
+    auto* controller = Model<WalletController>(app, "walletController");
     auto* wallet = WaitForOpenWallet(app, name);
     if (!controller || !wallet || !controller->selectWallet(wallet) ||
         !QTest::qWaitFor([&] { return controller->selectedWallet() == wallet; }, 30'000)) return nullptr;
     return wallet;
 }
 
-inline WalletQmlModel* CreateWallet(BitcoinQmlApplication& app, const QString& name = "integration")
+inline WalletModel* CreateWallet(BitcoinQmlApplication& app, const QString& name = "integration")
 {
     UniValue params{UniValue::VOBJ};
     params.pushKV("wallet_name", name.toStdString());
@@ -84,7 +84,7 @@ inline WalletQmlModel* CreateWallet(BitcoinQmlApplication& app, const QString& n
 }
 
 // Only for cases explicitly opted into a prepared profile in their module.
-inline WalletQmlModel* LoadFundedWallet(BitcoinQmlApplication& app, const QString& name = "integration")
+inline WalletModel* LoadFundedWallet(BitcoinQmlApplication& app, const QString& name = "integration")
 {
     UniValue params{UniValue::VARR};
     params.push_back(name.toStdString());
@@ -98,7 +98,7 @@ inline WalletQmlModel* LoadFundedWallet(BitcoinQmlApplication& app, const QStrin
 }
 
 // Hardened derivation cannot replenish an exhausted keypool while locked.
-inline WalletQmlModel* CreateLockedHardenedWallet(BitcoinQmlApplication& app, const QString& name, const QString& passphrase)
+inline WalletModel* CreateLockedHardenedWallet(BitcoinQmlApplication& app, const QString& name, const QString& passphrase)
 {
     UniValue params{UniValue::VOBJ};
     params.pushKV("wallet_name", name.toStdString());
@@ -107,7 +107,7 @@ inline WalletQmlModel* CreateLockedHardenedWallet(BitcoinQmlApplication& app, co
     auto* wallet = SelectOpenWalletForSetup(app, name);
     if (!wallet || !wallet->encryptWallet(passphrase)) return nullptr;
     if (!QTest::qWaitFor([&] {
-            return wallet->securityState() == WalletQmlModel::SecurityState::SecuritySucceeded && wallet->isLocked();
+            return wallet->securityState() == WalletModel::SecurityState::SecuritySucceeded && wallet->isLocked();
         }, 30'000)) return nullptr;
     UniValue unlock{UniValue::VARR};
     unlock.push_back(passphrase.toStdString());
@@ -145,7 +145,7 @@ inline QString NewAddress(BitcoinQmlApplication& app, const QString& wallet, con
     return QString::fromStdString(Rpc(app, "getnewaddress", params, wallet).get_str());
 }
 
-inline bool FundWallet(BitcoinQmlApplication& app, WalletQmlModel& wallet)
+inline bool FundWallet(BitcoinQmlApplication& app, WalletModel& wallet)
 {
     UniValue params{UniValue::VARR};
     params.push_back(101);

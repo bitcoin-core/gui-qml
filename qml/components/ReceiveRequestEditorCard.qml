@@ -12,7 +12,7 @@ Pane {
     property WalletReceiveModel receive: null
     property PaymentRequestEditorModel editor: null
     readonly property PaymentRequestEditorModel deleteEditor: deletion.deletion
-    RequestDeleteController {
+    PaymentRequestDeleteController {
         id: deletion
         objectName: "savedRequestDeleteController"
         receive: root.receive

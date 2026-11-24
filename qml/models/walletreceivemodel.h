@@ -5,14 +5,14 @@
 #define BITCOIN_QML_MODELS_WALLETRECEIVEMODEL_H
 
 #include <qml/models/paymentrequesteditormodel.h>
-#include <qml/models/receivereservationmodel.h>
+#include <qml/models/addressreservationmodel.h>
 #include <qml/models/requestsharingmodel.h>
 
 /** Opening one saved request in its editor. Pending until the editor shows
  * the request's source, then Opened with that editor, or Failed with why.
  * The caller owns it; cancelling or deleting it stops the open. Once
  * finished it no longer changes. */
-class RequestOpenOperation final : public QObject
+class PaymentRequestOpenOperation final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(State state READ state NOTIFY changed)
@@ -22,7 +22,7 @@ class RequestOpenOperation final : public QObject
 public:
     enum class State { Pending, Opened, Failed, Cancelled };
     Q_ENUM(State)
-    RequestOpenOperation(QString request_id, QObject* parent) : QObject(parent), m_request_id{std::move(request_id)} {}
+    PaymentRequestOpenOperation(QString request_id, QObject* parent) : QObject(parent), m_request_id{std::move(request_id)} {}
     State state() const { return m_state; }
     bool pending() const { return m_state == State::Pending; }
     QString requestId() const { return m_request_id; }
@@ -51,21 +51,21 @@ class WalletReceiveModel final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(PaymentRequestEditorModel* editor READ editor NOTIFY changed)
-    Q_PROPERTY(ReceiveReservationModel* reservation READ reservation CONSTANT)
+    Q_PROPERTY(AddressReservationModel* reservation READ reservation CONSTANT)
     Q_PROPERTY(bool available READ available NOTIFY changed)
     Q_PROPERTY(bool replacementPending READ replacementPending NOTIFY changed)
     Q_PROPERTY(TextEditError error READ error NOTIFY changed)
 public:
     struct Ports {
         PaymentRequestEditorModel::Ports editor;
-        ReceiveReservationModel::Ports reservation;
+        AddressReservationModel::Ports reservation;
         requestshare::Services sharing;
         QPointer<ReceiptReconciliationModel> receipts{};
     };
     WalletReceiveModel(uint64_t view, Ports ports, QObject* parent = nullptr);
     ~WalletReceiveModel() override;
     PaymentRequestEditorModel* editor() const { return m_editor; }
-    ReceiveReservationModel* reservation() { return &m_reservation; }
+    AddressReservationModel* reservation() { return &m_reservation; }
     bool available() const { return !m_closed; }
     bool replacementPending() const { return m_pending.has_value() || m_repeat.has_value(); }
     TextEditError error() const { return m_error; }
@@ -78,7 +78,7 @@ public:
     Q_INVOKABLE bool useAddress(const QString& address);
     //! Starts opening saved request \p id, owned by \p owner. Null when it
     //! cannot start (another open is pending); error() says why.
-    RequestOpenOperation* openRequest(const QString& id, QObject* owner);
+    PaymentRequestOpenOperation* openRequest(const QString& id, QObject* owner);
     //! A delete question for saved request \p id; the caller owns it.
     PaymentRequestEditorModel* deleteRequest(const QString& id);
     Q_INVOKABLE RequestSharingModel* sharing(PaymentRequestEditorModel* editor, QObject* view = nullptr);
@@ -116,7 +116,7 @@ private:
     bool owns(PaymentRequestEditorModel* editor) const;
     const uint64_t m_view;
     Ports m_ports;
-    ReceiveReservationModel m_reservation;
+    AddressReservationModel m_reservation;
     QPointer<PaymentRequestEditorModel> m_editor;
     QList<QPointer<PaymentRequestEditorModel>> m_editors;
     QList<QPointer<RequestSharingModel>> m_sharing;
@@ -129,7 +129,7 @@ private:
     uint64_t m_token{0};
     bool m_closed{false};
     //! The pending open and its request.
-    QPointer<RequestOpenOperation> m_open;
+    QPointer<PaymentRequestOpenOperation> m_open;
     bool m_open_waiting{false};
     int64_t m_open_id{0};
     QPointer<PaymentRequestEditorModel> m_open_editor;

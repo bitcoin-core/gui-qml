@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_WALLETSENDOPERATION_H
-#define BITCOIN_QML_MODELS_WALLETSENDOPERATION_H
+#ifndef BITCOIN_QML_MODELS_WALLETSENDHANDLE_H
+#define BITCOIN_QML_MODELS_WALLETSENDHANDLE_H
 
 #include <qml/models/sendoperation.h>
 #include <qml/models/transactionreviewinterface.h>
@@ -13,11 +13,11 @@
 #include <memory>
 #include <optional>
 
-class WalletQmlModel;
-class WalletQmlModelTransaction;
+class WalletModel;
+class TransactionReviewModel;
 namespace walletsend {
 class CommitConsent;
-class Operation;
+class SendTask;
 struct Result;
 } // namespace walletsend
 
@@ -28,16 +28,16 @@ struct SendResultText {
 };
 SendResultText DescribeSendResult(const walletsend::Result& result, bool sign_only);
 
-/** A send of one WalletQmlModel review. It owns its walletsend::Operation:
+/** A send of one WalletModel review. It owns its walletsend::SendTask:
  * prompts and the outcome of that work are this operation's alone. Effects on
  * the wallet and the review after the work finishes are the wallet's, so they
  * happen even when the operation is gone. */
-class WalletSendOperation final : public SendOperation
+class WalletSendHandle final : public SendOperation
 {
     Q_OBJECT
 public:
-    WalletSendOperation(WalletQmlModel& wallet, bool sign_only, QObject* parent = nullptr);
-    ~WalletSendOperation() override;
+    WalletSendHandle(WalletModel& wallet, bool sign_only, QObject* parent = nullptr);
+    ~WalletSendHandle() override;
 
     //! Starts the work for the wallet's current review. False when the wallet
     //! can't start a send now; a send that can't proceed reports Failed.
@@ -52,21 +52,21 @@ public:
     void workFinished(const walletsend::Result& result, bool review_current);
 
 private:
-    QPointer<WalletQmlModel> m_wallet;
-    QPointer<WalletQmlModelTransaction> m_review;
+    QPointer<WalletModel> m_wallet;
+    QPointer<TransactionReviewModel> m_review;
     quint64 m_attempt_id{0};
     quint64 m_review_id{0};
-    std::shared_ptr<walletsend::Operation> m_work;
+    std::shared_ptr<walletsend::SendTask> m_work;
     //! Withdrawn by cancel() while the work runs; wins only before the commit.
     std::shared_ptr<walletsend::CommitConsent> m_consent;
 };
 
-/** WalletQmlModel's TransactionReviewInterface. */
-class WalletTransactionReviewInterface final : public TransactionReviewInterface
+/** WalletModel's TransactionReviewInterface. */
+class WalletTransactionReview final : public TransactionReviewInterface
 {
     Q_OBJECT
 public:
-    explicit WalletTransactionReviewInterface(WalletQmlModel& wallet);
+    explicit WalletTransactionReview(WalletModel& wallet);
     QObject* currentReview() const override;
     bool currentTransactionIsImportedPsbt() const override;
     bool currentTransactionCanSend() const override;
@@ -87,7 +87,7 @@ public:
     QString reviewError() const override;
 
 private:
-    QPointer<WalletQmlModel> m_wallet;
+    QPointer<WalletModel> m_wallet;
 };
 
-#endif // BITCOIN_QML_MODELS_WALLETSENDOPERATION_H
+#endif // BITCOIN_QML_MODELS_WALLETSENDHANDLE_H

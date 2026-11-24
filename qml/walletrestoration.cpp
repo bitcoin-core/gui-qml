@@ -159,25 +159,25 @@ walletcreation::Frame FailureFrame(Failure reason, const QString& error, const Q
     return frame;
 }
 
-Owner::Owner(walletcreation::Services services, Request request, Notify notify,
+Service::Service(walletcreation::Services services, Request request, Notify notify,
     std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation, secretinput::Captured secret)
     : m_services(std::move(services)), m_request(std::move(request)), m_notify(std::move(notify)), m_secret(std::move(secret)), m_release(std::move(release)), m_observation(std::move(observation)), m_confirmed(m_request.confirmed) { m_frame.target_id = m_request.kind == Kind::Migrate ? m_request.source : QString{}; }
-Owner::~Owner() { if (!m_backend_retained && m_release) m_release->release(); if (m_detached.load() || !m_started) m_services.admission->presentationConsumed(m_request.id); }
-std::shared_ptr<Owner> Owner::Make(walletcreation::Services services, Request request, Notify notify,
+Service::~Service() { if (!m_backend_retained && m_release) m_release->release(); if (m_detached.load() || !m_started) m_services.admission->presentationConsumed(m_request.id); }
+std::shared_ptr<Service> Service::Make(walletcreation::Services services, Request request, Notify notify,
     std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
 {
     auto secret = std::move(request.passphrase);
-    return services.retain<Owner>([&] {
-        return std::unique_ptr<Owner>{new Owner(std::move(services), std::move(request), std::move(notify),
+    return services.retain<Service>([&] {
+        return std::unique_ptr<Service>{new Service(std::move(services), std::move(request), std::move(notify),
             std::move(release), std::move(observation), std::move(secret))};
     });
 }
-walletcreation::Frame Owner::snapshot() const { std::lock_guard lock{m_mutex}; return m_frame; }
-QString Owner::errorText() const { std::lock_guard lock{m_mutex}; return m_actual.error.isEmpty() ? m_frame.error.message : m_actual.error; }
-QString Owner::warningText() const { std::lock_guard lock{m_mutex}; return m_actual.warnings; }
-void Owner::notify() { if (!m_detached.load()) m_notify(); }
-void Owner::update(Phase phase) { { std::lock_guard lock{m_mutex}; m_frame.phase = phase; ++m_frame.revision; } notify(); }
-void Owner::start()
+walletcreation::Frame Service::snapshot() const { std::lock_guard lock{m_mutex}; return m_frame; }
+QString Service::errorText() const { std::lock_guard lock{m_mutex}; return m_actual.error.isEmpty() ? m_frame.error.message : m_actual.error; }
+QString Service::warningText() const { std::lock_guard lock{m_mutex}; return m_actual.warnings; }
+void Service::notify() { if (!m_detached.load()) m_notify(); }
+void Service::update(Phase phase) { { std::lock_guard lock{m_mutex}; m_frame.phase = phase; ++m_frame.revision; } notify(); }
+void Service::start()
 {
     if (m_started) return;
     m_started = true;
@@ -187,7 +187,7 @@ void Owner::start()
         if (!m_services.post(execution::Lane::Utility, [self] { self->prompt(Phase::AwaitingConfirmation); })) complete(Phase::Rejected, Failure::Backend, Text("The update question could not be shown. No wallet was changed."));
     } else inspect();
 }
-void Owner::inspect()
+void Service::inspect()
 {
     update(Phase::Validating); const auto weak = weak_from_this();
     m_inspect = std::make_shared<execution::OwnedCommand<Facts>>([weak] { if (const auto owner = weak.lock()) owner->inspected(); });
@@ -196,7 +196,7 @@ void Owner::inspect()
             return Inspect(*self->m_services.node, self->m_request, self->m_target, self->m_copied);
         })) complete(Phase::Rejected, Failure::Backend, Text("The wallet check could not start. No wallet was changed."));
 }
-void Owner::inspected()
+void Service::inspected()
 {
     const auto outcome = m_inspect->result(); if (!outcome) return;
     if (m_cancelled.load() || m_detached.load()) { complete(Phase::Cancelled); return; }
@@ -215,7 +215,7 @@ void Owner::inspected()
     }
     perform();
 }
-void Owner::prompt(Phase phase, QString error, Failure reason)
+void Service::prompt(Phase phase, QString error, Failure reason)
 {
     if (m_prompt_sequence >= 64) { complete(Phase::Partial, Failure::Backend, Text("The prompt retry limit was reached. Keep the wallet files and begin a new explicit operation.")); return; }
     {
@@ -228,7 +228,7 @@ void Owner::prompt(Phase phase, QString error, Failure reason)
     if (m_release) m_release->release();
     notify();
 }
-void Owner::answer(QString command_id, QString expected_prompt, std::shared_ptr<walletpublication::Release> release,
+void Service::answer(QString command_id, QString expected_prompt, std::shared_ptr<walletpublication::Release> release,
     std::shared_ptr<walletpublication::NativeObservation> observation, secretinput::Captured secret)
 {
     {
@@ -245,7 +245,7 @@ void Owner::answer(QString command_id, QString expected_prompt, std::shared_ptr<
     { std::lock_guard lock{m_mutex}; m_frame.prompt_id.clear(); m_frame.error = {}; m_frame.error_title.clear(); m_frame.error_description.clear(); }
     inspect();
 }
-void Owner::perform()
+void Service::perform()
 {
     update(Phase::Creating);
     const auto group = std::make_shared<ReleaseGroup>(); group->original = m_release;
@@ -259,7 +259,7 @@ void Owner::perform()
     const auto weak = weak_from_this(); m_effect = std::make_shared<execution::OwnedCommand<NativeResult>>([weak] { if (const auto owner = weak.lock()) owner->performed(); });
     if (!m_services.start(*m_effect, [self = shared_from_this()] { return self->effect(); })) complete(Phase::Rejected, Failure::Backend, Text("The wallet action could not start."));
 }
-void Owner::loadResult(NativeResult& out, const QString& name, size_t index)
+void Service::loadResult(NativeResult& out, const QString& name, size_t index)
 {
     std::vector<bilingual_str> warnings;
     walletopening::Source source;
@@ -294,7 +294,7 @@ void Owner::loadResult(NativeResult& out, const QString& name, size_t index)
     { std::lock_guard lock{m_mutex}; m_backends[index]->wallet = std::move(source); }
     ++out.count;
 }
-NativeResult Owner::effect()
+NativeResult Service::effect()
 {
     auto out = performEffect();
     if (out.copied) {
@@ -303,7 +303,7 @@ NativeResult Owner::effect()
     }
     return out;
 }
-NativeResult Owner::performEffect()
+NativeResult Service::performEffect()
 {
     NativeResult out; out.copied = m_copied; out.migrated = m_migrated; out.primary = m_target;
     try {
@@ -363,7 +363,7 @@ NativeResult Owner::performEffect()
     }
     return out;
 }
-void Owner::performed()
+void Service::performed()
 {
     const auto outcome = m_effect->result(); if (!outcome) return;
     if (!outcome->value) { complete(Phase::Uncertain, Failure::Exception, Text("Core did not report whether the wallet action finished.")); return; }
@@ -386,18 +386,18 @@ void Owner::performed()
     }
     complete(Phase::Succeeded);
 }
-void Owner::publishReady()
+void Service::publishReady()
 {
     if (m_detached.load() || (m_services.shutdown && m_services.shutdown->load())) { complete(Phase::Partial, Failure::Backend, Text("The wallet files were kept after their view closed.")); return; }
     { std::lock_guard lock{m_mutex}; m_frame.publication_requested = true; m_awaited = true; }
     update(Phase::Publishing);
 }
-size_t Owner::publicationCount() const { std::lock_guard lock{m_mutex}; return m_actual.count; }
-QString Owner::publicationName(size_t index) const { std::lock_guard lock{m_mutex}; return index < m_actual.count ? m_actual.names[index] : QString{}; }
-bool Owner::publicationPrimary(size_t index) const { std::lock_guard lock{m_mutex}; return index == m_actual.primary_index; }
-walletopening::NativeEvents Owner::publicationObservation(size_t index) const { std::lock_guard lock{m_mutex}; return index < m_actual.count ? m_actual.observations[index] : walletopening::NativeEvents{}; }
-walletopening::NativeEvents Owner::observationForPublication() const { return publicationObservation(0); }
-walletpublication::TakeWallet Owner::publicationWallet(size_t index) const
+size_t Service::publicationCount() const { std::lock_guard lock{m_mutex}; return m_actual.count; }
+QString Service::publicationName(size_t index) const { std::lock_guard lock{m_mutex}; return index < m_actual.count ? m_actual.names[index] : QString{}; }
+bool Service::publicationPrimary(size_t index) const { std::lock_guard lock{m_mutex}; return index == m_actual.primary_index; }
+walletopening::NativeEvents Service::publicationObservation(size_t index) const { std::lock_guard lock{m_mutex}; return index < m_actual.count ? m_actual.observations[index] : walletopening::NativeEvents{}; }
+walletopening::NativeEvents Service::observationForPublication() const { return publicationObservation(0); }
+walletpublication::TakeWallet Service::publicationWallet(size_t index) const
 {
     std::lock_guard lock{m_mutex};
     if (index >= m_actual.count || !m_backends[index] || !m_backends[index]->canPublish()) return {};
@@ -406,13 +406,13 @@ walletpublication::TakeWallet Owner::publicationWallet(size_t index) const
         return backend->take(handler);
     };
 }
-std::shared_ptr<walletpublication::Release> Owner::publicationRelease(size_t index) const
+std::shared_ptr<walletpublication::Release> Service::publicationRelease(size_t index) const
 {
     std::lock_guard lock{m_mutex}; return index < m_actual.count && m_backends[index] ? m_backends[index]->release : nullptr;
 }
-walletpublication::TakeWallet Owner::walletForPublication() const { return publicationWallet(0); }
-void Owner::publicationConsumed(walletpublication::Availability value, QString error) { publicationsConsumed({value}, std::move(error)); }
-void Owner::publicationsConsumed(std::vector<walletpublication::Availability> values, QString error)
+walletpublication::TakeWallet Service::walletForPublication() const { return publicationWallet(0); }
+void Service::publicationConsumed(walletpublication::Availability value, QString error) { publicationsConsumed({value}, std::move(error)); }
+void Service::publicationsConsumed(std::vector<walletpublication::Availability> values, QString error)
 {
     const auto self = shared_from_this();
     if (!m_services.post(execution::Lane::Utility, [self, values = std::move(values), error = std::move(error)] {
@@ -443,7 +443,7 @@ void Owner::publicationsConsumed(std::vector<walletpublication::Availability> va
             self->complete(Phase::Partial, failure, std::move(message));
         })) complete(Phase::Partial, Failure::Backend, Text("The wallet result could not be shown."));
 }
-void Owner::complete(Phase phase, Failure reason, QString error)
+void Service::complete(Phase phase, Failure reason, QString error)
 {
     if (phase == Phase::Cancelled && (m_copied || m_migrated || m_actual.effect_started)) {
         phase = Phase::Partial; reason = m_actual.failure == Failure::None ? Failure::Backend : m_actual.failure;
@@ -481,14 +481,14 @@ void Owner::complete(Phase phase, Failure reason, QString error)
     if (m_detached.load()) m_services.admission->presentationConsumed(m_request.id);
     notify(); m_keep_alive.reset();
 }
-bool Owner::reconcileNeedsTicket() const
+bool Service::reconcileNeedsTicket() const
 {
     std::lock_guard lock{m_mutex};
     // This exact public error precedes adoption. Generic/late exceptions are
     // not proof that reopening the name is safe; preserve their recovery facts.
     return m_actual.count == 0 && m_copied && m_actual.failure == Failure::Pruned && !m_actual.target_stamp.path.isEmpty();
 }
-bool Owner::reconcileAvailable() const
+bool Service::reconcileAvailable() const
 {
     std::lock_guard lock{m_mutex};
     if (m_reconciled) return false;
@@ -496,15 +496,15 @@ bool Owner::reconcileAvailable() const
     for (size_t i = 0; i < m_actual.count; ++i) if (m_backends[i] && m_backends[i]->canPublish() && !(m_actual.observations[i].unloaded && m_actual.observations[i].unloaded->load())) return true;
     return false;
 }
-void Owner::reconcileWithPorts(std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
+void Service::reconcileWithPorts(std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
 {
     if (!reconcileNeedsTicket()) { reconcilePublication(); return; }
     if (m_reconciled) { if (release) release->release(); return; }
     m_reconciled = true; m_reload_only = true; m_release = std::move(release); m_observation = std::move(observation); m_backend_retained = false;
     m_keep_alive = shared_from_this(); inspect();
 }
-void Owner::reconcilePublication() { if (m_reconciled) return; m_reconciled = true; m_keep_alive = shared_from_this(); publishReady(); }
-void Owner::cancel()
+void Service::reconcilePublication() { if (m_reconciled) return; m_reconciled = true; m_keep_alive = shared_from_this(); publishReady(); }
+void Service::cancel()
 {
     const auto phase = snapshot().phase;
     if (phase != Phase::Requested && phase != Phase::Validating && phase != Phase::AwaitingConfirmation && phase != Phase::AwaitingPassphrase) return;
@@ -516,7 +516,7 @@ void Owner::cancel()
     // bounded fallback performs no Core/I/O and retires all payloads on Native.
     if (!admitted && (phase == Phase::AwaitingConfirmation || phase == Phase::AwaitingPassphrase)) complete(Phase::Cancelled);
 }
-void Owner::detach()
+void Service::detach()
 {
     m_detached = true; const auto phase = snapshot().phase;
     if (phase == Phase::Requested || phase == Phase::Validating || phase == Phase::AwaitingConfirmation || phase == Phase::AwaitingPassphrase) cancel();

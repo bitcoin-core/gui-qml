@@ -10,11 +10,11 @@
 #include <qml/models/paymentimportoperation.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
 WalletImportTarget::WalletImportTarget(QObject* parent) : ImportTarget(parent) {}
 
-void WalletImportTarget::setWallet(WalletQmlModel* wallet)
+void WalletImportTarget::setWallet(WalletModel* wallet)
 {
     if (m_wallet == wallet) return;
     if (m_wallet) {
@@ -24,8 +24,8 @@ void WalletImportTarget::setWallet(WalletQmlModel* wallet)
     m_wallet = wallet;
     if (wallet) {
         auto* recipients = wallet->sendRecipientList();
-        connect(wallet, &WalletQmlModel::availableChanged, this, &ImportTarget::availableChanged);
-        connect(wallet, &WalletQmlModel::currentTransactionChanged, this, &ImportTarget::importedReviewChanged);
+        connect(wallet, &WalletModel::availableChanged, this, &ImportTarget::availableChanged);
+        connect(wallet, &WalletModel::currentTransactionChanged, this, &ImportTarget::importedReviewChanged);
         connect(recipients, &SendRecipientsListModel::revisionChanged, this, &ImportTarget::draftRevisionChanged);
         connect(recipients, &SendRecipientsListModel::validationChanged, this, &ImportTarget::importPendingChanged);
         connect(recipients, &SendRecipientsListModel::currentRecipientChanged, this, [this] {

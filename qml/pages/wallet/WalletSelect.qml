@@ -167,10 +167,10 @@ Popup {
                 readonly property string iconSource: {
                     if (loadState !== WalletListModel.Open) return "image://images/wallet"
                     const filled = delegate.checked
-                    if (keySchemeKind === WalletQmlModel.WatchOnly) {
+                    if (keySchemeKind === WalletModel.WatchOnly) {
                         return filled ? "image://images/visible-filled" : "image://images/visible"
                     }
-                    if (keySchemeKind === WalletQmlModel.MultiKey) {
+                    if (keySchemeKind === WalletModel.MultiKey) {
                         return filled ? "image://images/two-keys-filled" : "image://images/two-keys"
                     }
                     return filled ? "image://images/key-filled" : "image://images/key"

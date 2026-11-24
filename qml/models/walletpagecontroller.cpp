@@ -27,7 +27,7 @@ void WalletPageController::setActive(bool active)
     if (guard) update();
 }
 
-bool WalletPageController::bindWallet(WalletInterface* wallet)
+bool WalletPageController::bindWallet(WalletAvailabilityInterface* wallet)
 {
     if (!wallet || m_disabled) return false;
     if (m_wallet == wallet) return true;
@@ -40,7 +40,7 @@ bool WalletPageController::bindWallet(WalletInterface* wallet)
     }
     m_bound = true;
     m_wallet = wallet;
-    m_wallet_available = connect(wallet, &WalletInterface::availableChanged, this, &WalletPageController::update);
+    m_wallet_available = connect(wallet, &WalletAvailabilityInterface::availableChanged, this, &WalletPageController::update);
     // The wallet's own destruction ends its availability too. Never ask a
     // destroyed wallet; its subclass part is gone.
     connect(wallet, &QObject::destroyed, this, [this] { m_wallet.clear(); update(); });

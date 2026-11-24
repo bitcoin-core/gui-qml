@@ -6,7 +6,7 @@
 #define BITCOIN_QML_MODELS_TRANSACTIONREVIEWINTERFACE_H
 
 #include <qml/models/filesaveoperation.h>
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 #include <qml/models/psbtoperation.h>
 
 #include <QObject>
@@ -15,9 +15,9 @@
 class SendOperation;
 
 /** What a TransactionReviewController needs from a wallet: the transaction
- * under review and a way to act on it. WalletQmlModel implements it; tests
+ * under review and a way to act on it. WalletModel implements it; tests
  * use a fake. */
-class TransactionReviewInterface : public WalletInterface
+class TransactionReviewInterface : public WalletAvailabilityInterface
 {
     Q_OBJECT
     Q_PROPERTY(bool currentTransactionIsImportedPsbt READ currentTransactionIsImportedPsbt NOTIFY currentReviewChanged)
@@ -28,7 +28,7 @@ class TransactionReviewInterface : public WalletInterface
     Q_PROPERTY(bool currentTransactionCanBroadcast READ currentTransactionCanBroadcast NOTIFY currentReviewChanged)
     Q_PROPERTY(QString currentTransactionReviewMessage READ currentTransactionReviewMessage NOTIFY currentReviewChanged)
 public:
-    using WalletInterface::WalletInterface;
+    using WalletAvailabilityInterface::WalletAvailabilityInterface;
 
     //! The transaction under review, or null.
     virtual QObject* currentReview() const = 0;

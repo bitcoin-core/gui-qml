@@ -94,7 +94,7 @@ Item {
                 Repeater {
                     model: root.operation.resultWallets
                     delegate: LinkButton {
-                        required property WalletQmlModel modelData
+                        required property WalletModel modelData
                         text: qsTr("Open %1").arg(modelData.displayName)
                         visible: modelData !== root.operation.resultWallet
                         enabled: modelData.available

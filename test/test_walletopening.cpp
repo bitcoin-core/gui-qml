@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/executor.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/retainedvalue.h>
 #include <qml/snapshotquery.h>
 #include <qml/walletopening.h>
@@ -1357,7 +1357,7 @@ private Q_SLOTS:
         };
         ManualStartupExecution commands;
         auto native = std::make_shared<Native>();
-        WalletQmlModel model{WalletWithQueues(native, commands.executor()), nullptr,
+        WalletModel model{WalletWithQueues(native, commands.executor()), nullptr,
                              FeeReadServices{}, psbtfee::Services{}, backup::Services{}};
         ManualWalletDrain cleanup{commands, &model};
         for (int n{0}; n < 4; ++n) { commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); }
@@ -1365,14 +1365,14 @@ private Q_SLOTS:
         QVERIFY(model.encryptWallet("secret"));
         QVERIFY(!model.encryptWallet("duplicate"));
         QCOMPARE(native->effects, 0);
-        QCOMPARE(model.securityState(), WalletQmlModel::SecurityState::SecurityPending);
+        QCOMPARE(model.securityState(), WalletModel::SecurityState::SecurityPending);
         while (!native->effects && commands.step(Lane::Core)) {}
         QCOMPARE(native->effects, 1);
         QVERIFY(!model.isEncrypted());
         while (commands.step(Lane::Utility)) {}
-        QCOMPARE(model.securityState(), WalletQmlModel::SecurityState::SecurityPending);
+        QCOMPARE(model.securityState(), WalletModel::SecurityState::SecurityPending);
         QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
-        QCOMPARE(model.securityState(), WalletQmlModel::SecurityState::SecuritySucceeded);
+        QCOMPARE(model.securityState(), WalletModel::SecurityState::SecuritySucceeded);
         // Only Session metadata can update observed security; consume its
         // fresh Native read after the operation's historical outcome.
         commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
@@ -1388,7 +1388,7 @@ private Q_SLOTS:
         };
         ManualStartupExecution commands;
         auto native = std::make_shared<Native>();
-        WalletQmlModel model{WalletWithQueues(native, commands.executor()), nullptr,
+        WalletModel model{WalletWithQueues(native, commands.executor()), nullptr,
                              FeeReadServices{}, psbtfee::Services{}, backup::Services{}};
         ManualWalletDrain cleanup{commands, &model};
         for (int n{0}; n < 4; ++n) { commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); }
@@ -1499,7 +1499,7 @@ private Q_SLOTS:
         walletopening::Session::Preferences preferences{
             [&](const std::string&) { return saved; },
             [&](const std::string&, const std::string& type) { saved = type; ++writes; return true; }};
-        WalletQmlModel model{WalletWithQueues(native, commands.executor(), std::move(preferences)), nullptr,
+        WalletModel model{WalletWithQueues(native, commands.executor(), std::move(preferences)), nullptr,
                              FeeReadServices{}, psbtfee::Services{}, backup::Services{}};
         ManualWalletDrain cleanup{commands, &model};
         for (int n{0}; n < 4; ++n) { commands.drain(); QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); }

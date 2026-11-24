@@ -12,7 +12,7 @@ import "../../components"
 Page {
     id: root
     objectName: "activityDetailsPage"
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property bool actionContextAvailable: root.visible && root.wallet !== null && root.wallet.available
     onActionContextAvailableChanged: if (!actionContextAvailable) root.retireDialogs()
     property string transactionId: ""

@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/paymentimportoperation.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <QPointer>
 PaymentImportOperation::~PaymentImportOperation() { cancel(); }
 PaymentImportOperation::Outcome PaymentImportOperation::outcome() const
@@ -27,7 +27,7 @@ void PaymentImportOperation::project(paymentimport::Snapshot snapshot)
     m_snapshot = std::move(snapshot);
     Q_EMIT changed();
 }
-void PaymentImportOperation::chooseTarget(WalletQmlModel* wallet, SendRecipient* recipient)
+void PaymentImportOperation::chooseTarget(WalletModel* wallet, SendRecipient* recipient)
 {
     if (m_closed || !m_owner) return;
     const QPointer<PaymentImportOperation> self{this};
@@ -35,7 +35,7 @@ void PaymentImportOperation::chooseTarget(WalletQmlModel* wallet, SendRecipient*
     const auto target = wallet ? wallet->importTarget(recipient) : nullptr;
     if (self && !self->m_closed && self->m_owner == actor) self->command([target](auto& original) { return original.chooseTarget(target); });
 }
-void PaymentImportOperation::command(const std::function<execution::SubmitResult(paymentimport::Owner&)>& submit)
+void PaymentImportOperation::command(const std::function<execution::SubmitResult(paymentimport::Service&)>& submit)
 {
     if (m_closed || !m_owner) return;
     const QPointer<PaymentImportOperation> self{this}; const auto owner = m_owner;

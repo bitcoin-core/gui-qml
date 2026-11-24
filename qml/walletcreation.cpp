@@ -203,25 +203,25 @@ walletopening::Source Backend::take(std::unique_ptr<interfaces::Handler>& handle
     if (get()) transferred = true;
     return std::exchange(wallet, {});
 }
-Owner::Owner(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
+Service::Service(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
     : m_services(std::move(services)), m_request(std::move(request)), m_notify(std::move(notify)), m_release(std::move(release)), m_observation(std::move(observation)) { m_frame.target_id = m_request.submitted_name; }
-Owner::~Owner()
+Service::~Service()
 {
     if (!m_backend_retained && m_release) m_release->release();
     if (!m_started || m_detached.load()) { m_services.admission->releaseName(m_request.id); m_services.admission->presentationConsumed(m_request.id); }
 }
-std::shared_ptr<Owner> Owner::Make(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
+std::shared_ptr<Service> Service::Make(Services services, Request request, Notify notify, std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation)
 {
-    return services.retain<Owner>([&] {
-        return std::unique_ptr<Owner>{new Owner(std::move(services), std::move(request), std::move(notify),
+    return services.retain<Service>([&] {
+        return std::unique_ptr<Service>{new Service(std::move(services), std::move(request), std::move(notify),
             std::move(release), std::move(observation))};
     });
 }
-Frame Owner::snapshot() const { std::lock_guard lock{m_mutex}; return m_frame; }
-QString Owner::errorText() const { std::lock_guard lock{m_mutex}; return m_actual.error.isEmpty() ? m_frame.error.message : m_actual.error; }
-walletopening::NativeEvents Owner::observationForPublication() const { std::lock_guard lock{m_mutex}; return m_actual.observation; }
-QString Owner::warningText() const { std::lock_guard lock{m_mutex}; return m_actual.warnings; }
-walletpublication::TakeWallet Owner::walletForPublication() const
+Frame Service::snapshot() const { std::lock_guard lock{m_mutex}; return m_frame; }
+QString Service::errorText() const { std::lock_guard lock{m_mutex}; return m_actual.error.isEmpty() ? m_frame.error.message : m_actual.error; }
+walletopening::NativeEvents Service::observationForPublication() const { std::lock_guard lock{m_mutex}; return m_actual.observation; }
+QString Service::warningText() const { std::lock_guard lock{m_mutex}; return m_actual.warnings; }
+walletpublication::TakeWallet Service::walletForPublication() const
 {
     std::lock_guard lock{m_mutex};
     if (!m_backend || !m_backend->canPublish()) return {};
@@ -230,9 +230,9 @@ walletpublication::TakeWallet Owner::walletForPublication() const
         return backend->take(handler);
     };
 }
-void Owner::notify() { if (!m_detached.load()) try { m_notify(); } catch (...) {} }
-void Owner::update(Phase phase) { { std::lock_guard lock{m_mutex}; m_frame.phase = phase; ++m_frame.revision; } notify(); }
-void Owner::start()
+void Service::notify() { if (!m_detached.load()) try { m_notify(); } catch (...) {} }
+void Service::update(Phase phase) { { std::lock_guard lock{m_mutex}; m_frame.phase = phase; ++m_frame.revision; } notify(); }
+void Service::start()
 {
     if (std::exchange(m_started, true)) return;
     m_keep_alive = shared_from_this(); update(Phase::Validating);
@@ -244,7 +244,7 @@ void Owner::start()
     });
     if (!admitted) complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created.")));
 }
-void Owner::factsReady()
+void Service::factsReady()
 {
     const auto result = m_facts->result(); if (!result) return;
     if (m_cancelled.load() || (m_services.shutdown && m_services.shutdown->load())) { complete(Phase::Cancelled); return; }
@@ -256,7 +256,7 @@ void Owner::factsReady()
     if (!m_services.admission->reserveName(m_request.id, m_decision.name)) { complete(Phase::Rejected, Error("Busy", Text("Wait for the current wallet operation to finish."))); return; }
     preparePublication(m_release);
 }
-void Owner::preparePublication(std::shared_ptr<walletpublication::Release> release)
+void Service::preparePublication(std::shared_ptr<walletpublication::Release> release)
 {
     const auto self = shared_from_this();
     const auto admitted = m_services.post(execution::Lane::Utility, [self, release = std::move(release)] {
@@ -286,7 +286,7 @@ void Owner::preparePublication(std::shared_ptr<walletpublication::Release> relea
     });
     if (!admitted) complete(Phase::Rejected, Error("TransportRejected", Text("Wallet creation could not start. No wallet was created.")));
 }
-void Owner::created()
+void Service::created()
 {
     const auto result = m_create->result(); if (!result) return;
     if (!result->value) {
@@ -312,20 +312,20 @@ void Owner::created()
     });
     if (!admitted) { { std::lock_guard lock{m_mutex}; m_actual.incomplete = true; } complete(Phase::Partial, Error("SetupNotQueued", Text("The wallet file was created, but its setup could not start."), "", Text("Keep the created wallet file; do not repeat creation."))); }
 }
-void Owner::setupReady()
+void Service::setupReady()
 {
     const auto result = m_setup->result(); if (!result) return;
     const auto error = result->value ? *result->value : Text("The wallet file was created, but its setup may not have finished.");
     if (!error.isEmpty()) { { std::lock_guard lock{m_mutex}; m_actual.error = error; m_actual.incomplete = true; } complete(Phase::Partial, Error("SetupIncomplete", error.left(1024), "", Text("Keep the created wallet file; do not repeat creation."))); return; }
     readyToPublish();
 }
-void Owner::readyToPublish()
+void Service::readyToPublish()
 {
     if (m_detached.load() || (m_services.shutdown && m_services.shutdown->load())) { complete(Phase::Partial, Error("PresentationClosed", Text("Wallet storage was created after the view closed."))); return; }
     { std::lock_guard lock{m_mutex}; m_publication_awaited = true; m_frame.publication_requested = true; }
     update(Phase::Publishing);
 }
-void Owner::publicationConsumed(walletpublication::Availability availability, QString error)
+void Service::publicationConsumed(walletpublication::Availability availability, QString error)
 {
     const auto self = shared_from_this();
     const auto admitted = m_services.post(execution::Lane::Utility, [self, availability, error = std::move(error)] {
@@ -344,7 +344,7 @@ void Owner::publicationConsumed(walletpublication::Availability availability, QS
     });
     if (!admitted) complete(Phase::Partial, Error("PublicationReceiptUnavailable", Text("The wallet was created, but its result could not be shown.")));
 }
-void Owner::complete(Phase phase, WalletOperationError error)
+void Service::complete(Phase phase, WalletOperationError error)
 {
     {
         std::lock_guard lock{m_mutex};
@@ -374,8 +374,8 @@ void Owner::complete(Phase phase, WalletOperationError error)
     if (m_detached.load()) m_services.admission->presentationConsumed(m_request.id);
     notify(); m_keep_alive.reset();
 }
-void Owner::cancel() { m_cancelled = true; }
-void Owner::detach()
+void Service::cancel() { m_cancelled = true; }
+void Service::detach()
 {
     m_detached = true;
     const auto frame = snapshot();
@@ -385,7 +385,7 @@ void Owner::detach()
         (void)m_services.post(execution::Lane::Utility, [self] { if (self->m_native_created) self->complete(Phase::Partial, Error("PresentationClosed", Text("Wallet storage was created after the view closed."))); else self->complete(Phase::Cancelled); });
     }
 }
-void Owner::reconcilePublication()
+void Service::reconcilePublication()
 {
     { std::lock_guard lock{m_mutex}; if (m_reconciled || !m_backend || !m_backend->canPublish()) return; m_reconciled = true; } m_keep_alive = shared_from_this(); readyToPublish();
 }

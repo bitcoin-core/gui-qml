@@ -73,7 +73,7 @@ Result Execute(interfaces::Wallet& wallet, Request request)
             for (const auto& output : *request.selected) {
                 if (wallet.isLockedCoin(output)) {
                     result.error = Error::InsufficientSelectedBalance;
-                    result.message = QCoreApplication::translate("WalletQmlModel", "Some selected inputs are locked. Unlock or replace them and prepare again.");
+                    result.message = QCoreApplication::translate("WalletModel", "Some selected inputs are locked. Unlock or replace them and prepare again.");
                     return finish();
                 }
             }

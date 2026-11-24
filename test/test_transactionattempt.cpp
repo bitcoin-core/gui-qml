@@ -147,7 +147,7 @@ private Q_SLOTS:
     {
         ManualStartupExecution transport;
         auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
         const auto opening = NewOpening();
         transactionattempt::StartInput input;
         input.id = 1;
@@ -199,7 +199,7 @@ private Q_SLOTS:
         transactionattempt::Ticket ticket;
         ManualStartupExecution worker;
         const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
 
         transactionattempt::StartInput input;
         input.id = 1;
@@ -253,7 +253,7 @@ private Q_SLOTS:
     {
         ManualStartupExecution transport;
         auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
         const auto opening = NewOpening();
         transactionattempt::StartInput input;
         input.id = 1;
@@ -297,7 +297,7 @@ private Q_SLOTS:
         QFETCH(bool, ordinary);
         ManualStartupExecution transport;
         auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
         const auto opening = NewOpening();
         const QString original{64, QLatin1Char{'a'}};
         transactionattempt::ReplacementStart input{7, 3, {opening, 0, true}, original};
@@ -324,7 +324,7 @@ private Q_SLOTS:
     {
         ManualStartupExecution transport;
         auto utility = std::make_shared<execution::SerialQueue>(transport.executor().makeQueue(execution::Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
         const auto opening = NewOpening();
         const QString original_txid{QString(64, QLatin1Char{'a'})};
         transactionattempt::ReplacementStart input{1, 1, {opening, 0, true}, original_txid};
@@ -384,7 +384,7 @@ private Q_SLOTS:
         QSemaphore completed, drained;
         execution::Executor executor{execution::Executor::Config{}};
         const auto utility = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
-        transactionattempt::Owner owner{utility};
+        transactionattempt::Store owner{utility};
         transactionattempt::StartInput input;
         input.id = 1;
         input.facts = {NewOpening(), 2, true};

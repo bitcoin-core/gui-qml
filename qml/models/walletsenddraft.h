@@ -10,15 +10,15 @@
 
 #include <QPointer>
 
-class WalletQmlModel;
+class WalletModel;
 
-/** A preparation of a WalletQmlModel's send draft. The wallet prepares one
+/** A preparation of a WalletModel's send draft. The wallet prepares one
  * draft at a time; this operation follows the one it started. */
 class WalletPreparationOperation final : public PreparationOperation
 {
     Q_OBJECT
 public:
-    explicit WalletPreparationOperation(WalletQmlModel& wallet, QObject* parent = nullptr);
+    explicit WalletPreparationOperation(WalletModel& wallet, QObject* parent = nullptr);
     //! False when the wallet can't prepare now.
     bool start(std::optional<QString> passphrase);
     void unlock(const QString& passphrase) override;
@@ -26,16 +26,16 @@ public:
 
 private:
     void follow();
-    QPointer<WalletQmlModel> m_wallet;
+    QPointer<WalletModel> m_wallet;
     quint64 m_preparation{0};
 };
 
-/** WalletQmlModel's SendDraftInterface. */
-class WalletSendDraftInterface final : public SendDraftInterface
+/** WalletModel's SendDraftInterface. */
+class WalletSendDraft final : public SendDraftInterface
 {
     Q_OBJECT
 public:
-    explicit WalletSendDraftInterface(WalletQmlModel& wallet);
+    explicit WalletSendDraft(WalletModel& wallet);
     bool available() const override;
     QString draftRevision() const override;
     bool selectionPending() const override;
@@ -46,7 +46,7 @@ public:
     PsbtOperation* startImport(const QString& path) override;
 
 private:
-    QPointer<WalletQmlModel> m_wallet;
+    QPointer<WalletModel> m_wallet;
 };
 
 #endif // BITCOIN_QML_MODELS_WALLETSENDDRAFT_H

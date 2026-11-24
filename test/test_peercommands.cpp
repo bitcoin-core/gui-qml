@@ -38,7 +38,7 @@ struct Fixture {
     std::vector<NodeId> disconnected_ids;
     std::unique_ptr<PeerCommandModel> commands;
     std::unique_ptr<PeerListModel> source;
-    std::unique_ptr<PeerListSortProxy> proxy;
+    std::unique_ptr<PeerListProxyModel> proxy;
     Fixture()
     {
         peers.emplace_back(Peer(7, "10.0.0.7:8333"), true, CNodeStateStats{});
@@ -60,7 +60,7 @@ struct Fixture {
         source = std::make_unique<PeerListModel>(node, nullptr, true, post,
             [] { return NodeClock::now(); }, NativeListQueues(execution.executor()));
         source->setCommands(commands.get());
-        proxy = std::make_unique<PeerListSortProxy>(nullptr); proxy->setSourceModel(source.get());
+        proxy = std::make_unique<PeerListProxyModel>(nullptr); proxy->setSourceModel(source.get());
     }
     bool publish()
     {

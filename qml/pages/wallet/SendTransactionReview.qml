@@ -16,8 +16,8 @@ Page {
     background: Rectangle { color: Theme.color.background }
     title: qsTr("Review transaction")
 
-    property WalletQmlModel wallet: null
-    readonly property WalletQmlModelTransaction transaction: wallet ? wallet.currentTransaction : null
+    property WalletModel wallet: null
+    readonly property TransactionReviewModel transaction: wallet ? wallet.currentTransaction : null
     readonly property var flowDetails: wallet ? wallet.currentTransactionFlowDetails : null
     readonly property bool detailsContextValid: wallet !== null && wallet.available && transaction !== null
         && flowDetails !== null && flowDetails.context === transaction
@@ -34,7 +34,7 @@ Page {
         ? qsTr("The draft changed after review. Prepare it again before sending.")
         : reviewInterface ? reviewInterface.currentTransactionReviewMessage : ""
     readonly property bool showWarning: (reviewInterface && reviewInterface.currentTransactionNeedsRevalidation)
-        || reviewMessage.length > 0 || (wallet && wallet.keySchemeKind === WalletQmlModel.WatchOnly && !canBroadcast)
+        || reviewMessage.length > 0 || (wallet && wallet.keySchemeKind === WalletModel.WatchOnly && !canBroadcast)
     readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real reviewContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     readonly property bool sendBusy: wallet !== null && (wallet.sendBusy || wallet.psbtActionBusy)
@@ -48,7 +48,7 @@ Page {
     onBroadcastSubmittedChanged: {
         if (!broadcastSubmitted || sending) return
         sending = true
-        transactionSent(sendController.psbtTxid, WalletQmlModel.SubmissionAccepted, WalletQmlModel.SendRecordUnknown)
+        transactionSent(sendController.psbtTxid, WalletModel.SubmissionAccepted, WalletModel.SendRecordUnknown)
     }
 
     // Sends and signs the transaction on this page. Hiding the page, another

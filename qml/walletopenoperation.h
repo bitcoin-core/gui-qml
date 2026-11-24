@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_WALLETOPENOPERATION_H
 #define BITCOIN_QML_WALLETOPENOPERATION_H
 
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
 #include <QObject>
 #include <QPointer>
@@ -27,7 +27,7 @@ public:
     struct Snapshot {
         State state{State::WalletOperationIdle};
         QString target, error, warnings, adoption_error;
-        QPointer<WalletQmlModel> result;
+        QPointer<WalletModel> result;
         bool can_open{false};
         Adoption adoption{Adoption::AdoptionNone};
     };
@@ -37,7 +37,7 @@ public:
         std::function<bool()> current;
         std::function<State()> state;
         std::function<QString()> target, error, warnings, adoption_error;
-        std::function<WalletQmlModel*()> result;
+        std::function<WalletModel*()> result;
         std::function<bool()> can_open;
         std::function<Adoption()> adoption;
     };
@@ -52,7 +52,7 @@ public:
     QString target() const { return following() ? m_live.target() : m_frozen.target; }
     QString error() const { return following() ? m_live.error() : m_frozen.error; }
     QString warnings() const { return following() ? m_live.warnings() : m_frozen.warnings; }
-    WalletQmlModel* resultWallet() const { return following() ? m_live.result() : m_frozen.result.data(); }
+    WalletModel* resultWallet() const { return following() ? m_live.result() : m_frozen.result.data(); }
     bool canOpenResult() const { return following() ? m_live.can_open() : m_frozen.can_open; }
     Adoption adoptionState() const { return following() ? m_live.adoption() : m_frozen.adoption; }
     QString adoptionError() const { return following() ? m_live.adoption_error() : m_frozen.adoption_error; }

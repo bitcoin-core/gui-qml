@@ -14,7 +14,7 @@
 #include <qml/bitcoinamount.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
-#include <qml/models/walletqmlmodeltransaction.h>
+#include <qml/models/transactionreviewmodel.h>
 #include <qml/retainedvalue.h>
 #include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/walletsession.h>
@@ -30,14 +30,14 @@ struct FrozenReview {
     std::deque<std::function<void()>> publications;
     std::shared_ptr<walletopening::Session> opening{MakeWalletSession(worker.executor(), [] {})};
 
-    std::unique_ptr<WalletQmlModelTransaction> create(walletreview::Snapshot snapshot)
+    std::unique_ptr<TransactionReviewModel> create(walletreview::Snapshot snapshot)
     {
         const bool accepted = worker.outcomes.post([&] {
             snapshot.presentation = walletreview::FormatRecipients(snapshot.recipients, snapshot.display_unit);
         });
         if (!accepted) { QTest::qFail("Fixture preparation was rejected", __FILE__, __LINE__); return {}; }
         worker.drain();
-        return std::make_unique<WalletQmlModelTransaction>(snapshot, opening,
+        return std::make_unique<TransactionReviewModel>(snapshot, opening,
             [this](auto callback) { publications.push_back(std::move(callback)); });
     }
     void publishAll()
@@ -85,7 +85,7 @@ private Q_SLOTS:
         f.opening->cleanupQueue()->close();
         bool rejected{false};
         try {
-            auto review = std::make_unique<WalletQmlModelTransaction>(parent->snapshot, f.opening,
+            auto review = std::make_unique<TransactionReviewModel>(parent->snapshot, f.opening,
                 [&](auto callback) { f.publications.push_back(std::move(callback)); }, parent.get());
         } catch (const std::runtime_error& error) {
             rejected = true;
@@ -114,12 +114,12 @@ private Q_SLOTS:
         tx.vout.emplace_back(1000, CScript{});
         parent->snapshot.transaction = MakeTransactionRef(std::move(tx));
         const std::weak_ptr<const CTransaction> transaction = parent->snapshot.transaction;
-        QPointer<WalletQmlModelTransaction> review = new WalletQmlModelTransaction(parent->snapshot, f.opening,
+        QPointer<TransactionReviewModel> review = new TransactionReviewModel(parent->snapshot, f.opening,
             [&](auto publication) { f.publications.push_back(std::move(publication)); }, parent.get());
         parent->snapshot.transaction.reset();
         QVERIFY(!transaction.expired());
         if (pending) {
-            connect(review.data(), &WalletQmlModelTransaction::presentationChanged, this, [&] { parent.reset(); });
+            connect(review.data(), &TransactionReviewModel::presentationChanged, this, [&] { parent.reset(); });
             review->setDisplayUnit(3);
         } else {
             parent.reset();
@@ -145,12 +145,12 @@ private Q_SLOTS:
         f.worker.drain();
         QVERIFY(original->presentationPending());
         auto parent = std::make_unique<QObject>();
-        QPointer<WalletQmlModelTransaction> clone = new WalletQmlModelTransaction(*original, 25, parent.get());
+        QPointer<TransactionReviewModel> clone = new TransactionReviewModel(*original, 25, parent.get());
         QVERIFY(clone);
         QVERIFY(clone->presentationPending());
         QCOMPARE(clone->getTransactionFee(), CAmount{25});
         QVERIFY(f.worker.quiescent());
-        connect(clone.data(), &WalletQmlModelTransaction::presentationChanged, this, [&] { parent.reset(); });
+        connect(clone.data(), &TransactionReviewModel::presentationChanged, this, [&] { parent.reset(); });
         QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
         QVERIFY(!clone);
         QVERIFY(!parent);
@@ -167,10 +167,10 @@ private Q_SLOTS:
         });
         QVERIFY(retained);
         std::deque<std::function<void()>> duplicates;
-        auto review = std::make_unique<WalletQmlModelTransaction>(std::move(retained), f.opening,
+        auto review = std::make_unique<TransactionReviewModel>(std::move(retained), f.opening,
             [&](auto callback) { if (enqueue) duplicates.push_back(std::move(callback)); throw std::runtime_error{"post failed"}; });
         const auto cleanup = qScopeGuard([&] { duplicates.clear(); if (review) review->close(); review.reset(); f.settle(); });
-        QSignalSpy changed{review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged};
+        QSignalSpy changed{review.get(), &TransactionReviewModel::reviewedRecipientsChanged};
         review->setDisplayUnit(3);
         QVERIFY(f.worker.step(execution::Lane::Utility));
         f.worker.drain();
@@ -187,8 +187,8 @@ private Q_SLOTS:
         auto& transaction = *review;
         QVERIFY(!transaction.feeKnown()); QVERIFY(!transaction.reviewedFee());
         QCOMPARE(transaction.fee(), QString("Unknown")); QCOMPARE(transaction.total(), QString("Unknown"));
-        QSignalSpy fee_changed{&transaction, &WalletQmlModelTransaction::feeChanged};
-        QSignalSpy total_changed{&transaction, &WalletQmlModelTransaction::totalChanged};
+        QSignalSpy fee_changed{&transaction, &TransactionReviewModel::feeChanged};
+        QSignalSpy total_changed{&transaction, &TransactionReviewModel::totalChanged};
         transaction.setTransactionFee(0);
         QVERIFY(transaction.feeKnown()); QCOMPARE(transaction.reviewedFee(), std::optional<CAmount>{0});
         QVERIFY(transaction.fee() != QString("Unknown")); QVERIFY(transaction.total() != QString("Unknown"));
@@ -236,9 +236,9 @@ void WalletQmlModelTransactionTests::presentationAdmissionKeepsOriginalReview()
     const std::weak_ptr<const CTransaction> original_transaction{snapshot.transaction};
     auto review = f.create(std::move(snapshot));
     QVERIFY(review);
-    const QPointer<WalletQmlModelTransaction> original{review.get()};
-    QSignalSpy changes{review.get(), &WalletQmlModelTransaction::presentationChanged};
-    QSignalSpy recipients{review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged};
+    const QPointer<TransactionReviewModel> original{review.get()};
+    QSignalSpy changes{review.get(), &TransactionReviewModel::presentationChanged};
+    QSignalSpy recipients{review.get(), &TransactionReviewModel::reviewedRecipientsChanged};
     int changes_after{-1}, recipients_after{-1};
     auto change = [&] {
         if (action == 0) review->close();
@@ -248,7 +248,7 @@ void WalletQmlModelTransactionTests::presentationAdmissionKeepsOriginalReview()
         recipients_after = recipients.count();
     };
     if (!before_publication) {
-        connect(review.get(), &WalletQmlModelTransaction::presentationChanged, this, change, Qt::SingleShotConnection);
+        connect(review.get(), &TransactionReviewModel::presentationChanged, this, change, Qt::SingleShotConnection);
     }
     review->setDisplayUnit(3);
     if (before_publication) {
@@ -300,7 +300,7 @@ void WalletQmlModelTransactionTests::manualDisplayUnitProjectionRejectsStalePubl
     fixture.settle(); QVERIFY(!review->presentationPending()); QVERIFY(review->presentationError().isEmpty());
     QCOMPARE(review->reviewedRecipients().first().toMap().value("label").toString(), QStringLiteral("frozen note"));
     review->setDisplayUnit(3); fixture.worker.drain();
-    QSignalSpy quiet(review.get(), &WalletQmlModelTransaction::reviewedRecipientsChanged);
+    QSignalSpy quiet(review.get(), &TransactionReviewModel::reviewedRecipientsChanged);
     review->close(); fixture.publishAll();
     QCOMPARE(quiet.size(), 0); QVERIFY(!review->presentationPending()); QVERIFY(review->reviewedRecipients().isEmpty());
 }
@@ -444,7 +444,7 @@ void WalletQmlModelTransactionTests::txidTracksAssignedTransaction()
     const auto original = MakeTransactionRef(std::move(mutable_transaction));
     const auto retained = walletopening::RetainValues<CTransactionRef>(fixture.opening, [&] { return std::make_unique<CTransactionRef>(original); });
     const CTransactionRef wallet_transaction{retained, original.get()};
-    QSignalSpy txid_changed_spy{&transaction, &WalletQmlModelTransaction::txidChanged};
+    QSignalSpy txid_changed_spy{&transaction, &TransactionReviewModel::txidChanged};
 
     transaction.setWtx(wallet_transaction);
     QCOMPARE(transaction.txid(), QString::fromStdString(wallet_transaction->GetHash().ToString()));

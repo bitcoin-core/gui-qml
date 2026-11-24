@@ -8,7 +8,7 @@
 #include <qml/retainedvalue.h>
 #include <qml/walletnames.h>
 #include <qml/walletpublication.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
 #include <QAbstractListModel>
 #include <QMutex>
@@ -37,9 +37,9 @@ public:
     QModelIndex index(int row, int column = 0, const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
-    bool addWallet(WalletQmlModel* wallet);
-    void removeWallet(WalletQmlModel* wallet);
-    int rowForWallet(WalletQmlModel* wallet) const;
+    bool addWallet(WalletModel* wallet);
+    void removeWallet(WalletModel* wallet);
+    int rowForWallet(WalletModel* wallet) const;
     bool valid() const { return bool(m_state); }
     std::shared_ptr<WalletNameRegistry> nameRegistry() const;
     void close();
@@ -47,7 +47,7 @@ private:
     struct State;
     std::shared_ptr<State> m_state;
     presentation::Post m_post;
-    bool removeWalletRow(WalletQmlModel* wallet);
+    bool removeWalletRow(WalletModel* wallet);
     void reconcile();
 };
 
@@ -74,19 +74,19 @@ public:
         std::function<void(Notice)> notice;
         std::function<bool(bool)> commitLoaded;
         std::function<void(bool)> adoptionUnavailable;
-        std::function<WalletQmlModel*(walletopening::Source, const QString&, walletopening::NativeEvents, std::unique_ptr<interfaces::Handler>)> createFacade;
-        std::function<void(WalletQmlModel*, Information)> information;
+        std::function<WalletModel*(walletopening::Source, const QString&, walletopening::NativeEvents, std::unique_ptr<interfaces::Handler>)> createFacade;
+        std::function<void(WalletModel*, Information)> information;
         std::function<void(const QString&, bool)> loadState;
         std::function<void(const QString&)> loadError;
-        std::function<bool(WalletQmlModel*)> forgetCloseTarget;
-        std::function<void(WalletQmlModel*)> closeQuestionChanged;
-        std::function<void(WalletQmlModel*)> prepareForget;
-        std::function<void(WalletQmlModel*, WalletQmlModel*)> forget;
+        std::function<bool(WalletModel*)> forgetCloseTarget;
+        std::function<void(WalletModel*)> closeQuestionChanged;
+        std::function<void(WalletModel*)> prepareForget;
+        std::function<void(WalletModel*, WalletModel*)> forget;
         std::function<void()> contextChanged;
     };
     struct Services {
         std::shared_ptr<QObject> bridge;
-        WalletQmlModel* empty{nullptr};
+        WalletModel* empty{nullptr};
         presentation::Post post;
         std::function<void(std::function<void()>)> shutdown;
         std::shared_ptr<execution::SerialQueue> value_cleanup{};
@@ -101,7 +101,7 @@ public:
      */
     using ResultLifetime = walletpublication::Release;
     struct OpeningAdoption {
-        QPointer<WalletQmlModel> facade;
+        QPointer<WalletModel> facade;
         walletopening::Opening identity;
         bool closed{false};
         std::set<std::shared_ptr<ResultLifetime>, std::owner_less<std::shared_ptr<ResultLifetime>>> pending_results;
@@ -121,15 +121,15 @@ public:
     struct Retirement : std::enable_shared_from_this<Retirement> {
         struct ClosedFence { QString name; uint64_t origin_cutoff, event_cutoff; std::shared_ptr<OpeningAdoption> opening; };
         struct Values {
-            std::list<WalletQmlModel*> pending;
+            std::list<WalletModel*> pending;
             std::map<QObject*, Form> forms;
-            std::map<WalletQmlModel*, QPointer<WalletQmlModel>> alive;
-            std::map<QString, WalletQmlModel*> names;
-            std::map<WalletQmlModel*, std::list<WalletQmlModel*>::iterator> positions;
-            std::map<WalletQmlModel*, WalletInformation> information;
-            std::set<WalletQmlModel*> retiring;
+            std::map<WalletModel*, QPointer<WalletModel>> alive;
+            std::map<QString, WalletModel*> names;
+            std::map<WalletModel*, std::list<WalletModel*>::iterator> positions;
+            std::map<WalletModel*, WalletInformation> information;
+            std::set<WalletModel*> retiring;
             std::multiset<QString> retiring_names;
-            std::map<WalletQmlModel*, std::shared_ptr<OpeningAdoption>> adoptions;
+            std::map<WalletModel*, std::shared_ptr<OpeningAdoption>> adoptions;
             std::set<uint64_t> origins;
             uint64_t admitting_origin{std::numeric_limits<uint64_t>::max()};
             std::map<QString, std::shared_ptr<ClosedFence>> closed;
@@ -139,7 +139,7 @@ public:
         std::shared_ptr<QObject> bridge;
         QPointer<QObject> observer;
         std::shared_ptr<Host> host;
-        QPointer<WalletQmlModel> empty;
+        QPointer<WalletModel> empty;
         std::shared_ptr<Retirement> keep_alive;
         std::function<void(std::function<void()>)> post;
         std::function<void(std::function<void()>)> shutdown;
@@ -150,8 +150,8 @@ public:
         bool retained{true};
 
         void pruneAdoptions();
-        void watch(WalletQmlModel* model);
-        bool adopt(WalletQmlModel* model, bool remove);
+        void watch(WalletModel* model);
+        bool adopt(WalletModel* model, bool remove);
         void enqueue();
         void pump();
         void finish();
@@ -163,26 +163,26 @@ public:
     OpenWalletListModel* openWalletModel() const { return m_open_wallet_model; }
     std::shared_ptr<WalletNameRegistry> nameRegistry() const { return m_names_registry; }
     execution::ValueCleanup valueCleanup() const;
-    bool containsExact(WalletQmlModel* wallet) const override;
+    bool containsExact(WalletModel* wallet) const override;
     std::shared_ptr<walletpublication::CatalogReservation> reserveCreation(const QString& operation_id) override;
     walletpublication::Result publishCreation(const std::shared_ptr<walletpublication::CatalogReservation>& ticket,
         walletpublication::TakeWallet take, const QString& wallet_id, walletopening::NativeEvents observation) override;
     walletpublication::Result publishWithLifetime(const std::shared_ptr<walletpublication::CatalogReservation>& ticket, walletpublication::TakeWallet take,
         const QString& wallet_id, walletopening::NativeEvents observation, std::shared_ptr<walletpublication::Release> cell) override;
     void finishCreation(const std::shared_ptr<walletpublication::CatalogReservation>& ticket) override;
-    WalletQmlModel* walletForName(const QString& name) const;
-    WalletQmlModel* firstAvailable(WalletQmlModel* except = nullptr) const;
+    WalletModel* walletForName(const QString& name) const;
+    WalletModel* firstAvailable(WalletModel* except = nullptr) const;
     QList<QObject*> openWallets() const;
     bool empty() const { return m_wallets.empty(); }
     const auto& names() const { return m_wallet_names; }
     const auto& positions() const { return m_wallet_positions; }
     const auto& wallets() const { return m_wallets; }
     const auto& information() const { return m_wallet_information; }
-    void retainResult(WalletQmlModel* wallet, const std::shared_ptr<ResultLifetime>& lifetime);
-    void rememberInformation(WalletQmlModel* wallet, WalletInformation information);
-    void insert(WalletQmlModel* wallet, const QString& name);
+    void retainResult(WalletModel* wallet, const std::shared_ptr<ResultLifetime>& lifetime);
+    void rememberInformation(WalletModel* wallet, WalletInformation information);
+    void insert(WalletModel* wallet, const QString& name);
     void close();
-    bool adoptRetirement(WalletQmlModel* model, bool remove);
+    bool adoptRetirement(WalletModel* model, bool remove);
     void detachPresentation();
     void detachController();
     void beginRetirement(std::shared_ptr<execution::Executor> executor,
@@ -193,14 +193,14 @@ public:
     bool retained() const { return m_retirement->retained; }
     std::shared_ptr<Retirement> retirement() const { return m_retirement; }
     std::shared_ptr<AdoptionOrigin> newOrigin();
-    void closeOpening(WalletQmlModel* wallet);
-    bool registerModel(WalletQmlModel* wallet, std::shared_ptr<OpeningAdoption> adoption);
-    void removeModel(WalletQmlModel* wallet, bool remove);
-    WalletQmlModel* adoptWallet(walletpublication::TakeWallet take,
+    void closeOpening(WalletModel* wallet);
+    bool registerModel(WalletModel* wallet, std::shared_ptr<OpeningAdoption> adoption);
+    void removeModel(WalletModel* wallet, bool remove);
+    WalletModel* adoptWallet(walletpublication::TakeWallet take,
         const std::optional<QString>& captured_name, std::shared_ptr<AdoptionOrigin> origin, uint64_t ingress_sequence, walletopening::NativeEvents observation = {});
-    WalletQmlModel* adoptWallet(std::unique_ptr<interfaces::Wallet>& wallet, const QString& name);
+    WalletModel* adoptWallet(std::unique_ptr<interfaces::Wallet>& wallet, const QString& name);
     void observeOpening(const std::shared_ptr<AdoptionOrigin>& source, const std::shared_ptr<AdoptionOrigin>& intent,
-                        const QString& name, WalletQmlModel* facade, uint64_t notification_sequence, uint64_t ingress_sequence);
+                        const QString& name, WalletModel* facade, uint64_t notification_sequence, uint64_t ingress_sequence);
     std::shared_ptr<walletopening::NativeEventClock> eventClock() const { return m_adoption_clock; }
     std::shared_ptr<AdoptionOrigin> notificationOrigin() const { return m_notification_origin; }
     std::shared_ptr<AdoptionOrigin> commandOrigin() const { return m_command_origin; }
@@ -221,10 +221,10 @@ private:
     size_t m_adoption_depth{0};
     std::map<QObject*, Form> m_forms;
     mutable QMutex m_wallets_mutex;
-    std::list<WalletQmlModel*> m_wallets;
-    std::map<QString, WalletQmlModel*> m_wallet_names;
-    std::map<WalletQmlModel*, std::list<WalletQmlModel*>::iterator> m_wallet_positions;
-    std::map<WalletQmlModel*, WalletInformation> m_wallet_information;
+    std::list<WalletModel*> m_wallets;
+    std::map<QString, WalletModel*> m_wallet_names;
+    std::map<WalletModel*, std::list<WalletModel*>::iterator> m_wallet_positions;
+    std::map<WalletModel*, WalletInformation> m_wallet_information;
     std::shared_ptr<WalletNameRegistry> m_names_registry;
     OpenWalletListModel* m_open_wallet_model{nullptr};
     std::shared_ptr<Retirement> m_retirement;

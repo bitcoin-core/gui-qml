@@ -18,14 +18,14 @@
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
 #include <qml/models/onboardingoptionsmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/peerlistmodel.h>
-#include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peerlistproxymodel.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <qml/presentationservices.h>
 #ifdef ENABLE_WALLET
 #include <qml/models/walletlistmodel.h>
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 #endif
 
 #include <QObject>
@@ -42,16 +42,16 @@ class ApplicationModels : public QObject
     Q_PROPERTY(ChainModel* chainModel READ chainModel CONSTANT)
     Q_PROPERTY(BlockClockModel* blockClockModel READ blockClockModel CONSTANT)
     Q_PROPERTY(PresentationServices* presentationServices READ presentationServices CONSTANT)
-    Q_PROPERTY(OptionsQmlModel* optionsModel READ optionsModel CONSTANT)
+    Q_PROPERTY(SettingsModel* optionsModel READ optionsModel CONSTANT)
     Q_PROPERTY(NetworkTrafficTower* networkTrafficTower READ networkTrafficTower CONSTANT)
     Q_PROPERTY(NetworkStatusModel* networkStatusModel READ networkStatusModel CONSTANT)
     Q_PROPERTY(PeerListModel* peerTableModel READ peerTableModel CONSTANT)
-    Q_PROPERTY(PeerListSortProxy* peerListModelProxy READ peerListModelProxy CONSTANT)
+    Q_PROPERTY(PeerListProxyModel* peerListModelProxy READ peerListModelProxy CONSTANT)
     Q_PROPERTY(BanListModel* banListModel READ banListModel CONSTANT)
     Q_PROPERTY(DebugLogModel* debugLogModel READ debugLogModel CONSTANT)
     Q_PROPERTY(RpcConsoleModel* rpcConsoleModel READ rpcConsoleModel CONSTANT)
 #ifdef ENABLE_WALLET
-    Q_PROPERTY(WalletQmlController* walletController READ walletController CONSTANT)
+    Q_PROPERTY(WalletController* walletController READ walletController CONSTANT)
     Q_PROPERTY(SignerDiscoveryModel* signers READ signers NOTIFY signersChanged)
 #else
     Q_PROPERTY(QObject* walletController READ walletController CONSTANT)
@@ -83,17 +83,17 @@ public:
     ChainModel* chainModel() const { return m_context ? m_context->contextProperty(QStringLiteral("chainModel")).value<ChainModel*>() : nullptr; }
     BlockClockModel* blockClockModel() const { return m_context ? m_context->contextProperty(QStringLiteral("blockClockModel")).value<BlockClockModel*>() : nullptr; }
     PresentationServices* presentationServices() const { return m_context ? m_context->contextProperty(QStringLiteral("presentationServices")).value<PresentationServices*>() : nullptr; }
-    OptionsQmlModel* optionsModel() const { return m_context ? m_context->contextProperty(QStringLiteral("optionsModel")).value<OptionsQmlModel*>() : nullptr; }
+    SettingsModel* optionsModel() const { return m_context ? m_context->contextProperty(QStringLiteral("optionsModel")).value<SettingsModel*>() : nullptr; }
     NetworkTrafficTower* networkTrafficTower() const { return m_context ? m_context->contextProperty(QStringLiteral("networkTrafficTower")).value<NetworkTrafficTower*>() : nullptr; }
     NetworkStatusModel* networkStatusModel() const { return m_context ? m_context->contextProperty(QStringLiteral("networkStatusModel")).value<NetworkStatusModel*>() : nullptr; }
     PeerListModel* peerTableModel() const { return m_context ? m_context->contextProperty(QStringLiteral("peerTableModel")).value<PeerListModel*>() : nullptr; }
-    PeerListSortProxy* peerListModelProxy() const { return m_context ? m_context->contextProperty(QStringLiteral("peerListModelProxy")).value<PeerListSortProxy*>() : nullptr; }
+    PeerListProxyModel* peerListModelProxy() const { return m_context ? m_context->contextProperty(QStringLiteral("peerListModelProxy")).value<PeerListProxyModel*>() : nullptr; }
     BanListModel* banListModel() const { return m_context ? m_context->contextProperty(QStringLiteral("banListModel")).value<BanListModel*>() : nullptr; }
     DebugLogModel* debugLogModel() const { return m_context ? m_context->contextProperty(QStringLiteral("debugLogModel")).value<DebugLogModel*>() : nullptr; }
     RpcConsoleModel* rpcConsoleModel() const { return m_context ? m_context->contextProperty(QStringLiteral("rpcConsoleModel")).value<RpcConsoleModel*>() : nullptr; }
 #ifdef ENABLE_WALLET
     SignerDiscoveryModel* signers() const { const auto* controller = walletController(); return controller ? controller->creation()->signers() : nullptr; }
-    WalletQmlController* walletController() const { return m_context ? m_context->contextProperty(QStringLiteral("walletController")).value<WalletQmlController*>() : nullptr; }
+    WalletController* walletController() const { return m_context ? m_context->contextProperty(QStringLiteral("walletController")).value<WalletController*>() : nullptr; }
 #else
     QObject* walletController() const { return nullptr; }
     QObject* signers() const { return nullptr; }

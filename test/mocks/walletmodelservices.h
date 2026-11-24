@@ -6,12 +6,12 @@
 #define BITCOIN_QML_TEST_MOCKS_WALLETMODELSERVICES_H
 
 #include <qml/executor.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
-inline WalletQmlModel::SharedWallet WalletWithQueues(walletopening::Source source, execution::Executor& executor,
+inline WalletModel::SharedWallet WalletWithQueues(walletopening::Source source, execution::Executor& executor,
                                         walletopening::Session::Preferences preferences = {}, QString name = {})
 {
-    WalletQmlModel::SharedWallet wallet{std::move(source), std::move(name), std::move(preferences)};
+    WalletModel::SharedWallet wallet{std::move(source), std::move(name), std::move(preferences)};
     wallet.services.core = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core));
     wallet.services.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
     wallet.services.cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));

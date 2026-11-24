@@ -5,7 +5,7 @@
 #include <qml/walletnamescontroller.h>
 
 #include <qml/executor.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/walletidentity.h>
 
 #include <interfaces/node.h>
@@ -129,12 +129,12 @@ void WalletNamesController::applyAliases(quint64 generation)
     QMetaObject::invokeMethod(this, [guard, generation] { if (guard) guard->applyAliases(generation); }, Qt::QueuedConnection);
 }
 
-void WalletNamesController::apply(WalletQmlModel* wallet) const
+void WalletNamesController::apply(WalletModel* wallet) const
 {
     if (wallet) wallet->setDisplayName(displayName(wallet->name()));
 }
 
-bool WalletNamesController::openLocation(WalletQmlModel* wallet)
+bool WalletNamesController::openLocation(WalletModel* wallet)
 {
     if (m_closed || m_location_pending) return false;
     if (!wallet || wallet == m_services.empty_wallet) {

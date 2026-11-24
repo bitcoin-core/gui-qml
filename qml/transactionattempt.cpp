@@ -147,12 +147,12 @@ bool Preparation::candidateCurrent(ReviewId review) const
         m_candidate_revision == m_intent_revision && m_candidate_review == review;
 }
 
-Owner::Owner(std::shared_ptr<execution::SerialQueue> utility)
+Store::Store(std::shared_ptr<execution::SerialQueue> utility)
     : m_utility(std::move(utility))
 {
 }
 
-Snapshot Owner::project(State& state)
+Snapshot Store::project(State& state)
 {
     Snapshot result;
     result.kind = state.kind;
@@ -169,7 +169,7 @@ Snapshot Owner::project(State& state)
     return result;
 }
 
-execution::SubmitResult Owner::submit(Mutation mutation, Completion done) const
+execution::SubmitResult Store::submit(Mutation mutation, Completion done) const
 {
     if (!done) done = [](Result) {};
     auto work = [state = m_state, mutation = std::move(mutation)] {
@@ -187,7 +187,7 @@ execution::SubmitResult Owner::submit(Mutation mutation, Completion done) const
     return {{}, accepted ? execution::Rejection::None : execution::Rejection::Transport};
 }
 
-execution::SubmitResult Owner::begin(StartInput input, Completion done)
+execution::SubmitResult Store::begin(StartInput input, Completion done)
 {
     return submit(
         [input = std::move(input)](State& state) mutable {
@@ -219,7 +219,7 @@ execution::SubmitResult Owner::begin(StartInput input, Completion done)
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::beginReplacement(ReplacementStart input, Completion done)
+execution::SubmitResult Store::beginReplacement(ReplacementStart input, Completion done)
 {
     return submit(
         [input = std::move(input)](State& state) mutable {
@@ -247,7 +247,7 @@ execution::SubmitResult Owner::beginReplacement(ReplacementStart input, Completi
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::intentChanged(std::uint64_t revision, Completion done)
+execution::SubmitResult Store::intentChanged(std::uint64_t revision, Completion done)
 {
     return submit(
         [revision](State& state) {
@@ -256,7 +256,7 @@ execution::SubmitResult Owner::intentChanged(std::uint64_t revision, Completion 
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::reviewReplaced(ReviewId current_review, Completion done)
+execution::SubmitResult Store::reviewReplaced(ReviewId current_review, Completion done)
 {
     return submit(
         [current_review](State& state) {
@@ -267,7 +267,7 @@ execution::SubmitResult Owner::reviewReplaced(ReviewId current_review, Completio
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::assess(Ticket ticket, CurrentFacts facts, Completion done)
+execution::SubmitResult Store::assess(Ticket ticket, CurrentFacts facts, Completion done)
 {
     return submit(
         [ticket = std::move(ticket), facts = std::move(facts)](State& state) mutable {
@@ -278,7 +278,7 @@ execution::SubmitResult Owner::assess(Ticket ticket, CurrentFacts facts, Complet
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::install(Ticket ticket, CurrentFacts facts,
+execution::SubmitResult Store::install(Ticket ticket, CurrentFacts facts,
                                     std::shared_ptr<const walletreview::Snapshot> candidate,
                                     ReviewId installed_review, Completion done)
 {
@@ -293,7 +293,7 @@ execution::SubmitResult Owner::install(Ticket ticket, CurrentFacts facts,
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::resolve(Ticket ticket, CurrentFacts facts, walletprepare::Error outcome,
+execution::SubmitResult Store::resolve(Ticket ticket, CurrentFacts facts, walletprepare::Error outcome,
                                     std::shared_ptr<const walletreview::Snapshot> candidate,
                                     ReviewId installed_review, Completion done)
 {
@@ -315,7 +315,7 @@ execution::SubmitResult Owner::resolve(Ticket ticket, CurrentFacts facts, wallet
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::fail(Ticket ticket, CurrentFacts facts, Phase outcome, Completion done)
+execution::SubmitResult Store::fail(Ticket ticket, CurrentFacts facts, Phase outcome, Completion done)
 {
     return submit(
         [ticket = std::move(ticket), facts = std::move(facts), outcome](State& state) mutable {
@@ -326,7 +326,7 @@ execution::SubmitResult Owner::fail(Ticket ticket, CurrentFacts facts, Phase out
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::reject(Ticket ticket, Phase outcome, Completion done)
+execution::SubmitResult Store::reject(Ticket ticket, Phase outcome, Completion done)
 {
     return submit(
         [ticket = std::move(ticket), outcome](State& state) mutable {
@@ -334,7 +334,7 @@ execution::SubmitResult Owner::reject(Ticket ticket, Phase outcome, Completion d
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::discard(Ticket ticket, Phase outcome, Completion done)
+execution::SubmitResult Store::discard(Ticket ticket, Phase outcome, Completion done)
 {
     return submit(
         [ticket = std::move(ticket), outcome](State& state) {
@@ -342,7 +342,7 @@ execution::SubmitResult Owner::discard(Ticket ticket, Phase outcome, Completion 
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::advance(Ticket ticket, CurrentFacts facts, Phase expected, Phase outcome, Completion done)
+execution::SubmitResult Store::advance(Ticket ticket, CurrentFacts facts, Phase expected, Phase outcome, Completion done)
 {
     return submit(
         [ticket = std::move(ticket), facts = std::move(facts), expected, outcome](State& state) mutable {
@@ -352,7 +352,7 @@ execution::SubmitResult Owner::advance(Ticket ticket, CurrentFacts facts, Phase 
         }, std::move(done));
 }
 
-execution::SubmitResult Owner::close(Completion done)
+execution::SubmitResult Store::close(Completion done)
 {
     return submit(
         [](State& state) { state.facts.session_open = false; state.preparation.close(); return Result{Transition::Accepted}; }, std::move(done));

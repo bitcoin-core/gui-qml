@@ -36,7 +36,7 @@ Q_SIGNALS:
 };
 
 /** The send draft that imports apply to: one wallet and its current
- * recipient. Implemented for WalletQmlModel in the app and for the wallet
+ * recipient. Implemented for WalletModel in the app and for the wallet
  * fixture in QML tests. */
 class ImportTarget : public QObject
 {

@@ -53,12 +53,12 @@ QString RestoreName(const QString& source, Format hint);
 Facts Inspect(interfaces::Node& node, const Request& request, const QString& captured_target, bool copied);
 walletcreation::Frame FailureFrame(Failure reason, const QString& error, const QString& target, bool effect);
 
-class Owner final : public walletcreation::OperationOwner, public std::enable_shared_from_this<Owner> {
+class Service final : public walletcreation::OperationService, public std::enable_shared_from_this<Service> {
 public:
     using Notify = std::function<void()>;
-    static std::shared_ptr<Owner> Make(walletcreation::Services services, Request request, Notify notify,
+    static std::shared_ptr<Service> Make(walletcreation::Services services, Request request, Notify notify,
         std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation);
-    ~Owner() override;
+    ~Service() override;
     void start() override;
     void cancel() override;
     void detach() override;
@@ -82,7 +82,7 @@ public:
     void answer(QString command_id, QString expected_prompt, std::shared_ptr<walletpublication::Release> release,
         std::shared_ptr<walletpublication::NativeObservation> observation, secretinput::Captured secret) override;
 private:
-    Owner(walletcreation::Services services, Request request, Notify notify,
+    Service(walletcreation::Services services, Request request, Notify notify,
         std::shared_ptr<walletpublication::Release> release, std::shared_ptr<walletpublication::NativeObservation> observation, secretinput::Captured secret);
     void inspect();
     void inspected();
@@ -109,7 +109,7 @@ private:
     std::shared_ptr<walletpublication::Release> m_release;
     std::shared_ptr<walletpublication::NativeObservation> m_observation;
     std::array<std::shared_ptr<walletcreation::Backend>, 3> m_backends;
-    std::shared_ptr<Owner> m_keep_alive;
+    std::shared_ptr<Service> m_keep_alive;
     std::shared_ptr<execution::OwnedCommand<Facts>> m_inspect;
     std::shared_ptr<execution::OwnedCommand<NativeResult>> m_effect;
     std::atomic_bool m_cancelled{false}, m_detached{false};

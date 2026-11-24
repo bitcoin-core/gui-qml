@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-class WalletQmlModel;
+class WalletModel;
 namespace interfaces { class Wallet; }
 
 namespace walletpublication {
@@ -99,7 +99,7 @@ struct CatalogReservation {
 };
 enum class Availability { Available, Closed, Unavailable };
 struct Result {
-    QPointer<WalletQmlModel> wallet;
+    QPointer<WalletModel> wallet;
     Availability availability{Availability::Unavailable};
     QString error;
 };
@@ -114,7 +114,7 @@ public:
     virtual Result publishWithLifetime(const std::shared_ptr<CatalogReservation>& ticket,
         TakeWallet take, const QString& id, walletopening::NativeEvents observation, std::shared_ptr<Release>) { return publishCreation(ticket, std::move(take), id, std::move(observation)); }
     virtual void finishCreation(const std::shared_ptr<CatalogReservation>& ticket) = 0;
-    virtual bool containsExact(WalletQmlModel* wallet) const = 0;
+    virtual bool containsExact(WalletModel* wallet) const = 0;
 };
 } // namespace walletpublication
 #endif // BITCOIN_QML_WALLETPUBLICATION_H

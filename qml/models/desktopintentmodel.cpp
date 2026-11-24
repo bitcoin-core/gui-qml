@@ -31,7 +31,7 @@ DesktopIntentModel::DesktopIntentModel(execution::Executor& executor, presentati
     ports.wake = [post, timer](auto delay, auto callback) {
         post([timer, delay, callback = std::move(callback)] { QTimer::singleShot(delay, timer.get(), callback); });
     };
-    m_owner = desktopintent::Owner::Create(std::move(ports), [observer, post](auto snapshot) {
+    m_service = desktopintent::Service::Create(std::move(ports), [observer, post](auto snapshot) {
         post([observer, snapshot = std::move(snapshot)]() mutable { if (observer) observer->project(std::move(snapshot)); });
     }, m_queue);
 }
@@ -89,7 +89,7 @@ void DesktopIntentModel::installFileOpenHandler()
 bool DesktopIntentModel::eventFilter(QObject*, QEvent* event)
 {
     if (event->type() != QEvent::FileOpen) return false;
-    if (m_closed || !m_owner || m_file_sequence == std::numeric_limits<uint64_t>::max()) return true;
+    if (m_closed || !m_service || m_file_sequence == std::numeric_limits<uint64_t>::max()) return true;
     const auto& open = *static_cast<QFileOpenEvent*>(event);
     // Copy the native event payload only. Path validation and all file reads
     // belong to the Source worker; no QFileInfo/QDir/filesystem calls here.
@@ -104,7 +104,7 @@ bool DesktopIntentModel::eventFilter(QObject*, QEvent* event)
     }
     const QPointer<DesktopIntentModel> self{this};
     m_ingress_error.clear();
-    const auto admitted = m_owner->admit({std::move(input)}, {});
+    const auto admitted = m_service->admit({std::move(input)}, {});
     if (!admitted && self && !self->m_closed) {
         self->m_ingress_error = tr("The request could not be opened. Try opening it again.");
         Q_EMIT self->changed();
@@ -122,7 +122,7 @@ void DesktopIntentModel::setWalletEnabled(bool enabled)
 QString DesktopIntentModel::error() const
 {
     if (m_closed) return {};
-    if (!m_owner) return tr("Desktop request services are unavailable.");
+    if (!m_service) return tr("Desktop request services are unavailable.");
     if (!m_ingress_error.isEmpty()) return m_ingress_error;
     if (!m_wallet_enabled && m_snapshot.pending) return tr("Wallet support is unavailable. The request remains unapplied.");
     switch (m_snapshot.error) {
@@ -147,14 +147,14 @@ void DesktopIntentModel::project(desktopintent::Snapshot snapshot)
 void DesktopIntentModel::setReady(bool ready)
 {
     m_ready = ready && !m_closed;
-    if (m_owner && m_readiness < std::numeric_limits<uint64_t>::max())
-        m_owner->readiness(++m_readiness, m_ready && static_cast<bool>(m_sink));
+    if (m_service && m_readiness < std::numeric_limits<uint64_t>::max())
+        m_service->readiness(++m_readiness, m_ready && static_cast<bool>(m_sink));
 }
 void DesktopIntentModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     m_closed_gate->store(true);
-    if (const auto owner = std::exchange(m_owner, {})) owner->stop();
+    if (const auto owner = std::exchange(m_service, {})) owner->stop();
 #ifdef ENABLE_WALLET
     if (m_inspection) m_inspection->close();
 #endif
@@ -165,17 +165,17 @@ void DesktopIntentModel::whenDrained(std::function<void()> done)
 }
 void DesktopIntentModel::inspectNext()
 {
-    if (!canInspect() || !m_owner) return;
+    if (!canInspect() || !m_service) return;
     setReady(m_ready); // Explicit retry after a known refusal; Unknown cannot enter this path.
-    m_owner->review(m_sink);
+    m_service->review(m_sink);
 }
 void DesktopIntentModel::dismiss()
 {
-    if (!canDismiss() || !m_owner) return;
+    if (!canDismiss() || !m_service) return;
     m_ingress_error.clear();
-    m_owner->dismiss();
+    m_service->dismiss();
 }
-void DesktopIntentModel::reconcile() { if (canReconcile() && m_owner) m_owner->reconcile(); }
+void DesktopIntentModel::reconcile() { if (canReconcile() && m_service) m_service->reconcile(); }
 
 #ifdef ENABLE_WALLET
 namespace {
@@ -211,7 +211,7 @@ void DesktopIntentModel::setFactory(BitcoinUriModel* factory)
         const auto parent = gate->load();
         return !closed->load() && (!parent || !parent->load());
     };
-    const auto weak_owner = std::weak_ptr<desktopintent::Owner>{m_owner};
+    const auto weak_owner = std::weak_ptr<desktopintent::Service>{m_service};
     auto sink = std::make_shared<desktopintent::Sink>(); sink->identity = 1;
     sink->inspect = [self, original, records, post, available, weak_owner](auto delivery, auto done) {
         std::shared_ptr<Creation> creation;
@@ -277,7 +277,7 @@ void DesktopIntentModel::setFactory(BitcoinUriModel* factory)
         post([creation] { if (creation->operation) creation->operation->cancel(); });
     };
     m_sink = std::move(sink);
-    if (m_owner) m_owner->registerReceiver(m_sink);
+    if (m_service) m_service->registerReceiver(m_sink);
     setReady(m_ready);
 }
 PaymentImportOperation* DesktopIntentModel::takeInspection(QObject* receiver)
@@ -285,7 +285,7 @@ PaymentImportOperation* DesktopIntentModel::takeInspection(QObject* receiver)
     if (m_closed || !receiver || !m_inspection) return nullptr;
     const QPointer<DesktopIntentModel> self{this};
     const QPointer<PaymentImportOperation> operation{m_inspection};
-    const auto key = std::exchange(m_inspection_ticket, {}); const auto owner = m_owner;
+    const auto key = std::exchange(m_inspection_ticket, {}); const auto owner = m_service;
     m_inspection = nullptr;
     QObject::disconnect(operation, nullptr, this, nullptr);
     operation->setParent(receiver);
@@ -297,7 +297,7 @@ void DesktopIntentModel::closeInspection()
 {
     const QPointer<DesktopIntentModel> self{this};
     const QPointer<PaymentImportOperation> operation{m_inspection};
-    const auto key = std::exchange(m_inspection_ticket, {}); const auto owner = m_owner;
+    const auto key = std::exchange(m_inspection_ticket, {}); const auto owner = m_service;
     m_inspection = nullptr;
     if (operation) QObject::disconnect(operation, nullptr, this, nullptr);
     if (operation) { operation->cancel(); if (operation) operation->deleteLater(); }

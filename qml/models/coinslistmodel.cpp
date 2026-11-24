@@ -4,7 +4,7 @@
 #include <qml/models/coinslistmodel.h>
 #include <qml/guipresentation.h>
 #include <qml/bitcoinamount.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/retainedvalue.h>
 #include <key_io.h>
 #include <script/solver.h>
@@ -501,12 +501,12 @@ struct CoinsListModel::Retired {
     std::shared_ptr<execution::OwnedCommand<SelectionResult>> last_selection;
 };
 
-CoinsListModel::CoinsListModel(WalletQmlModel* parent) : QAbstractListModel(parent), m_wallet_model(parent)
+CoinsListModel::CoinsListModel(WalletModel* parent) : QAbstractListModel(parent), m_wallet_model(parent)
 {
     if (parent) {
-        connect(parent, &WalletQmlModel::transactionChanged, this, &CoinsListModel::update);
-        connect(parent, &WalletQmlModel::addressListChanged, this, &CoinsListModel::update);
-        connect(parent, &WalletQmlModel::walletContentsChanged, this, &CoinsListModel::update);
+        connect(parent, &WalletModel::transactionChanged, this, &CoinsListModel::update);
+        connect(parent, &WalletModel::addressListChanged, this, &CoinsListModel::update);
+        connect(parent, &WalletModel::walletContentsChanged, this, &CoinsListModel::update);
     }
 }
 CoinsListModel::~CoinsListModel() { close(); retireValues(); }

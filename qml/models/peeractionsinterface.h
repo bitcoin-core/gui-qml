@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_PEERCOMMANDTARGET_H
-#define BITCOIN_QML_MODELS_PEERCOMMANDTARGET_H
+#ifndef BITCOIN_QML_MODELS_PEERACTIONSINTERFACE_H
+#define BITCOIN_QML_MODELS_PEERACTIONSINTERFACE_H
 
 #include <qml/models/peercommandoperation.h>
 
@@ -12,7 +12,7 @@
 /** What a PeerCommandController needs from a peer: whether it can be
  * disconnected or banned, and the commands that do. PeerDetailsModel
  * implements it; QML tests use a fake. */
-class PeerCommandTarget : public QObject
+class PeerActionsInterface : public QObject
 {
     Q_OBJECT
 public:
@@ -25,4 +25,4 @@ public:
     virtual PeerCommandOperation* prepareBan(PeerCommandOperation::BanDuration duration) = 0;
 };
 
-#endif // BITCOIN_QML_MODELS_PEERCOMMANDTARGET_H
+#endif // BITCOIN_QML_MODELS_PEERACTIONSINTERFACE_H

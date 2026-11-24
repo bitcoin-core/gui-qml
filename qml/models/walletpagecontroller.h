@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_WALLETPAGECONTROLLER_H
 #define BITCOIN_QML_MODELS_WALLETPAGECONTROLLER_H
 
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 
 #include <QMetaObject>
 #include <QObject>
@@ -43,8 +43,8 @@ protected:
     //! different wallet is a page bug: the controller warns, rejects it,
     //! stops and stays disabled until its page is recreated, so a delayed
     //! callback for the first wallet cannot start work on either.
-    bool bindWallet(WalletInterface* wallet);
-    WalletInterface* boundWallet() const { return m_disabled ? nullptr : m_wallet.data(); }
+    bool bindWallet(WalletAvailabilityInterface* wallet);
+    WalletAvailabilityInterface* boundWallet() const { return m_disabled ? nullptr : m_wallet.data(); }
     //! Ends prompts and work that has not been admitted; keeps admitted
     //! outcomes. Called when `available` turns false. A subclass calls it
     //! from its own destructor too.
@@ -53,7 +53,7 @@ protected:
 private:
     void update();
 
-    QPointer<WalletInterface> m_wallet;
+    QPointer<WalletAvailabilityInterface> m_wallet;
     QMetaObject::Connection m_wallet_available;
     bool m_active{false};
     bool m_available{false};

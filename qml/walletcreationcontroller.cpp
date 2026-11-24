@@ -4,7 +4,7 @@
 
 #include <qml/walletcreationcontroller.h>
 
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/secretinput.h>
 #include <qml/walletregistry.h>
 

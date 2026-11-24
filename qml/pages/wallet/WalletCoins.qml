@@ -9,7 +9,7 @@ import "../../components"
 Page {
     id: root
     objectName: "walletCoinsPage"
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property real contentHorizontalPadding: Theme.space.pagePadding(width)
     readonly property real maximumContentWidth: 840
     signal back()

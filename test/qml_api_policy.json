@@ -78,7 +78,7 @@
       },
       "required": {
         "source": {
-          "type": "PeerListSortProxy*",
+          "type": "PeerListProxyModel*",
           "constant": false
         },
         "autoSelectFirst": {
@@ -105,7 +105,7 @@
       "requires_wallet": false
     },
     "ReceiveAuthorizationPrompt": {
-      "header": "qml/models/receivereservationmodel.h",
+      "header": "qml/models/addressreservationmodel.h",
       "writable": {},
       "required": {
         "active": {
@@ -119,8 +119,8 @@
       },
       "requires_wallet": true
     },
-    "ReceiveReservationModel": {
-      "header": "qml/models/receivereservationmodel.h",
+    "AddressReservationModel": {
+      "header": "qml/models/addressreservationmodel.h",
       "writable": {},
       "required": {
         "phase": {
@@ -305,7 +305,7 @@
           "constant": false
         },
         "resultWallet": {
-          "type": "WalletQmlModel*",
+          "type": "WalletModel*",
           "constant": false
         },
         "canOpenResult": {
@@ -359,7 +359,7 @@
           "constant": false
         },
         "reservation": {
-          "type": "ReceiveReservationModel*",
+          "type": "AddressReservationModel*",
           "constant": true
         },
         "available": {
@@ -374,7 +374,7 @@
       "writable": {},
       "required": {
         "selectedWallet": {
-          "type": "WalletQmlModel*",
+          "type": "WalletModel*",
           "constant": false
         },
         "pending": {

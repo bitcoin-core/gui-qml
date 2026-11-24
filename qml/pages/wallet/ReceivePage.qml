@@ -10,7 +10,7 @@ import "../../controls"
 
 Page {
     id: root
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     property bool walletViewActive: true
     readonly property WalletReceiveModel receive: wallet ? wallet.receive : null
     // Without a loaded wallet there is nothing to receive into.
@@ -82,7 +82,7 @@ Page {
             NeutralButton {
                 objectName: "receiveRetryAddressButton"
                 text: qsTr("Retry address")
-                visible: root.receive !== null && (root.receive.reservation.phase === ReceiveReservationModel.Failed || root.receive.reservation.phase === ReceiveReservationModel.Cancelled)
+                visible: root.receive !== null && (root.receive.reservation.phase === AddressReservationModel.Failed || root.receive.reservation.phase === AddressReservationModel.Cancelled)
                 onClicked: root.receive.reservation.retry()
             }
             ReceiveRequestEditorCard {

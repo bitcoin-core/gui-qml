@@ -23,7 +23,7 @@ OnboardingView {
     secondaryButtonText: qsTr("Done")
     secondaryButtonObjectName: "walletCreationOutcomeDoneButton"
     signal done()
-    signal openRequested(WalletQmlModel wallet)
+    signal openRequested(WalletModel wallet)
     onPrimaryClicked: operation.reconcile()
     onSecondaryClicked: root.done()
     childView: ColumnLayout {
@@ -45,7 +45,7 @@ OnboardingView {
                 id: resultWalletsRepeater
                 model: root.operation.resultWallets
                 delegate: TextButton {
-                    required property WalletQmlModel modelData
+                    required property WalletModel modelData
                     width: resultWalletsColumn.width
                     text: qsTr("Open %1").arg(modelData.displayName)
                     visible: modelData !== root.operation.resultWallet

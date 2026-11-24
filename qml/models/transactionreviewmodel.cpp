@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/walletqmlmodeltransaction.h>
-#include <qml/reviewowner.h>
+#include <qml/models/transactionreviewmodel.h>
+#include <qml/reviewregistry.h>
 
 #include <qml/bitcoinunits.h>
 #include <qml/retainedvalue.h>
@@ -27,11 +27,11 @@ std::shared_ptr<const walletreview::Snapshot> RetainReview(const walletreview::S
 }
 } // namespace
 
-WalletQmlModelTransaction::WalletQmlModelTransaction(const walletreview::Snapshot& snapshot,
+TransactionReviewModel::TransactionReviewModel(const walletreview::Snapshot& snapshot,
     std::shared_ptr<walletopening::Session> opening, std::function<void(std::function<void()>)> post, QObject* parent)
-    : WalletQmlModelTransaction(prepareConstruction(snapshot, std::move(opening), std::move(post), parent)) {}
+    : TransactionReviewModel(prepareConstruction(snapshot, std::move(opening), std::move(post), parent)) {}
 
-WalletQmlModelTransaction::ConstructionInput WalletQmlModelTransaction::prepareConstruction(
+TransactionReviewModel::ConstructionInput TransactionReviewModel::prepareConstruction(
     const walletreview::Snapshot& snapshot, std::shared_ptr<walletopening::Session> opening,
     std::function<void(std::function<void()>)> post, QObject* parent)
 {
@@ -41,10 +41,10 @@ WalletQmlModelTransaction::ConstructionInput WalletQmlModelTransaction::prepareC
     return input;
 }
 
-WalletQmlModelTransaction::WalletQmlModelTransaction(ConstructionInput input)
-    : WalletQmlModelTransaction(std::move(input.snapshot), std::move(input.opening), std::move(input.post), input.parent.data()) {}
+TransactionReviewModel::TransactionReviewModel(ConstructionInput input)
+    : TransactionReviewModel(std::move(input.snapshot), std::move(input.opening), std::move(input.post), input.parent.data()) {}
 
-WalletQmlModelTransaction::WalletQmlModelTransaction(std::shared_ptr<const walletreview::Snapshot> retained,
+TransactionReviewModel::TransactionReviewModel(std::shared_ptr<const walletreview::Snapshot> retained,
     std::shared_ptr<walletopening::Session> opening, std::function<void(std::function<void()>)> post, QObject* parent)
     : QObject(parent), m_review_lifetime(std::move(retained)),
       m_recipient_labels(m_review_lifetime->notes), m_reviewed_recipients(m_review_lifetime->recipients),
@@ -70,10 +70,10 @@ WalletQmlModelTransaction::WalletQmlModelTransaction(std::shared_ptr<const walle
     m_amount_amount->setSatoshi(m_amount);
     m_fee_amount->setSatoshi(m_fee);
     m_total_amount->setSatoshi(m_amount + m_fee);
-    if (auto* owner = qobject_cast<ReviewOwner*>(parent)) owner->registerReview(this);
+    if (auto* owner = qobject_cast<ReviewRegistry*>(parent)) owner->registerReview(this);
 }
 
-WalletQmlModelTransaction::WalletQmlModelTransaction(const WalletQmlModelTransaction& reviewed, CAmount authenticated_fee, QObject* parent)
+TransactionReviewModel::TransactionReviewModel(const TransactionReviewModel& reviewed, CAmount authenticated_fee, QObject* parent)
     : QObject(parent),
       m_review_lifetime(reviewed.m_review_lifetime),
       m_presentation_lifetime(reviewed.m_presentation_lifetime),
@@ -117,10 +117,10 @@ WalletQmlModelTransaction::WalletQmlModelTransaction(const WalletQmlModelTransac
     m_fee_amount->setSatoshi(m_fee);
     m_total_amount->setUnit(unit);
     m_total_amount->setSatoshi(m_amount + m_fee);
-    if (auto* owner = qobject_cast<ReviewOwner*>(parent)) owner->registerReview(this);
+    if (auto* owner = qobject_cast<ReviewRegistry*>(parent)) owner->registerReview(this);
     if (m_requested_display_unit != m_display_unit) {
         m_presentation_pending = true;
-        const QPointer<WalletQmlModelTransaction> observer{this};
+        const QPointer<TransactionReviewModel> observer{this};
         const auto revision = m_presentation_revision;
         const auto unit = m_requested_display_unit;
         presentation::QueuedPost()([observer, revision, unit] {
@@ -130,61 +130,61 @@ WalletQmlModelTransaction::WalletQmlModelTransaction(const WalletQmlModelTransac
     }
 }
 
-void WalletQmlModelTransaction::setNodePolicyStatus(QString status, bool blocked)
+void TransactionReviewModel::setNodePolicyStatus(QString status, bool blocked)
 {
     if (m_node_policy_status == status && m_node_policy_blocked == blocked) return;
     m_node_policy_status = std::move(status); m_node_policy_blocked = blocked;
     Q_EMIT nodePolicyChanged();
 }
 
-BitcoinAmount* WalletQmlModelTransaction::amountAmount() const
+BitcoinAmount* TransactionReviewModel::amountAmount() const
 {
     return m_amount_amount;
 }
 
-QString WalletQmlModelTransaction::formatWithUnit(CAmount value, int display_unit)
+QString TransactionReviewModel::formatWithUnit(CAmount value, int display_unit)
 {
     const QmlBitcoinUnits::Unit unit = QmlBitcoinUnits::fromDisplayUnit(display_unit);
     return QmlBitcoinUnits::formatForDisplay(unit, value) + QLatin1Char(' ')
         + QmlBitcoinUnits::label(unit, value);
 }
 
-QString WalletQmlModelTransaction::amount() const
+QString TransactionReviewModel::amount() const
 {
     return formatWithUnit(m_amount, m_display_unit);
 }
 
-BitcoinAmount* WalletQmlModelTransaction::feeAmount() const
+BitcoinAmount* TransactionReviewModel::feeAmount() const
 {
     return m_fee_amount;
 }
 
-BitcoinAmount* WalletQmlModelTransaction::totalAmount() const
+BitcoinAmount* TransactionReviewModel::totalAmount() const
 {
     return m_total_amount;
 }
 
-QString WalletQmlModelTransaction::fee() const
+QString TransactionReviewModel::fee() const
 {
     return m_fee_known ? formatWithUnit(m_fee, m_display_unit) : tr("Unknown");
 }
 
-QString WalletQmlModelTransaction::total() const
+QString TransactionReviewModel::total() const
 {
     return m_fee_known ? formatWithUnit(m_amount + m_fee, m_display_unit) : tr("Unknown");
 }
 
-QString WalletQmlModelTransaction::label() const
+QString TransactionReviewModel::label() const
 {
     return m_label;
 }
 
-QString WalletQmlModelTransaction::txid() const
+QString TransactionReviewModel::txid() const
 {
     return m_txid;
 }
 
-void WalletQmlModelTransaction::close()
+void TransactionReviewModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     // Quietly drop aliases before releasing their reserved cleanup owners.
@@ -200,23 +200,23 @@ void WalletQmlModelTransaction::close()
     m_review_lifetime.reset();
 }
 
-QVariantList WalletQmlModelTransaction::reviewedRecipients() const
+QVariantList TransactionReviewModel::reviewedRecipients() const
 {
     return m_reviewed_presentation;
 }
 
-bool WalletQmlModelTransaction::isReviewedRecipient(const QString& address) const
+bool TransactionReviewModel::isReviewedRecipient(const QString& address) const
 {
     return m_reviewed_addresses.contains(address);
 }
 
-void WalletQmlModelTransaction::setReviewFeeDetails(int target_blocks, const QString& fee_rate)
+void TransactionReviewModel::setReviewFeeDetails(int target_blocks, const QString& fee_rate)
 {
     m_review_target_blocks = target_blocks;
     m_review_fee_rate = fee_rate;
 }
 
-void WalletQmlModelTransaction::setDisplayUnit(int unit)
+void TransactionReviewModel::setDisplayUnit(int unit)
 {
     if (m_closed || (m_opening && !m_opening->observationOpen())) return;
     if (unit == m_requested_display_unit && m_presentation_error.isEmpty()) return;
@@ -224,7 +224,7 @@ void WalletQmlModelTransaction::setDisplayUnit(int unit)
     refreshRecipientPresentation();
 }
 
-void WalletQmlModelTransaction::refreshRecipientPresentation()
+void TransactionReviewModel::refreshRecipientPresentation()
 {
     if (m_closed || (m_opening && !m_opening->observationOpen())) return;
     if (!m_opening || !m_post) {
@@ -234,7 +234,7 @@ void WalletQmlModelTransaction::refreshRecipientPresentation()
         return;
     }
     const auto revision = ++m_presentation_revision;
-    const QPointer<WalletQmlModelTransaction> observer{this};
+    const QPointer<TransactionReviewModel> observer{this};
     const int unit = m_requested_display_unit;
     const auto opening = m_opening;
     const auto original = m_review_lifetime;
@@ -293,12 +293,12 @@ void WalletQmlModelTransaction::refreshRecipientPresentation()
     Q_EMIT presentationChanged();
 }
 
-CTransactionRef& WalletQmlModelTransaction::getWtx()
+CTransactionRef& TransactionReviewModel::getWtx()
 {
     return m_wtx;
 }
 
-void WalletQmlModelTransaction::setWtx(const CTransactionRef& newTx)
+void TransactionReviewModel::setWtx(const CTransactionRef& newTx)
 {
     const QString old_txid{txid()};
     m_wtx = newTx;
@@ -308,17 +308,17 @@ void WalletQmlModelTransaction::setWtx(const CTransactionRef& newTx)
     }
 }
 
-CAmount WalletQmlModelTransaction::getTransactionFee() const
+CAmount TransactionReviewModel::getTransactionFee() const
 {
     return m_fee;
 }
 
-CAmount WalletQmlModelTransaction::getTotalTransactionAmount() const
+CAmount TransactionReviewModel::getTotalTransactionAmount() const
 {
     return m_amount + m_fee;
 }
 
-void WalletQmlModelTransaction::setTransactionFee(const CAmount& newFee)
+void TransactionReviewModel::setTransactionFee(const CAmount& newFee)
 {
     if (!m_fee_known || m_fee != newFee) {
         m_fee_known = true;

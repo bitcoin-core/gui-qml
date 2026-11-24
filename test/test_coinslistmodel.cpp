@@ -6,7 +6,7 @@
 #include <test/mocks/manualstartupexecution.h>
 #include <test/mocks/walletsession.h>
 #include <test/qt_test_registry.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <key_io.h>
 #include <util/string.h>
 #include <addresstype.h>
@@ -905,7 +905,7 @@ private Q_SLOTS:
         auto wallet = std::make_unique<CoinWallet>();
         auto* source = wallet.get();
         wallet->add(0, 1000, 1700000000, 1, "First");
-        WalletQmlModel model{std::move(wallet)};
+        WalletModel model{std::move(wallet)};
         auto* coins = model.coinsListModel();
         QTRY_COMPARE(coins->coinCount(), 1);
         const auto id = coins->data(coins->index(0), CoinsListModel::CoinIdRole).toString();
@@ -945,7 +945,7 @@ private Q_SLOTS:
         auto* source = wallet.get();
         wallet->add(0, 1000, 1700000000, 1, "First");
         wallet->add(1, 2000, 1700000010, 2, "Second");
-        WalletQmlModel model{std::move(wallet)};
+        WalletModel model{std::move(wallet)};
         auto* coins = model.coinsListModel();
         QTRY_COMPARE(coins->coinCount(), 2);
         coins->setSortBy("amount");
@@ -984,7 +984,7 @@ private Q_SLOTS:
         auto wallet = std::make_unique<CoinWallet>();
         wallet->add(0, 1000, 1700000000, 1, "Rent");
         wallet->add(1, 2000, 1700000010, 2, "Savings");
-        WalletQmlModel model{std::move(wallet)};
+        WalletModel model{std::move(wallet)};
         auto* coins = model.coinsListModel();
         QTRY_COMPARE(coins->coinCount(), 2);
         coins->setSortDescending(false);
@@ -1022,7 +1022,7 @@ private Q_SLOTS:
         wallet->add(0, 3000, 1700000000, 1, "Zulu");
         wallet->add(1, 1000, 1700000010, 1, "Zulu");
         wallet->add(2, 2000, 1700000020, 2, "Alpha");
-        WalletQmlModel model{std::move(wallet)};
+        WalletModel model{std::move(wallet)};
         auto* coins = model.coinsListModel();
         QTRY_COMPARE(coins->coinCount(), 3);
         coins->setGroupBy("date");

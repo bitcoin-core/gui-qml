@@ -16,7 +16,7 @@ SettingsNavigationController::~SettingsNavigationController()
     }
 }
 
-void SettingsNavigationController::setSource(SettingsEditorSource* source)
+void SettingsNavigationController::setSource(SettingsEditorFactoryInterface* source)
 {
     if (m_source == source) return;
     m_source = source;

@@ -15,7 +15,7 @@ PageStack {
     objectName: "sendPage"
     vertical: true
 
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     property SendRecipient recipient: wallet ? wallet.recipients.current : null
     // A preparation failure, until the draft changes or the page dismisses it.
     readonly property string prepareTransactionErrorText: draftController.preparationState === PreparationOperation.Stale
@@ -250,14 +250,14 @@ PageStack {
 
         function handlePsbtImportResult(result) {
             sendOptionsPopup.close()
-            if (result === WalletQmlModel.WalletCanSign) {
+            if (result === WalletModel.WalletCanSign) {
                 root.openTransactionReview()
-            } else if (result === WalletQmlModel.WalletCannotSign || result === WalletQmlModel.ReviewPending) {
+            } else if (result === WalletModel.WalletCannotSign || result === WalletModel.ReviewPending) {
                 root.openTransactionReview()
-            } else if (result === WalletQmlModel.TransactionAlreadyKnown) {
+            } else if (result === WalletModel.TransactionAlreadyKnown) {
                 knownPsbtTxPopup.txid = root.wallet.importedPsbt.matchedTxid
                 knownPsbtTxPopup.open()
-            } else if (result === WalletQmlModel.PsbtUnsupported) {
+            } else if (result === WalletModel.PsbtUnsupported) {
                 unsupportedPsbtPopup.message = root.wallet.importedPsbt.error.length > 0
                     ? root.wallet.importedPsbt.error
                     : qsTr("This PSBT is not supported yet.")
@@ -329,7 +329,7 @@ PageStack {
                 }
             }
 
-            property WalletQmlModel reviewWallet: null
+            property WalletModel reviewWallet: null
             property bool importedReview: false
             // The completion page's actions. They run in the popup's context:
             // closing pops and destroys the completion page, so its own

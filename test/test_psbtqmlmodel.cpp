@@ -6,7 +6,7 @@
 
 #include <qml/models/psbtqmlmodel.h>
 #include <qml/asyncjoin.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/executor.h>
 #include <qml/guipresentation.h>
 #include <qml/retainedvalue.h>
@@ -791,14 +791,14 @@ private Q_SLOTS:
 
         // The standalone wallet facade still offers a file request when no
         // wallet is loaded and drains its detached PSBT aliases on shutdown.
-        WalletQmlModel detached;
+        WalletModel detached;
         QCOMPARE(WritePsbtFile(original, path), QString{});
         const auto request = detached.requestImportPsbtFromFile(path);
         QVERIFY(request);
         QVERIFY(detached.psbtActionBusy());
         QTRY_VERIFY(!detached.psbtActionBusy());
         QCOMPARE(detached.psbtActionId(), request);
-        QCOMPARE(detached.psbtActionState(), WalletQmlModel::PsbtActionState::PsbtFailed);
+        QCOMPARE(detached.psbtActionState(), WalletModel::PsbtActionState::PsbtFailed);
         QCOMPARE(detached.psbtActionError(), QStringLiteral("No wallet is loaded."));
         QVERIFY(!detached.currentTransaction());
 

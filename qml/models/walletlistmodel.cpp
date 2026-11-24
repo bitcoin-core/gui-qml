@@ -7,7 +7,7 @@
 #include <interfaces/node.h>
 #include <qml/asyncjoin.h>
 #include <qml/guipresentation.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 
 #include <QPointer>
 
@@ -94,7 +94,7 @@ void WalletListModel::setBackendAvailability(BackendAvailability availability)
     }
     enqueue(std::move(input));
 }
-void WalletListModel::setOpenWallet(const QString& walletId, WalletQmlModel* wallet)
+void WalletListModel::setOpenWallet(const QString& walletId, WalletModel* wallet)
 {
     if (m_stopping) return;
     const auto existing = m_open_wallets.constFind(walletId);

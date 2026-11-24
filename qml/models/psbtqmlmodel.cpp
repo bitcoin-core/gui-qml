@@ -161,8 +161,8 @@ void PsbtQmlModel::ensureServices()
         };
     }
     if (!m_document_owner) {
-        m_document_owner = RetainValue<psbtdocument::Owner>(m_services, m_opening,
-            [generation = m_generation] { return std::make_unique<psbtdocument::Owner>(generation); });
+        m_document_owner = RetainValue<psbtdocument::Store>(m_services, m_opening,
+            [generation = m_generation] { return std::make_unique<psbtdocument::Store>(generation); });
     }
 }
 void PsbtQmlModel::setNode(interfaces::Node* node)

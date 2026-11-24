@@ -61,11 +61,11 @@ public:
     void close();
 private:
     struct Publication;
-    struct Owner;
+    struct Impl;
     bool command(Id id, int kind, uint32_t button = 0);
     std::shared_ptr<Publication> m_publication;
-    std::shared_ptr<Owner> m_owner;
-    std::weak_ptr<Owner> m_state;
+    std::shared_ptr<Impl> m_owner;
+    std::weak_ptr<Impl> m_state;
 };
 } // namespace runtimeprompt
 #endif // BITCOIN_QML_RUNTIMEPROMPTWORKER_H

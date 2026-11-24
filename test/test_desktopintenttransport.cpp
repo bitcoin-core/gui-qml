@@ -27,9 +27,9 @@ namespace {
 using namespace desktopintent;
 using namespace desktopintent::transport;
 using namespace std::chrono_literals;
-std::shared_ptr<Owner> NewOwner(execution::Executor& executor, Owner::Notify notify = {})
+std::shared_ptr<desktopintent::Service> NewService(execution::Executor& executor, desktopintent::Service::Notify notify = {})
 {
-    return Owner::Create({}, std::move(notify), std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility)));
+    return desktopintent::Service::Create({}, std::move(notify), std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility)));
 }
 Input Request(int id, Origin origin = Origin::Arguments)
 {
@@ -39,7 +39,7 @@ template <typename T> bool Ready(std::future<T>& future)
 {
     return QTest::qWaitFor([&] { return future.wait_for(0ms) == std::future_status::ready; }, 8000);
 }
-auto Start(const std::shared_ptr<Service>& service, const QString& profile, std::vector<Input> inputs = {})
+auto Start(const std::shared_ptr<transport::Service>& service, const QString& profile, std::vector<Input> inputs = {})
 {
     auto promise = std::make_shared<std::promise<StartResult>>();
     auto future = promise->get_future();
@@ -47,19 +47,19 @@ auto Start(const std::shared_ptr<Service>& service, const QString& profile, std:
         promise->set_value({StartStatus::Rejected, QStringLiteral("Not admitted"), {}});
     return future;
 }
-auto Stop(const std::shared_ptr<Service>& service)
+auto Stop(const std::shared_ptr<transport::Service>& service)
 {
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
     if (!service->stop([promise] { promise->set_value(); })) promise->set_value();
     return future;
 }
-bool Shutdown(const std::shared_ptr<Service>& service)
+bool Shutdown(const std::shared_ptr<transport::Service>& service)
 {
     auto retired = Stop(service);
     return Ready(retired) && service->retired();
 }
-auto Probe(const std::shared_ptr<Service>& service, const QString& profile, const std::vector<Input>& inputs = {})
+auto Probe(const std::shared_ptr<transport::Service>& service, const QString& profile, const std::vector<Input>& inputs = {})
 {
     auto promise = std::make_shared<std::promise<ProbeResult>>();
     auto future = promise->get_future();
@@ -67,7 +67,7 @@ auto Probe(const std::shared_ptr<Service>& service, const QString& profile, cons
         promise->set_value({ProbeStatus::Rejected, {StartStatus::Rejected, QStringLiteral("Not admitted"), {}}});
     return future;
 }
-auto Lookup(const std::shared_ptr<Owner>& owner, const QString& key)
+auto Lookup(const std::shared_ptr<desktopintent::Service>& owner, const QString& key)
 {
     auto promise = std::make_shared<std::promise<std::optional<Receipt>>>(); auto future = promise->get_future();
     if (!owner->lookup(key, [promise](auto value) { promise->set_value(std::move(value)); })) promise->set_value({});
@@ -103,8 +103,8 @@ private Q_SLOTS:
     void admissionFenceDoesNotDrainAndRetainedFacadeReleasesScope()
     {
         ManualStartupExecution commands;
-        auto owner = NewOwner(commands.executor());
-        auto service = Service::Create(owner); QVERIFY(service);
+        auto owner = NewService(commands.executor());
+        auto service = transport::Service::Create(owner); QVERIFY(service);
         QVERIFY(commands.quiescent());
         service->close();
         QVERIFY(commands.quiescent()); QVERIFY(!service->retired());
@@ -121,8 +121,8 @@ private Q_SLOTS:
     void missingProfileIsNotCreatedAndPhysicalStopUsesBackgroundDomain()
     {
         execution::Executor executor{execution::Executor::Config{}};
-        auto owner = NewOwner(executor);
-        auto service = Service::Create(owner); QVERIFY(service);
+        auto owner = NewService(executor);
+        auto service = transport::Service::Create(owner); QVERIFY(service);
         const auto cleanup = qScopeGuard([&] { service->stop(); owner.reset(); Shutdown(service); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto profile = directory.filePath(QStringLiteral("not-created/profile"));
@@ -153,8 +153,8 @@ private Q_SLOTS:
         const auto restore = qScopeGuard([&] { if (had_previous) qputenv("XDG_RUNTIME_DIR", previous); else qunsetenv("XDG_RUNTIME_DIR"); });
 
         execution::Executor executor{execution::Executor::Config{}};
-        auto owner = NewOwner(executor);
-        auto service = Service::Create(owner); QVERIFY(service);
+        auto owner = NewService(executor);
+        auto service = transport::Service::Create(owner); QVERIFY(service);
         const auto cleanup = qScopeGuard([&] { service->stop(); owner.reset(); Shutdown(service); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto started = Start(service, directory.path()); QVERIFY(Ready(started));
@@ -187,12 +187,12 @@ private Q_SLOTS:
         QFETCH(bool, separate_owner);
         execution::Executor primary_executor{execution::Executor::Config{}}, secondary_executor{execution::Executor::Config{}}, empty_executor{execution::Executor::Config{}};
         const auto owner_executor = separate_owner ? std::make_unique<execution::Executor>(execution::Executor::Config{}) : nullptr;
-        auto primary_owner = NewOwner(owner_executor ? *owner_executor : primary_executor);
-        auto secondary_owner = NewOwner(owner_executor ? *owner_executor : secondary_executor);
-        auto empty_owner = NewOwner(owner_executor ? *owner_executor : empty_executor);
-        auto primary = Service::Create(primary_owner);
-        auto secondary = Service::Create(secondary_owner);
-        auto empty = Service::Create(empty_owner);
+        auto primary_owner = NewService(owner_executor ? *owner_executor : primary_executor);
+        auto secondary_owner = NewService(owner_executor ? *owner_executor : secondary_executor);
+        auto empty_owner = NewService(owner_executor ? *owner_executor : empty_executor);
+        auto primary = transport::Service::Create(primary_owner);
+        auto secondary = transport::Service::Create(secondary_owner);
+        auto empty = transport::Service::Create(empty_owner);
         const auto cleanup = qScopeGuard([&] {
             primary->stop(); secondary->stop(); empty->stop(); primary_owner.reset(); secondary_owner.reset(); empty_owner.reset();
             Shutdown(primary); Shutdown(secondary); Shutdown(empty);
@@ -214,12 +214,12 @@ private Q_SLOTS:
     void reusedLocalProducerKeyFromAnotherServiceIsASeparateDelivery()
     {
         execution::Executor primary_executor{execution::Executor::Config{}}, first_executor{execution::Executor::Config{}}, second_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(primary_executor);
-        auto first_owner = NewOwner(first_executor);
-        auto second_owner = NewOwner(second_executor);
-        auto primary = Service::Create(primary_owner);
-        auto first = Service::Create(first_owner);
-        auto second = Service::Create(second_owner);
+        auto primary_owner = NewService(primary_executor);
+        auto first_owner = NewService(first_executor);
+        auto second_owner = NewService(second_executor);
+        auto primary = transport::Service::Create(primary_owner);
+        auto first = transport::Service::Create(first_owner);
+        auto second = transport::Service::Create(second_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); first->stop(); second->stop(); primary_owner.reset(); first_owner.reset(); second_owner.reset(); Shutdown(primary); Shutdown(first); Shutdown(second); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
@@ -232,10 +232,10 @@ private Q_SLOTS:
     void capacityRejectsWholeRemoteBatchWithoutConsumingIdentity()
     {
         execution::Executor primary_executor{execution::Executor::Config{}}, secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(primary_executor);
-        auto secondary_owner = NewOwner(secondary_executor);
-        auto primary = Service::Create(primary_owner);
-        auto secondary = Service::Create(secondary_owner);
+        auto primary_owner = NewService(primary_executor);
+        auto secondary_owner = NewService(secondary_executor);
+        auto primary = transport::Service::Create(primary_owner);
+        auto secondary = transport::Service::Create(secondary_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); primary_owner.reset(); secondary_owner.reset(); Shutdown(primary); Shutdown(secondary); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         std::vector<Input> initial; for (int index{1}; index <= 15; ++index) initial.push_back(Request(index));
@@ -249,13 +249,13 @@ private Q_SLOTS:
     {
         ManualStartupExecution original;
         execution::Executor secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(original.executor());
-        auto secondary_owner = NewOwner(secondary_executor);
+        auto primary_owner = NewService(original.executor());
+        auto secondary_owner = NewService(secondary_executor);
         auto clock = std::make_shared<std::atomic<int64_t>>(0);
         auto clock_calls = std::make_shared<std::atomic<size_t>>(0);
         Limits limits; limits.now = [clock, clock_calls] { ++*clock_calls; return Limits::Time{} + std::chrono::milliseconds{clock->load()}; };
-        auto primary = Service::Create(primary_owner);
-        auto secondary = Service::Create(secondary_owner, limits);
+        auto primary = transport::Service::Create(primary_owner);
+        auto secondary = transport::Service::Create(secondary_owner, limits);
         auto release = std::make_shared<std::promise<void>>(); const auto gate = release->get_future().share(); bool released{false};
         const auto cleanup = qScopeGuard([&] {
             if (!released) release->set_value();
@@ -283,10 +283,10 @@ private Q_SLOTS:
     {
         ManualStartupExecution original;
         execution::Executor secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(original.executor());
-        auto secondary_owner = NewOwner(secondary_executor);
-        auto primary = Service::Create(primary_owner);
-        auto secondary = Service::Create(secondary_owner);
+        auto primary_owner = NewService(original.executor());
+        auto secondary_owner = NewService(secondary_executor);
+        auto primary = transport::Service::Create(primary_owner);
+        auto secondary = transport::Service::Create(secondary_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); original.drain(); primary_owner.reset(); secondary_owner.reset(); original.drain(); Shutdown(primary); Shutdown(secondary); original.drain(); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
@@ -304,12 +304,12 @@ private Q_SLOTS:
         ManualStartupExecution original;
         execution::Executor secondary_executor{execution::Executor::Config{}};
         size_t owner_turns{0};
-        auto primary_owner = NewOwner(original.executor(), [&](auto) { ++owner_turns; });
-        auto secondary_owner = NewOwner(secondary_executor);
+        auto primary_owner = NewService(original.executor(), [&](auto) { ++owner_turns; });
+        auto secondary_owner = NewService(secondary_executor);
         auto clock = std::make_shared<std::atomic<int64_t>>(1000);
         Limits limits; limits.now = [clock] { return Limits::Time{} + std::chrono::milliseconds{clock->load()}; };
-        auto primary = Service::Create(primary_owner);
-        auto secondary = Service::Create(secondary_owner, limits);
+        auto primary = transport::Service::Create(primary_owner);
+        auto secondary = transport::Service::Create(secondary_owner, limits);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); original.drain(); primary_owner.reset(); secondary_owner.reset(); original.drain(); Shutdown(primary); Shutdown(secondary); original.drain(); });
         QTemporaryDir directory; QVERIFY(directory.isValid());
         auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
@@ -319,25 +319,25 @@ private Q_SLOTS:
         *clock = 0;
         QVERIFY(Ready(forwarded)); QVERIFY(forwarded.get().status == StartStatus::Unknown);
         original.drain();
-        // Each admitted request or lookup publishes a new Owner snapshot.
+        // Each admitted request or lookup publishes a new desktopintent::Service snapshot.
         // The invalid clock must permit only the original admission.
         QCOMPARE(owner_turns, size_t{1});
     }
     void invalidDeadlineConfigurationDoesNotReserveResources()
     {
         ManualStartupExecution commands;
-        auto owner = NewOwner(commands.executor());
+        auto owner = NewService(commands.executor());
         Limits limits; limits.acknowledge = 31s;
-        QVERIFY(!Service::Create(owner, limits));
+        QVERIFY(!transport::Service::Create(owner, limits));
         limits = {}; limits.now = {};
-        QVERIFY(!Service::Create(owner, limits));
+        QVERIFY(!transport::Service::Create(owner, limits));
         owner.reset(); commands.drain(); QVERIFY(commands.quiescent());
     }
     void missingProbeLeavesOriginalQueueAndLaterFinalProfileStartUntouched()
     {
         execution::Executor executor{execution::Executor::Config{}}, rival_executor{execution::Executor::Config{}};
-        auto owner = NewOwner(executor), rival_owner = NewOwner(rival_executor);
-        auto service = Service::Create(owner), rival = Service::Create(rival_owner);
+        auto owner = NewService(executor), rival_owner = NewService(rival_executor);
+        auto service = transport::Service::Create(owner), rival = transport::Service::Create(rival_owner);
         const auto cleanup = qScopeGuard([&] { service->stop(); rival->stop(); owner.reset(); rival_owner.reset(); Shutdown(service); Shutdown(rival); });
         QTemporaryDir directory; QVERIFY(directory.isValid()); const auto lookup_profile = directory.filePath(QStringLiteral("initial/missing"));
         const auto final_profile = directory.filePath(QStringLiteral("final/missing"));
@@ -361,8 +361,8 @@ private Q_SLOTS:
     {
         QFETCH(bool, arguments);
         execution::Executor primary_executor{execution::Executor::Config{}}, secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(primary_executor), secondary_owner = NewOwner(secondary_executor);
-        auto primary = Service::Create(primary_owner), secondary = Service::Create(secondary_owner);
+        auto primary_owner = NewService(primary_executor), secondary_owner = NewService(secondary_executor);
+        auto primary = transport::Service::Create(primary_owner), secondary = transport::Service::Create(secondary_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); primary_owner.reset(); secondary_owner.reset(); Shutdown(primary); Shutdown(secondary); });
         QTemporaryDir directory; QVERIFY(directory.isValid()); auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
         QVERIFY(secondary_owner->admit({Request(1, Origin::FileOpen)}, {}));
@@ -384,8 +384,8 @@ private Q_SLOTS:
     {
         QFETCH(bool, full);
         execution::Executor primary_executor{execution::Executor::Config{}}, secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(primary_executor), secondary_owner = NewOwner(secondary_executor);
-        auto primary = Service::Create(primary_owner), secondary = Service::Create(secondary_owner);
+        auto primary_owner = NewService(primary_executor), secondary_owner = NewService(secondary_executor);
+        auto primary = transport::Service::Create(primary_owner), secondary = transport::Service::Create(secondary_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); primary_owner.reset(); secondary_owner.reset(); Shutdown(primary); Shutdown(secondary); });
         QTemporaryDir directory; QVERIFY(directory.isValid()); std::vector<Input> initial;
         if (full) for (int index{1}; index <= 16; ++index) initial.push_back(Request(index));
@@ -400,8 +400,8 @@ private Q_SLOTS:
     {
         ManualStartupExecution original;
         execution::Executor secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(original.executor()), secondary_owner = NewOwner(secondary_executor);
-        auto primary = Service::Create(primary_owner), secondary = Service::Create(secondary_owner);
+        auto primary_owner = NewService(original.executor()), secondary_owner = NewService(secondary_executor);
+        auto primary = transport::Service::Create(primary_owner), secondary = transport::Service::Create(secondary_owner);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); original.drain(); primary_owner.reset(); secondary_owner.reset(); original.drain(); Shutdown(primary); Shutdown(secondary); original.drain(); });
         QTemporaryDir directory; QVERIFY(directory.isValid()); auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
         auto probed = Probe(secondary, directory.path(), {Request(1)});
@@ -414,7 +414,7 @@ private Q_SLOTS:
     }
     void stopBeforeProbeNativeTurnRetiresWithoutLookupOrPrimary()
     {
-        ManualStartupExecution commands; auto owner = NewOwner(commands.executor()); auto service = Service::Create(owner); QVERIFY(service);
+        ManualStartupExecution commands; auto owner = NewService(commands.executor()); auto service = transport::Service::Create(owner); QVERIFY(service);
         QSemaphore entered, release;
         auto unblock = qScopeGuard([&] { release.release(); });
         QVERIFY(service->post([&] { entered.release(); release.acquire(); }));
@@ -443,8 +443,8 @@ private Q_SLOTS:
             }
         };
         ManualStartupExecution commands;
-        auto owner = NewOwner(commands.executor());
-        auto service = Service::Create(owner);
+        auto owner = NewService(commands.executor());
+        auto service = transport::Service::Create(owner);
         QVERIFY(service);
         auto cleanup = std::make_shared<Cleanup>();
         const auto unblock = qScopeGuard([&] { cleanup->release.release(); });
@@ -472,10 +472,10 @@ private Q_SLOTS:
     {
         QFETCH(bool, rollback);
         execution::Executor primary_executor{execution::Executor::Config{}}, secondary_executor{execution::Executor::Config{}};
-        auto primary_owner = NewOwner(primary_executor), secondary_owner = NewOwner(secondary_executor);
+        auto primary_owner = NewService(primary_executor), secondary_owner = NewService(secondary_executor);
         Limits limits; auto calls = std::make_shared<std::atomic_size_t>(0);
         limits.now = [calls, rollback] { return Limits::Time{((*calls)++ == 0 ? 100ms : (rollback ? 0ms : 6000ms))}; };
-        auto primary = Service::Create(primary_owner), secondary = Service::Create(secondary_owner, limits);
+        auto primary = transport::Service::Create(primary_owner), secondary = transport::Service::Create(secondary_owner, limits);
         const auto cleanup = qScopeGuard([&] { primary->stop(); secondary->stop(); primary_owner.reset(); secondary_owner.reset(); Shutdown(primary); Shutdown(secondary); });
         QTemporaryDir directory; QVERIFY(directory.isValid()); auto listening = Start(primary, directory.path()); QVERIFY(Ready(listening)); QVERIFY(listening.get().status == StartStatus::Primary);
         auto probed = Probe(secondary, directory.path(), {Request(1)}); QVERIFY(Ready(probed)); QVERIFY(probed.get().status == ProbeStatus::Rejected);

@@ -565,17 +565,17 @@ QVariantMap CoreSettingStatus(ArgsManager& args, const QString& name)
     const bool creates_gui_override = can_edit && !has_rw_setting && (has_config_setting || startup_adjusted);
     QString info_text;
     if (command_line_overridden) {
-        info_text = QCoreApplication::translate("OptionsQmlModel", "Set by command line (-%1). Remove the command-line option to change this here.").arg(name);
+        info_text = QCoreApplication::translate("SettingsModel", "Set by command line (-%1). Remove the command-line option to change this here.").arg(name);
     } else if (structured) {
         QStringList shown;
         for (size_t i = 0; i < std::min<size_t>(routes.size(), 32); ++i) shown.push_back(QString::fromStdString(routes[i].substr(0, 128)));
-        info_text = QCoreApplication::translate("OptionsQmlModel", "This per-network or multiple proxy configuration is read-only here. Change it in its original configuration:") + QLatin1Char('\n') + shown.join(QLatin1Char('\n'));
+        info_text = QCoreApplication::translate("SettingsModel", "This per-network or multiple proxy configuration is read-only here. Change it in its original configuration:") + QLatin1Char('\n') + shown.join(QLatin1Char('\n'));
     } else if (startup_adjusted) {
         info_text = has_rw_setting
-            ? QCoreApplication::translate("OptionsQmlModel", "Adjusted by related startup options. The saved GUI override will apply after restart.")
-            : QCoreApplication::translate("OptionsQmlModel", "Adjusted by related startup options. Changing this saves a GUI override in settings.json.");
+            ? QCoreApplication::translate("SettingsModel", "Adjusted by related startup options. The saved GUI override will apply after restart.")
+            : QCoreApplication::translate("SettingsModel", "Adjusted by related startup options. Changing this saves a GUI override in settings.json.");
     } else if (creates_gui_override) {
-        info_text = QCoreApplication::translate("OptionsQmlModel", "Loaded from bitcoin.conf. Changing this saves a GUI override in settings.json.");
+        info_text = QCoreApplication::translate("SettingsModel", "Loaded from bitcoin.conf. Changing this saves a GUI override in settings.json.");
     }
 
     QVariantMap status;
@@ -1009,7 +1009,7 @@ PersistenceResult PersistTransaction(ArgsManager& args, const QStringList& keys,
         const bool accepted = mutation();
         attempted = read();
         if (!accepted) {
-            failure = QCoreApplication::translate("OptionsQmlModel", "This setting cannot be changed.");
+            failure = QCoreApplication::translate("SettingsModel", "This setting cannot be changed.");
         } else {
             std::vector<std::string> errors;
             bool unchanged = before.size() == attempted.size();
@@ -1031,10 +1031,10 @@ PersistenceResult PersistTransaction(ArgsManager& args, const QStringList& keys,
     } catch (const std::exception& exception) {
         failure = QString::fromUtf8(exception.what());
     } catch (...) {
-        failure = QCoreApplication::translate("OptionsQmlModel", "Unable to save settings.");
+        failure = QCoreApplication::translate("SettingsModel", "Unable to save settings.");
     }
     if (result.persisted) {
-        result.error = failure.isEmpty() ? QCoreApplication::translate("OptionsQmlModel", "The settings were saved, but runtime application could not be confirmed.") : failure.left(4096);
+        result.error = failure.isEmpty() ? QCoreApplication::translate("SettingsModel", "The settings were saved, but runtime application could not be confirmed.") : failure.left(4096);
         return result;
     }
     if (attempted.empty()) attempted = read();
@@ -1050,7 +1050,7 @@ PersistenceResult PersistTransaction(ArgsManager& args, const QStringList& keys,
             else settings.rw_settings.erase(key);
         }
     });
-    if (failure.isEmpty()) failure = QCoreApplication::translate("OptionsQmlModel", "Unable to save settings.");
+    if (failure.isEmpty()) failure = QCoreApplication::translate("SettingsModel", "Unable to save settings.");
     result.error = failure.left(4096);
     return result;
 }

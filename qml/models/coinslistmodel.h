@@ -16,7 +16,7 @@
 #include <set>
 #include <vector>
 
-class WalletQmlModel;
+class WalletModel;
 
 class CoinsListModel : public QAbstractListModel
 {
@@ -67,7 +67,7 @@ public:
     struct SelectionOutcome { std::shared_ptr<const Selection> selection; quint64 revision{0}; bool failed{false}; coinselection::InputMode input_mode{coinselection::InputMode::Automatic}; bool editing{false}; };
     std::shared_ptr<const execution::OwnedCommand<LockOutcome>> lockOperation() const { return m_last_lock; }
     std::shared_ptr<const execution::OwnedCommand<SelectionOutcome>> selectionOperation() const { return m_last_selection; }
-    explicit CoinsListModel(WalletQmlModel* parent = nullptr);
+    explicit CoinsListModel(WalletModel* parent = nullptr);
     ~CoinsListModel() override;
     void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     void close();
@@ -164,7 +164,7 @@ private:
     std::shared_ptr<const Selection> m_selection{std::make_shared<const Selection>()};
     std::shared_ptr<walletopening::Session> m_opening;
     presentation::Post m_post;
-    WalletQmlModel* m_wallet_model;
+    WalletModel* m_wallet_model;
     bool m_stopping{false}, m_loading{false}, m_incomplete{false}, m_descending{true};
     bool m_selection_editing{false};
     int m_coin_count{0}, m_locked_count{0}, m_selected_count{0}, m_selection_commands{0}, m_marked_count{0};

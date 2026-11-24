@@ -56,12 +56,12 @@ struct Snapshot {
 /** One original source, independent of its optional target. All state changes
  * run on its Utility queue. Target callbacks fill reply cells and enqueue their
  * consumption on the original owner's queue. */
-class Owner final : public std::enable_shared_from_this<Owner>
+class Service final : public std::enable_shared_from_this<Service>
 {
 public:
     using Notify = std::function<void(Snapshot)>;
     using Retired = std::function<void(uint64_t)>;
-    static std::shared_ptr<Owner> Create(uint64_t identity, Services services, Notify notify, Retired retired = {});
+    static std::shared_ptr<Service> Create(uint64_t identity, Services services, Notify notify, Retired retired = {});
     execution::SubmitResult inspect(Input input);
     execution::SubmitResult retry();
     execution::SubmitResult chooseTarget(std::shared_ptr<const TargetPort> target);
@@ -79,7 +79,7 @@ private:
     struct Delivery;
     enum class ReplyKind { Observe, Dispatch, Query };
     struct Reply;
-    Owner(uint64_t identity, Services services,
+    Service(uint64_t identity, Services services,
           Notify notify, Retired retired, std::shared_ptr<State> state);
     execution::SubmitResult submit(std::function<void()> decision);
     void publish();
@@ -103,7 +103,7 @@ private:
     const Retired m_retired;
     const std::shared_ptr<State> m_state;
     std::atomic_bool m_close_requested{false};
-    std::function<void(std::shared_ptr<Owner>)> m_post_close;
+    std::function<void(std::shared_ptr<Service>)> m_post_close;
     // close() revokes this before queuing the Domain lifecycle decision. A
     // queued target GUI handoff must not outlive its Source view.
     const std::shared_ptr<std::atomic_bool> m_presentation_allowed{std::make_shared<std::atomic_bool>(true)};

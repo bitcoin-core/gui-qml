@@ -2,12 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_WALLETQMLCONTROLLER_H
-#define BITCOIN_QML_WALLETQMLCONTROLLER_H
+#ifndef BITCOIN_QML_WALLETCONTROLLER_H
+#define BITCOIN_QML_WALLETCONTROLLER_H
 
 #include <qml/models/signerdiscoverymodel.h>
 #include <qml/models/walletlistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/models/walletselectionmodel.h>
 #include <qml/models/walletprovisioningcheck.h>
 #include <qml/models/walletcreationmodel.h>
@@ -41,16 +41,16 @@
 namespace walletlife { class LoadSubscription; struct Update; }
 
 
-class WalletQmlController : public QObject
+class WalletController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(WalletQmlModel* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
+    Q_PROPERTY(WalletModel* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
     Q_PROPERTY(WalletSelectionModel* selection READ selection CONSTANT)
     //! Wallet display names, the home folder and wallet file locations.
     Q_PROPERTY(WalletNamesController* names READ names CONSTANT)
     //! Creating, restoring and migrating wallets.
     Q_PROPERTY(WalletCreationController* creation READ creation CONSTANT)
-    Q_PROPERTY(WalletQmlModel* closeTarget READ closeTarget NOTIFY closeTargetChanged)
+    Q_PROPERTY(WalletModel* closeTarget READ closeTarget NOTIFY closeTargetChanged)
     Q_PROPERTY(QAbstractItemModel* openWalletModel READ openWalletModel NOTIFY openWalletsChanged)
     Q_PROPERTY(bool initialized READ initialized NOTIFY initializedChanged)
     Q_PROPERTY(bool isWalletLoaded READ isWalletLoaded NOTIFY isWalletLoadedChanged)
@@ -77,19 +77,19 @@ public:
         // The application supplies the shared executor for the catalog queues.
         presentation::Post post; // Enqueue on GUI; never invoke a Native observer inline.
         std::function<void(std::function<void()>)> shutdown;
-        std::function<WalletQmlModel::Services(bool detached)> make_wallet_services{};
+        std::function<WalletModel::Services(bool detached)> make_wallet_services{};
         std::shared_ptr<execution::Executor> owned_executor{}; // Standalone controller only.
         execution::Executor* executor{nullptr};
         WalletProvisioningCheck::Queues catalog_queues{};
     };
-    explicit WalletQmlController(interfaces::Node& node, QObject *parent = nullptr);
-    WalletQmlController(interfaces::Node& node, Services services, QObject* parent = nullptr);
-    WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences, QObject* parent = nullptr);
-    WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences,
+    explicit WalletController(interfaces::Node& node, QObject *parent = nullptr);
+    WalletController(interfaces::Node& node, Services services, QObject* parent = nullptr);
+    WalletController(interfaces::Node& node, walletopening::Session::Preferences preferences, QObject* parent = nullptr);
+    WalletController(interfaces::Node& node, walletopening::Session::Preferences preferences,
                         walletopening::FeePolicy fee_policy, QObject* parent = nullptr);
-    WalletQmlController(interfaces::Node& node, walletopening::Session::Preferences preferences,
+    WalletController(interfaces::Node& node, walletopening::Session::Preferences preferences,
                         walletopening::FeePolicy fee_policy, Services services, QObject* parent = nullptr);
-    ~WalletQmlController();
+    ~WalletController();
     void setPsbtPolicyRead(psbtpolicy::Read read, psbtpolicy::Read wallet_read = {})
     {
         m_psbt_policy = std::move(read);
@@ -99,23 +99,23 @@ public:
     Q_INVOKABLE void setSelectedWallet(QString path, QString wallet_format = QString());
     Q_INVOKABLE bool isWalletOpen(const QString& path);
     Q_INVOKABLE void closeWallet(const QString& path);
-    Q_INVOKABLE bool selectWallet(WalletQmlModel* wallet);
-    Q_INVOKABLE WalletQmlModel* walletForName(const QString& name) const;
-    Q_INVOKABLE void requestCloseWallet(WalletQmlModel* wallet);
-    WalletQmlModel* closeTarget() const { return m_close_target; }
+    Q_INVOKABLE bool selectWallet(WalletModel* wallet);
+    Q_INVOKABLE WalletModel* walletForName(const QString& name) const;
+    Q_INVOKABLE void requestCloseWallet(WalletModel* wallet);
+    WalletModel* closeTarget() const { return m_close_target; }
     Q_INVOKABLE void clearWalletLoadStatus();
     WalletOperationModel* loadFailure() const { return m_load_failure; }
     //! Forgets the shown load failure.
     Q_INVOKABLE void dismissLoadFailure();
-    Q_INVOKABLE void requestOpenWalletSettings(WalletQmlModel* wallet);
-    Q_INVOKABLE void requestOpenReceive(WalletQmlModel* wallet);
-    Q_INVOKABLE void requestClosePaymentRequestDetail(WalletQmlModel* wallet);
+    Q_INVOKABLE void requestOpenWalletSettings(WalletModel* wallet);
+    Q_INVOKABLE void requestOpenReceive(WalletModel* wallet);
+    Q_INVOKABLE void requestClosePaymentRequestDetail(WalletModel* wallet);
 
     // C++ catalog work uses the Core queue and delivers its outcome on Utility.
     execution::SubmitResult postNative(std::shared_ptr<execution::Task> task) const;
-    WalletQmlModel* selectedWallet() const;
+    WalletModel* selectedWallet() const;
     QAbstractItemModel* openWalletModel() const { return m_shutting_down ? nullptr : m_registry->openWalletModel(); }
-    Q_INVOKABLE int rowForWallet(WalletQmlModel* wallet) const {
+    Q_INVOKABLE int rowForWallet(WalletModel* wallet) const {
         // A paired Qt row removal follows selection publication. Its old row
         // must not expose a facade after the registry committed its retirement.
         if (!m_registry->containsExact(wallet)) return -1;
@@ -160,10 +160,10 @@ Q_SIGNALS:
                            int keySchemeKind,
                            bool balanceKnown);
     // Each carries the wallet that was opened, or null if it could not be.
-    void walletLoadSucceeded(WalletQmlModel* wallet);
-    void openWalletSettingsRequested(WalletQmlModel* wallet);
-    void openReceiveRequested(WalletQmlModel* wallet);
-    void closePaymentRequestDetailRequested(WalletQmlModel* wallet);
+    void walletLoadSucceeded(WalletModel* wallet);
+    void openWalletSettingsRequested(WalletModel* wallet);
+    void openReceiveRequested(WalletModel* wallet);
+    void closePaymentRequestDetailRequested(WalletModel* wallet);
 
 public Q_SLOTS:
     void initialize();
@@ -207,8 +207,8 @@ private:
     void publishWalletCommand(quint64 id);
     void commitWalletCommandOutcome();
     void offerWalletLoadWarnings(const QString& wallet, const QString& warnings);
-    WalletQmlModel* reconciledOpenWallet(const CommandResult& result) const;
-    void recordCommandWallet(WalletQmlModel* wallet);
+    WalletModel* reconciledOpenWallet(const CommandResult& result) const;
+    void recordCommandWallet(WalletModel* wallet);
     struct OpenIntentFacts { bool native_failed{false}; walletopening::Opening observed; std::weak_ptr<walletopening::Session> owner; };
     struct OpenIntentResolution { WalletOperationState state; walletopening::Opening opening; };
     static OpenIntentResolution resolveOpenIntent(const OpenIntentFacts& facts);
@@ -218,7 +218,7 @@ private:
     QString m_adoption_error;
     std::shared_ptr<AdoptionOrigin> newAdoptionOrigin();
     void updateNotificationContext();
-    void closeOpeningAdoption(WalletQmlModel* wallet);
+    void closeOpeningAdoption(WalletModel* wallet);
     void adoptionUnavailable(bool closed);
     void flushDeferredPublications();
     quint64 m_deferred_command_publication{0};
@@ -231,7 +231,7 @@ private:
     bool m_command_adopted{false};
     bool m_command_is_open{false};
     std::shared_ptr<execution::OwnedCommand<OpenIntentResolution>> m_open_resolution;
-    QPointer<WalletQmlModel> m_open_resolution_wallet;
+    QPointer<WalletModel> m_open_resolution_wallet;
     bool m_open_resolution_rejected{false};
     std::shared_ptr<std::shared_ptr<Command>> m_command_owner;
     std::shared_ptr<CommandReceipt> m_command_receipt;
@@ -251,11 +251,11 @@ private:
     void finishInitialization();
     QString walletDiscoveryError() const;
     void handleLifecyclePublication(walletlife::Update update);
-    WalletQmlModel* adoptWalletModel(walletpublication::TakeWallet take, const std::optional<QString>& captured_name = {}, std::shared_ptr<AdoptionOrigin> origin = {}, uint64_t ingress_sequence = 0, walletopening::NativeEvents observation = {});
-    bool registerWalletModel(WalletQmlModel* wallet_model, std::shared_ptr<OpeningAdoption> adoption = {});
-    void removeWalletModel(WalletQmlModel* wallet_model, bool remove = false);
-    bool adoptRetirement(WalletQmlModel* model, bool remove);
-    void retireWallet(WalletQmlModel* wallet_model, bool remove);
+    WalletModel* adoptWalletModel(walletpublication::TakeWallet take, const std::optional<QString>& captured_name = {}, std::shared_ptr<AdoptionOrigin> origin = {}, uint64_t ingress_sequence = 0, walletopening::NativeEvents observation = {});
+    bool registerWalletModel(WalletModel* wallet_model, std::shared_ptr<OpeningAdoption> adoption = {});
+    void removeWalletModel(WalletModel* wallet_model, bool remove = false);
+    bool adoptRetirement(WalletModel* model, bool remove);
+    void retireWallet(WalletModel* wallet_model, bool remove);
     void checkShutdownFinished();
     std::shared_ptr<walletcreation::Admission> m_creation_admission{std::make_shared<walletcreation::Admission>()};
     void startWalletLoad(const QString& path, const QString& wallet_format = QString());
@@ -263,12 +263,12 @@ private:
     void setWalletLoadError(const QString& error);
     void setWalletLoadWarnings(const QString& warnings);
     void maybeFinishShutdown();
-    void publishWalletInfo(WalletQmlModel* wallet_model);
-    void subscribeWalletInfo(WalletQmlModel* wallet_model);
-    void initializeWalletInfo(WalletQmlModel* wallet_model);
+    void publishWalletInfo(WalletModel* wallet_model);
+    void subscribeWalletInfo(WalletModel* wallet_model);
+    void initializeWalletInfo(WalletModel* wallet_model);
     void publishWalletInfoTurn(quint64 generation);
     quint64 m_info_generation{0};
-    std::optional<WalletQmlModel*> m_info_cursor;
+    std::optional<WalletModel*> m_info_cursor;
 
     backup::Services backupServices() const;
     std::shared_ptr<backup::InstallCoordinator> m_backup_installs{std::make_shared<backup::InstallCoordinator>()};
@@ -296,21 +296,21 @@ private:
         return services;
     }
     Services m_services;
-    WalletQmlModel::Services walletServices(bool detached = false) const;
-    WalletQmlModel* m_empty_wallet;
+    WalletModel::Services walletServices(bool detached = false) const;
+    WalletModel* m_empty_wallet;
     WalletSelectionModel* m_selection{nullptr};
     WalletNamesController* m_names{nullptr};
     WalletCreationController* m_creations{nullptr};
-    QPointer<WalletQmlModel> m_result_wallet;
+    QPointer<WalletModel> m_result_wallet;
     QMetaObject::Connection m_result_available_connection, m_result_destroyed_connection;
-    WalletQmlModel* m_close_target{nullptr};
+    WalletModel* m_close_target{nullptr};
     std::shared_ptr<walletlife::LoadSubscription> m_load_subscription;
     QPointer<WalletOperationModel> m_load_failure;
     QPointer<WalletOpenOperation> m_opening, m_command_opening, m_previous_command_opening;
     QString m_wallet_list_error;
     WalletAdoptionState walletOperationAdoptionState() const;
     QString walletOperationAdoptionError() const;
-    WalletQmlModel* walletOperationResultWallet() const;
+    WalletModel* walletOperationResultWallet() const;
     bool canOpenResult() const;
     WalletOperationState walletOperationState() const;
     QString walletOperationName() const;
@@ -337,4 +337,4 @@ private:
 
 };
 
-#endif // BITCOIN_QML_WALLETQMLCONTROLLER_H
+#endif // BITCOIN_QML_WALLETCONTROLLER_H

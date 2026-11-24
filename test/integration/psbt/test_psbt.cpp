@@ -87,7 +87,7 @@ public:
 private Q_SLOTS:
     void externalUnloadCannotTransferAnImportedReviewToAReopenedWallet()
     {
-        QPointer<WalletQmlModel> original{qmltest::CreateWallet(m_app, "original-review")}; QVERIFY(original);
+        QPointer<WalletModel> original{qmltest::CreateWallet(m_app, "original-review")}; QVERIFY(original);
         QVERIFY(qmltest::FundWallet(m_app, *original));
         const auto address = qmltest::NewAddress(m_app, original->name());
         const auto funded = qmltest::Rpc(m_app, "walletcreatefundedpsbt",
@@ -100,11 +100,11 @@ private Q_SLOTS:
         const auto path = directory.filePath("original.psbt");
         QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write(bytes), bytes.size()); file.close();
-        QCOMPARE(AwaitPsbtImport(*original, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*original, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(original->currentTransactionCanBroadcast());
         const auto original_opening = original->opening()->identity();
         auto* standby = qmltest::CreateWallet(m_app, "standby-review"); QVERIFY(standby);
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
         QCOMPARE(controller->selectedWallet(), standby);
         QVERIFY(!standby->currentTransaction());
         const auto export_path = directory.filePath("pending-export.psbt");
@@ -133,7 +133,7 @@ private Q_SLOTS:
         QVERIFY(!reopened->currentTransactionCanSend()); QVERIFY(!reopened->currentTransactionCanBroadcast());
         // Only a fresh explicit import arms the new opening. No old callback,
         // wallet name lookup, or review result can supply this authorization.
-        QCOMPARE(AwaitPsbtImport(*reopened, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*reopened, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(reopened->currentTransactionCanBroadcast());
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 0U);
     }
@@ -142,7 +142,7 @@ private Q_SLOTS:
     // document and its sign and broadcast capabilities before it goes away.
     void importedPsbtCapabilitiesClearOnWalletShutdown()
     {
-        QPointer<WalletQmlModel> wallet{qmltest::CreateWallet(m_app, "psbt-shutdown")}; QVERIFY(wallet);
+        QPointer<WalletModel> wallet{qmltest::CreateWallet(m_app, "psbt-shutdown")}; QVERIFY(wallet);
         QVERIFY(qmltest::FundWallet(m_app, *wallet));
         const auto address = qmltest::NewAddress(m_app, wallet->name());
         const auto encoded = qmltest::Rpc(m_app, "walletcreatefundedpsbt",
@@ -238,14 +238,14 @@ private Q_SLOTS:
         auto* draft = wallet->sendRecipientList()->currentRecipient(); QVERIFY(draft);
         draft->setAddress(address); draft->amount()->setSatoshi(COIN / 4);
         QTRY_VERIFY(!wallet->sendRecipientList()->validationPending());
-        QCOMPARE(AwaitPsbtImport(*wallet, paths[0]), WalletQmlModel::PsbtImportResult::WalletCanSign);
-        const QPointer<WalletQmlModelTransaction> original{wallet->currentTransaction()}; QVERIFY(original);
+        QCOMPARE(AwaitPsbtImport(*wallet, paths[0]), WalletModel::PsbtImportResult::WalletCanSign);
+        const QPointer<TransactionReviewModel> original{wallet->currentTransaction()}; QVERIFY(original);
         const auto original_id = original->txid(), original_fee = original->fee();
         const auto original_flow = wallet->currentTransactionFlow();
         const bool can_send = wallet->currentTransactionCanSend(), can_broadcast = wallet->currentTransactionCanBroadcast();
         QVERIFY(can_send); QVERIFY(!can_broadcast); QVERIFY(original->feeKnown());
-        QCOMPARE(AwaitPsbtImport(*wallet, paths[1]), WalletQmlModel::PsbtImportResult::PsbtUnsupported);
-        QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtFailed);
+        QCOMPARE(AwaitPsbtImport(*wallet, paths[1]), WalletModel::PsbtImportResult::PsbtUnsupported);
+        QCOMPARE(wallet->psbtActionState(), WalletModel::PsbtActionState::PsbtFailed);
         QVERIFY2(wallet->psbtActionError().contains(reason), qPrintable(wallet->psbtActionError()));
         QCOMPARE(wallet->currentTransaction(), original.data());
         QVERIFY(wallet->currentTransactionIsImportedPsbt());
@@ -256,7 +256,7 @@ private Q_SLOTS:
         const auto preserved_path = directory.filePath("preserved.psbt");
         QVERIFY(AwaitPsbtSave(*wallet, preserved_path));
         QFile preserved{preserved_path}; QVERIFY(preserved.open(QIODevice::ReadOnly)); QCOMPARE(preserved.readAll(), documents[0]);
-        QCOMPARE(AwaitPsbtImport(*wallet, paths[2]), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, paths[2]), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransaction() && wallet->currentTransaction() != original.data());
         QVERIFY(wallet->currentTransaction()->txid() != original_id);
         QVERIFY(wallet->currentTransactionIsImportedPsbt()); QVERIFY(wallet->currentTransactionCanSend()); QVERIFY(!wallet->currentTransactionCanBroadcast());
@@ -270,7 +270,7 @@ private Q_SLOTS:
     // reports no transaction it can send, sign or broadcast.
     void sendCapabilitiesRequireAWallet()
     {
-        QPointer<WalletQmlModel> wallet{qmltest::CreateWallet(m_app, "send-without-wallet")}; QVERIFY(wallet);
+        QPointer<WalletModel> wallet{qmltest::CreateWallet(m_app, "send-without-wallet")}; QVERIFY(wallet);
         QVERIFY(qmltest::FundWallet(m_app, *wallet));
         const auto address = qmltest::NewAddress(m_app, wallet->name());
         const auto encoded = qmltest::Rpc(m_app, "walletcreatefundedpsbt",
@@ -279,11 +279,11 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("walletless.psbt");
         QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size()); file.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransactionCanSend()); QVERIFY(wallet->currentTransactionCanSignOnly());
         QVERIFY(qmltest::CreateWallet(m_app, "send-standby"));
         struct { bool seen{false}, released{false}, can_send{true}, can_sign{true}, can_broadcast{true}; } at_shutdown;
-        QObject::connect(wallet, &WalletQmlModel::shutdownFinished, wallet, [&, wallet] {
+        QObject::connect(wallet, &WalletModel::shutdownFinished, wallet, [&, wallet] {
             if (at_shutdown.seen || !wallet) return;
             const auto stopped = std::make_shared<std::atomic_bool>(false);
             wallet->opening()->stop(false, [stopped] { stopped->store(true); });
@@ -402,7 +402,7 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("review.psbt");
         QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size()); file.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransactionIsImportedPsbt());
         if (newer) { apply(); if (QTest::currentTestFailed()) return; }
         // The review's close path (SendCreate.qml onClosed) discards it.
@@ -506,7 +506,7 @@ private Q_SLOTS:
         const auto signed_path = directory.filePath("recorded-finalized.psbt");
         QFile signed_file{signed_path}; QVERIFY(signed_file.open(QIODevice::WriteOnly));
         QCOMPARE(signed_file.write(finalized_bytes), finalized_bytes.size()); signed_file.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, signed_path), WalletQmlModel::PsbtImportResult::TransactionAlreadyKnown);
+        QCOMPARE(AwaitPsbtImport(*wallet, signed_path), WalletModel::PsbtImportResult::TransactionAlreadyKnown);
         QCOMPARE(wallet->importedPsbt()->matchedTxid(), QString::fromStdString(final_txid));
         QCOMPARE(qmltest::Rpc(m_app, "gettransaction", qmltest::Json("[\"" + final_txid + "\"]"), wallet->name()).find_value("fee").getValStr(), std::string{"-0.00010000"});
     }
@@ -559,7 +559,7 @@ private Q_SLOTS:
             QVERIFY(qmltest::Click(m_app, "sendImportPsbtFromFileButton"));
             QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
             QTRY_VERIFY(wallet->currentTransactionIsImportedPsbt());
-            QCOMPARE(wallet->psbtImportResult(), keys ? WalletQmlModel::PsbtImportResult::WalletCanSign : WalletQmlModel::PsbtImportResult::WalletCannotSign);
+            QCOMPARE(wallet->psbtImportResult(), keys ? WalletModel::PsbtImportResult::WalletCanSign : WalletModel::PsbtImportResult::WalletCannotSign);
             QCOMPARE(qmltest::Find(m_app, "sendTransactionReviewRecipients")->property("title").toString(), QStringLiteral("Outputs"));
             QCOMPARE(qmltest::Find(m_app, "sendTransactionReviewTotal")->property("title").toString(), QStringLiteral("Outputs plus fee"));
             QTRY_COMPARE(qmltest::Find(m_app, "sendTransactionReviewRecipientRows")->property("count").toInt(), 2);
@@ -604,7 +604,7 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("unsigned.psbt");
         QFile source{path}; QVERIFY(source.open(QIODevice::WriteOnly)); QCOMPARE(source.write(bytes), bytes.size()); source.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransactionCanSignOnly());
         const auto unsigned_identity = wallet->currentTransaction()->getWtx()->GetHash();
         const auto sign = StartSend(*wallet, true); QVERIFY(sign);
@@ -651,7 +651,7 @@ private Q_SLOTS:
         const auto path = directory.filePath("imported.psbt");
         QFile source{path}; QVERIFY(source.open(QIODevice::WriteOnly)); QCOMPARE(source.write(bytes), bytes.size()); source.close();
         const auto read = [](const QString& file) { QFile in{file}; return in.open(QIODevice::ReadOnly) ? in.readAll() : QByteArray{}; };
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransactionCanSignOnly());
         const auto reviewed_path = directory.filePath("reviewed.psbt");
         QVERIFY(AwaitPsbtSave(*wallet, reviewed_path));
@@ -686,7 +686,7 @@ private Q_SLOTS:
 
             QVERIFY(wallet->fileExportOperation()->confirm());
             QVERIFY(AwaitPsbtAction(*wallet, saved));
-            QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtSaved);
+            QCOMPARE(wallet->psbtActionState(), WalletModel::PsbtActionState::PsbtSaved);
         }
         QCOMPARE(read(reviewed_path), signed_bytes);
         QVERIFY(signed_bytes != bytes);
@@ -744,8 +744,8 @@ private Q_SLOTS:
         for (const bool confirmed : {false, true}) {
             if (confirmed) qmltest::Rpc(m_app, "generatetoaddress", qmltest::Json("[1,\"" + mining.toStdString() + "\"]"));
             QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), confirmed ? 0U : 1U);
-            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::TransactionAlreadyKnown);
-            QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtKnown);
+            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::TransactionAlreadyKnown);
+            QCOMPARE(wallet->psbtActionState(), WalletModel::PsbtActionState::PsbtKnown);
             QCOMPARE(wallet->importedPsbt()->matchedTxid(), QString::fromStdString(final_txid));
             QVERIFY(!wallet->currentTransactionCanBroadcast()); QVERIFY(!wallet->currentTransactionCanSend());
         }
@@ -855,7 +855,7 @@ private Q_SLOTS:
         if (scenario == 0 || scenario == 6) {
             // #1071: the Send -> Import PSBT review reaches the same verdict.
             const auto result = AwaitPsbtImport(*wallet, path);
-            QVERIFY(result == WalletQmlModel::PsbtImportResult::ReviewPending || result == WalletQmlModel::PsbtImportResult::WalletCanSign);
+            QVERIFY(result == WalletModel::PsbtImportResult::ReviewPending || result == WalletModel::PsbtImportResult::WalletCanSign);
             QVERIFY(wallet->currentTransactionIsImportedPsbt());
             const auto policy = wallet->currentTransaction()->nodePolicyStatus();
             QCOMPARE(wallet->currentTransactionCanBroadcast() || wallet->currentTransactionCanSend(), scenario == 6);
@@ -880,7 +880,7 @@ private Q_SLOTS:
         if (scenario == 6) QCOMPARE(pool[0].get_str(), final_txid);
         QCOMPARE(qmltest::Call(m_app, [document = model->psbt()](interfaces::Node*) { return psbtwork::SerializeRaw(*document); }), imported);
         if (scenario == 1) {
-            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::ReviewPending);
+            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::ReviewPending);
             QVERIFY(wallet->currentTransactionIsImportedPsbt());
             QVERIFY(!wallet->currentTransactionCanBroadcast());
             QVERIFY(!wallet->currentTransactionCanSend());
@@ -895,14 +895,14 @@ private Q_SLOTS:
             // Unavailable facade commands return a terminal error receipt;
             // a nonzero receipt does not imply dispatch to Native.
             QVERIFY(AwaitPsbtAction(*wallet, wallet->requestBroadcastCurrentTransaction()));
-            QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtFailed);
+            QCOMPARE(wallet->psbtActionState(), WalletModel::PsbtActionState::PsbtFailed);
             const auto submitted = qmltest::Rpc(m_app, "getrawmempool");
             QCOMPARE(submitted.size(), 1U);
             QCOMPARE(submitted[0].get_str(), wallet->currentTransaction()->txid().toStdString());
-            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::TransactionAlreadyKnown);
+            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::TransactionAlreadyKnown);
         }
         if (scenario == 5) {
-            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::ReviewPending);
+            QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::ReviewPending);
             QVERIFY(wallet->currentTransactionIsImportedPsbt());
             QVERIFY(!wallet->currentTransactionCanBroadcast());
             const auto reviewed = wallet->currentTransaction()->getWtx()->GetWitnessHash();
@@ -989,7 +989,7 @@ private Q_SLOTS:
         arrived = true; arrive.set_value();
         QVERIFY(sent.get());
         QVERIFY(AwaitPsbtAction(*wallet, slow));
-        QCOMPARE(wallet->psbtImportResult(), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(wallet->psbtImportResult(), WalletModel::PsbtImportResult::WalletCanSign);
 #endif
         {
             HeldWalletLock lock{m_app, wallet->name()};
@@ -1001,8 +1001,8 @@ private Q_SLOTS:
             lock.release();
             QVERIFY(AwaitPsbtAction(*wallet, import));
         }
-        QCOMPARE(wallet->psbtImportResult(), WalletQmlModel::PsbtImportResult::WalletCanSign);
-        std::unique_ptr<WalletSendOperation> sign;
+        QCOMPARE(wallet->psbtImportResult(), WalletModel::PsbtImportResult::WalletCanSign);
+        std::unique_ptr<WalletSendHandle> sign;
         {
             HeldWalletLock lock{m_app, wallet->name()};
             sign = StartSend(*wallet, true); QVERIFY(sign);
@@ -1016,7 +1016,7 @@ private Q_SLOTS:
         const auto broadcast = wallet->requestBroadcastCurrentTransaction(); QVERIFY(broadcast);
         QCOMPARE(wallet->requestBroadcastCurrentTransaction(), quint64{0});
         QVERIFY(AwaitPsbtAction(*wallet, broadcast));
-        QCOMPARE(wallet->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtSubmitted);
+        QCOMPARE(wallet->psbtActionState(), WalletModel::PsbtActionState::PsbtSubmitted);
         const auto pool = qmltest::Rpc(m_app, "getrawmempool"); QCOMPARE(pool.size(), 1U);
         QCOMPARE(pool[0].get_str(), wallet->currentTransaction()->txid().toStdString());
     }
@@ -1034,7 +1034,7 @@ private Q_SLOTS:
             qmltest::Rpc(m_app, "sendtoaddress", qmltest::Json("[\"" + qmltest::NewAddress(m_app, other->name()).toStdString() + "\",1]"), alpha->name());
         }
         qmltest::Rpc(m_app, "generatetoaddress", qmltest::Json("[3,\"" + qmltest::NewAddress(m_app, alpha->name()).toStdString() + "\"]"));
-        const auto coin = [&](WalletQmlModel* wallet, const std::string& amount, size_t skip = 0) {
+        const auto coin = [&](WalletModel* wallet, const std::string& amount, size_t skip = 0) {
             const auto coins = qmltest::Rpc(m_app, "listunspent", {}, wallet->name());
             for (size_t i = 0; i < coins.size(); ++i) {
                 if (coins[i].find_value("amount").getValStr() != amount) continue;
@@ -1049,7 +1049,7 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor([&] { return !coin(bravo, "1.00000000").empty() && !coin(charlie, "1.00000000").empty(); }, 5'000));
         const auto bravo_coin = coin(bravo, "1.00000000");
         // Alpha's input carries only its UTXO data; Bravo signs its own input.
-        const auto prepare = [&](const std::string& inputs, const std::string& amount, WalletQmlModel* unsigned_owner) {
+        const auto prepare = [&](const std::string& inputs, const std::string& amount, WalletModel* unsigned_owner) {
             auto psbt = qmltest::Rpc(m_app, "createpsbt", qmltest::Json("[[" + inputs + "],[{\"" + qmltest::NewAddress(m_app, alpha->name()).toStdString() + "\":" + amount + "}]]")).get_str();
             for (auto* owner : {alpha, unsigned_owner}) {
                 if (owner) psbt = qmltest::Rpc(m_app, "walletprocesspsbt", qmltest::Json("[\"" + psbt + "\",false]"), owner->name()).find_value("psbt").get_str();
@@ -1069,7 +1069,7 @@ private Q_SLOTS:
         const auto control = prepare(coin(alpha, "50.00000000") + "," + bravo_coin + "," + coin(charlie, "1.00000000"), "51.999", charlie);
         QVERIFY(!control.second);
         const auto control_path = write(control.first, "control.psbt"); QVERIFY(!control_path.isEmpty());
-        QCOMPARE(AwaitPsbtImport(*alpha, control_path), WalletQmlModel::PsbtImportResult::WalletCannotSign);
+        QCOMPARE(AwaitPsbtImport(*alpha, control_path), WalletModel::PsbtImportResult::WalletCannotSign);
         QVERIFY(alpha->currentTransaction()); QCOMPARE(alpha->currentTransaction()->feeAmount()->satoshi(), CAmount{100'000});
         QVERIFY(!alpha->currentTransactionCanSend()); QVERIFY(!alpha->currentTransactionCanSignOnly());
         QVERIFY(!alpha->currentTransactionCanBroadcast());
@@ -1079,7 +1079,7 @@ private Q_SLOTS:
         const auto joint = prepare(coin(alpha, "50.00000000", 1) + "," + bravo_coin, "50.999", nullptr);
         QVERIFY(!joint.second);
         const auto path = write(joint.first, "joint.psbt"); QVERIFY(!path.isEmpty());
-        QCOMPARE(AwaitPsbtImport(*alpha, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*alpha, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(alpha->currentTransactionCanSend()); QVERIFY(alpha->currentTransactionCanSignOnly());
         QVERIFY(!alpha->currentTransactionCanBroadcast());
         const auto sign = StartSend(*alpha, true); QVERIFY(sign);
@@ -1088,7 +1088,7 @@ private Q_SLOTS:
         QVERIFY(alpha->currentTransactionCanBroadcast());
         const auto broadcast = alpha->requestBroadcastCurrentTransaction(); QVERIFY(broadcast);
         QVERIFY(AwaitPsbtAction(*alpha, broadcast));
-        QCOMPARE(alpha->psbtActionState(), WalletQmlModel::PsbtActionState::PsbtSubmitted);
+        QCOMPARE(alpha->psbtActionState(), WalletModel::PsbtActionState::PsbtSubmitted);
         const auto pool = qmltest::Rpc(m_app, "getrawmempool"); QCOMPARE(pool.size(), 1U);
         const auto txid = alpha->currentTransaction()->txid().toStdString();
         QCOMPARE(pool[0].get_str(), txid);
@@ -1164,7 +1164,7 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto source_path = directory.filePath("withheld.psbt");
         QFile source{source_path}; QVERIFY(source.open(QIODevice::WriteOnly)); QCOMPARE(source.write(original.first), original.first.size()); source.close();
-        QCOMPARE(AwaitPsbtImport(*reviewer, source_path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*reviewer, source_path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(reviewer->currentTransactionCanSend()); QVERIFY(reviewer->currentTransactionCanBroadcast());
         QVERIFY(!qmltest::Rpc(m_app, "getwalletinfo", {}, reviewer->name()).find_value("private_keys_enabled").get_bool());
         const auto saved_path = directory.filePath("preserved.psbt"); QVERIFY(AwaitPsbtSave(*reviewer, saved_path));
@@ -1379,7 +1379,7 @@ private Q_SLOTS:
         const auto bytes = QByteArray::fromBase64(QByteArray::fromStdString(psbt));
         QCOMPARE(file.write(bytes), bytes.size());
         file.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         QVERIFY(wallet->currentTransaction());
         QVERIFY(wallet->currentTransactionIsImportedPsbt());
         QVERIFY(wallet->currentTransactionCanSend());
@@ -1389,7 +1389,7 @@ private Q_SLOTS:
         QVERIFY(AwaitPsbtSave(*wallet, exported_path));
         QVERIFY2(AwaitCommittedSend(*wallet), qPrintable(wallet->transactionError()));
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), 1U);
-        QCOMPARE(AwaitPsbtImport(*wallet, exported_path), WalletQmlModel::PsbtImportResult::TransactionAlreadyKnown);
+        QCOMPARE(AwaitPsbtImport(*wallet, exported_path), WalletModel::PsbtImportResult::TransactionAlreadyKnown);
     }
 
     // draft-108-RC28: after an imported PSBT is committed through Send, that
@@ -1405,7 +1405,7 @@ private Q_SLOTS:
         QTemporaryDir directory; QVERIFY(directory.isValid());
         const auto path = directory.filePath("resend.psbt");
         QFile file{path}; QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), bytes.size()); file.close();
-        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletQmlModel::PsbtImportResult::WalletCanSign);
+        QCOMPARE(AwaitPsbtImport(*wallet, path), WalletModel::PsbtImportResult::WalletCanSign);
         // A committed send reaches the wallet asynchronously. Its balance update
         // marks a review prepared before it as stale (it may spend the same
         // coins), so wait for it before preparing the next draft, as a user would.

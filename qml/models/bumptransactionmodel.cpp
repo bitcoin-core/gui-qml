@@ -140,7 +140,7 @@ quint64 BumpTransactionModel::requestPrepareFeeBump(const QString& txid, unsigne
     if (!observer || m_closed) return 0;
     const auto attempt = m_attempt_id + 1, revision = m_view_revision + 1;
     if (m_attempt_owner) m_attempt_owner->close({});
-    auto owner = std::make_shared<transactionattempt::Owner>(m_opening->utilityQueue());
+    auto owner = std::make_shared<transactionattempt::Store>(m_opening->utilityQueue());
     const transactionattempt::CurrentFacts facts{m_opening->identity(), 0, m_opening->available()};
     const transactionattempt::Ticket ticket{attempt, revision, facts.session, facts.review};
     m_attempt_owner = owner;

@@ -208,7 +208,7 @@ Q_SIGNALS:
 
 private:
     struct Parameters;
-    struct Owner;
+    struct State;
     struct Job;
     struct Mailbox;
     quint64 startExport(const QString& path, std::shared_ptr<const activityview::Hold> snapshot, int unit, bool captured);
@@ -219,7 +219,7 @@ private:
     void finishClose();
     void sourceChanged();
     static void step(const std::shared_ptr<Job>& job);
-    static void patchRow(Owner& owner, const QString& id, activityview::SharedRow row);
+    static void patchRow(State& state, const QString& id, activityview::SharedRow row);
     static bool typeMatches(const activityview::Row& row, TypeFilter type);
     static bool dateMatches(qint64 timestamp, const Parameters& parameters);
     static bool matches(const activityview::Row& row, const Parameters& parameters);

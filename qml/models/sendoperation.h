@@ -23,7 +23,7 @@ class SendOperation : public QObject
     Q_PROPERTY(bool passwordRequested READ passwordRequested NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(QString txid READ txid NOTIFY changed)
-    //! WalletQmlModel::SendSubmission and SendRecord values.
+    //! WalletModel::SendSubmission and SendRecord values.
     Q_PROPERTY(int submission READ submission NOTIFY changed)
     Q_PROPERTY(int record READ record NOTIFY changed)
 

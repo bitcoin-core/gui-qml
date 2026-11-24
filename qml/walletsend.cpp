@@ -333,7 +333,7 @@ bool VerifyExternalTransaction(interfaces::Wallet& wallet, const CTransaction& t
     return VerifiedExternalTransaction(wallet, transaction);
 }
 
-execution::SubmitResult Operation::start(Request request, std::shared_ptr<const walletopening::Session::Action> action)
+execution::SubmitResult SendTask::start(Request request, std::shared_ptr<const walletopening::Session::Action> action)
 {
     {
         std::lock_guard lock{m_mutex};
@@ -364,7 +364,7 @@ execution::SubmitResult Operation::start(Request request, std::shared_ptr<const 
     return plan([self] { self->beginOnDomain(); });
 }
 
-execution::SubmitResult Operation::plan(std::function<void()> work)
+execution::SubmitResult SendTask::plan(std::function<void()> work)
 {
     std::shared_ptr<const walletopening::Session::Action> action;
     { std::lock_guard lock{m_mutex}; action = m_action; }
@@ -372,7 +372,7 @@ execution::SubmitResult Operation::plan(std::function<void()> work)
     return m_opening->planAction(action, std::move(work));
 }
 
-void Operation::beginOnDomain()
+void SendTask::beginOnDomain()
 {
     Notice notice{Notice::SweepConsentRequired};
     bool wait_for_sweep{false}, cancelled{false};
@@ -399,7 +399,7 @@ void Operation::beginOnDomain()
     dispatchNative();
 }
 
-void Operation::dispatchNative(secretinput::Captured passphrase)
+void SendTask::dispatchNative(secretinput::Captured passphrase)
 {
     Request request;
     std::shared_ptr<const walletopening::Session::Action> action;
@@ -453,7 +453,7 @@ void Operation::dispatchNative(secretinput::Captured passphrase)
     if (!admitted) nativeCompleted(FailureResult(Error::Rejected));
 }
 
-void Operation::nativeCompleted(Result result)
+void SendTask::nativeCompleted(Result result)
 {
     if (!result.candidate) {
         std::lock_guard lock{m_mutex};
@@ -489,7 +489,7 @@ void Operation::nativeCompleted(Result result)
         } else if (m_notes) {
             try {
                 auto accepted = m_notes->submitSentLabels(action, result.committed->GetHash(), notes,
-                    [notify = m_notify, weak = std::weak_ptr<Operation>{shared_from_this()}] {
+                    [notify = m_notify, weak = std::weak_ptr<SendTask>{shared_from_this()}] {
                         try { notify(Notice::Notes); }
                         catch (...) { if (const auto owner = weak.lock()) owner->publicationFailed(); }
                     });
@@ -500,7 +500,7 @@ void Operation::nativeCompleted(Result result)
     complete(std::move(result));
 }
 
-execution::SubmitResult Operation::confirmSweep(uint64_t attempt_id, uint64_t review_id)
+execution::SubmitResult SendTask::confirmSweep(uint64_t attempt_id, uint64_t review_id)
 {
     std::shared_ptr<const walletopening::Session::Action> action;
     {
@@ -532,7 +532,7 @@ execution::SubmitResult Operation::confirmSweep(uint64_t attempt_id, uint64_t re
     return started;
 }
 
-execution::SubmitResult Operation::providePassphrase(uint64_t attempt_id, uint64_t review_id, secretinput::Captured passphrase)
+execution::SubmitResult SendTask::providePassphrase(uint64_t attempt_id, uint64_t review_id, secretinput::Captured passphrase)
 {
     std::shared_ptr<const walletopening::Session::Action> action;
     {
@@ -564,7 +564,7 @@ execution::SubmitResult Operation::providePassphrase(uint64_t attempt_id, uint64
     return started;
 }
 
-execution::SubmitResult Operation::cancelPrompt(uint64_t attempt_id, uint64_t review_id)
+execution::SubmitResult SendTask::cancelPrompt(uint64_t attempt_id, uint64_t review_id)
 {
     std::shared_ptr<const walletopening::Session::Action> action;
     {
@@ -591,14 +591,14 @@ execution::SubmitResult Operation::cancelPrompt(uint64_t attempt_id, uint64_t re
     return started;
 }
 
-Stage Operation::stage() const { std::lock_guard lock{m_mutex}; return m_stage; }
-Error Operation::promptError() const { std::lock_guard lock{m_mutex}; return m_prompt_error; }
+Stage SendTask::stage() const { std::lock_guard lock{m_mutex}; return m_stage; }
+Error SendTask::promptError() const { std::lock_guard lock{m_mutex}; return m_prompt_error; }
 
-std::optional<Result> Operation::result() const
+std::optional<Result> SendTask::result() const
 {
     std::lock_guard lock{m_mutex}; return m_result;
 }
-void Operation::complete(Result result)
+void SendTask::complete(Result result)
 {
     Request discarded;
     std::shared_ptr<const walletopening::Session::Action> retired_action;
@@ -627,7 +627,7 @@ void Operation::complete(Result result)
     try { m_notify(Notice::Finished); }
     catch (...) { publicationFailed(); }
 }
-void Operation::publicationFailed()
+void SendTask::publicationFailed()
 {
     std::lock_guard lock{m_mutex}; m_publication_failed = true;
     if (m_result) m_result->publication_failed = true;
@@ -751,7 +751,7 @@ Result ApproveInto(interfaces::Wallet& wallet, const Request& request, std::shar
     return result;
 }
 
-struct ApprovalOwner::State {
+struct ApprovalService::State {
     uint64_t sequence{0};
     uint64_t current_review{0}, current_view{0};
     uint64_t attempt_id{0}, attempt_review{0}, attempt_view{0};
@@ -780,12 +780,12 @@ Error ApprovalExecutionError(std::exception_ptr error)
 }
 }
 
-ApprovalOwner::ApprovalOwner(std::shared_ptr<walletopening::Session> opening, Notify notify)
+ApprovalService::ApprovalService(std::shared_ptr<walletopening::Session> opening, Notify notify)
     : m_opening(std::move(opening)), m_notify(std::move(notify)), m_state(std::make_shared<State>())
 {
 }
 
-ApprovalSnapshot ApprovalOwner::project(const State& state)
+ApprovalSnapshot ApprovalService::project(const State& state)
 {
     ApprovalSnapshot result;
     result.sequence = state.sequence;
@@ -804,12 +804,12 @@ ApprovalSnapshot ApprovalOwner::project(const State& state)
     return result;
 }
 
-void ApprovalOwner::publish(const std::shared_ptr<State>& state, const Notify& notify)
+void ApprovalService::publish(const std::shared_ptr<State>& state, const Notify& notify)
 {
     if (notify) notify(project(*state));
 }
 
-execution::SubmitResult ApprovalOwner::reviewChanged(uint64_t review_id, uint64_t view_revision)
+execution::SubmitResult ApprovalService::reviewChanged(uint64_t review_id, uint64_t view_revision)
 {
     if (!m_opening || m_close_requested.load()) return {{}, execution::Rejection::Closed};
     const auto state = m_state;
@@ -845,7 +845,7 @@ execution::SubmitResult ApprovalOwner::reviewChanged(uint64_t review_id, uint64_
     });
 }
 
-execution::SubmitResult ApprovalOwner::request(uint64_t attempt_id, uint64_t review_id, uint64_t view_revision,
+execution::SubmitResult ApprovalService::request(uint64_t attempt_id, uint64_t review_id, uint64_t view_revision,
                                              std::shared_ptr<Request> retained_request)
 {
     if (!m_opening || m_close_requested.load() || attempt_id == 0 || !retained_request)
@@ -976,7 +976,7 @@ execution::SubmitResult ApprovalOwner::request(uint64_t attempt_id, uint64_t rev
     });
 }
 
-execution::SubmitResult ApprovalOwner::close()
+execution::SubmitResult ApprovalService::close()
 {
     if (m_close_requested.exchange(true)) return {{}, execution::Rejection::Invalid};
     if (!m_opening) return {{}, execution::Rejection::Closed};

@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#ifndef BITCOIN_QML_MODELS_RECEIVERESERVATIONMODEL_H
-#define BITCOIN_QML_MODELS_RECEIVERESERVATIONMODEL_H
+#ifndef BITCOIN_QML_MODELS_ADDRESSRESERVATIONMODEL_H
+#define BITCOIN_QML_MODELS_ADDRESSRESERVATIONMODEL_H
 
 #include <qml/walletrequests.h>
 #include <qml/models/texteditsessionmodel.h>
@@ -10,14 +10,14 @@
 
 #include <QPointer>
 
-class ReceiveReservationModel;
+class AddressReservationModel;
 class ReceiveAuthorizationPrompt final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool active READ active NOTIFY changed)
     Q_PROPERTY(QString errorText READ errorText NOTIFY changed)
 public:
-    ReceiveAuthorizationPrompt(ReceiveReservationModel* owner, QString token, QObject* parent);
+    ReceiveAuthorizationPrompt(AddressReservationModel* owner, QString token, QObject* parent);
     QString token() const { return m_token; }
     bool active() const;
     QString errorText() const;
@@ -27,14 +27,14 @@ public:
 Q_SIGNALS:
     void changed();
 private:
-    const QPointer<ReceiveReservationModel> m_owner;
+    const QPointer<AddressReservationModel> m_owner;
     const QString m_token;
     bool m_active{true};
 };
 
 /** GUI projection of the sole Store reservation/generation writer. A cancelled
  * question owns no Wallet or secret; already admitted effects still drain. */
-class ReceiveReservationModel final : public QObject
+class AddressReservationModel final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(Phase phase READ phase NOTIFY changed)
@@ -70,7 +70,7 @@ public:
         // materializes its secure input on the injected executor.
         std::function<Admission(walletrequests::Command, const QString&, std::function<void(const walletrequests::Result&)>)> authorize;
     };
-    ReceiveReservationModel(uint64_t view, Ports ports, QObject* parent = nullptr);
+    AddressReservationModel(uint64_t view, Ports ports, QObject* parent = nullptr);
     Phase phase() const { return m_phase; }
     QString reservationId() const { return m_intent ? QString::number(m_intent->token) : QString{}; }
     QString address() const { return m_address; }
@@ -121,4 +121,4 @@ private:
     QString m_requested_type;
 };
 
-#endif // BITCOIN_QML_MODELS_RECEIVERESERVATIONMODEL_H
+#endif // BITCOIN_QML_MODELS_ADDRESSRESERVATIONMODEL_H

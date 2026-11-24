@@ -31,13 +31,13 @@
 #include <qml/models/sendimportmodel.h>
 #include <qml/models/preparationoperation.h>
 #include <qml/models/psbtoperation.h>
-#include <qml/models/requestdeletecontroller.h>
-#include <qml/models/requestviewcontroller.h>
+#include <qml/models/paymentrequestdeletecontroller.h>
+#include <qml/models/paymentrequestviewcontroller.h>
 #include <qml/models/peercommandcontroller.h>
 #include <qml/models/peercommandoperation.h>
-#include <qml/models/peercommandtarget.h>
+#include <qml/models/peeractionsinterface.h>
 #include <qml/models/securityoperation.h>
-#include <qml/models/settingseditorsource.h>
+#include <qml/models/settingseditorfactoryinterface.h>
 #include <qml/models/settingsnavigationcontroller.h>
 #include <qml/models/senddraftcontroller.h>
 #include <qml/models/feebumpcontroller.h>
@@ -208,7 +208,7 @@ struct MockPeerOperationState {
     std::function<void()> notify;
 };
 
-class MockPeerDetailsModel : public PeerCommandTarget
+class MockPeerDetailsModel : public PeerActionsInterface
 {
     Q_OBJECT
     Q_PROPERTY(qint64 nodeId MEMBER m_node_id NOTIFY dataChanged)
@@ -249,7 +249,7 @@ class MockPeerDetailsModel : public PeerCommandTarget
     Q_PROPERTY(QString timeOffset MEMBER m_time_offset NOTIFY dataChanged)
 
 public:
-    explicit MockPeerDetailsModel(QObject* parent = nullptr) : PeerCommandTarget(parent) {}
+    explicit MockPeerDetailsModel(QObject* parent = nullptr) : PeerActionsInterface(parent) {}
     QString nodeIdText() const { return QString::number(m_node_id); }
     QString connectionId() const { return m_connection_id; }
     bool connected() const { return m_connected; }
@@ -1915,12 +1915,12 @@ public:
     explicit MockWalletQmlModel(QObject* parent = nullptr) : QObject(parent), m_fees(new FeeSelectionModel(this))
     {
         m_security.walletAvailable = [this] { return m_available; };
-        connect(this, &MockWalletQmlModel::availableChanged, &m_security, &WalletInterface::availableChanged);
+        connect(this, &MockWalletQmlModel::availableChanged, &m_security, &WalletAvailabilityInterface::availableChanged);
         m_backups.walletAvailable = [this] { return m_available; };
         m_backups.started = [this](const QString& path) {
             m_last_backup_path = path; ++m_backup_wallet_calls; Q_EMIT backupWalletCallsChanged();
         };
-        connect(this, &MockWalletQmlModel::availableChanged, &m_backups, &WalletInterface::availableChanged);
+        connect(this, &MockWalletQmlModel::availableChanged, &m_backups, &WalletAvailabilityInterface::availableChanged);
         connect(this, &MockWalletQmlModel::currentTransactionChanged, this, [this] {
             ++m_flow_revision;
             m_flow_details.setSource(m_current_transaction_flow, m_current_transaction ? m_current_transaction->property("reviewedRecipients").toList() : QVariantList{}, m_current_transaction, m_flow_revision);
@@ -2736,8 +2736,8 @@ Q_SIGNALS:
     void reviewedRecipientsChanged();
 };
 
-//! Follows the mock wallet's send simulation the way WalletSendOperation
-//! follows its walletsend::Operation.
+//! Follows the mock wallet's send simulation the way WalletSendHandle
+//! follows its walletsend::SendTask.
 class MockSendOperation final : public SendOperation
 {
     Q_OBJECT
@@ -2794,7 +2794,7 @@ private:
 };
 
 //! Follows the mock wallet's PSBT action slot the way WalletPsbtOperation
-//! follows WalletQmlModel's.
+//! follows WalletModel's.
 class MockPsbtOperation final : public PsbtOperation
 {
     Q_OBJECT
@@ -2889,7 +2889,7 @@ private:
 };
 
 //! Follows the mock wallet's preparation the way WalletPreparationOperation
-//! follows WalletQmlModel's.
+//! follows WalletModel's.
 class MockPreparationOperation final : public PreparationOperation
 {
     Q_OBJECT
@@ -4616,7 +4616,7 @@ std::atomic_size_t& MockSettingsPending()
     return pending;
 }
 }
-class MockOptionsModel : public SettingsEditorSource
+class MockOptionsModel : public SettingsEditorFactoryInterface
 {
     Q_OBJECT
     Q_PROPERTY(bool settingsReady MEMBER m_settings_ready NOTIFY settingsReadyChanged)
@@ -6364,7 +6364,7 @@ FeeBumpInterface* MockWalletQmlModel::feeBumps()
     if (!m_fee_bumps) {
         m_fee_bumps = new MockFeeBumps(this);
         m_fee_bumps->walletAvailable = [this] { return m_available; };
-        connect(this, &MockWalletQmlModel::availableChanged, m_fee_bumps, &WalletInterface::availableChanged);
+        connect(this, &MockWalletQmlModel::availableChanged, m_fee_bumps, &WalletAvailabilityInterface::availableChanged);
     }
     return m_fee_bumps;
 }
@@ -7851,7 +7851,7 @@ public Q_SLOTS:
         qmlRegisterUncreatableMetaObject(SettingsSaveResult::staticMetaObject,"org.bitcoincore.qt",1,0,"SettingsSaveResult","Retained settings outcome");
         qRegisterMetaType<SettingsSaveResult>();
         qmlRegisterUncreatableType<SettingsEditorModel>("org.bitcoincore.qt",1,0,"SettingsEditorModel","Actual controlled editor");
-        qmlRegisterUncreatableType<SettingsEditorSource>("org.bitcoincore.qt",1,0,"SettingsEditorSource","The options");
+        qmlRegisterUncreatableType<SettingsEditorFactoryInterface>("org.bitcoincore.qt",1,0,"SettingsEditorFactoryInterface","The options");
         qmlRegisterType<SettingsNavigationController>("org.bitcoincore.qt",1,0,"SettingsNavigationController");
         qmlRegisterUncreatableType<SettingsEntryModel>("org.bitcoincore.qt",1,0,"SettingsEntryModel","Actual controlled setting");
         qmlRegisterUncreatableType<FeeSelectionModel>("org.bitcoincore.qt", 1, 0, "FeeSelectionModel", "Owned fee policy");
@@ -8093,7 +8093,7 @@ public Q_SLOTS:
             "Test stub type"
         );
         qmlRegisterUncreatableType<PeerCommandOperation>("org.bitcoincore.qt", 1, 0, "PeerCommandOperation", "Captured peer operation");
-        qmlRegisterUncreatableType<PeerCommandTarget>("org.bitcoincore.qt", 1, 0, "PeerCommandTarget", "A peer");
+        qmlRegisterUncreatableType<PeerActionsInterface>("org.bitcoincore.qt", 1, 0, "PeerActionsInterface", "A peer");
         qmlRegisterType<PeerCommandController>("org.bitcoincore.qt", 1, 0, "PeerCommandController");
         qmlRegisterType<MockPeerSelectionModel>("org.bitcoincore.qt", 1, 0, "PeerSelectionModel");
         qRegisterMetaType<PeerCommandResult>();
@@ -8136,7 +8136,7 @@ public Q_SLOTS:
         qmlRegisterType<WalletPasswordController>("org.bitcoincore.qt", 1, 0, "WalletPasswordController");
         qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
         qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
-        qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel", "Test stub type");
+        qmlRegisterUncreatableType<MockWalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletModel", "Test stub type");
         qmlRegisterUncreatableType<MockWalletNamesController>("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Test stub type");
         qmlRegisterUncreatableType<MockWalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Test stub type");
         qmlRegisterSingletonInstance<MockBitcoinUri>("org.bitcoincore.qt", 1, 0, "BitcoinUri", &bitcoin_uri);
@@ -8146,8 +8146,8 @@ public Q_SLOTS:
         qmlRegisterUncreatableType<PreparationOperation>("org.bitcoincore.qt", 1, 0, "PreparationOperation", "Started by a wallet");
         qmlRegisterUncreatableType<SendDraftInterface>("org.bitcoincore.qt", 1, 0, "SendDraftInterface", "A wallet");
         qmlRegisterType<SendDraftController>("org.bitcoincore.qt", 1, 0, "SendDraftController");
-        qmlRegisterType<RequestViewController>("org.bitcoincore.qt", 1, 0, "RequestViewController");
-        qmlRegisterType<RequestDeleteController>("org.bitcoincore.qt", 1, 0, "RequestDeleteController");
+        qmlRegisterType<PaymentRequestViewController>("org.bitcoincore.qt", 1, 0, "PaymentRequestViewController");
+        qmlRegisterType<PaymentRequestDeleteController>("org.bitcoincore.qt", 1, 0, "PaymentRequestDeleteController");
         qmlRegisterUncreatableType<TransactionReviewInterface>("org.bitcoincore.qt", 1, 0, "TransactionReviewInterface", "A wallet");
         qmlRegisterType<TransactionReviewController>("org.bitcoincore.qt", 1, 0, "TransactionReviewController");
         qmlRegisterUncreatableType<ImportTarget>("org.bitcoincore.qt", 1, 0, "ImportTarget", "Test stub type");
@@ -8169,7 +8169,7 @@ public Q_SLOTS:
             "org.bitcoincore.qt",
             1,
             0,
-            "WalletQmlModelTransaction",
+            "TransactionReviewModel",
             "Test stub type"
         );
         qmlRegisterUncreatableType<MockDebugLogModel>(

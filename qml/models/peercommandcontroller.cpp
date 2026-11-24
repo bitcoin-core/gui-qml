@@ -52,13 +52,13 @@ QString PeerCommandController::banDurationText() const
         : seconds >= int(Duration::Day) ? tr("1 day") : tr("1 hour");
 }
 
-bool PeerCommandController::disconnectPeer(PeerCommandTarget* peer)
+bool PeerCommandController::disconnectPeer(PeerActionsInterface* peer)
 {
     if (!peer || busy() || m_presenting || !peer->canDisconnect()) return false;
     return start(peer->prepareDisconnect(), Prompt::Disconnect);
 }
 
-bool PeerCommandController::banPeer(PeerCommandTarget* peer, PeerCommandOperation::BanDuration duration)
+bool PeerCommandController::banPeer(PeerActionsInterface* peer, PeerCommandOperation::BanDuration duration)
 {
     if (!peer || busy() || m_presenting || !peer->canBan()) return false;
     return start(peer->prepareBan(duration), Prompt::Ban);

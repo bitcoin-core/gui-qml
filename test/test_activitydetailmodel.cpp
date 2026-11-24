@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/activitydetailmodel.h>
 #include <qml/models/transactionactivitymodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <test/mocks/walletmodelservices.h>
 #include <test/mocks/manualexecutionenvironment.h>
 #include <test/mocks/manualstartupexecution.h>
@@ -99,7 +99,7 @@ struct Fixture {
     ManualExecutionEnvironment env;
     ManualStartupExecution worker;
     std::shared_ptr<Native> native;
-    std::unique_ptr<WalletQmlModel> wallet;
+    std::unique_ptr<WalletModel> wallet;
     std::unique_ptr<TransactionActivityModel> source;
     std::shared_ptr<const bool> native_drained;
     std::unique_ptr<ActivityDetailModel> view(QObject& owner) {
@@ -111,7 +111,7 @@ struct Fixture {
         FeeReadServices fees;
         fees.post=[this](auto turn){env.post(std::move(turn));};
         fees.timer=std::shared_ptr<FeeReadTimer>{&env,[](auto*){}};
-        wallet=std::make_unique<WalletQmlModel>(WalletWithQueues(native,worker.executor()),nullptr,std::move(fees),psbtfee::Services{},backup::Services{});
+        wallet=std::make_unique<WalletModel>(WalletWithQueues(native,worker.executor()),nullptr,std::move(fees),psbtfee::Services{},backup::Services{});
         native_drained = WatchWalletNativeDrain(*wallet);
         if(!QTest::qWaitFor([this]{settle();
             return wallet->capabilitiesKnown()&&wallet->property("receiveRequestsLoaded").toBool()&&!wallet->receiveRequestReconciliationPending();},5000))QTest::qFail("Opening did not become ready",__FILE__,__LINE__);
@@ -400,7 +400,7 @@ private Q_SLOTS:
         QGuiApplication::clipboard()->setText("before original handoff");
         const auto expected=QString::fromStdString(EncodeHexTx(*f.native->first.tx));
         QSignalSpy copied{view.get(),&ActivityDetailModel::rawTransactionCopied};
-        QSignalSpy shutdown{f.wallet.get(),&WalletQmlModel::shutdownFinished};
+        QSignalSpy shutdown{f.wallet.get(),&WalletModel::shutdownFinished};
         QVERIFY(view->copyRawTransaction());
         // Hold the accepted Domain turn, then close its original opening.
         f.wallet->beginShutdown();
@@ -516,7 +516,7 @@ private Q_SLOTS:
     {
         auto owned=std::make_unique<Native>();
         auto* native=owned.get();
-        auto wallet=std::make_unique<WalletQmlModel>(std::move(owned),nullptr);
+        auto wallet=std::make_unique<WalletModel>(std::move(owned),nullptr);
         QTRY_VERIFY(wallet->capabilitiesKnown());
         auto* source=wallet->transactionActivityModel();
         QTRY_VERIFY(!source->loading());

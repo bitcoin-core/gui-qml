@@ -25,7 +25,7 @@
 #include <QInputMethodEvent>
 #include <core_io.h>
 #include <util/string.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 
 #include <algorithm>
 #include <atomic>
@@ -45,8 +45,8 @@ class SendIntegrationTests : public QObject
     BitcoinQmlApplication& m_app;
 
     struct Sweep {
-        WalletQmlModel* wallet;
-        WalletQmlModel* destination_wallet;
+        WalletModel* wallet;
+        WalletModel* destination_wallet;
         QString address;
         UniValue locked_input;
         CAmount expected_amount;
@@ -144,7 +144,7 @@ private Q_SLOTS:
         QTRY_VERIFY(!wallet->fees()->policyPending() && !wallet->feeEstimatePending() && wallet->customFeeRateValid() && wallet->estimatedFeeSatoshi() > 0);
         const auto preview = wallet->estimatedFeeSatoshi(); QCOMPARE(preview, expected_preview);
         QVERIFY(qmltest::Click(m_app, "sendReviewButton")); QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
-        QCOMPARE(wallet->preparationState(), WalletQmlModel::PreparationState::PreparationReady);
+        QCOMPARE(wallet->preparationState(), WalletModel::PreparationState::PreparationReady);
         auto* prepared = wallet->currentTransaction(); QVERIFY(prepared);
         const auto actual = prepared->feeAmount()->satoshi(); QCOMPARE(actual, expected_review);
         QCOMPARE(prepared->reviewFeeRate(), QStringLiteral("10.000"));
@@ -183,7 +183,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(review_button->property("enabled").toBool(), 30'000);
         QVERIFY(qmltest::Click(m_app, "sendReviewButton"));
         QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
-        QCOMPARE(wallet->preparationState(), WalletQmlModel::PreparationState::PreparationReady);
+        QCOMPARE(wallet->preparationState(), WalletModel::PreparationState::PreparationReady);
         auto* review = wallet->currentTransaction(); QVERIFY(review && review->getWtx());
 
         const auto outputs = wallet->currentTransactionFlow().value("outputs").toList();
@@ -258,7 +258,7 @@ private Q_SLOTS:
         QTRY_VERIFY(!wallet->fees()->policyPending() && !wallet->feeEstimatePending() && wallet->estimatedFeeSatoshi() > 0);
         QCOMPARE(wallet->estimatedFeeRate(), QStringLiteral("2")); QVERIFY(!wallet->customFeeEnabled());
         const auto ticket = wallet->requestPrepareTransaction(); QVERIFY(ticket); QTRY_VERIFY(!wallet->preparationBusy());
-        QCOMPARE(wallet->preparationState(), WalletQmlModel::PreparationState::PreparationReady);
+        QCOMPARE(wallet->preparationState(), WalletModel::PreparationState::PreparationReady);
         auto* review = wallet->currentTransaction(); QVERIFY(review); QCOMPARE(review->reviewFeeRate(), QStringLiteral("2.000"));
         const auto tx = review->getWtx(); QVERIFY(tx); const auto fee = review->feeAmount()->satoshi();
         const auto rpc = qmltest::Rpc(m_app, "testmempoolaccept", qmltest::Json("[[\"" + EncodeHexTx(*tx) + "\"]]"));
@@ -417,7 +417,7 @@ private Q_SLOTS:
         QFETCH(int, unit); QFETCH(QString, text); QFETCH(int, producer);
         auto* wallet = qmltest::CreateWallet(m_app, "boundary"); QVERIFY(wallet);
         QVERIFY(qmltest::Click(m_app, "sendTabButton"));
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
         auto* input = qmltest::WaitForVisible(m_app, "sendAmountInput"); QVERIFY(input);
         auto* amount = wallet->sendRecipientList()->currentRecipient()->amount();
         QTRY_COMPARE(int(amount->unit()), unit);
@@ -528,7 +528,7 @@ private Q_SLOTS:
         const auto restore = qScopeGuard([previous] { QLocale::setDefault(previous); });
         QLocale::setDefault(QLocale("de_DE"));
         const auto setup = prepareSweep(false); QVERIFY(setup);
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options); options->setDisplayUnit(unit);
         QVERIFY(qmltest::SetText(m_app, "sendAddressInput", setup->address));
         auto* input = qmltest::WaitForVisible(m_app, "sendAmountInput"); QVERIFY(input);
         QTRY_VERIFY(qmltest::Click(m_app, "sendAmountInput") && input->property("activeFocus").toBool());
@@ -583,7 +583,7 @@ private Q_SLOTS:
         qInfo() << "Typed Send preparation" << int(setup->wallet->preparationState())
                 << setup->wallet->transactionError() << "draft revision"
                 << setup->wallet->sendRecipientList()->revision();
-        QCOMPARE(setup->wallet->preparationState(), WalletQmlModel::PreparationState::PreparationReady);
+        QCOMPARE(setup->wallet->preparationState(), WalletModel::PreparationState::PreparationReady);
         QVERIFY(qmltest::WaitForVisible(m_app, "sendTransactionReviewPage"));
         auto* prepared = setup->wallet->currentTransaction(); QVERIFY(prepared && prepared->getWtx());
         const auto decoded = qmltest::Rpc(m_app, "decoderawtransaction", qmltest::Json("[\"" + EncodeHexTx(*prepared->getWtx()) + "\"]"));
@@ -663,7 +663,7 @@ private Q_SLOTS:
         // The model's own entry point must refuse too, not choose inputs.
         const auto ticket = wallet->requestPrepareTransaction();
         if (ticket) QTRY_VERIFY(!wallet->preparationBusy());
-        QVERIFY(wallet->preparationState() != WalletQmlModel::PreparationState::PreparationReady);
+        QVERIFY(wallet->preparationState() != WalletModel::PreparationState::PreparationReady);
         QVERIFY(!wallet->currentTransaction()); QVERIFY(!QTest::qWaitFor([&] { return review_popup->property("opened").toBool(); }, 1'000));
         QCOMPARE(picker->property("currentIndex").toInt(), 1); QVERIFY(!review->property("enabled").toBool()); QVERIFY(wallet->coinSelectionBlocked());
         QCOMPARE(qmltest::Rpc(m_app, "getrawmempool").size(), size_t{0});
@@ -1065,7 +1065,7 @@ private Q_SLOTS:
         QVERIFY(setup);
         auto* wallet = setup->wallet;
         QVERIFY(wallet->encryptWallet("review password"));
-        QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletQmlModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
+        QTRY_COMPARE_WITH_TIMEOUT(wallet->securityState(), WalletModel::SecurityState::SecuritySucceeded, qmltest::kSecurityStateTimeoutMs);
         QTRY_VERIFY(wallet->isLocked());
         QTRY_COMPARE(wallet->selectedCoins()->size(), 2U);
         QVERIFY(qmltest::SetText(m_app, "sendAddressInput", setup->address));
@@ -1189,7 +1189,7 @@ private Q_SLOTS:
     // amount rows and the final "Send all available funds?" warning switch to BTC.
     void sendAllReviewFollowsAGlobalDisplayUnitChange()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
         const auto setup = prepareSweep(false); QVERIFY(setup); auto* wallet = setup->wallet;
         options->setDisplayUnit(3); QTRY_COMPARE(wallet->displayUnit(), 3);
@@ -1306,8 +1306,8 @@ private Q_SLOTS:
         QVERIFY2(coins->lockError().contains(QStringLiteral("already locked")), qPrintable(coins->lockError()));
         QCOMPARE(coins->lockOperation()->result()->value->changed, size_t{0});
         // Only the temporary lock exists: reopening the wallet clears it.
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
-        QPointer<WalletQmlModel> original{wallet}; controller->closeWallet(wallet->name()); QTRY_VERIFY(original.isNull());
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
+        QPointer<WalletModel> original{wallet}; controller->closeWallet(wallet->name()); QTRY_VERIFY(original.isNull());
         controller->setSelectedWallet("stale-context-lock"); QVERIFY(qmltest::WaitForOpenWallet(m_app, "stale-context-lock"));
         QCOMPARE(qmltest::Rpc(m_app, "listlockunspent", {}, QStringLiteral("stale-context-lock")).size(), size_t{0});
     }
@@ -1371,7 +1371,7 @@ private Q_SLOTS:
     // wallet; only wallet content changes do.
     void displayUnitChangeDoesNotRefreshTheCoinList()
     {
-        auto* options = qmltest::Model<OptionsQmlModel>(m_app, "optionsModel"); QVERIFY(options);
+        auto* options = qmltest::Model<SettingsModel>(m_app, "optionsModel"); QVERIFY(options);
         const auto restore = qScopeGuard([options] { options->setDisplayUnit(0); });
         auto* hidden = qmltest::CreateWallet(m_app, "unit-hidden"); QVERIFY(hidden); QVERIFY(qmltest::FundWallet(m_app, *hidden));
         auto* coins = hidden->coinsListModel(); QVERIFY(coins); coins->update(); QTRY_VERIFY(!coins->loading() && coins->coinCount() == 1);
@@ -1569,8 +1569,8 @@ private Q_SLOTS:
         QVERIFY(coins->setCoinsLocked({id}, false)); QTRY_VERIFY(!coins->lockPending());
         QVERIFY2(coins->lockError().isEmpty(), qPrintable(coins->lockError()));
         QCOMPARE(qmltest::Rpc(m_app, "listlockunspent", {}, wallet->name()).size(), size_t{0});
-        auto* controller = qmltest::Model<WalletQmlController>(m_app, "walletController"); QVERIFY(controller);
-        QPointer<WalletQmlModel> original{wallet}; controller->closeWallet("temporary-lock-upgrade");
+        auto* controller = qmltest::Model<WalletController>(m_app, "walletController"); QVERIFY(controller);
+        QPointer<WalletModel> original{wallet}; controller->closeWallet("temporary-lock-upgrade");
         QTRY_VERIFY(original.isNull());
         controller->setSelectedWallet("temporary-lock-upgrade");
         QVERIFY(qmltest::WaitForOpenWallet(m_app, "temporary-lock-upgrade"));

@@ -28,7 +28,7 @@ struct Service::Publication {
     uint64_t rejected{0};Disposition rejection{Disposition::Accepted};
     void refused(Disposition reason){std::lock_guard lock{mutex};if(rejected!=std::numeric_limits<uint64_t>::max())++rejected;rejection=reason;}
 };
-struct Service::Owner {
+struct Service::Impl {
     struct Completion {std::function<void()> done;~Completion(){try{if(done)done();}catch(...){}}};
     Completion completion; // Last destroyed, after every request and port.
     struct Slot { std::shared_ptr<const Request> request; bool blocking{false}; Id id{0}; std::function<void()> completion; };
@@ -42,7 +42,7 @@ struct Service::Owner {
     std::atomic_bool stopping{false};
     std::recursive_mutex reducer_mutex;
     bool retired{false};
-    Owner(std::shared_ptr<Publication> output,
+    Impl(std::shared_ptr<Publication> output,
           std::function<void()> notify, std::function<void()> done, Limits limits, std::shared_ptr<execution::SerialQueue> utility)
         : completion{std::move(done)}, utility(std::move(utility)), publication(std::move(output)),
           changed(std::move(notify)), queue(limits) {}
@@ -126,8 +126,8 @@ Service::Service(Queues queues, std::function<void()> changed,
 {
     if (!queues.utility || !queues.retire)
         throw std::invalid_argument{"Missing runtime prompt execution"};
-    m_owner = execution::RetainSnapshot<Owner>(queues.retire, [&] {
-        return std::make_unique<Owner>(m_publication, std::move(changed), std::move(drained), limits, std::move(queues.utility));
+    m_owner = execution::RetainSnapshot<Impl>(queues.retire, [&] {
+        return std::make_unique<Impl>(m_publication, std::move(changed), std::move(drained), limits, std::move(queues.utility));
     });
     m_state = m_owner;
 }

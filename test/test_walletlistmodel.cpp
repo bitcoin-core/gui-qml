@@ -8,7 +8,7 @@
 #include <interfaces/wallet.h>
 #include <qml/execution.h>
 #include <qml/models/walletlistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <scheduler.h>
 #include <test/mocks/mocknode.h>
 #include <util/translation.h>
@@ -968,7 +968,7 @@ void WalletListModelTests::manualDefaultWalletHasExplicitLoadingAndFailureAbsenc
     QVERIFY(!model.data(row(), WalletListModel::DisplayNameRole).toString().isEmpty());
     QVERIFY(model.data(row(), WalletListModel::RowErrorRole).toString().isEmpty());
     QVERIFY(model.data(row(), WalletListModel::OpenWalletRole).isValid());
-    QCOMPARE(model.data(row(), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), nullptr);
+    QCOMPARE(model.data(row(), WalletListModel::OpenWalletRole).value<WalletModel*>(), nullptr);
     model.setWalletLoadState({}, WalletListModel::LoadState::Loading); environment.settle();
     QCOMPARE(model.data(row(), WalletListModel::LoadStateRole).toInt(), int(WalletListModel::LoadState::Loading));
     model.setWalletLoadState({}, WalletListModel::LoadState::LoadError, "default failed"); environment.settle();
@@ -1124,19 +1124,19 @@ void WalletListModelTests::exactFacadeRoleSurvivesOldFacadeDestruction()
     loader.wallet_dir_entries = {{"", "sqlite"}};
     node.wallet_loader_fn = [&]() -> interfaces::WalletLoader& { return loader; };
     WalletListModel model{node, environment.executor, environment.post()};
-    auto old_facade = std::make_unique<WalletQmlModel>();
-    auto new_facade = std::make_unique<WalletQmlModel>();
+    auto old_facade = std::make_unique<WalletModel>();
+    auto new_facade = std::make_unique<WalletModel>();
     model.refresh(); model.setOpenWallet({}, old_facade.get()); environment.settle();
-    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), old_facade.get());
+    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletModel*>(), old_facade.get());
     QSignalSpy changed{&model, &QAbstractItemModel::dataChanged};
     model.setOpenWallet({}, new_facade.get()); environment.settle();
     QCOMPARE(changed.size(), 1);
     QVERIFY(changed.at(0).at(2).value<QList<int>>().contains(WalletListModel::OpenWalletRole));
     old_facade.reset(); environment.settle();
-    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), new_facade.get());
+    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletModel*>(), new_facade.get());
     QCOMPARE(changed.size(), 1);
     new_facade.reset(); environment.settle();
-    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletQmlModel*>(), nullptr);
+    QCOMPARE(model.data(model.index(0), WalletListModel::OpenWalletRole).value<WalletModel*>(), nullptr);
     QCOMPARE(changed.size(), 2); QCOMPARE(loader.reads.load(), 1);
     QVERIFY(environment.retire(model));
 }

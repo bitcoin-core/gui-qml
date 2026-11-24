@@ -21,7 +21,7 @@
 
 #include <optional>
 
-class WalletQmlModel;
+class WalletModel;
 class ActivityDetailModel;
 Q_MOC_INCLUDE("qml/models/activitydetailmodel.h")
 namespace walletrequests { struct Snapshot; }
@@ -123,8 +123,8 @@ public:
         std::function<void(std::chrono::milliseconds, std::function<void()>)> schedule_poll;
         std::function<void()> cancel_poll;
     };
-    explicit TransactionActivityModel(WalletQmlModel* wallet_model);
-    TransactionActivityModel(WalletQmlModel* wallet_model, Services services);
+    explicit TransactionActivityModel(WalletModel* wallet_model);
+    TransactionActivityModel(WalletModel* wallet_model, Services services);
     ~TransactionActivityModel() override;
     bool loading() const { return m_loading; }
     bool initialLoading() const { return m_loading && !m_published; }
@@ -211,7 +211,7 @@ private:
     static void prepareDetails(activityview::Snapshot& view, QVariantMap details, int unit, const Row& original_row);
     static QVariantMap buildDetails(const QString& txid, const Row& row, const Snapshot& snapshot,
                                    const std::shared_ptr<const walletrequests::Snapshot>& requests, int unit, bool full);
-    struct Owner;
+    struct State;
     struct Job;
     struct Mailbox;
     static void planned(const std::shared_ptr<Job>& job);
@@ -224,7 +224,7 @@ private:
     void schedulePreview();
     bool publishDetailModels();
 
-    WalletQmlModel* const m_wallet_model;
+    WalletModel* const m_wallet_model;
     int m_display_unit{0};
     const std::shared_ptr<walletopening::Session> m_opening;
     Services m_services;

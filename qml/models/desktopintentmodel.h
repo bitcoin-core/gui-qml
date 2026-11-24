@@ -4,7 +4,7 @@
 #ifndef BITCOIN_QML_MODELS_DESKTOPINTENTMODEL_H
 #define BITCOIN_QML_MODELS_DESKTOPINTENTMODEL_H
 #include <bitcoin-build-config.h> // IWYU pragma: keep
-#include <qml/desktopintentowner.h>
+#include <qml/desktopintentservice.h>
 #include <qml/guipresentation.h>
 #include <qml/atomicsharedptr.h>
 #include <QObject>
@@ -38,7 +38,7 @@ public:
     Q_ENUM(State)
     DesktopIntentModel(execution::Executor& executor, presentation::Post post, bool wallet_enabled, QObject* parent = nullptr);
     ~DesktopIntentModel() override;
-    std::shared_ptr<desktopintent::Owner> owner() const { return m_owner; }
+    std::shared_ptr<desktopintent::Service> service() const { return m_service; }
     State state() const { return static_cast<State>(m_snapshot.phase); }
     int pendingCount() const { return static_cast<int>(m_snapshot.pending); }
     bool canInspect() const { return !m_closed && m_ready && m_wallet_enabled && m_sink && m_snapshot.pending && !m_snapshot.active && !hasInspection()
@@ -79,7 +79,7 @@ private:
     bool m_wallet_enabled;
     const std::shared_ptr<std::atomic_bool> m_closed_gate{std::make_shared<std::atomic_bool>(false)};
     const std::shared_ptr<ownership::AtomicSharedPtr<const std::atomic_bool>> m_parent_closed{std::make_shared<ownership::AtomicSharedPtr<const std::atomic_bool>>()};
-    std::shared_ptr<desktopintent::Owner> m_owner;
+    std::shared_ptr<desktopintent::Service> m_service;
     std::shared_ptr<const desktopintent::Sink> m_sink;
     desktopintent::Snapshot m_snapshot;
     uint64_t m_readiness{0};

@@ -2,21 +2,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/walletbackups.h>
+#include <qml/models/walletbackupmodel.h>
 
-WalletBackups::WalletBackups(std::function<bool()> available, Start start, QObject* parent)
+WalletBackupModel::WalletBackupModel(std::function<bool()> available, Start start, QObject* parent)
     : WalletBackupInterface(parent), m_available(std::move(available)), m_start(std::move(start))
 {
 }
 
-FileSaveOperation* WalletBackups::startBackup(const QString& path, QString& why)
+FileSaveOperation* WalletBackupModel::startBackup(const QString& path, QString& why)
 {
     if (!available()) { why = tr("This wallet is closing."); return nullptr; }
     if (busy()) { why = tr("A backup operation is already pending."); return nullptr; }
     if (path.size() > 32'768 || path.trimmed().isEmpty()) { why = tr("Choose a location for the wallet backup."); return nullptr; }
     const quint64 record = ++m_next;
     m_pending = record;
-    const QPointer<WalletBackups> self{this};
+    const QPointer<WalletBackupModel> self{this};
     // Called on the GUI thread (the factory marshals the backend's outcome),
     // also after the page and its operation object are gone.
     auto* operation = m_start(path, why, [self, record](backup::Snapshot) { if (self) self->finish(record); });
@@ -32,14 +32,14 @@ FileSaveOperation* WalletBackups::startBackup(const QString& path, QString& why)
     return operation;
 }
 
-void WalletBackups::close()
+void WalletBackupModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     if (m_operation && m_operation->busy()) m_operation->retireBeforeWrite();
     Q_EMIT availableChanged();
 }
 
-void WalletBackups::finish(quint64 record)
+void WalletBackupModel::finish(quint64 record)
 {
     if (m_pending != record) return;
     m_pending = 0;

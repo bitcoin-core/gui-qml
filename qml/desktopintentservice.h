@@ -1,8 +1,8 @@
 // Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-#ifndef BITCOIN_QML_DESKTOPINTENTOWNER_H
-#define BITCOIN_QML_DESKTOPINTENTOWNER_H
+#ifndef BITCOIN_QML_DESKTOPINTENTSERVICE_H
+#define BITCOIN_QML_DESKTOPINTENTSERVICE_H
 
 #include <qml/desktopintent.h>
 #include <qml/execution.h>
@@ -43,10 +43,10 @@ struct Services {
 
 /** Process-lifetime owner. Native and GUI entry points submit owned values.
  * Foreign acknowledgments keep the original delivery until it is accounted for. */
-class Owner final : public std::enable_shared_from_this<Owner> {
+class Service final : public std::enable_shared_from_this<Service> {
 public:
     using Notify = std::function<void(Snapshot)>;
-    static std::shared_ptr<Owner> Create(Services services, Notify notify,
+    static std::shared_ptr<Service> Create(Services services, Notify notify,
                                          std::shared_ptr<execution::SerialQueue> queue);
     execution::SubmitResult admit(std::vector<Input> inputs, std::function<void(Acceptance)> done);
     execution::SubmitResult prepareForwarding(std::vector<Input> arguments, std::function<void(ForwardingSnapshot)> done);
@@ -63,7 +63,7 @@ private:
     struct State;
     struct ReplyCell;
     enum class ReplyKind { Inspect, Query };
-    Owner(Services services, std::shared_ptr<State> state, Notify notify, std::shared_ptr<execution::SerialQueue> queue);
+    Service(Services services, std::shared_ptr<State> state, Notify notify, std::shared_ptr<execution::SerialQueue> queue);
     bool post(std::function<void()> decision, bool must_deliver = false);
     execution::SubmitResult submit(std::function<void()> decision);
     std::shared_ptr<ReplyCell> reserve(ReplyKind kind, DeliveryKey key);
@@ -90,4 +90,4 @@ private:
     std::optional<DeliveryKey> m_presentation_release;
 };
 } // namespace desktopintent
-#endif // BITCOIN_QML_DESKTOPINTENTOWNER_H
+#endif // BITCOIN_QML_DESKTOPINTENTSERVICE_H

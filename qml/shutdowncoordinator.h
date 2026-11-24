@@ -14,11 +14,11 @@
 
 class QmlInitExecutor;
 
-class QmlShutdownCoordinator : public QObject
+class ShutdownCoordinator : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlShutdownCoordinator(QmlInitExecutor& executor, QObject* parent = nullptr);
+    explicit ShutdownCoordinator(QmlInitExecutor& executor, QObject* parent = nullptr);
 
     template <typename Sender, typename Signal>
     void addParticipant(Sender* sender, Signal finished, std::function<void()> begin)

@@ -152,12 +152,12 @@ private:
  * This value owner has no QObject, GUI callback, wallet handle, or Core effect.
  * Callers pass captured facts and receive immutable projection snapshots.
  */
-class Owner final
+class Store final
 {
 public:
     using Completion = std::function<void(Result)>;
 
-    explicit Owner(std::shared_ptr<execution::SerialQueue> utility);
+    explicit Store(std::shared_ptr<execution::SerialQueue> utility);
     execution::SubmitResult begin(StartInput input, Completion done);
     execution::SubmitResult beginReplacement(ReplacementStart input, Completion done);
     execution::SubmitResult intentChanged(std::uint64_t revision, Completion done);

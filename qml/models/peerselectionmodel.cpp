@@ -10,14 +10,14 @@ void PeerSelectionModel::detach()
     for (const auto& connection : m_detail_connections) disconnect(connection);
     m_detail_connections.clear(); m_selected.clear();
 }
-void PeerSelectionModel::setSource(PeerListSortProxy* source)
+void PeerSelectionModel::setSource(PeerListProxyModel* source)
 {
     if (m_source == source || m_phase == Phase::Stopped || m_revision == std::numeric_limits<quint64>::max()) return;
     for (const auto& connection : m_source_connections) disconnect(connection);
     m_source_connections.clear(); detach(); m_target = {}; m_phase = Phase::NoSelection; m_source = source;
     if (source) {
         m_source_connections.push_back(connect(source, &NativeListModel::snapshotReady, this, &PeerSelectionModel::reconcile));
-        m_source_connections.push_back(connect(source, &PeerListSortProxy::admissionClosed, this, &PeerSelectionModel::stop));
+        m_source_connections.push_back(connect(source, &PeerListProxyModel::admissionClosed, this, &PeerSelectionModel::stop));
         m_source_connections.push_back(connect(source, &QObject::destroyed, this, &PeerSelectionModel::stop));
     }
     const auto revision = ++m_revision;

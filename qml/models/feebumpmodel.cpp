@@ -2,14 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/feebumps.h>
+#include <qml/models/feebumpmodel.h>
 
-FeeBumps::FeeBumps(std::function<bool()> available, Create create, QObject* parent)
+FeeBumpModel::FeeBumpModel(std::function<bool()> available, Create create, QObject* parent)
     : FeeBumpInterface(parent), m_available(std::move(available)), m_create(std::move(create))
 {
 }
 
-FeeBumpOperation* FeeBumps::attemptFor(const QString& txid)
+FeeBumpOperation* FeeBumpModel::attemptFor(const QString& txid)
 {
     if (!available()) return nullptr;
     auto* attempt = m_create ? m_create(this) : nullptr;
@@ -24,7 +24,7 @@ FeeBumpOperation* FeeBumps::attemptFor(const QString& txid)
     return attempt;
 }
 
-FeeBumpOperation* FeeBumps::openFeeBump(const QString& txid, unsigned target_blocks)
+FeeBumpOperation* FeeBumpModel::openFeeBump(const QString& txid, unsigned target_blocks)
 {
     if (!available() || txid.isEmpty()) return nullptr;
     // An attempt past its commit point is shown again, never a second commit.
@@ -42,14 +42,14 @@ FeeBumpOperation* FeeBumps::openFeeBump(const QString& txid, unsigned target_blo
     return guard;
 }
 
-void FeeBumps::presented(FeeBumpOperation* attempt)
+void FeeBumpModel::presented(FeeBumpOperation* attempt)
 {
     if (!attempt || !m_txids.contains(attempt)) return;
     const auto txid = m_txids.value(attempt);
     if (m_kept.value(txid) == attempt) m_kept.remove(txid);
 }
 
-void FeeBumps::release(FeeBumpOperation* attempt)
+void FeeBumpModel::release(FeeBumpOperation* attempt)
 {
     if (!attempt || !m_holds.contains(attempt)) return;
     if (--m_holds[attempt] > 0) return;
@@ -60,7 +60,7 @@ void FeeBumps::release(FeeBumpOperation* attempt)
     forget(attempt);
 }
 
-void FeeBumps::forget(FeeBumpOperation* attempt)
+void FeeBumpModel::forget(FeeBumpOperation* attempt)
 {
     m_holds.remove(attempt);
     const auto txid = m_txids.take(attempt);
@@ -70,19 +70,19 @@ void FeeBumps::forget(FeeBumpOperation* attempt)
     attempt->deleteLater();
 }
 
-void FeeBumps::setDisplayUnit(int unit)
+void FeeBumpModel::setDisplayUnit(int unit)
 {
     m_display_unit = unit;
     for (const auto& attempt : m_attempts) if (attempt) attempt->setDisplayUnit(unit);
 }
 
-void FeeBumps::retryPublications()
+void FeeBumpModel::retryPublications()
 {
     const auto attempts = m_attempts;
     for (const auto& attempt : attempts) if (attempt) attempt->retryPublications();
 }
 
-void FeeBumps::close()
+void FeeBumpModel::close()
 {
     if (std::exchange(m_closed, true)) return;
     const auto attempts = m_attempts;

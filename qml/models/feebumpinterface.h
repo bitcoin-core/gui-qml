@@ -6,7 +6,7 @@
 #define BITCOIN_QML_MODELS_FEEBUMPINTERFACE_H
 
 #include <qml/models/feebumpoperation.h>
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 
 #include <QString>
 
@@ -14,7 +14,7 @@
  * attempt past its commit point until a page has shown its result, so an
  * unresolved replacement survives the page that started it and a second
  * commit for the same transaction is never offered meanwhile. */
-class FeeBumpInterface : public WalletInterface
+class FeeBumpInterface : public WalletAvailabilityInterface
 {
     Q_OBJECT
 public:
@@ -28,7 +28,7 @@ public:
     //! one past it is kept for the next open of its transaction.
     virtual void release(FeeBumpOperation* attempt) = 0;
 protected:
-    using WalletInterface::WalletInterface;
+    using WalletAvailabilityInterface::WalletAvailabilityInterface;
 };
 
 #endif // BITCOIN_QML_MODELS_FEEBUMPINTERFACE_H

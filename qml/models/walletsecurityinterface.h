@@ -6,14 +6,14 @@
 #define BITCOIN_QML_MODELS_WALLETSECURITYINTERFACE_H
 
 #include <qml/models/securityoperation.h>
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 
 #include <QObject>
 
 /** What a WalletPasswordController needs from a wallet: whether it can set or
  * change the password, and the operations that do. WalletSecurityModel
  * implements it; QML tests use a fake. */
-class WalletSecurityInterface : public WalletInterface
+class WalletSecurityInterface : public WalletAvailabilityInterface
 {
     Q_OBJECT
     Q_PROPERTY(bool canEncrypt READ canEncrypt NOTIFY capabilitiesChanged)
@@ -21,7 +21,7 @@ class WalletSecurityInterface : public WalletInterface
     //! A password operation runs on this wallet.
     Q_PROPERTY(bool busy READ busy NOTIFY capabilitiesChanged)
 public:
-    using WalletInterface::WalletInterface;
+    using WalletAvailabilityInterface::WalletAvailabilityInterface;
 
     virtual bool canEncrypt() const = 0;
     virtual bool canChangePassphrase() const = 0;

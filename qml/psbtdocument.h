@@ -30,10 +30,10 @@ struct Snapshot {
  * can only withdraw interest. RetainValues reserves background destruction for
  * the owner, including when its last facade disappears while a read is held.
  */
-class Owner final
+class Store final
 {
 public:
-    explicit Owner(std::uint64_t generation) { m_snapshot.generation = generation; }
+    explicit Store(std::uint64_t generation) { m_snapshot.generation = generation; }
     void withdraw() noexcept { m_withdrawn.store(true); }
     psbtwork::Result consume(std::uint64_t operation, psbtwork::Kind kind, psbtwork::Result result);
     const Snapshot& snapshot() const { return m_snapshot; } // Domain only.

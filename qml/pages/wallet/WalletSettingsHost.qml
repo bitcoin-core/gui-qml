@@ -26,7 +26,7 @@ WalletSettingsPort {
         delegate: WalletSettingsStack {
             required property var modelData
             anchors.fill: parent
-            wallet: modelData as WalletQmlModel
+            wallet: modelData as WalletModel
             onSelectWalletRequested: root.selectWalletRequested()
         }
     }

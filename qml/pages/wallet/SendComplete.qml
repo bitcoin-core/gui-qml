@@ -15,29 +15,29 @@ Page {
 
     property string txid: ""
     property int targetBlocks: 0
-    property int submissionState: WalletQmlModel.SubmissionUnknown
-    property int recordState: WalletQmlModel.SendRecordUnknown
-    readonly property bool accepted: submissionState === WalletQmlModel.SubmissionMempool
-        || submissionState === WalletQmlModel.SubmissionAccepted
-    readonly property bool confirmed: submissionState === WalletQmlModel.SubmissionConfirmed
+    property int submissionState: WalletModel.SubmissionUnknown
+    property int recordState: WalletModel.SendRecordUnknown
+    readonly property bool accepted: submissionState === WalletModel.SubmissionMempool
+        || submissionState === WalletModel.SubmissionAccepted
+    readonly property bool confirmed: submissionState === WalletModel.SubmissionConfirmed
     readonly property bool attention: !accepted && !confirmed
     readonly property string titleText: confirmed ? qsTr("Transaction confirmed")
         : accepted ? qsTr("Transaction submitted")
-        : submissionState === WalletQmlModel.SubmissionConflicted ? qsTr("Transaction conflicted")
-        : submissionState === WalletQmlModel.SubmissionAbandoned ? qsTr("Transaction abandoned")
-        : submissionState === WalletQmlModel.SubmissionUnknown && recordState !== WalletQmlModel.SendRecordRecorded
+        : submissionState === WalletModel.SubmissionConflicted ? qsTr("Transaction conflicted")
+        : submissionState === WalletModel.SubmissionAbandoned ? qsTr("Transaction abandoned")
+        : submissionState === WalletModel.SubmissionUnknown && recordState !== WalletModel.SendRecordRecorded
             ? qsTr("Transaction status unknown")
             : qsTr("Transaction saved")
     readonly property string descriptionText: confirmed ? qsTr("Your transaction is confirmed.")
-        : submissionState === WalletQmlModel.SubmissionConflicted
+        : submissionState === WalletModel.SubmissionConflicted
             ? qsTr("A conflicting transaction was observed. Check Activity before trying again.")
-        : submissionState === WalletQmlModel.SubmissionAbandoned
+        : submissionState === WalletModel.SubmissionAbandoned
             ? qsTr("The transaction was marked abandoned. Check Activity before trying again.")
-        : submissionState === WalletQmlModel.SubmissionNotInMempool
+        : submissionState === WalletModel.SubmissionNotInMempool
             ? qsTr("Your transaction was saved to the wallet, but was not in the mempool when checked. Check Activity for its latest status.")
-        : submissionState === WalletQmlModel.SubmissionUnknown && recordState === WalletQmlModel.SendRecordAbsentAtObservation
+        : submissionState === WalletModel.SubmissionUnknown && recordState === WalletModel.SendRecordAbsentAtObservation
             ? qsTr("The wallet did not report this transaction in its records when checked. Check Activity before retrying.")
-        : submissionState === WalletQmlModel.SubmissionUnknown && recordState !== WalletQmlModel.SendRecordRecorded
+        : submissionState === WalletModel.SubmissionUnknown && recordState !== WalletModel.SendRecordRecorded
             ? qsTr("The wallet record could not be confirmed. Check Activity before retrying.")
         : !accepted
             ? qsTr("Your transaction was saved to the wallet. Its submission status could not be confirmed. Check Activity for its latest status.")
@@ -98,7 +98,7 @@ Page {
                 objectName: "sendCompleteStatusGlyph"
                 anchors.centerIn: parent
                 visible: root.attention
-                text: root.submissionState === WalletQmlModel.SubmissionUnknown ? "?" : "!"
+                text: root.submissionState === WalletModel.SubmissionUnknown ? "?" : "!"
                 color: Theme.color.accentForeground
                 textStyle: Theme.text.headline
             }

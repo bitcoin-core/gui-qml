@@ -9,23 +9,23 @@
 
 #include <QPointer>
 
-class WalletQmlModel;
+class WalletModel;
 
-/** A PSBT action of a WalletQmlModel. The wallet runs one PSBT action at a
+/** A PSBT action of a WalletModel. The wallet runs one PSBT action at a
  * time; this operation follows the one it started and stops when the wallet
  * starts another. */
 class WalletPsbtOperation final : public PsbtOperation
 {
     Q_OBJECT
 public:
-    WalletPsbtOperation(WalletQmlModel& wallet, Kind kind, QObject* parent = nullptr);
+    WalletPsbtOperation(WalletModel& wallet, Kind kind, QObject* parent = nullptr);
     //! False when the wallet can't start the action now.
     bool start(const QString& path, const QString& signer_result);
     void cancel() override;
 
 private:
     void follow();
-    QPointer<WalletQmlModel> m_wallet;
+    QPointer<WalletModel> m_wallet;
     quint64 m_action{0};
 };
 

@@ -23,7 +23,7 @@ class Node;
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
-class PeerCommandPort;
+class PeerCommandInterface;
 
 class PeerListModel : public NativeListModel
 {
@@ -44,8 +44,8 @@ public:
     void close() override;
     int rowForId(qint64 id) const { return indexForKey(QString::number(id)); }
     void watchDetails(qint64 id, PeerPresentationObserver* details);
-    void setCommands(PeerCommandPort* commands);
-    PeerCommandPort* commands() const;
+    void setCommands(PeerCommandInterface* commands);
+    PeerCommandInterface* commands() const;
     bool readingAvailable() const { return !stopping(); }
 
     enum Role {
@@ -85,7 +85,7 @@ private:
     bool m_backend_ready;
     bool m_auto_refresh_requested{false};
     bool m_destroying{false};
-    PeerCommandPort* m_commands{nullptr};
+    PeerCommandInterface* m_commands{nullptr};
     QPointer<QObject> m_commands_object;
     QMetaObject::Connection m_commands_change, m_commands_destroyed;
 };

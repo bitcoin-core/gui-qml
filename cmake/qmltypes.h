@@ -28,8 +28,8 @@
 #include <qml/models/sendimportmodel.h>
 #include <qml/models/preparationoperation.h>
 #include <qml/models/psbtoperation.h>
-#include <qml/models/requestdeletecontroller.h>
-#include <qml/models/requestviewcontroller.h>
+#include <qml/models/paymentrequestdeletecontroller.h>
+#include <qml/models/paymentrequestviewcontroller.h>
 #include <qml/models/senddraftcontroller.h>
 #include <qml/models/walletpasswordcontroller.h>
 #include <qml/models/walletbackupcontroller.h>
@@ -62,7 +62,7 @@
 #include <qml/models/monospaceoutputmodel.h>
 #include <qml/presentationservices.h>
 #include <qml/models/onboardingoptionsmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/settingseditormodel.h>
 #include <qml/models/uipreferences.h>
 #include <qml/models/peerdetailsmodel.h>
@@ -70,7 +70,7 @@
 #include <qml/models/peercommandoperation.h>
 #include <qml/models/peerselectionmodel.h>
 #include <qml/models/peerlistmodel.h>
-#include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peerlistproxymodel.h>
 #include <qml/models/psbtqmlmodel.h>
 #include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/receiverequestoperation.h>
@@ -86,13 +86,13 @@
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletlistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/models/walletimporttarget.h>
-#include <qml/models/walletqmlmodeltransaction.h>
+#include <qml/models/transactionreviewmodel.h>
 #include <qml/qmlfiledialog.h>
 #include <qml/nativelistmodel.h>
 #include <qml/urlopener.h>
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 
 #include <QtQml/qqml.h>
 
@@ -232,10 +232,10 @@ struct PeerCommandModelForeign {
     QML_NAMED_ELEMENT(PeerCommandModel)
     QML_UNCREATABLE("Application peer commands")
 };
-struct PeerCommandTargetForeign {
+struct PeerActionsInterfaceForeign {
     Q_GADGET
-    QML_FOREIGN(PeerCommandTarget)
-    QML_NAMED_ELEMENT(PeerCommandTarget)
+    QML_FOREIGN(PeerActionsInterface)
+    QML_NAMED_ELEMENT(PeerActionsInterface)
     QML_UNCREATABLE("A peer")
 };
 
@@ -318,7 +318,7 @@ struct WalletReceiveModelForeign { Q_GADGET QML_FOREIGN(WalletReceiveModel) QML_
 struct ReceiptReconciliationModelForeign { Q_GADGET QML_FOREIGN(ReceiptReconciliationModel) QML_NAMED_ELEMENT(ReceiptReconciliationModel) QML_UNCREATABLE("Owned by a wallet opening") };
 struct RequestReceiptModelForeign { Q_GADGET QML_FOREIGN(RequestReceiptModel) QML_NAMED_ELEMENT(RequestReceiptModel) QML_UNCREATABLE("Owned by an original request") };
 struct PaymentRequestEditorModelForeign { Q_GADGET QML_FOREIGN(PaymentRequestEditorModel) QML_NAMED_ELEMENT(PaymentRequestEditorModel) QML_UNCREATABLE("Owned by the receive editor factory") };
-struct ReceiveReservationModelForeign { Q_GADGET QML_FOREIGN(ReceiveReservationModel) QML_NAMED_ELEMENT(ReceiveReservationModel) QML_UNCREATABLE("Owned by a receiving context") };
+struct AddressReservationModelForeign { Q_GADGET QML_FOREIGN(AddressReservationModel) QML_NAMED_ELEMENT(AddressReservationModel) QML_UNCREATABLE("Owned by a receiving context") };
 struct ReceiveAuthorizationPromptForeign { Q_GADGET QML_FOREIGN(ReceiveAuthorizationPrompt) QML_NAMED_ELEMENT(ReceiveAuthorizationPrompt) QML_UNCREATABLE("Owned by an original receiving intent") };
 struct RequestSharingModelForeign { Q_GADGET QML_FOREIGN(RequestSharingModel) QML_NAMED_ELEMENT(RequestSharingModel) QML_UNCREATABLE("Owned by a request view") };
 struct ShareOperationModelForeign { Q_GADGET QML_FOREIGN(ShareOperationModel) QML_NAMED_ELEMENT(ShareOperationModel) QML_UNCREATABLE("Owned by an original sharing action") };
@@ -352,8 +352,8 @@ struct SendImportModelForeign { Q_GADGET QML_FOREIGN(SendImportModel) QML_NAMED_
 struct PreparationOperationForeign { Q_GADGET QML_FOREIGN(PreparationOperation) QML_NAMED_ELEMENT(PreparationOperation) QML_UNCREATABLE("Started by a wallet") };
 struct SendDraftInterfaceForeign { Q_GADGET QML_FOREIGN(SendDraftInterface) QML_NAMED_ELEMENT(SendDraftInterface) QML_UNCREATABLE("A wallet") };
 struct SendDraftControllerForeign { Q_GADGET QML_FOREIGN(SendDraftController) QML_NAMED_ELEMENT(SendDraftController) };
-struct RequestViewControllerForeign { Q_GADGET QML_FOREIGN(RequestViewController) QML_NAMED_ELEMENT(RequestViewController) };
-struct RequestDeleteControllerForeign { Q_GADGET QML_FOREIGN(RequestDeleteController) QML_NAMED_ELEMENT(RequestDeleteController) };
+struct PaymentRequestViewControllerForeign { Q_GADGET QML_FOREIGN(PaymentRequestViewController) QML_NAMED_ELEMENT(PaymentRequestViewController) };
+struct PaymentRequestDeleteControllerForeign { Q_GADGET QML_FOREIGN(PaymentRequestDeleteController) QML_NAMED_ELEMENT(PaymentRequestDeleteController) };
 struct PsbtOperationForeign { Q_GADGET QML_FOREIGN(PsbtOperation) QML_NAMED_ELEMENT(PsbtOperation) QML_UNCREATABLE("Started by a wallet") };
 struct SendOperationForeign { Q_GADGET QML_FOREIGN(SendOperation) QML_NAMED_ELEMENT(SendOperation) QML_UNCREATABLE("Started by a wallet") };
 struct TransactionReviewInterfaceForeign { Q_GADGET QML_FOREIGN(TransactionReviewInterface) QML_NAMED_ELEMENT(TransactionReviewInterface) QML_UNCREATABLE("A wallet") };
@@ -446,10 +446,10 @@ struct WalletPasswordControllerForeign {
     QML_NAMED_ELEMENT(WalletPasswordController)
 };
 
-struct WalletInterfaceForeign {
+struct WalletAvailabilityInterfaceForeign {
     Q_GADGET
-    QML_FOREIGN(WalletInterface)
-    QML_NAMED_ELEMENT(WalletInterface)
+    QML_FOREIGN(WalletAvailabilityInterface)
+    QML_NAMED_ELEMENT(WalletAvailabilityInterface)
     QML_UNCREATABLE("A wallet")
 };
 
@@ -507,10 +507,10 @@ struct SecurityOperationModelForeign {
     QML_UNCREATABLE("Owned by a security command")
 };
 
-struct WalletQmlModelForeign {
+struct WalletModelForeign {
     Q_GADGET
-    QML_FOREIGN(WalletQmlModel)
-    QML_NAMED_ELEMENT(WalletQmlModel)
+    QML_FOREIGN(WalletModel)
+    QML_NAMED_ELEMENT(WalletModel)
     QML_UNCREATABLE("Owned by the application")
 };
 
@@ -521,10 +521,10 @@ struct WalletCloseQuestionForeign {
     QML_UNCREATABLE("Owned by a wallet")
 };
 
-struct WalletQmlModelTransactionForeign {
+struct TransactionReviewModelForeign {
     Q_GADGET
-    QML_FOREIGN(WalletQmlModelTransaction)
-    QML_NAMED_ELEMENT(WalletQmlModelTransaction)
+    QML_FOREIGN(TransactionReviewModel)
+    QML_NAMED_ELEMENT(TransactionReviewModel)
     QML_UNCREATABLE("Owned by the application")
 };
 
@@ -657,15 +657,15 @@ struct PeerListModelForeign {
     QML_ANONYMOUS
 };
 
-struct PeerListSortProxyForeign {
+struct PeerListProxyModelForeign {
     Q_GADGET
-    QML_FOREIGN(PeerListSortProxy)
+    QML_FOREIGN(PeerListProxyModel)
     QML_ANONYMOUS
 };
 
-struct OptionsQmlModelForeign {
+struct SettingsModelForeign {
     Q_GADGET
-    QML_FOREIGN(OptionsQmlModel)
+    QML_FOREIGN(SettingsModel)
     QML_ANONYMOUS
 };
 
@@ -675,10 +675,10 @@ struct SettingsSaveResultForeign {
     QML_NAMED_ELEMENT(SettingsSaveResult)
     QML_UNCREATABLE("Retained settings outcome")
 };
-struct SettingsEditorSourceForeign {
+struct SettingsEditorFactoryInterfaceForeign {
     Q_GADGET
-    QML_FOREIGN(SettingsEditorSource)
-    QML_NAMED_ELEMENT(SettingsEditorSource)
+    QML_FOREIGN(SettingsEditorFactoryInterface)
+    QML_NAMED_ELEMENT(SettingsEditorFactoryInterface)
     QML_UNCREATABLE("The options")
 };
 
@@ -727,9 +727,9 @@ struct FlowDetailsModelForeign {
     QML_UNCREATABLE("Owned by a transaction review")
 };
 
-struct WalletQmlControllerForeign {
+struct WalletControllerForeign {
     Q_GADGET
-    QML_FOREIGN(WalletQmlController)
+    QML_FOREIGN(WalletController)
     QML_ANONYMOUS
 };
 

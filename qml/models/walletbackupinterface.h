@@ -6,14 +6,14 @@
 #define BITCOIN_QML_MODELS_WALLETBACKUPINTERFACE_H
 
 #include <qml/models/filesaveoperation.h>
-#include <qml/models/walletinterface.h>
+#include <qml/models/walletavailabilityinterface.h>
 
 #include <QString>
 
 /** What a WalletBackupController needs from a wallet. The wallet keeps one
  * backup at a time: `busy` lasts until the backend finishes the write or
  * retires it before writing, even when the page that started it is gone. */
-class WalletBackupInterface : public WalletInterface
+class WalletBackupInterface : public WalletAvailabilityInterface
 {
     Q_OBJECT
     //! A backup of this wallet is waiting for its destination or writing.
@@ -26,7 +26,7 @@ public:
 Q_SIGNALS:
     void busyChanged();
 protected:
-    using WalletInterface::WalletInterface;
+    using WalletAvailabilityInterface::WalletAvailabilityInterface;
 };
 
 #endif // BITCOIN_QML_MODELS_WALLETBACKUPINTERFACE_H

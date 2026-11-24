@@ -23,20 +23,20 @@ WalletReceiveModel::WalletReceiveModel(uint64_t view, Ports ports, QObject* pare
     m_ports.editor.post = presentation::ReliablePost(std::move(m_ports.editor.post));
     m_editor = makeEditor(0);
     if (m_editor) m_editor->setParent(this);
-    connect(&m_reservation, &ReceiveReservationModel::changed, this, [this] {
+    connect(&m_reservation, &AddressReservationModel::changed, this, [this] {
         const QPointer<WalletReceiveModel> guard{this};
         if (m_editor) m_editor->reservationChanged();
         if (!guard) return;
         refresh(); if (!guard) return;
         if (m_pending && m_pending->cancelling) {
-            if (m_reservation.phase() == ReceiveReservationModel::Cancelled) { applyReplacement(); return; }
-            if (m_reservation.phase() == ReceiveReservationModel::Failed) {
+            if (m_reservation.phase() == AddressReservationModel::Cancelled) { applyReplacement(); return; }
+            if (m_reservation.phase() == AddressReservationModel::Failed) {
                 m_error = m_reservation.error(); m_pending.reset(); Q_EMIT changed(); return;
             }
         }
         Q_EMIT changed();
     });
-    connect(&m_reservation, &ReceiveReservationModel::requestSelected, this, &WalletReceiveModel::existingRequestRequested);
+    connect(&m_reservation, &AddressReservationModel::requestSelected, this, &WalletReceiveModel::existingRequestRequested);
 }
 WalletReceiveModel::~WalletReceiveModel()
 {
@@ -71,7 +71,7 @@ PaymentRequestEditorModel* WalletReceiveModel::makeEditor(int64_t id, bool erase
         editor->setParent(nullptr);
         if (!m_pending || !m_pending->closing || m_pending->original_editor != original || m_editor != editor) return;
         m_pending->closing = false; m_pending->cancelling = true;
-        if (m_reservation.phase() == ReceiveReservationModel::Cancelled) applyReplacement(); else m_reservation.cancel();
+        if (m_reservation.phase() == AddressReservationModel::Cancelled) applyReplacement(); else m_reservation.cancel();
     });
     connect(editor, &PaymentRequestEditorModel::keptEditing, this, [this, editor, erase](const QString& original, const QString&) {
         if (m_pending && m_pending->original_editor == original) { m_pending.reset(); m_error = {}; Q_EMIT changed(); }
@@ -83,10 +83,10 @@ bool WalletReceiveModel::ensureAddress()
 {
     if (m_closed || replacementPending() || !m_editor) return false;
     if (m_editor->mutationKind() != PaymentRequestEditorModel::Create) return true;
-    if (m_reservation.phase() == ReceiveReservationModel::Ready || m_reservation.busy() || m_reservation.prompt()) return true;
+    if (m_reservation.phase() == AddressReservationModel::Ready || m_reservation.busy() || m_reservation.prompt()) return true;
     // Observation or reopening a view cannot replay a cancelled/failed
     // request, nor silently rotate a used reservation under composed fields.
-    if (m_reservation.phase() != ReceiveReservationModel::Idle || m_reservation.historicallyUsed() || !m_reservation.selectedRequestId().isEmpty()) return false;
+    if (m_reservation.phase() != AddressReservationModel::Idle || m_reservation.historicallyUsed() || !m_reservation.selectedRequestId().isEmpty()) return false;
     return m_reservation.ensure(false, {});
 }
 bool WalletReceiveModel::nextAddress()
@@ -116,7 +116,7 @@ void WalletReceiveModel::askToReplace()
     m_pending->closing = true;
     if (m_editor->phase() == PaymentRequestEditorModel::Closed) {
         m_pending->closing = false; m_pending->cancelling = true;
-        if (m_reservation.phase() == ReceiveReservationModel::Cancelled) applyReplacement(); else m_reservation.cancel();
+        if (m_reservation.phase() == AddressReservationModel::Cancelled) applyReplacement(); else m_reservation.cancel();
     } else m_editor->requestClose();
 }
 bool WalletReceiveModel::newRequest() { return begin({}); }
@@ -199,18 +199,18 @@ void WalletReceiveModel::applyReplacement()
     else m_reservation.ensure(target.kind == Target::Template, target.type,
         target.kind == Target::Fresh || !target.type.isEmpty(), false);
 }
-RequestOpenOperation* WalletReceiveModel::openRequest(const QString& id, QObject* owner)
+PaymentRequestOpenOperation* WalletReceiveModel::openRequest(const QString& id, QObject* owner)
 {
     const auto parsed = RequestId(id);
     if (!parsed || m_closed || m_open || !m_ports.editor.read) {
         refuse(QStringLiteral("open"), {TextEditError::Refused, tr("This request could not be opened. Try again.")}); return nullptr;
     }
-    auto* operation = new RequestOpenOperation(QString::number(*parsed), owner);
+    auto* operation = new PaymentRequestOpenOperation(QString::number(*parsed), owner);
     m_open = operation; m_open_waiting = m_open_refresh_pending = false; m_open_id = *parsed;
     // A cancelled or deleted open stops being followed.
-    connect(operation, &RequestOpenOperation::changed, this, [this, operation] { if (m_open == operation && !operation->pending()) endOpen(); });
+    connect(operation, &PaymentRequestOpenOperation::changed, this, [this, operation] { if (m_open == operation && !operation->pending()) endOpen(); });
     connect(operation, &QObject::destroyed, this, [this] { if (!m_open) endOpen(); });
-    const QPointer<RequestOpenOperation> guard{operation};
+    const QPointer<PaymentRequestOpenOperation> guard{operation};
     readOpenRequest();
     return guard;
 }
@@ -221,16 +221,16 @@ void WalletReceiveModel::endOpen()
 }
 void WalletReceiveModel::failOpen(const TextEditError& error)
 {
-    const QPointer<RequestOpenOperation> operation{m_open};
+    const QPointer<PaymentRequestOpenOperation> operation{m_open};
     endOpen();
-    if (operation) operation->finish(RequestOpenOperation::State::Failed, nullptr, error);
+    if (operation) operation->finish(PaymentRequestOpenOperation::State::Failed, nullptr, error);
 }
 void WalletReceiveModel::readOpenRequest()
 {
     if (!m_open || m_closed) return;
     m_open_waiting = false;
     m_open_refresh_pending = false;
-    const auto id = m_open_id; const QPointer<RequestOpenOperation> operation{m_open};
+    const auto id = m_open_id; const QPointer<PaymentRequestOpenOperation> operation{m_open};
     const QPointer<WalletReceiveModel> observer{this}; const auto post = m_ports.editor.post;
     const auto complete = [observer, post, id, operation](requestedit::Source source) {
         post([observer, id, operation, source = std::move(source)] {
@@ -284,9 +284,9 @@ void WalletReceiveModel::completeOpenRequest(PaymentRequestEditorModel* editor)
     }
     // The real facade must own its exact source projection before the open
     // finishes. A new facade is initially still Loading.
-    const QPointer<RequestOpenOperation> operation{m_open};
+    const QPointer<PaymentRequestOpenOperation> operation{m_open};
     endOpen();
-    if (operation) operation->finish(RequestOpenOperation::State::Opened, editor);
+    if (operation) operation->finish(PaymentRequestOpenOperation::State::Opened, editor);
 }
 PaymentRequestEditorModel* WalletReceiveModel::deleteRequest(const QString& id)
 {
@@ -370,7 +370,7 @@ void WalletReceiveModel::observeReservation()
 void WalletReceiveModel::retire()
 {
     if (std::exchange(m_closed, true)) return;
-    m_pending.reset(); clearRepeat(); if (const QPointer<RequestOpenOperation> open{m_open}) { endOpen(); if (open) open->finish(RequestOpenOperation::State::Cancelled); } m_reservation.retire();
+    m_pending.reset(); clearRepeat(); if (const QPointer<PaymentRequestOpenOperation> open{m_open}) { endOpen(); if (open) open->finish(PaymentRequestOpenOperation::State::Cancelled); } m_reservation.retire();
     const auto editors = m_editors; const auto contexts = m_sharing;
     for (const auto& editor : editors) if (editor) editor->retire();
     for (const auto& context : contexts) if (context) context->retire();

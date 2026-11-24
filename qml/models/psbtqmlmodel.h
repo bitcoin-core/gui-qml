@@ -14,7 +14,7 @@
 #include <QStringList>
 #include <mutex>
 
-namespace psbtdocument { class Owner; }
+namespace psbtdocument { class Store; }
 namespace interfaces { class Node; }
 
 class PsbtQmlModel : public QObject
@@ -148,7 +148,7 @@ private:
     std::shared_ptr<const psbtwork::Snapshot> m_snapshot;
     std::shared_ptr<SummaryRequestState> m_summary_request_state;
     std::shared_ptr<execution::SnapshotQuery<psbtwork::SummaryPage>> m_summary_query;
-    std::shared_ptr<psbtdocument::Owner> m_document_owner;
+    std::shared_ptr<psbtdocument::Store> m_document_owner;
     quint64 m_operation_id{0}, m_generation{0}, m_active_generation{0};
     quint64 m_summary_epoch{0}, m_summary_request_id{0};
     psbtwork::Kind m_active_kind{psbtwork::Kind::Inspect};

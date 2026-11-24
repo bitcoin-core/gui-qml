@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/asyncjoin.h>
 #include <qml/retainedvalue.h>
 #include <qml/retainedsnapshot.h>
@@ -77,7 +77,7 @@ QVariantMap CoreSettingStatusesForNames(const QVariantMap& statuses, const QStri
 } // namespace
 
 struct OptionsLinksState {std::shared_ptr<const QVariantList> links,next;};
-struct OptionsQmlModel::LinksRegistry {std::map<quint64,std::shared_ptr<OptionsLinksState>> views;};
+struct SettingsModel::LinksRegistry {std::map<quint64,std::shared_ptr<OptionsLinksState>> views;};
 
 namespace {
 template <typename T, typename Factory>
@@ -109,7 +109,7 @@ QVariantList BuildTransactionLinks(const QString& templates,const QString& txid)
  }
 }
 OptionsTransactionLinks::OptionsTransactionLinks(QObject* parent):QAbstractListModel(parent){}
-void OptionsTransactionLinks::setSource(OptionsQmlModel* source)
+void OptionsTransactionLinks::setSource(SettingsModel* source)
 {
     if(m_source==source)return;
     const QPointer<OptionsTransactionLinks> guard{this};
@@ -118,7 +118,7 @@ void OptionsTransactionLinks::setSource(OptionsQmlModel* source)
     m_source=nullptr;m_state.reset();m_id=0;m_visible=0;++m_revision;m_pending=false;m_error.clear();
     if(source&&source->attachLinks(*this)){
         m_source=source;
-        connect(source,&OptionsQmlModel::thirdPartyTransactionUrlsChanged,this,&OptionsTransactionLinks::refresh);
+        connect(source,&SettingsModel::thirdPartyTransactionUrlsChanged,this,&OptionsTransactionLinks::refresh);
     }
     endResetModel();
     if(!guard)return;
@@ -151,7 +151,7 @@ void OptionsTransactionLinks::applyRows(quint64 revision){
     try {m_source->m_post([observer,revision]{if(observer)observer->applyRows(revision);});}
     catch(...){m_pending=false;m_error=tr("Transaction links could not be presented.");Q_EMIT resultChanged();}
 }
-bool OptionsQmlModel::attachLinks(OptionsTransactionLinks& view){
+bool SettingsModel::attachLinks(OptionsTransactionLinks& view){
     if(m_stopping)return false;
     if(!m_links){setError(tr("Transaction link is unavailable."));return false;}
     auto state=RetainLinkSnapshot<OptionsLinksState>(m_retire_link_value, m_link_cleanup,
@@ -159,19 +159,19 @@ bool OptionsQmlModel::attachLinks(OptionsTransactionLinks& view){
     if(!state){setError(tr("Transaction link is unavailable."));return false;}const auto id=++m_next_links;m_links->views.emplace(id,state);
     view.m_state=state;view.m_id=id;return true;
 }
-OptionsTransactionLinks* OptionsQmlModel::createTransactionLinks(){
+OptionsTransactionLinks* SettingsModel::createTransactionLinks(){
     auto view=std::make_unique<OptionsTransactionLinks>();view->setSource(this);
     return view->source()?view.release():nullptr;
 }
-void OptionsQmlModel::removeLinks(quint64 id){if(m_links)m_links->views.erase(id);}
-void OptionsQmlModel::refreshLinks(OptionsTransactionLinks* view)
+void SettingsModel::removeLinks(quint64 id){if(m_links)m_links->views.erase(id);}
+void SettingsModel::refreshLinks(OptionsTransactionLinks* view)
 {
     if (m_stopping || !m_links) return;
     const auto revision = ++view->m_revision;
     view->m_pending = true;
     view->m_error.clear();
     const QPointer<OptionsTransactionLinks> observer{view};
-    const QPointer<OptionsQmlModel> source{this};
+    const QPointer<SettingsModel> source{this};
     auto work = [templates = m_third_party_transaction_urls, txid = view->m_txid,
                  retire = m_retire_link_value, cleanup = m_link_cleanup] {
         auto result = RetainLinkSnapshot<QVariantList>(retire, cleanup, [&] {
@@ -203,7 +203,7 @@ void OptionsQmlModel::refreshLinks(OptionsTransactionLinks* view)
     if (observer && source && source->presentationOpen()) Q_EMIT observer->resultChanged();
 }
 
-struct OptionsQmlModel::Snapshot {
+struct SettingsModel::Snapshot {
     QmlCoreSettings::Values core;
     QmlCoreSettings::Values effective_core;
     QVariantMap statuses;
@@ -228,7 +228,7 @@ struct OptionsQmlModel::Snapshot {
     bool hide_amounts;
 };
 
-OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, ArgsManager& args)
+SettingsModel::Snapshot SettingsModel::readSnapshot(interfaces::Node& node, ArgsManager& args)
 {
     Snapshot result;
     result.languages=buildAvailableLanguages();
@@ -304,7 +304,7 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
 }
 
 namespace {struct NativeSettingsWrite {quint64 revision;std::shared_ptr<std::atomic<int>> receipt;};}
-OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, presentation::Post post,
+SettingsModel::SettingsModel(interfaces::Node& node, ArgsManager& args, presentation::Post post,
                                  execution::Executor* executor, PresentationServices* presentation, execution::Lane lane)
     : m_node{node}, m_args{args},
       m_owned_executor{!executor ? std::make_shared<execution::Executor>(execution::Executor::Config{}) : nullptr},
@@ -340,7 +340,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, pres
     m_core_settings.setAfterChangeHandler([this](const QmlCoreSettings::Change& change, CoreSettingsModel::ChangeOrigin origin) {
         Q_UNUSED(origin);applyRuntimeCoreChange(change,m_core_change_dirty_snapshot);
     });
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     m_core_settings.setEffect([node = &m_node, args = &m_args](
         const QmlCoreSettings::Change& change, CoreSettingsModel::EffectContext opaque) {
         const auto context = std::static_pointer_cast<const NativeSettingsWrite>(opaque);
@@ -386,11 +386,11 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args, pres
         if(observer&&!observer->m_stopping)observer->finishPreferenceRefresh();
     },[](CoreSettingsModel::EffectContext opaque){const auto context=std::static_pointer_cast<const NativeSettingsWrite>(opaque);
         if(context&&context->receipt->load()==SettingsPending)context->receipt->store(SettingsFailed);});
-    connect(&m_core_settings,&CoreSettingsModel::operationChanged,this,[this]{if(m_stopping)return;const QPointer<OptionsQmlModel> guard{this};Q_EMIT settingsPendingChanged();if(guard&&!m_stopping)Q_EMIT settingsErrorChanged();if(guard&&!m_stopping)Q_EMIT pruneTargetInputChanged();if(guard&&!m_stopping)finishPreferenceRefresh();});
+    connect(&m_core_settings,&CoreSettingsModel::operationChanged,this,[this]{if(m_stopping)return;const QPointer<SettingsModel> guard{this};Q_EMIT settingsPendingChanged();if(guard&&!m_stopping)Q_EMIT settingsErrorChanged();if(guard&&!m_stopping)Q_EMIT pruneTargetInputChanged();if(guard&&!m_stopping)finishPreferenceRefresh();});
     runCommand([](interfaces::Node&, ArgsManager&) { return QString{}; });
 }
 
-SettingsEditorModel* OptionsQmlModel::createSettingsEditor()
+SettingsEditorModel* SettingsModel::createSettingsEditor()
 {
     if(m_stopping)return nullptr;
     m_editors.removeIf([](const auto& editor){return !editor;});
@@ -410,19 +410,19 @@ SettingsEditorModel* OptionsQmlModel::createSettingsEditor()
     connect(editor,&SettingsEditorModel::changed,this,[this,editor,previous]{
         if(m_stopping||!editor->lastSavePresent()||!editor->lastSavePersisted()||*previous==editor->lastSaveId())return;
         *previous=editor->lastSaveId();
-        const QPointer<OptionsQmlModel> guard{this};
+        const QPointer<SettingsModel> guard{this};
         runCommand([](interfaces::Node&,ArgsManager&){return QString{};});
         if(guard&&m_signer_model)m_signer_model->refresh();
     });
     connect(editor,&SettingsEditorModel::closed,editor,[editor]{const QPointer<SettingsEditorModel> guard{editor};editor->retire([guard]{if(guard)guard->deleteLater();});});
     return editor;
 }
-OptionsQmlModel::~OptionsQmlModel()
+SettingsModel::~SettingsModel()
 {
     close();
 }
 
-void OptionsQmlModel::whenLinksDrained(std::function<void()> done)
+void SettingsModel::whenLinksDrained(std::function<void()> done)
 {
     m_work->whenQueuesDrained([queue = m_link_queue, cleanup = m_link_cleanup, done = std::move(done)] {
         if (queue) {
@@ -434,7 +434,7 @@ void OptionsQmlModel::whenLinksDrained(std::function<void()> done)
     });
 }
 
-void OptionsQmlModel::close()
+void SettingsModel::close()
 {
     if (std::exchange(m_stopping, true)) return;
     m_preference_watch.stop();
@@ -463,10 +463,10 @@ void OptionsQmlModel::close()
     }
 }
 
-void OptionsQmlModel::beginShutdown()
+void SettingsModel::beginShutdown()
 {
     if (std::exchange(m_shutdown_started, true)) return;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     close();
     if (!observer || m_join_pending) return;
     const auto remaining = std::make_shared<int>(m_link_queue ? 3 : 2);
@@ -478,21 +478,21 @@ void OptionsQmlModel::beginShutdown()
     m_core_settings.whenEffectsDrained(finish);
 }
 
-void OptionsQmlModel::setError(const QString& error)
+void SettingsModel::setError(const QString& error)
 {
     if (m_error == error) return;
     m_error = error;
     Q_EMIT settingsErrorChanged();
 }
 
-void OptionsQmlModel::setObservationError(const QString& error)
+void SettingsModel::setObservationError(const QString& error)
 {
     if (m_observation_error == error) return;
     m_observation_error = error;
     Q_EMIT settingsErrorChanged();
 }
 
-void OptionsQmlModel::setPending(bool pending)
+void SettingsModel::setPending(bool pending)
 {
     if (m_pending == pending) return;
     m_pending = pending;
@@ -500,9 +500,9 @@ void OptionsQmlModel::setPending(bool pending)
     Q_EMIT settingsPendingChanged();
 }
 
-void OptionsQmlModel::applySnapshot(Snapshot snapshot,bool core_adopted)
+void SettingsModel::applySnapshot(Snapshot snapshot,bool core_adopted)
 {
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     if(!core_adopted){
         const auto expected=m_core_settings.userRevision();const auto revision=m_command_revision;
         m_core_settings.applyPreviewValuesPreservingTouched(snapshot.core,snapshot.entry_statuses,
@@ -591,7 +591,7 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot,bool core_adopted)
 }
 
 
-void OptionsQmlModel::refreshDisplaySettings()
+void SettingsModel::refreshDisplaySettings()
 {
     if (m_stopping) return;
     m_preference_refresh_requested = true;
@@ -599,17 +599,17 @@ void OptionsQmlModel::refreshDisplaySettings()
 }
 // Do not resume from synchronous admission failure: report it, retain demand,
 // and wait for a fresh trigger. Successful asynchronous outcomes can continue.
-void OptionsQmlModel::finishPreferenceRefresh()
+void SettingsModel::finishPreferenceRefresh()
 {
     if (m_stopping || m_pending_commands || m_submitting_commands || m_core_settings.pending() || !m_preference_refresh_requested) return;
     m_preference_refresh_requested = false;
     runCommand([](interfaces::Node&, ArgsManager&) { return QString{}; },/*observation=*/true);
 }
 
-void OptionsQmlModel::runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command,bool observation)
+void SettingsModel::runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command,bool observation)
 {
     if(m_stopping)return;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     ++m_submitting_commands;
     const auto submitting=qScopeGuard([observer]{if(observer)--observer->m_submitting_commands;});
     auto receipt=std::make_shared<std::atomic<int>>(SettingsPending);
@@ -663,25 +663,25 @@ void OptionsQmlModel::runCommand(std::function<QString(interfaces::Node&, ArgsMa
     if(!observation)Q_EMIT settingsOperationChanged();
 }
 
-bool OptionsQmlModel::connectionSettingsDirty() const
+bool SettingsModel::connectionSettingsDirty() const
 {
     const QmlCoreSettings::Values& values = m_core_settings.values();
     return values.listen != m_initial_core_values.listen || values.server != m_initial_core_values.server;
 }
 
-bool OptionsQmlModel::storageSettingsDirty() const
+bool SettingsModel::storageSettingsDirty() const
 {
     const QmlCoreSettings::Values& values = m_core_settings.values();
     return !QmlCoreSettings::CoreSettingValuesEqual(QStringLiteral("prune"), QmlCoreSettings::PruneSetting(values), QmlCoreSettings::PruneSetting(m_initial_core_values));
 }
 
-bool OptionsQmlModel::developerSettingsDirty() const
+bool SettingsModel::developerSettingsDirty() const
 {
     return m_dbcache_size_mib != m_initial_dbcache_size_mib ||
            m_script_threads != m_initial_script_threads;
 }
 
-bool OptionsQmlModel::restartRequired() const
+bool SettingsModel::restartRequired() const
 {
     return connectionSettingsDirty() ||
            storageSettingsDirty() ||
@@ -690,7 +690,7 @@ bool OptionsQmlModel::restartRequired() const
            proxySettingsDirty();
 }
 
-QVariantMap OptionsQmlModel::coreSettingStatuses() const
+QVariantMap SettingsModel::coreSettingStatuses() const
 {
     QVariantMap statuses = m_core_setting_statuses;
     if (!m_ready || m_stopping) {
@@ -703,12 +703,12 @@ QVariantMap OptionsQmlModel::coreSettingStatuses() const
     return statuses;
 }
 
-QVariantMap OptionsQmlModel::coreSettingStatus(const QString& name) const
+QVariantMap SettingsModel::coreSettingStatus(const QString& name) const
 {
     return coreSettingStatuses().value(name).toMap();
 }
 
-void OptionsQmlModel::resetDirtySnapshots()
+void SettingsModel::resetDirtySnapshots()
 {
     m_initial_core_values = m_core_settings.values();
     m_initial_dbcache_size_mib = m_dbcache_size_mib;
@@ -717,7 +717,7 @@ void OptionsQmlModel::resetDirtySnapshots()
     m_initial_external_signer_path = m_external_signer_path;
 }
 
-OptionsQmlModel::DirtySnapshot OptionsQmlModel::dirtySnapshot() const
+SettingsModel::DirtySnapshot SettingsModel::dirtySnapshot() const
 {
     DirtySnapshot snapshot;
     snapshot.connection = connectionSettingsDirty();
@@ -730,9 +730,9 @@ OptionsQmlModel::DirtySnapshot OptionsQmlModel::dirtySnapshot() const
     return snapshot;
 }
 
-void OptionsQmlModel::emitDirtySignals(const DirtySnapshot& before)
+void SettingsModel::emitDirtySignals(const DirtySnapshot& before)
 {
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     if (connectionSettingsDirty() != before.connection) Q_EMIT connectionSettingsDirtyChanged();
     if(!observer||m_stopping)return;
     if (storageSettingsDirty() != before.storage) Q_EMIT storageSettingsDirtyChanged();
@@ -750,12 +750,12 @@ void OptionsQmlModel::emitDirtySignals(const DirtySnapshot& before)
 }
 
 
-void OptionsQmlModel::applyRuntimeCoreChange(const QmlCoreSettings::Change& change,const DirtySnapshot& before)
+void SettingsModel::applyRuntimeCoreChange(const QmlCoreSettings::Change& change,const DirtySnapshot& before)
 {
-    const QPointer<OptionsQmlModel> observer{this};QmlCoreSettings::EmitCoreSettingSignals(*this,change);if(observer&&!m_stopping&&m_ready)emitDirtySignals(before);
+    const QPointer<SettingsModel> observer{this};QmlCoreSettings::EmitCoreSettingSignals(*this,change);if(observer&&!m_stopping&&m_ready)emitDirtySignals(before);
 }
 
-common::SettingsValue OptionsQmlModel::currentCoreSettingValue(const QString& name) const
+common::SettingsValue SettingsModel::currentCoreSettingValue(const QString& name) const
 {
     if (name == QStringLiteral("dbcache")) return m_dbcache_size_mib;
     if (name == QStringLiteral("par")) return m_script_threads;
@@ -765,13 +765,13 @@ common::SettingsValue OptionsQmlModel::currentCoreSettingValue(const QString& na
     return {};
 }
 
-bool OptionsQmlModel::canEditCoreSetting(const QString& name) const
+bool SettingsModel::canEditCoreSetting(const QString& name) const
 {
     if (!m_ready || m_stopping || m_validation_pending) return false;
     return coreSettingStatus(name).value(QStringLiteral("canEdit"), false).toBool();
 }
 
-bool OptionsQmlModel::writeCoreSettingOverride(const QString& name, const common::SettingsValue& value)
+bool SettingsModel::writeCoreSettingOverride(const QString& name, const common::SettingsValue& value)
 {
     if (!canEditCoreSetting(name)) return false;
     runCommand([name, value](interfaces::Node& node, ArgsManager& args) {
@@ -784,14 +784,14 @@ bool OptionsQmlModel::writeCoreSettingOverride(const QString& name, const common
     return true;
 }
 
-void OptionsQmlModel::refreshCoreSettingStatuses()
+void SettingsModel::refreshCoreSettingStatuses()
 {
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     m_core_settings.setStatuses(m_entry_statuses);
     if(observer&&!m_stopping)Q_EMIT coreSettingStatusesChanged();
 }
 
-void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
+void SettingsModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
 {
     if (!canEditCoreSetting(QStringLiteral("dbcache"))) return;
     if (new_dbcache_size_mib != m_dbcache_size_mib) {
@@ -803,13 +803,13 @@ void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
     }
 }
 
-void OptionsQmlModel::setListen(bool new_listen)
+void SettingsModel::setListen(bool new_listen)
 {
     if (m_stopping) return;
     m_core_settings.changeListen(new_listen);
 }
 
-void OptionsQmlModel::setMaxMempoolSizeMB(int new_max_mempool_size_mb)
+void SettingsModel::setMaxMempoolSizeMB(int new_max_mempool_size_mb)
 {
     if (!canEditCoreSetting(QStringLiteral("maxmempool"))) return;
     if (new_max_mempool_size_mb != m_max_mempool_size_mb) {
@@ -821,25 +821,25 @@ void OptionsQmlModel::setMaxMempoolSizeMB(int new_max_mempool_size_mb)
     }
 }
 
-void OptionsQmlModel::setNatpmp(bool new_natpmp)
+void SettingsModel::setNatpmp(bool new_natpmp)
 {
     if (m_stopping) return;
     m_core_settings.changeNatpmp(new_natpmp);
 }
 
-void OptionsQmlModel::setPrune(bool new_prune)
+void SettingsModel::setPrune(bool new_prune)
 {
     if (m_stopping) return;
     m_core_settings.changePrune(new_prune);
 }
 
-void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
+void SettingsModel::setPruneSizeGB(int new_prune_size_gb)
 {
     if (m_stopping) return;
     m_core_settings.changePruneSizeGB(new_prune_size_gb);
 }
 
-void OptionsQmlModel::setScriptThreads(int new_script_threads)
+void SettingsModel::setScriptThreads(int new_script_threads)
 {
     if (!canEditCoreSetting(QStringLiteral("par"))) return;
     if (new_script_threads != m_script_threads) {
@@ -851,37 +851,37 @@ void OptionsQmlModel::setScriptThreads(int new_script_threads)
     }
 }
 
-void OptionsQmlModel::setServer(bool new_server)
+void SettingsModel::setServer(bool new_server)
 {
     if (m_stopping) return;
     m_core_settings.changeServer(new_server);
 }
 
-void OptionsQmlModel::setProxyEnabled(bool enabled)
+void SettingsModel::setProxyEnabled(bool enabled)
 {
     if (m_stopping) return;
     m_core_settings.changeProxyEnabled(enabled);
 }
 
-void OptionsQmlModel::setProxyAddress(const QString& address)
+void SettingsModel::setProxyAddress(const QString& address)
 {
     if (m_stopping) return;
     m_core_settings.changeProxyLocation(address);
 }
 
-void OptionsQmlModel::setTorEnabled(bool enabled)
+void SettingsModel::setTorEnabled(bool enabled)
 {
     if (m_stopping) return;
     m_core_settings.changeTorEnabled(enabled);
 }
 
-void OptionsQmlModel::setTorAddress(const QString& address)
+void SettingsModel::setTorAddress(const QString& address)
 {
     if (m_stopping) return;
     m_core_settings.changeTorLocation(address);
 }
 
-QString OptionsQmlModel::defaultProxyAddress() const
+QString SettingsModel::defaultProxyAddress() const
 {
     return m_core_settings.defaultProxyAddress();
 }
@@ -902,13 +902,13 @@ QString SaveGuiSetting(const QString& key, const QVariant& value)
 }
 } // namespace
 
-void OptionsQmlModel::setExternalSignerPath(const QString& path)
+void SettingsModel::setExternalSignerPath(const QString& path)
 {
     if (m_stopping) return;
     if (!canEditCoreSetting(QStringLiteral("signer"))) return;
     if(path.size()>32768){setError(tr("The signer path is too long."));return;}
     if (m_signer_model) {
-        const QPointer<OptionsQmlModel> observer{this}; const auto model = m_signer_model;
+        const QPointer<SettingsModel> observer{this}; const auto model = m_signer_model;
         model->editPath(path); if (!observer || m_stopping || !model) return;
         m_forwarded_signer_command = true;
         model->apply();
@@ -918,7 +918,7 @@ void OptionsQmlModel::setExternalSignerPath(const QString& path)
     if (normalized_path == m_external_signer_path) return;
     const auto before = dirtySnapshot();
     m_external_signer_path = normalized_path;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     runCommand([original=normalized_path](interfaces::Node& node, ArgsManager& args) {
         const auto normalized_path=signerdiscovery::NormalizeCommand(original);
         QString error = signerdiscovery::PathError(normalized_path);
@@ -936,14 +936,14 @@ void OptionsQmlModel::setExternalSignerPath(const QString& path)
     if(observer&&!m_stopping)emitDirtySignals(before);
 }
 
-void OptionsQmlModel::setSignerDiscoveryModel(SignerDiscoveryModel* model)
+void SettingsModel::setSignerDiscoveryModel(SignerDiscoveryModel* model)
 {
     if (m_stopping || !model || m_signer_model) return;
     m_signer_model = model;
     const QPointer<SignerDiscoveryModel> original{model};
     const auto project = [this, original] {
         if (m_stopping || !original) return;
-        const QPointer<OptionsQmlModel> observer{this}; const auto before = dirtySnapshot();
+        const QPointer<SettingsModel> observer{this}; const auto before = dirtySnapshot();
         const bool pending_changed = m_forwarded_signer_pending != original->saving();
         m_forwarded_signer_pending = original->saving();
         if (original->configurationKnown() && m_external_signer_path != original->effectivePath()) {
@@ -963,34 +963,34 @@ void OptionsQmlModel::setSignerDiscoveryModel(SignerDiscoveryModel* model)
     project();
 }
 
-QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) const
+QString SettingsModel::externalSignerPathValidationError(const QString& path) const
 {
     return path == m_validated_signer_path ? m_signer_validation_error : QString{};
 }
 
-void OptionsQmlModel::requestExternalSignerPathValidation(const QString& path)
+void SettingsModel::requestExternalSignerPathValidation(const QString& path)
 {
     if (m_stopping) return;
     m_requested_signer_path = path;
     ++m_signer_validation_revision;
     m_signer_validation_pending = true;
     m_signer_validation_error.clear();
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     if (!m_signer_validation_in_flight) startSignerValidation();
     if(observer&&!m_stopping)Q_EMIT signerPathValidationChanged();
 }
 
-void OptionsQmlModel::queueSignerValidation()
+void SettingsModel::queueSignerValidation()
 {
     if (m_stopping) return;
     m_signer_validation_in_flight = true;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     presentation::ReliablePost(m_post)([observer] {
         if (observer && !observer->m_stopping) observer->startSignerValidation();
     });
 }
 
-void OptionsQmlModel::startSignerValidation()
+void SettingsModel::startSignerValidation()
 {
     if(m_stopping)return;
     const QString normalized = m_requested_signer_path;
@@ -1014,29 +1014,29 @@ void OptionsQmlModel::startSignerValidation()
     },execution::Lane::Core);
 }
 
-QString OptionsQmlModel::getDefaultDataDirString()
+QString SettingsModel::getDefaultDataDirString()
 {
     return m_default_data_dir;
 }
 
 
-QUrl OptionsQmlModel::getDefaultDataDirectory()
+QUrl SettingsModel::getDefaultDataDirectory()
 {
     return m_default_data_directory;
 }
 
-QString OptionsQmlModel::getCustomDataDirString(){return m_custom_datadir_display;}
+QString SettingsModel::getCustomDataDirString(){return m_custom_datadir_display;}
 
-QString OptionsQmlModel::validateCustomDataDir(const QString& path) const
+QString SettingsModel::validateCustomDataDir(const QString& path) const
 {
     return path==m_data_dir_validation_source||path==m_validated_data_dir?m_data_dir_validation_error:QString{};
 }
-bool OptionsQmlModel::selectCustomDataDir(const QString& path)
+bool SettingsModel::selectCustomDataDir(const QString& path)
 {
     if(!m_ready||m_stopping||m_pending||m_validation_pending)return false;
     if(path.size()>32768){setError(tr("The data directory path is too long."));return false;}
     const auto revision=++m_data_dir_revision;m_data_dir_validation_source=path;m_validation_pending=true;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     const bool admitted=m_work->submit([path]{const auto normalized=QmlDataDir::NormalizeLocalPath(path);QString error;
         const bool saved=QmlDataDir::PersistGuiDataDirSelection(normalized,&error);
         if(!saved&&error.isEmpty())error=tr("Unable to save the selected data directory.");
@@ -1060,10 +1060,10 @@ bool OptionsQmlModel::selectCustomDataDir(const QString& path)
     if(observer&&!m_stopping){Q_EMIT validationPendingChanged();if(observer&&!m_stopping&&admitted)setError({});}
     return admitted;
 }
-void OptionsQmlModel::useDefaultDataDir()
+void SettingsModel::useDefaultDataDir()
 {
     if(!m_ready||m_stopping||m_pending||m_validation_pending)return;
-    const auto revision=++m_data_dir_revision;m_validation_pending=true;const QPointer<OptionsQmlModel> observer{this};
+    const auto revision=++m_data_dir_revision;m_validation_pending=true;const QPointer<SettingsModel> observer{this};
     m_work->submit([]{QString error;const bool saved=QmlDataDir::PersistDefaultDataDirSelection(&error);
         if(!saved&&error.isEmpty())error=tr("Unable to save the default data directory.");
         return error;},
@@ -1084,20 +1084,20 @@ void OptionsQmlModel::useDefaultDataDir()
         });
     if(observer&&!m_stopping)Q_EMIT validationPendingChanged();
 }
-void OptionsQmlModel::setDataDir(QString path)
+void SettingsModel::setDataDir(QString path)
 {
     if(m_stopping)return;
-    const auto revision=++m_data_dir_revision;const QPointer<OptionsQmlModel> observer{this};
+    const auto revision=++m_data_dir_revision;const QPointer<SettingsModel> observer{this};
     m_work->submit([path]{return QmlDataDir::NormalizeLocalPath(path);},[observer,revision](const QString& normalized){
         if(observer&&!observer->m_stopping&&observer->m_data_dir_revision==revision)observer->adoptDataDir(normalized);
     },[observer](std::exception_ptr){if(observer&&!observer->m_stopping)observer->setError(tr("Unable to check the data directory."));});
 }
-void OptionsQmlModel::adoptDataDir(const QString& normalized)
+void SettingsModel::adoptDataDir(const QString& normalized)
 {
     const auto effective=normalized.isEmpty()?m_default_data_dir:normalized;if(effective==m_dataDir)return;m_dataDir=effective;Q_EMIT dataDirChanged(m_dataDir);
 }
 
-QStringList OptionsQmlModel::buildAvailableLanguages()
+QStringList SettingsModel::buildAvailableLanguages()
 {
     QStringList languages;
     languages << "";  // empty = system default
@@ -1119,13 +1119,13 @@ QStringList OptionsQmlModel::buildAvailableLanguages()
     return languages;
 }
 
-void OptionsQmlModel::persistGuiSetting(const QString& key, const QVariant& value)
+void SettingsModel::persistGuiSetting(const QString& key, const QVariant& value)
 {
     if (!m_ready || m_stopping || m_validation_pending) return;
     runCommand([key, value](interfaces::Node&, ArgsManager&) { return SaveGuiSetting(key, value); });
 }
 
-void OptionsQmlModel::setLanguage(const QString& new_language)
+void SettingsModel::setLanguage(const QString& new_language)
 {
     if (!canEditCoreSetting(QStringLiteral("lang")) || new_language == m_language) return;
     if (new_language.size() > 64) { setError(tr("The selected language is not available.")); return; }
@@ -1139,12 +1139,12 @@ void OptionsQmlModel::setLanguage(const QString& new_language)
     });
 }
 
-QString OptionsQmlModel::languageSummary() const
+QString SettingsModel::languageSummary() const
 {
     return languageLabel(m_language);
 }
 
-QString OptionsQmlModel::languageLabel(const QString& locale_tag) const
+QString SettingsModel::languageLabel(const QString& locale_tag) const
 {
     if (locale_tag.isEmpty()) {
         return QObject::tr("System default");
@@ -1169,38 +1169,38 @@ QString OptionsQmlModel::languageLabel(const QString& locale_tag) const
     return QStringLiteral("%1 \u2014 %2").arg(native, english);
 }
 
-void OptionsQmlModel::setDisplayUnit(int new_display_unit)
+void SettingsModel::setDisplayUnit(int new_display_unit)
 {
     new_display_unit = NormalizeDisplayUnit(new_display_unit);
     if (!m_ready || m_stopping || m_validation_pending || new_display_unit == m_display_unit) return;
     m_display_unit = new_display_unit;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     persistGuiSetting(SettingsKeys::DISPLAY_UNIT, new_display_unit);
     if(observer&&!m_stopping)Q_EMIT displayUnitChanged(m_display_unit);
 }
 
-void OptionsQmlModel::setThirdPartyTransactionUrls(const QString& urls)
+void SettingsModel::setThirdPartyTransactionUrls(const QString& urls)
 {
     if (!m_ready || m_stopping || m_validation_pending || urls == m_third_party_transaction_urls) return;
     m_third_party_transaction_urls = urls;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     persistGuiSetting(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, urls);
     if(observer&&!m_stopping)Q_EMIT thirdPartyTransactionUrlsChanged();
 }
 
-void OptionsQmlModel::setMoneyFontChoice(const QString& choice)
+void SettingsModel::setMoneyFontChoice(const QString& choice)
 {
     const QString normalized = choice == MONEY_FONT_BEST_SYSTEM ? QString{MONEY_FONT_BEST_SYSTEM} : QString{MONEY_FONT_EMBEDDED};
     if (!m_ready || m_stopping || m_validation_pending || normalized == m_money_font_choice) return;
     m_money_font_choice = normalized;
-    const QPointer<OptionsQmlModel> observer{this};
+    const QPointer<SettingsModel> observer{this};
     persistGuiSetting(SettingsKeys::MONEY_FONT_CHOICE, normalized);
     if(!observer||m_stopping)return;
     Q_EMIT moneyFontChoiceChanged();
     if(observer&&!m_stopping)Q_EMIT moneyFontChanged();
 }
 
-void OptionsQmlModel::setHideAmounts(bool hide)
+void SettingsModel::setHideAmounts(bool hide)
 {
     if (!m_ready || m_stopping || m_validation_pending || hide == m_hide_amounts) return;
     m_hide_amounts = hide;
@@ -1208,7 +1208,7 @@ void OptionsQmlModel::setHideAmounts(bool hide)
     persistGuiSetting(SettingsKeys::HIDE_AMOUNTS, hide);
 }
 
-QFont OptionsQmlModel::moneyFont() const
+QFont SettingsModel::moneyFont() const
 {
     if (m_money_font_choice == MONEY_FONT_BEST_SYSTEM) {
         return QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -1218,12 +1218,12 @@ QFont OptionsQmlModel::moneyFont() const
     return font;
 }
 
-QString OptionsQmlModel::displayUnitLabel() const
+QString SettingsModel::displayUnitLabel() const
 {
     return QmlBitcoinUnits::label(QmlBitcoinUnits::fromDisplayUnit(m_display_unit));
 }
 
-QString OptionsQmlModel::displayUnitLabelForAmount(qint64 satoshi) const
+QString SettingsModel::displayUnitLabelForAmount(qint64 satoshi) const
 {
     return QmlBitcoinUnits::displayLabel(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), satoshi);
 }

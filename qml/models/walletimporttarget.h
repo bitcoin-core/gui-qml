@@ -12,21 +12,21 @@
 
 class BitcoinUriModel;
 class SendRecipient;
-class WalletQmlModel;
+class WalletModel;
 
 /** A wallet's send draft as an ImportTarget: imports go through BitcoinUri
  * into the wallet's current recipient. */
 class WalletImportTarget : public ImportTarget
 {
     Q_OBJECT
-    Q_PROPERTY(WalletQmlModel* wallet READ wallet WRITE setWallet NOTIFY walletChanged)
+    Q_PROPERTY(WalletModel* wallet READ wallet WRITE setWallet NOTIFY walletChanged)
     Q_PROPERTY(BitcoinUriModel* uri READ uri WRITE setUri NOTIFY uriChanged)
 
 public:
     explicit WalletImportTarget(QObject* parent = nullptr);
 
-    WalletQmlModel* wallet() const { return m_wallet; }
-    void setWallet(WalletQmlModel* wallet);
+    WalletModel* wallet() const { return m_wallet; }
+    void setWallet(WalletModel* wallet);
     BitcoinUriModel* uri() const { return m_uri; }
     void setUri(BitcoinUriModel* uri);
 
@@ -50,7 +50,7 @@ private:
     SendRecipient* currentRecipient() const;
     void watchRecipient();
 
-    QPointer<WalletQmlModel> m_wallet;
+    QPointer<WalletModel> m_wallet;
     QPointer<BitcoinUriModel> m_uri;
     QPointer<SendRecipient> m_recipient;
     QList<QMetaObject::Connection> m_recipient_connections;

@@ -292,7 +292,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletsecurityinterface.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpasswordcontroller.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpasswordcontroller.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletinterface.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletavailabilityinterface.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpagecontroller.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletpagecontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletbackupinterface.h
@@ -313,14 +313,14 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/paymentrequesteditormodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receiptreconciliationmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receiptreconciliationmodel.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receivereservationmodel.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/receivereservationmodel.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/addressreservationmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/addressreservationmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/walletreceivemodel.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestdeletecontroller.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestdeletecontroller.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestviewcontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/paymentrequestdeletecontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/paymentrequestdeletecontroller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/paymentrequestviewcontroller.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/paymentrequestviewcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestsharingmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestsharingmodel.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/requestimageexportoperation.cpp
@@ -344,11 +344,11 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/settingsvalues.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/settingssession.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingseditormodel.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingseditorsource.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingseditorfactoryinterface.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingsnavigationcontroller.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/settingsnavigationcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandoperation.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandtarget.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peeractionsinterface.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandcontroller.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/peercommandcontroller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/signerconfiguration.cpp

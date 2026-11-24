@@ -7,9 +7,9 @@
 
 #include <qml/models/paymentrequesteditormodel.h>
 #include <qml/models/receiptreconciliationmodel.h>
-#include <qml/models/receivereservationmodel.h>
+#include <qml/models/addressreservationmodel.h>
 #include <qml/models/receiverequestoperation.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/models/walletreceivemodel.h>
 
 #include <QPointer>
@@ -41,7 +41,7 @@ struct SavedTypedRequest {
 
 //! Fills and saves the wallet's receive editor, as the Receive page does, then
 //! starts a fresh request so later saves get their own address.
-inline std::optional<SavedTypedRequest> SaveTypedRequest(WalletQmlModel& wallet,
+inline std::optional<SavedTypedRequest> SaveTypedRequest(WalletModel& wallet,
     const std::function<void(PaymentRequestEditorModel&)>& fill = {}, int timeout_ms = 30'000)
 {
     auto* receive = wallet.receive();
@@ -97,14 +97,14 @@ inline bool SaveTypedEdit(PaymentRequestEditorModel& editor, int timeout_ms = 30
 }
 
 //! Opens saved request \p id in its own editor, as a request detail does.
-inline QPointer<PaymentRequestEditorModel> OpenTypedRequest(WalletQmlModel& wallet, const QString& id, int timeout_ms = 30'000)
+inline QPointer<PaymentRequestEditorModel> OpenTypedRequest(WalletModel& wallet, const QString& id, int timeout_ms = 30'000)
 {
     auto* receive = wallet.receive();
     if (!receive) return {};
     QObject owner;
-    const QPointer<RequestOpenOperation> operation{receive->openRequest(id, &owner)};
+    const QPointer<PaymentRequestOpenOperation> operation{receive->openRequest(id, &owner)};
     if (!operation || !QTest::qWaitFor([&] { return !operation || !operation->pending(); }, timeout_ms) || !operation) return {};
-    return operation->state() == RequestOpenOperation::State::Opened ? operation->editor() : nullptr;
+    return operation->state() == PaymentRequestOpenOperation::State::Opened ? operation->editor() : nullptr;
 }
 
 #endif // BITCOIN_QML_TEST_MOCKS_RECEIVEREQUESTTEST_H

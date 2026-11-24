@@ -206,7 +206,7 @@ struct Service::Flags {
 };
 struct Service::State {
     struct Native;
-    std::shared_ptr<Owner> owner;
+    std::shared_ptr<desktopintent::Service> owner;
     Limits limits;
     const std::shared_ptr<Flags> flags{std::make_shared<Flags>()};
     // The same lock protects admission, pending delivery and the receiver
@@ -482,7 +482,7 @@ bool Service::post(std::function<void()> work) const
     return state && state->post([work = std::move(work)](State::Native&) { work(); });
 }
 
-std::shared_ptr<Service> Service::Create(std::shared_ptr<Owner> owner, Limits limits)
+std::shared_ptr<Service> Service::Create(std::shared_ptr<desktopintent::Service> owner, Limits limits)
 {
     const auto maximum = std::chrono::seconds{30};
     if (!owner || !limits.now || limits.startup <= std::chrono::milliseconds::zero() || limits.startup > maximum ||

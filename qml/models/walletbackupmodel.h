@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_WALLETBACKUPS_H
-#define BITCOIN_QML_MODELS_WALLETBACKUPS_H
+#ifndef BITCOIN_QML_MODELS_WALLETBACKUPMODEL_H
+#define BITCOIN_QML_MODELS_WALLETBACKUPMODEL_H
 
 #include <qml/models/backuppolicyoperation.h>
 #include <qml/models/walletbackupinterface.h>
@@ -16,7 +16,7 @@
  * the one backup that may run: the record is held by the operation's backend
  * services, so it clears only when the backend finishes or retires the save,
  * even after the page and its operation object are gone. */
-class WalletBackups final : public WalletBackupInterface
+class WalletBackupModel final : public WalletBackupInterface
 {
     Q_OBJECT
 public:
@@ -24,7 +24,7 @@ public:
     //! `outcome` on its terminal phase. Returns null with `why` set.
     using Start = std::function<BackupFileOperation*(const QString& path, QString& why,
         std::function<void(backup::Snapshot)> outcome)>;
-    WalletBackups(std::function<bool()> available, Start start, QObject* parent);
+    WalletBackupModel(std::function<bool()> available, Start start, QObject* parent);
 
     bool available() const override { return !m_closed && m_available && m_available(); }
     bool busy() const override { return m_pending != 0; }
@@ -46,4 +46,4 @@ private:
     bool m_closed{false};
 };
 
-#endif // BITCOIN_QML_MODELS_WALLETBACKUPS_H
+#endif // BITCOIN_QML_MODELS_WALLETBACKUPMODEL_H

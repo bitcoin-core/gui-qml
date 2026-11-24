@@ -74,14 +74,14 @@ WalletReceiveModel::Ports MakeReceivePorts(const std::shared_ptr<walletopening::
     const auto submit = [weak_store, weak_opening](walletrequests::Command command, auto done) {
         const auto writer = weak_store.lock();
         const auto owner = weak_opening.lock();
-        if (!writer || !owner) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
+        if (!writer || !owner) return AddressReservationModel::Admission{{}, {}, execution::Rejection::Closed};
         // The opening retires the original result after the view releases it.
         auto retained = walletopening::RetainValues<std::shared_ptr<walletrequests::Operation>>(owner,
             [] { return std::make_unique<std::shared_ptr<walletrequests::Operation>>(); });
-        if (!retained) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
+        if (!retained) return AddressReservationModel::Admission{{}, {}, execution::Rejection::Closed};
         const auto submitted = writer->submitResult(std::move(command), std::move(done));
         *retained = submitted.operation;
-        return ReceiveReservationModel::Admission{submitted.operation ? submitted.operation->address_intent : nullptr,
+        return AddressReservationModel::Admission{submitted.operation ? submitted.operation->address_intent : nullptr,
             std::move(retained), submitted.rejection};
     };
     ports.reservation.submit = submit;

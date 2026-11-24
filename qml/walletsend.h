@@ -83,11 +83,11 @@ struct Result {
 };
 /** One accepted reviewed transaction, with its original opening and result.
  * Neither the effect nor consuming its outcome depends on GUI delivery. */
-class Operation : public std::enable_shared_from_this<Operation>
+class SendTask : public std::enable_shared_from_this<SendTask>
 {
 public:
     using Notify = std::function<void(Notice)>;
-    Operation(std::shared_ptr<walletopening::Session> opening,
+    SendTask(std::shared_ptr<walletopening::Session> opening,
               std::shared_ptr<walletrequests::Store> notes, Notify notify)
         : m_opening(std::move(opening)), m_notes(std::move(notes)), m_notify(std::move(notify)) {}
     execution::SubmitResult start(Request request, std::shared_ptr<const walletopening::Session::Action> action = {});
@@ -159,11 +159,11 @@ struct ApprovalSnapshot {
  * Inputs are immutable captured review values; only snapshots are delivered
  * to the GUI, and a stale/closed result cannot install into a later review.
  */
-class ApprovalOwner final : public std::enable_shared_from_this<ApprovalOwner>
+class ApprovalService final : public std::enable_shared_from_this<ApprovalService>
 {
 public:
     using Notify = std::function<void(ApprovalSnapshot)>; // enqueue-only GUI transport
-    ApprovalOwner(std::shared_ptr<walletopening::Session> opening, Notify notify);
+    ApprovalService(std::shared_ptr<walletopening::Session> opening, Notify notify);
     execution::SubmitResult reviewChanged(uint64_t review_id, uint64_t view_revision);
     execution::SubmitResult request(uint64_t attempt_id, uint64_t review_id, uint64_t view_revision,
                                  std::shared_ptr<Request> retained_request);

@@ -21,7 +21,7 @@
 #include <outputtype.h>
 #include <primitives/transaction.h>
 #include <qml/models/addresslistmodel.h>
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #include <qml/models/transactionactivitymodel.h>
 #include <test/mocks/manualwalletdrain.h>
 #include <test/mocks/receiverequesttest.h>
@@ -225,7 +225,7 @@ void AddressListModelTests::receiveAddressesHideUsedUntilEnabled()
     };
 
     wallet->m_txs.insert(WalletTxFor({used}, {COIN}, {false}));
-    WalletQmlModel wallet_model{std::move(wallet)};
+    WalletModel wallet_model{std::move(wallet)};
     AddressListModel* model{wallet_model.addressListModel()};
     model->refresh();
 
@@ -247,7 +247,7 @@ void AddressListModelTests::labelsCanBeEdited()
     wallet->m_addresses = {
         {dest, true, wallet::AddressPurpose::RECEIVE, "first label"},
     };
-    WalletQmlModel wallet_model{std::move(wallet)};
+    WalletModel wallet_model{std::move(wallet)};
     const auto native_drained = WatchWalletNativeDrain(wallet_model);
     const auto cleanup = qScopeGuard([&] {
         wallet_model.beginShutdown();
@@ -271,9 +271,9 @@ void AddressListModelTests::labelsCanBeEdited()
     const auto history_before = all_history_reads->load();
 
     QSignalSpy resets{model, &QAbstractItemModel::modelReset};
-    QSignalSpy refreshed{&wallet_model, &WalletQmlModel::addressListChanged};
-    QSignalSpy label_refresh{&wallet_model, &WalletQmlModel::addressLabelsChanged};
-    QSignalSpy inventory_refresh{&wallet_model, &WalletQmlModel::addressInventoryChanged};
+    QSignalSpy refreshed{&wallet_model, &WalletModel::addressListChanged};
+    QSignalSpy label_refresh{&wallet_model, &WalletModel::addressLabelsChanged};
+    QSignalSpy inventory_refresh{&wallet_model, &WalletModel::addressInventoryChanged};
     const QPersistentModelIndex stable{model->index(0)};
     const std::unique_ptr<ReceiveRequestOperation> operation{model->setAddressLabel(address, QStringLiteral("updated label"))};
     QVERIFY(operation);
@@ -320,7 +320,7 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
 
     wallet->m_txs.insert(change_tx);
     wallet->m_coins[receive].emplace_back(COutPoint{txid, 1}, change_out);
-    WalletQmlModel wallet_model{std::move(wallet)};
+    WalletModel wallet_model{std::move(wallet)};
     AddressListModel* model{wallet_model.addressListModel()};
     model->setCategory(AddressListModel::Change);
 
@@ -350,7 +350,7 @@ void AddressListModelTests::labelEditorInventoryKeepsDirtyOriginalsAndDrainsBefo
 {
     auto wallet = std::make_unique<TestAddressWallet>(); auto* backend_wallet = wallet.get();
     for (uint8_t seed{1}; seed <= 96; ++seed) wallet->m_addresses.emplace_back(TestDestination(seed), true, wallet::AddressPurpose::RECEIVE, "original");
-    WalletQmlModel wallet_model{std::move(wallet)};
+    WalletModel wallet_model{std::move(wallet)};
     const auto native_drained = WatchWalletNativeDrain(wallet_model);
     const auto cleanup = qScopeGuard([&] {
         wallet_model.beginShutdown();
@@ -397,7 +397,7 @@ void AddressListModelTests::labelEditorRoundTripsItsSupportedUnicodeBoundary()
     auto wallet = std::make_unique<TestAddressWallet>(); auto* native = wallet.get();
     const auto destination = TestDestination(1);
     wallet->m_addresses.emplace_back(destination, true, wallet::AddressPurpose::RECEIVE, "original");
-    WalletQmlModel model{std::move(wallet)};
+    WalletModel model{std::move(wallet)};
     const auto native_drained = WatchWalletNativeDrain(model);
     const auto cleanup = qScopeGuard([&] {
         model.beginShutdown();

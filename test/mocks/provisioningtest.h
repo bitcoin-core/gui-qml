@@ -3,10 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_QML_TEST_MOCKS_PROVISIONINGTEST_H
 #define BITCOIN_QML_TEST_MOCKS_PROVISIONINGTEST_H
-#include <qml/walletqmlcontroller.h>
+#include <qml/walletcontroller.h>
 #include <QtTest/QtTest>
 #include <memory>
-inline QString AwaitWalletNameCheck(WalletQmlController& controller, const QString& name)
+inline QString AwaitWalletNameCheck(WalletController& controller, const QString& name)
 {
     std::unique_ptr<WalletProvisioningCheck> check{controller.creation()->createProvisioningCheck()};
     if (!check) { QTest::qFail("Wallet name check was not admitted", __FILE__, __LINE__); return QStringLiteral("Check unavailable"); }
@@ -16,7 +16,7 @@ inline QString AwaitWalletNameCheck(WalletQmlController& controller, const QStri
     }
     return check->nameError();
 }
-inline bool AwaitWalletPathCheck(WalletQmlController& controller, const QString& path)
+inline bool AwaitWalletPathCheck(WalletController& controller, const QString& path)
 {
     std::unique_ptr<WalletProvisioningCheck> check{controller.creation()->createProvisioningCheck()};
     if (!check) { QTest::qFail("Wallet path check was not admitted", __FILE__, __LINE__); return false; }

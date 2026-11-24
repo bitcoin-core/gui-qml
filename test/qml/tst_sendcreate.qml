@@ -236,7 +236,7 @@ TestCase {
 
         compare(testWalletModel.signOnlyTransactionCalls, 1)
         compare(testWalletModel.sendTransactionCalls, 0)
-        compare(testWalletModel.sendState, WalletQmlModel.SendSignedOnly)
+        compare(testWalletModel.sendState, WalletModel.SendSignedOnly)
     }
 
     function test_locked_sign_only_prompt_says_transaction_will_not_be_sent() {
@@ -371,7 +371,7 @@ TestCase {
         else page.visible = false
 
         testWalletModel.finishPsbtPublicationForTest()
-        compare(testWalletModel.psbtActionState, WalletQmlModel.PsbtImported)
+        compare(testWalletModel.psbtActionState, WalletModel.PsbtImported)
         compare(controller.importing, false)
         if (data.opens) tryCompare(popup, "opened", true)
         else compare(popup.visible, false)
@@ -412,8 +412,8 @@ TestCase {
         const completePage = findChild(reviewStack, "sendCompletePage")
         verify(completePage !== null)
         compare(completePage.targetBlocks, 0)
-        compare(completePage.submissionState, WalletQmlModel.SubmissionAccepted)
-        compare(completePage.recordState, WalletQmlModel.SendRecordUnknown)
+        compare(completePage.submissionState, WalletModel.SubmissionAccepted)
+        compare(completePage.recordState, WalletModel.SendRecordUnknown)
         verify(completePage.descriptionText.indexOf("fee rate") >= 0)
         tryCompare(testWalletModel, "broadcastCurrentTransactionCalls", broadcastCallsBefore + 1)
         findChild(reviewStack, "sendResultDoneButton").clicked()
@@ -553,7 +553,7 @@ TestCase {
         testWalletModel.currentTransactionCanBroadcast = false
         testWalletModel.transactionFeePending = true
         testWalletModel.currentTransactionReviewMessage = "Checking transaction fee."
-        findChild(page, "walletSendPage").handlePsbtImportResult(WalletQmlModel.ReviewPending)
+        findChild(page, "walletSendPage").handlePsbtImportResult(WalletModel.ReviewPending)
         const popup = findChild(page, "transactionReviewPopup")
         tryCompare(popup, "opened", true)
         const review = findChild(popup, "sendTransactionReviewPage")
@@ -593,18 +593,18 @@ TestCase {
     function test_completion_retains_the_original_submission_outcome() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null); page.width = testCase.width; page.height = testCase.height; page.visible = true
-        testWalletModel.sendSubmission = WalletQmlModel.SubmissionNotInMempool
+        testWalletModel.sendSubmission = WalletModel.SubmissionNotInMempool
         page.openTransactionReview()
         const popup = findChild(page, "transactionReviewPopup"), stack = findChild(popup, "sendTransactionReviewStack")
         tryCompare(popup, "opened", true)
         findChild(popup.contentItem, "sendTransactionReviewSendButton").clicked()
         tryCompare(stack, "depth", 2)
         const complete = findChild(stack, "sendCompletePage")
-        compare(complete.submissionState, WalletQmlModel.SubmissionNotInMempool)
+        compare(complete.submissionState, WalletModel.SubmissionNotInMempool)
         compare(complete.titleText, "Transaction saved")
         verify(complete.descriptionText.indexOf("not in the mempool") >= 0)
-        testWalletModel.sendSubmission = WalletQmlModel.SubmissionMempool
-        compare(complete.submissionState, WalletQmlModel.SubmissionNotInMempool)
+        testWalletModel.sendSubmission = WalletModel.SubmissionMempool
+        compare(complete.submissionState, WalletModel.SubmissionNotInMempool)
         compare(complete.titleText, "Transaction saved")
         verify(complete.descriptionText.indexOf("confirm within") === -1)
     }
@@ -622,7 +622,7 @@ TestCase {
             testWalletModel.finishSendForTest()
             compare(sent, 0)
             compare(review.sending, false)
-            compare(testWalletModel.sendState, WalletQmlModel.SendClosed)
+            compare(testWalletModel.sendState, WalletModel.SendClosed)
         } finally {
             testWalletModel.replaceCurrentTransactionForTest(original)
             testWalletModel.resetSendForTest()
@@ -1879,7 +1879,7 @@ TestCase {
         const stack = popup.contentItem
         compare(popup.opened, false)
         verify(stack.currentItem !== null)
-        stack.currentItem.transactionSent("fast-completion", WalletQmlModel.SubmissionAccepted, WalletQmlModel.SendRecordUnknown)
+        stack.currentItem.transactionSent("fast-completion", WalletModel.SubmissionAccepted, WalletModel.SendRecordUnknown)
         tryVerify(function() { return stack.currentItem && stack.currentItem.objectName === "sendCompletePage" })
         tryCompare(popup, "opened", true)
         const done = findChild(stack.currentItem, "sendResultDoneButton")
@@ -2126,7 +2126,7 @@ TestCase {
             else if (data.change === "draft") testSendRecipient.label = "replacement draft"
             else page.wallet = testSecondWalletModel
             testWalletModel.finishPreparationForTest()
-            compare(testWalletModel.preparationState, WalletQmlModel.PreparationReady)
+            compare(testWalletModel.preparationState, WalletModel.PreparationReady)
             compare(review.visible, false)
             compare(page.prepareTransactionErrorText, "")
             compare(testWalletModel.prepareTransactionCalls, originalCalls + 1)
@@ -2145,7 +2145,7 @@ TestCase {
         try {
             clickControlledReview(page)
             testWalletModel.finishPreparationStaleForTest()
-            compare(testWalletModel.preparationState, WalletQmlModel.PreparationStale)
+            compare(testWalletModel.preparationState, WalletModel.PreparationStale)
             compare(review.visible, false)
             compare(page.prepareTransactionErrorText, "Your balance or this transaction changed while it was being prepared. Review it again.")
         } finally {
@@ -2159,7 +2159,7 @@ TestCase {
         let allowSecondView = false
         let secondRequested = false
         function requestFromSecondView() {
-            if (!allowSecondView || secondRequested || testWalletModel.preparationState !== WalletQmlModel.PreparationReady) return
+            if (!allowSecondView || secondRequested || testWalletModel.preparationState !== WalletModel.PreparationReady) return
             secondRequested = true
             secondView.prepareTransactionForReview()
         }
@@ -2223,11 +2223,11 @@ TestCase {
     }
     function test_controlled_psbt_import_routes_public_result_data() {
         return [
-            {tag: "signable", result: WalletQmlModel.WalletCanSign, popup: "transactionReviewPopup"},
-            {tag: "save-only", result: WalletQmlModel.WalletCannotSign, popup: "transactionReviewPopup"},
-            {tag: "review-pending", result: WalletQmlModel.ReviewPending, popup: "transactionReviewPopup"},
-            {tag: "already-known", result: WalletQmlModel.TransactionAlreadyKnown, popup: "knownPsbtTxPopup"},
-            {tag: "unsupported", result: WalletQmlModel.PsbtUnsupported, popup: "unsupportedPsbtPopup"}
+            {tag: "signable", result: WalletModel.WalletCanSign, popup: "transactionReviewPopup"},
+            {tag: "save-only", result: WalletModel.WalletCannotSign, popup: "transactionReviewPopup"},
+            {tag: "review-pending", result: WalletModel.ReviewPending, popup: "transactionReviewPopup"},
+            {tag: "already-known", result: WalletModel.TransactionAlreadyKnown, popup: "knownPsbtTxPopup"},
+            {tag: "unsupported", result: WalletModel.PsbtUnsupported, popup: "unsupportedPsbtPopup"}
         ]
     }
     function test_controlled_psbt_import_routes_public_result(data) {
@@ -2811,7 +2811,7 @@ TestCase {
                     tryCompare(review, "opened", true)
                     compare(review.reviewWallet, testWalletModel)
                 } else {
-                    compare(testWalletModel.preparationState, WalletQmlModel.PreparationFailed)
+                    compare(testWalletModel.preparationState, WalletModel.PreparationFailed)
                     compare(prompt.opened, true)
                     compare(findChild(prompt, "reviewPassphraseErrorText").text, "Original password retry failed.")
                     compare(review.visible, false)
@@ -2855,13 +2855,13 @@ TestCase {
                 testWalletModel.holdPsbtPublicationForTest = true
                 page.requestPsbtImport("accepted-original.psbt")
                 const ticket = testWalletModel.psbtActionId
-                testWalletModel.psbtImportResultForTest = WalletQmlModel.PsbtUnsupported
+                testWalletModel.psbtImportResultForTest = WalletModel.PsbtUnsupported
                 page.requestPsbtImport("competing-replacement.psbt")
                 compare(testWalletModel.psbtActionId, ticket)
                 compare(testWalletModel.prepareTransactionCalls, calls)
                 testWalletModel.completePsbtWorkForTest()
                 testWalletModel.finishPsbtPublicationForTest()
-                compare(testWalletModel.psbtImportResult, WalletQmlModel.WalletCanSign)
+                compare(testWalletModel.psbtImportResult, WalletModel.WalletCanSign)
                 compare(findChild(page, "unsupportedPsbtPopup").visible, false)
             } else {
                 if (data.kind === "uri") {

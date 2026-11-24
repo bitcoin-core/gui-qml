@@ -123,12 +123,12 @@ struct ReceiveEditorPorts {
         };
         return ports;
     }
-    ReceiveReservationModel::Ports reservations()
+    AddressReservationModel::Ports reservations()
     {
-        ReceiveReservationModel::Ports ports;
+        AddressReservationModel::Ports ports;
         ports.post = [this](auto turn) { gui.push_back(std::move(turn)); };
         const auto submit = [this](walletrequests::Command command, std::function<void(const walletrequests::Result&)> done, bool authorized) {
-            if (closed) return ReceiveReservationModel::Admission{{}, {}, execution::Rejection::Closed};
+            if (closed) return AddressReservationModel::Admission{{}, {}, execution::Rejection::Closed};
             auto intent = command.resume;
             if (!intent) intent = std::make_shared<const walletrequests::AddressIntent>(walletrequests::AddressIntent{
                 opening, ++token, command.view, command.view_revision, command.draft, command.next, command.explicit_type, false,
@@ -161,7 +161,7 @@ struct ReceiveEditorPorts {
                 return result;
             }, [done = std::move(done)](walletrequests::Result result) { done(result); }, {});
             const auto submitted = outcomes->postWithOutcome(execution.core, std::move(task));
-            return ReceiveReservationModel::Admission{intent, {}, submitted.rejection};
+            return AddressReservationModel::Admission{intent, {}, submitted.rejection};
         };
         ports.submit = [submit](auto command, auto done) { return submit(std::move(command), std::move(done), false); };
         ports.authorize = [submit](auto command, const QString&, auto done) { return submit(std::move(command), std::move(done), true); };

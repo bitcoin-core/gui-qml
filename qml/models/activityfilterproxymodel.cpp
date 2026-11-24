@@ -56,7 +56,7 @@ struct ActivityFilterProxyModel::Parameters {
     QTimeZone timezone;
     bool operator==(const Parameters&) const = default;
 };
-struct ActivityFilterProxyModel::Owner {
+struct ActivityFilterProxyModel::State {
     enum class ProjectionStep {
         PrepareRows,
         RemoveMissingRows,
@@ -87,7 +87,7 @@ struct ActivityFilterProxyModel::Mailbox {
     }
 };
 struct ActivityFilterProxyModel::Job {
-    std::shared_ptr<Owner> owner;
+    std::shared_ptr<State> owner;
     std::shared_ptr<void> lease;
     std::shared_ptr<walletopening::Session> opening;
     std::shared_ptr<Mailbox> mailbox;
@@ -253,7 +253,7 @@ void ActivityFilterProxyModel::start()
     auto* provider = qobject_cast<activityview::Source*>(sourceModel());
     const auto opening = provider ? provider->opening() : nullptr;
     if (!m_input || !opening) { Q_EMIT stateChanged(); return; }
-    auto owner = std::make_shared<Owner>();
+    auto owner = std::make_shared<State>();
     const auto cleanup = [owner] { owner->clear(); };
     auto held = opening->holdValues(cleanup);
     if (!held) { m_error = tr("Activity could not be filtered. Try again."); Q_EMIT stateChanged(); return; }
@@ -269,7 +269,7 @@ void ActivityFilterProxyModel::start()
         [job](std::exception_ptr) { job->owner->error = tr("Activity filtering failed."); job->mailbox->publish(job); });
     if (!admitted) { owner->error = tr("Activity could not be filtered. Try again."); m_mailbox->publish(job); }
 }
-void ActivityFilterProxyModel::patchRow(Owner& owner, const QString& id, activityview::SharedRow row)
+void ActivityFilterProxyModel::patchRow(State& owner, const QString& id, activityview::SharedRow row)
 {
     const auto found = owner.result->rows.find(id);
     const bool existing = found != owner.result->rows.end();
@@ -314,7 +314,7 @@ void ActivityFilterProxyModel::patchRow(Owner& owner, const QString& id, activit
 void ActivityFilterProxyModel::step(const std::shared_ptr<Job>& job)
 {
     if (job->cancelled->load()) return;
-    using Step = Owner::ProjectionStep;
+    using Step = State::ProjectionStep;
     auto& owner = *job->owner;
     if (!owner.result) {
         if (owner.parameters.date == DateAll || owner.parameters.date == CustomRange) owner.parameters.today = {};

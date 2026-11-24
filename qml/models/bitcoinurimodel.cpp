@@ -8,7 +8,7 @@
 #include <qml/models/bitcoinuri.h>
 #include <qml/executor.h>
 #ifdef ENABLE_WALLET
-#include <qml/models/walletqmlmodel.h>
+#include <qml/models/walletmodel.h>
 #endif
 #include <QTimer>
 #include <qml/guipresentation.h>
@@ -24,7 +24,7 @@
 struct BitcoinUriOperations {
 #ifdef ENABLE_WALLET
     std::mutex import_mutex;
-    std::map<uint64_t, std::shared_ptr<paymentimport::Owner>> imports;
+    std::map<uint64_t, std::shared_ptr<paymentimport::Service>> imports;
     std::vector<std::function<void()>> drained;
     std::shared_ptr<execution::SerialQueue> reads, outcomes;
     std::shared_ptr<backup::InstallCoordinator> export_coordinator;
@@ -56,7 +56,7 @@ struct BitcoinUriOperations {
     }
 
     void retireImports() {
-        std::vector<std::shared_ptr<paymentimport::Owner>> retained;
+        std::vector<std::shared_ptr<paymentimport::Service>> retained;
         { std::lock_guard lock{import_mutex}; for (const auto& [id, operation] : imports) retained.push_back(operation); }
         for (const auto& operation : retained) operation->close();
     }
@@ -126,13 +126,13 @@ void BitcoinUriModel::setExportCoordinator(std::shared_ptr<backup::InstallCoordi
     m_operations->export_coordinator = std::move(coordinator);
 }
 
-PaymentImportOperation* BitcoinUriModel::requestImportText(const QString& text, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner)
+PaymentImportOperation* BitcoinUriModel::requestImportText(const QString& text, WalletModel* wallet, SendRecipient* recipient, QObject* owner)
 {
     const QPointer<BitcoinUriModel> self{this}; const QPointer<QObject> original_owner{owner};
     const auto target = wallet ? wallet->importTarget(recipient) : nullptr;
     return self && original_owner ? self->requestImport({paymentimport::Input::Kind::Text, text}, target, original_owner) : nullptr;
 }
-PaymentImportOperation* BitcoinUriModel::requestImportFile(const QString& path, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner)
+PaymentImportOperation* BitcoinUriModel::requestImportFile(const QString& path, WalletModel* wallet, SendRecipient* recipient, QObject* owner)
 {
     const QPointer<BitcoinUriModel> self{this}; const QPointer<QObject> original_owner{owner};
     const auto target = wallet ? wallet->importTarget(recipient) : nullptr;
@@ -143,20 +143,20 @@ PaymentImportOperation* BitcoinUriModel::requestImport(paymentimport::Input inpu
 {
     return createImport(std::move(input), std::move(target), owner, std::move(creation));
 }
-PaymentImportOperation* BitcoinUriModel::captureImport(WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner)
+PaymentImportOperation* BitcoinUriModel::captureImport(WalletModel* wallet, SendRecipient* recipient, QObject* owner)
 {
     const QPointer<BitcoinUriModel> self{this}; const QPointer<QObject> original_owner{owner};
     const auto target = wallet ? wallet->importTarget(recipient) : nullptr;
     return self && original_owner ? self->createImport({}, target, original_owner) : nullptr;
 }
-PaymentImportOperation* BitcoinUriModel::requestImportDrop(int urlCount, const QUrl& firstUrl, const QString& text, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner)
+PaymentImportOperation* BitcoinUriModel::requestImportDrop(int urlCount, const QUrl& firstUrl, const QString& text, WalletModel* wallet, SendRecipient* recipient, QObject* owner)
 {
     paymentimport::Input input{paymentimport::Input::Kind::Drop, text}; input.url_count = urlCount; input.url = firstUrl;
     const QPointer<BitcoinUriModel> self{this}; const QPointer<QObject> original_owner{owner};
     const auto target = wallet ? wallet->importTarget(recipient) : nullptr;
     return self && original_owner ? self->requestImport(std::move(input), target, original_owner) : nullptr;
 }
-PaymentImportOperation* BitcoinUriModel::requestImportPaste(const QString& text, InputField field, WalletQmlModel* wallet, SendRecipient* recipient, QObject* owner)
+PaymentImportOperation* BitcoinUriModel::requestImportPaste(const QString& text, InputField field, WalletModel* wallet, SendRecipient* recipient, QObject* owner)
 {
     paymentimport::Input input{paymentimport::Input::Kind::Text, text};
     if (field != InputField::AddressField && field != InputField::AmountField && field != InputField::PrivateNoteField) return nullptr;
@@ -188,7 +188,7 @@ PaymentImportOperation* BitcoinUriModel::createImport(std::optional<paymentimpor
     };
     const auto submitted = m_admission;
     const auto identity = operation->requestId();
-    auto actor = paymentimport::Owner::Create(identity, std::move(services),
+    auto actor = paymentimport::Service::Create(identity, std::move(services),
         [post, observer](auto snapshot) { post([observer, snapshot = std::move(snapshot)]() mutable { if (observer) observer->project(std::move(snapshot)); }); },
         [weak = std::weak_ptr<BitcoinUriOperations>{registry}](uint64_t id) {
             if (const auto retained = weak.lock()) retained->remove(id);

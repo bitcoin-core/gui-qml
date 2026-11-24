@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/settingseditormodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/settingsnavigationcontroller.h>
 #include <qml/guiargs.h>
 #include <common/args.h>
@@ -68,7 +68,7 @@ private Q_SLOTS:
     {
         Fixture fixture;
         QVERIFY(fixture.settle());
-        struct Source : SettingsEditorSource {
+        struct Source : SettingsEditorFactoryInterface {
             explicit Source(SettingsEditorModel& editor) : model(editor) {}
             SettingsEditorModel* createSettingsEditor() override { return &model; }
             SettingsEditorModel& model;
@@ -256,7 +256,7 @@ private Q_SLOTS:
         };
 
         {
-            OptionsQmlModel options{node, args, [&](auto fn) { gui.push_back(std::move(fn)); }, &shared.executor()};
+            SettingsModel options{node, args, [&](auto fn) { gui.push_back(std::move(fn)); }, &shared.executor()};
             const auto finish = qScopeGuard([&] { options.beginShutdown(); settle(); });
             QVERIFY(settle());
             auto* editor = options.createSettingsEditor();
@@ -274,8 +274,8 @@ private Q_SLOTS:
             QVERIFY(args.GetPersistentSetting("natpmp").isNull());
 
             delete editor;
-            QSignalSpy drained{&options, &OptionsQmlModel::shutdownFinished};
-            connect(&options, &OptionsQmlModel::shutdownFinished, this, [&] { closed = true; });
+            QSignalSpy drained{&options, &SettingsModel::shutdownFinished};
+            connect(&options, &SettingsModel::shutdownFinished, this, [&] { closed = true; });
             options.beginShutdown();
             utility();
             QCOMPARE(drained.count(), 0);

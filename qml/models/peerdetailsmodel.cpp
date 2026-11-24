@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistmodel.h>
-PeerDetailsModel::PeerDetailsModel(PeerStatsHandle stats, PeerListModel* model) : PeerCommandTarget(model), m_model(model)
+PeerDetailsModel::PeerDetailsModel(PeerStatsHandle stats, PeerListModel* model) : PeerActionsInterface(model), m_model(model)
 {
     if (!stats || !model) return;
     m_node_id = stats->nodeStats.nodeid;

@@ -23,7 +23,7 @@ Item {
     property bool readyPending: false
     // The wallet just created or imported. The completion pages act on it,
     // even if another wallet is selected meanwhile.
-    readonly property WalletQmlModel completedWallet: operation !== null ? operation.resultWallet : null
+    readonly property WalletModel completedWallet: operation !== null ? operation.resultWallet : null
     readonly property alias currentItem: pages.currentItem
     readonly property OnboardingView currentOnboardingPage: pages.currentItem as OnboardingView
     readonly property alias depth: pages.depth
@@ -32,7 +32,7 @@ Item {
     readonly property alias navigationBar: navigationBar
     readonly property bool walletDiscoveryReady: ApplicationModels.walletController.initialized
         && (!waitForWalletDiscovery || ApplicationModels.walletListModel.walletDirLoaded)
-    signal finished(bool openActivity, WalletQmlModel wallet)
+    signal finished(bool openActivity, WalletModel wallet)
 
     function showingCompletion() {
         const page = root.currentItem ? root.currentItem.objectName : ""

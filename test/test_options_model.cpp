@@ -28,7 +28,7 @@
 #include <qml/legacy_settings_migration.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/models/onboardingoptionsmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/settings_keys.h>
 #include <qml/onboarding_settings.h>
 #include <init.h>
@@ -160,7 +160,7 @@ private:
 private Q_SLOTS:
     void directorySelectionHasOneValidatedCommand()
     {
-        const auto& meta = OptionsQmlModel::staticMetaObject;
+        const auto& meta = SettingsModel::staticMetaObject;
         QCOMPARE(meta.indexOfMethod("setCustomDataDirArgs(QString)"), -1);
         QCOMPARE(meta.indexOfMethod("setCustomDataDirString(QString)"), -1);
         QVERIFY(meta.indexOfMethod("selectCustomDataDir(QString)") >= 0);
@@ -591,7 +591,7 @@ void OptionsModelTests::proxyDisabledPersistsDisabledOverride()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxyEnabled());
@@ -617,7 +617,7 @@ void OptionsModelTests::torDisabledPersistsDisabledOverride()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.torEnabled());
@@ -642,7 +642,7 @@ void OptionsModelTests::proxyEnabledWritesAddress()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
@@ -673,7 +673,7 @@ void OptionsModelTests::proxyDirtySetAtRuntime()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
@@ -693,7 +693,7 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
@@ -727,7 +727,7 @@ void OptionsModelTests::mempoolSizeLoadedFromSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
@@ -742,7 +742,7 @@ void OptionsModelTests::mempoolSizeWritesSetting()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -765,7 +765,7 @@ void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
     OnboardingStorageWork graph;
     auto& shared = graph.worker;
     {
-        OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
         const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
         QVERIFY(graph.settle());
         QVERIFY(model.settingsReady());
@@ -777,10 +777,10 @@ void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
         model.setDbcacheSizeMiB(701);
         QCOMPARE(model.dbcacheSizeMiB(), 701);
         QVERIFY(model.settingsPending());
-        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsPending);
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsPending);
         QVERIFY(!QFile::exists(path));
-        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
-        QSignalSpy published{&model, &OptionsQmlModel::dbcacheSizeMiBChanged};
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        QSignalSpy published{&model, &SettingsModel::dbcacheSizeMiBChanged};
         model.beginShutdown();
         QCOMPARE(drained.size(), 0);
         QVERIFY(shared.step(execution::Lane::Core));
@@ -790,7 +790,7 @@ void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
         const auto bytes = settings_file.readAll();
         QVERIFY(persisted.read(std::string{bytes.constData(), size_t(bytes.size())}));
         QCOMPARE(SettingToString(persisted["dbcache"]).value_or(""), std::string{"701"});
-        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsApplied);
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsApplied);
         QCOMPARE(drained.size(), 0);
 
         QVERIFY(shared.step(execution::Lane::Utility));
@@ -817,7 +817,7 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
     OnboardingStorageWork graph;
     auto& shared = graph.worker;
     {
-        OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
         const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
         QVERIFY(graph.settle());
         QVERIFY(model.settingsReady());
@@ -827,9 +827,9 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
 
         model.setNatpmp(!original);
         QVERIFY(model.settingsPending());
-        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsPending);
-        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
-        QSignalSpy published{&model, &OptionsQmlModel::natpmpChanged};
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsPending);
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        QSignalSpy published{&model, &SettingsModel::natpmpChanged};
         model.beginShutdown();
         QCOMPARE(drained.size(), 0);
 
@@ -844,7 +844,7 @@ void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
         QVERIFY(persisted.isBool());
         QCOMPARE(persisted.isTrue(), !original);
         QCOMPARE(node.calls.mapPort.load(), 1);
-        QCOMPARE(model.settingsOperationState(), OptionsQmlModel::SettingsApplied);
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsApplied);
         while (graph.publish()) {}
         QCOMPARE(drained.size(), 0);
 
@@ -869,7 +869,7 @@ void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -889,7 +889,7 @@ void OptionsModelTests::legacyNumericSettingsWriteStrings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -915,7 +915,7 @@ void OptionsModelTests::externalSignerPathWritesSigner()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -938,7 +938,7 @@ void OptionsModelTests::externalSignerPathClearedRemovesKey()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.externalSignerPath(), QString("hwi"));
@@ -960,7 +960,7 @@ void OptionsModelTests::walletSettingsDirtyTracksExternalSignerPath()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
@@ -985,7 +985,7 @@ void OptionsModelTests::signerPathLoadedFromSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.externalSignerPath(), QString("ledger-signer"));
@@ -1000,7 +1000,7 @@ void OptionsModelTests::signerPathWritesSetting()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.externalSignerPath().isEmpty());
@@ -1023,7 +1023,7 @@ void OptionsModelTests::signerDirtySetAtRuntime()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
@@ -1042,7 +1042,7 @@ void OptionsModelTests::signerDirtyResetWhenReverted()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
@@ -1065,7 +1065,7 @@ void OptionsModelTests::externalSignerPathValidationRejectsMissingPath()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.requestExternalSignerPathValidation("/definitely/not/a/real/signer");
@@ -1093,7 +1093,7 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.requestExternalSignerPathValidation(script_path);
@@ -1114,8 +1114,8 @@ void OptionsModelTests::signerValidationKeepsLatestManualIntent()
 
     QTemporaryDir missing_paths;
     {
-        OptionsQmlModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
-        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
+        SettingsModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
         const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
         QVERIFY(graph.settle());
         QVERIFY(shared.quiescent());
@@ -1128,7 +1128,7 @@ void OptionsModelTests::signerValidationKeepsLatestManualIntent()
         const QString latest_path = missing_paths.filePath(QStringLiteral("latest-missing-signer"));
         QVERIFY(!QFileInfo::exists(first_path));
         QVERIFY(!QFileInfo::exists(latest_path));
-        QSignalSpy validation_changed{&model, &OptionsQmlModel::signerPathValidationChanged};
+        QSignalSpy validation_changed{&model, &SettingsModel::signerPathValidationChanged};
 
         const auto core_submissions = shared.coreSubmissions();
         model.requestExternalSignerPathValidation(first_path);
@@ -1193,8 +1193,8 @@ void OptionsModelTests::signerValidationReportsManualTransportRefusal()
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
 
     {
-        OptionsQmlModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
-        QSignalSpy drained{&model, &OptionsQmlModel::shutdownFinished};
+        SettingsModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
         const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
         QVERIFY(graph.settle());
         QVERIFY(shared.quiescent());
@@ -1202,7 +1202,7 @@ void OptionsModelTests::signerValidationReportsManualTransportRefusal()
         QVERIFY(!model.settingsPending());
 
         const QString path = QStringLiteral("rejected-signer-observation");
-        QSignalSpy validation_changed{&model, &OptionsQmlModel::signerPathValidationChanged};
+        QSignalSpy validation_changed{&model, &SettingsModel::signerPathValidationChanged};
         shared.reject_core = true;
         model.requestExternalSignerPathValidation(path);
         QVERIFY(model.signerPathValidationPending());
@@ -1250,7 +1250,7 @@ void OptionsModelTests::signerValidationRunsOnCoreWorker()
             turn();
         });
     }};
-    OptionsQmlModel model(node, model_args, {}, &executor);
+    SettingsModel model(node, model_args, {}, &executor);
     QVERIFY(QTest::qWaitFor([&] { return model.settingsReady() && !model.settingsPending(); }, 5000));
 
     QTemporaryDir missing_paths;
@@ -1265,7 +1265,7 @@ void OptionsModelTests::signerValidationRunsOnCoreWorker()
     QVERIFY(core_thread.load());
     QVERIFY(core_thread.load() != QThread::currentThread());
 
-    QSignalSpy shutdown_finished{&model, &OptionsQmlModel::shutdownFinished};
+    QSignalSpy shutdown_finished{&model, &SettingsModel::shutdownFinished};
     model.beginShutdown();
     QTRY_COMPARE_WITH_TIMEOUT(shutdown_finished.size(), 1, 5000);
     executor.stopAndJoin();
@@ -1282,7 +1282,7 @@ void OptionsModelTests::connectionDirtyTracksRestartSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.connectionSettingsDirty());
@@ -1306,7 +1306,7 @@ void OptionsModelTests::natpmpAppliesLiveWithoutRestartDirty()
     ArgsManager args;
     QTemporaryDir directory;
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     const bool initial = model.natpmp();
     std::vector<bool> applied;
@@ -1338,7 +1338,7 @@ void OptionsModelTests::storageDirtyIgnoresDisabledPruneSize()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.prune());
@@ -1362,7 +1362,7 @@ void OptionsModelTests::pruneDisabledPreservesPreviousValue()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.prune());
@@ -1390,7 +1390,7 @@ void OptionsModelTests::developerDirtyTracksRestartSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
@@ -1415,7 +1415,7 @@ void OptionsModelTests::mempoolDirtyTracksRestartSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
@@ -1444,7 +1444,7 @@ void OptionsModelTests::proxyValidationAndCommit()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(CheckedProxyLiteral(model,"127.0.0.1:9050").isEmpty());
@@ -1482,7 +1482,7 @@ void OptionsModelTests::proxyDisabledPreservesPreviousValue()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.setProxyEnabled(false);
@@ -1515,7 +1515,7 @@ void OptionsModelTests::customDataDirValidationRejectsFile()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.selectCustomDataDir(file_path));
@@ -1544,7 +1544,7 @@ void OptionsModelTests::customDataDirSelectionCreatesDirectoryAndPersists()
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
     const auto drain_native_owners=DrainExecutorsBeforeNativeOwnerDestruction();
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
@@ -1580,7 +1580,7 @@ void OptionsModelTests::customDataDirSelectionPreservesExistingWalletDiscovery()
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
     const auto drain_native_owners=DrainExecutorsBeforeNativeOwnerDestruction();
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
@@ -1710,7 +1710,7 @@ void OptionsModelTests::runtimeDataDirUsesExplicitDatadirOverSavedGuiSetting()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.dataDir(), explicit_data_dir.path());
@@ -3094,7 +3094,7 @@ void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.setThirdPartyTransactionUrls(
@@ -3143,7 +3143,7 @@ void OptionsModelTests::moneyFontChoicePersists()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.moneyFontChoice(), QString("embedded"));
@@ -3165,18 +3165,18 @@ void OptionsModelTests::rejectedDisplayRefreshDoesNotReenterItsFailure()
 {
     SavedGuiDataDirSettings saved;MockNode node;ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);OnboardingStorageWork graph;
     auto& shared = graph.worker;
-    {OptionsQmlModel model{node,args,[&](auto turn) { graph.posts.push_back(std::move(turn)); },&shared.executor()};bool delivering{false},reentered{false};int notices{0};
+    {SettingsModel model{node,args,[&](auto turn) { graph.posts.push_back(std::move(turn)); },&shared.executor()};bool delivering{false},reentered{false};int notices{0};
      const auto finish=qScopeGuard([&]{disconnect(&model,nullptr,this,nullptr);model.beginShutdown();graph.settle();});
      QVERIFY(graph.settle());shared.reject_core = true;
      QVERIFY(model.settingsReady());
-     QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsApplied);
+     QCOMPARE(model.settingsOperationState(),SettingsModel::SettingsApplied);
      const auto original=model.settingsOperationId();
-     QSignalSpy operations{&model,&OptionsQmlModel::settingsOperationChanged};
-     connect(&model,&OptionsQmlModel::settingsErrorChanged,this,[&]{reentered|=delivering;delivering=true;if(++notices<=2)model.refreshDisplaySettings();delivering=false;});
+     QSignalSpy operations{&model,&SettingsModel::settingsOperationChanged};
+     connect(&model,&SettingsModel::settingsErrorChanged,this,[&]{reentered|=delivering;delivering=true;if(++notices<=2)model.refreshDisplaySettings();delivering=false;});
      model.refreshDisplaySettings();QVERIFY(graph.settle());QVERIFY(!reentered);QCOMPARE(notices,1);QCOMPARE(model.settingsOperationId(),original);QVERIFY(!model.settingsPending());QVERIFY(!model.settingsError().isEmpty());
      // A refused observation reports its diagnostic without inventing a user
      // operation or replacing the original accepted operation's receipt.
-     QCOMPARE(model.settingsOperationState(),OptionsQmlModel::SettingsApplied);
+     QCOMPARE(model.settingsOperationState(),SettingsModel::SettingsApplied);
      QCOMPARE(operations.count(),0);
     }
     QVERIFY(graph.settle());QVERIFY(graph.worker.quiescent());
@@ -3189,7 +3189,7 @@ void OptionsModelTests::databaseCacheMatchesCoreDefaultAndRange()
     const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model{node, args};
+    SettingsModel model{node, args};
     QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
     // Core's public default is an independent oracle; the 8 MiB coins
     // sub-cache is not the total -dbcache bound.
@@ -3217,7 +3217,7 @@ void OptionsModelTests::unavailableLanguageDoesNotPersist()
     MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
     OnboardingStorageWork graph;
-    { OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
+    { SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
       const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
       QVERIFY(graph.settle()); QCOMPARE(model.language(), QString{});
       model.setLanguage(literal); QVERIFY(graph.settle());
@@ -3246,13 +3246,13 @@ void OptionsModelTests::displayReadbackRepairsInvalidStoredUnit()
     MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model{node, args};
+    SettingsModel model{node, args};
     QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), expected);
     settings.sync(); QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), expected);
     bool valid{false}; settings.value(SettingsKeys::DISPLAY_UNIT).toInt(&valid); QVERIFY(valid);
     // A second independent model/restart sees the same canonical persisted unit.
-    OptionsQmlModel restarted{node, args}; QTRY_VERIFY(restarted.settingsReady());
+    SettingsModel restarted{node, args}; QTRY_VERIFY(restarted.settingsReady());
     QTRY_VERIFY(!restarted.settingsPending()); QCOMPARE(restarted.displayUnit(), expected);
 }
 void OptionsModelTests::languageReadbackRejectsUnavailablePersistedTag()
@@ -3262,7 +3262,7 @@ void OptionsModelTests::languageReadbackRejectsUnavailablePersistedTag()
     MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    SettingsModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.availableLanguages().contains(model.language()));
     QCOMPARE(model.language(), QString{});
     settings.sync(); QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(), QString{});
@@ -3274,7 +3274,7 @@ void OptionsModelTests::invalidCoreLanguageDoesNotEraseAnIndependentGuiPreferenc
     SavedGuiDataDirSettings saved;QSettings settings;settings.setValue(SettingsKeys::LANGUAGE,QStringLiteral("de"));settings.sync();
     MockNode node;const auto drain=DrainExecutorsBeforeNativeOwnerDestruction();ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);
     args.LockSettings([](common::Settings& values){values.rw_settings["lang"]=std::string{"unavailable_external_core_language"};});
-    OptionsQmlModel model{node,args};QTRY_VERIFY(model.settingsReady());QTRY_VERIFY(!model.settingsPending());
+    SettingsModel model{node,args};QTRY_VERIFY(model.settingsReady());QTRY_VERIFY(!model.settingsPending());
     settings.sync();QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(),QStringLiteral("de"));
     QCOMPARE(model.language(),QStringLiteral("unavailable_external_core_language"));QVERIFY(model.languageSummary().contains(QStringLiteral("Unavailable translation")));
     QCOMPARE(SettingToString(args.GetPersistentSetting("lang")).value_or(""),std::string{"unavailable_external_core_language"});
@@ -3291,7 +3291,7 @@ void OptionsModelTests::manualDisplayRefreshWaitsForPendingWrite()
     MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory); OnboardingStorageWork graph;
     auto& shared = graph.worker;
-    { OptionsQmlModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+    { SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
       const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
       QVERIFY(graph.settle()); model.setDisplayUnit(3);
       // Finish background work, retain its GUI outcome, then change the store.
@@ -3323,8 +3323,8 @@ void OptionsModelTests::externalDisplayWriterIsObservedWithoutUserEdit()
     MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
-    QSignalSpy changes{&model, &OptionsQmlModel::displayUnitChanged};
+    SettingsModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    QSignalSpy changes{&model, &SettingsModel::displayUnitChanged};
     { QSettings external; external.setValue(SettingsKeys::DISPLAY_UNIT, 2); external.sync(); }
     QTRY_COMPARE(model.displayUnit(), 2); QTRY_VERIFY(!model.settingsPending()); QVERIFY(!changes.empty());
     { QSettings external; external.remove(SettingsKeys::DISPLAY_UNIT); external.sync(); }
@@ -3349,17 +3349,17 @@ void OptionsModelTests::hideAmountsPersists()
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
     {
-        OptionsQmlModel model(node, model_args);
+        SettingsModel model(node, model_args);
         QTRY_VERIFY(model.settingsReady());
         QCOMPARE(model.hideAmounts(), false);
-        QSignalSpy spy(&model, &OptionsQmlModel::hideAmountsChanged);
+        QSignalSpy spy(&model, &SettingsModel::hideAmountsChanged);
         model.setHideAmounts(true);
         model.setHideAmounts(true);
         QCOMPARE(spy.count(), 1);
         QTRY_VERIFY(!model.settingsPending());
         QCOMPARE(settings.value(SettingsKeys::HIDE_AMOUNTS).toBool(), true);
     }
-    OptionsQmlModel reloaded(node, model_args);
+    SettingsModel reloaded(node, model_args);
     QTRY_VERIFY(reloaded.settingsReady());
     QCOMPARE(reloaded.hideAmounts(), true);
 
@@ -3386,7 +3386,7 @@ void OptionsModelTests::displayUnitUsesQtCompatibleSettingsKey()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(QString::fromUtf8(SettingsKeys::DISPLAY_UNIT), QStringLiteral("DisplayBitcoinUnit"));
@@ -3451,7 +3451,7 @@ DisplayBitcoinUnit=@Variant(\0\0\0\x7f\0\0\0\fBitcoinUnit\0\x3)
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 3);
@@ -3482,7 +3482,7 @@ void OptionsModelTests::displayUnitPrefersQmlSettingOverLegacyQtFallback()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 1);
@@ -3615,7 +3615,7 @@ void OptionsModelTests::coreSettingsModelEntryMutatesRuntimeModel()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     auto* core_settings = qobject_cast<CoreSettingsModel*>(model.coreSettings());
@@ -3876,7 +3876,7 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3902,7 +3902,7 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3927,7 +3927,7 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3953,12 +3953,12 @@ void OptionsModelTests::runtimeCoreSettingStatusesRefreshAfterWrite()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.coreSettingStatus(QStringLiteral("maxmempool")).value("source").toString(), QString("default"));
 
-    QSignalSpy status_spy(&model, &OptionsQmlModel::coreSettingStatusesChanged);
+    QSignalSpy status_spy(&model, &SettingsModel::coreSettingStatusesChanged);
     model.setMaxMempoolSizeMB(456);
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(status_spy.count() > 0);
@@ -3984,7 +3984,7 @@ void OptionsModelTests::commandLineOverriddenSettingDoesNotWrite()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
@@ -4030,7 +4030,7 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.server());
@@ -4074,7 +4074,7 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     QTemporaryDir proxy_model_settings_dir;
     QVERIFY(proxy_model_settings_dir.isValid());
     PrepareRuntimePersistence(proxy_node, proxy_args, proxy_model_settings_dir);
-    OptionsQmlModel proxy_model(proxy_node, proxy_args);
+    SettingsModel proxy_model(proxy_node, proxy_args);
     QTRY_VERIFY(proxy_model.settingsReady());
     QTRY_VERIFY(!proxy_model.settingsPending());
     QVERIFY(!proxy_model.listen());
@@ -4138,7 +4138,7 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     QTemporaryDir blocksonly_model_settings_dir;
     QVERIFY(blocksonly_model_settings_dir.isValid());
     PrepareRuntimePersistence(blocksonly_node, blocksonly_args, blocksonly_model_settings_dir);
-    OptionsQmlModel blocksonly_model(blocksonly_node, blocksonly_args);
+    SettingsModel blocksonly_model(blocksonly_node, blocksonly_args);
     QTRY_VERIFY(blocksonly_model.settingsReady());
     QTRY_VERIFY(!blocksonly_model.settingsPending());
     QCOMPARE(blocksonly_model.maxMempoolSizeMB(), static_cast<int>(DEFAULT_BLOCKSONLY_MAX_MEMPOOL_SIZE_MB));
@@ -4179,7 +4179,7 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -4230,7 +4230,7 @@ void OptionsModelTests::revertingToConfigValuePersistsExplicitOverride()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
@@ -4261,7 +4261,7 @@ void OptionsModelTests::revertingToDefaultValuePersistsExplicitOverride()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
@@ -4298,7 +4298,7 @@ void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QString("fr"));
@@ -4495,7 +4495,7 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QStringLiteral("de"));

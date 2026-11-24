@@ -17,7 +17,7 @@
 #include <atomic>
 #include <memory>
 
-class WalletQmlModel;
+class WalletModel;
 
 class SendRecipient : public QObject
 {
@@ -53,7 +53,7 @@ public:
     void projectAmountMode(senddraft::AmountMode mode);
     void applyImportedPayment(const senddraft::PaymentRequest& request);
     using Snapshot = senddraft::Recipient;
-    explicit SendRecipient(WalletQmlModel* wallet, QObject* parent = nullptr);
+    explicit SendRecipient(WalletModel* wallet, QObject* parent = nullptr);
     ~SendRecipient() override;
     void setOpening(std::shared_ptr<walletopening::Session> opening, presentation::Post post);
     void close();
@@ -122,7 +122,7 @@ private:
     void publishValidation();
     void validateAddress();
 
-    const WalletQmlModel* m_wallet;
+    const WalletModel* m_wallet;
     const quint64 m_identity;
     quint64 m_revision{0}, m_setup_revision{0}, m_amount_intent_revision{0}, m_import_sequence{0};
     QString m_address_intent_value;
