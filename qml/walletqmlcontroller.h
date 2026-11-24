@@ -78,6 +78,8 @@ class WalletQmlController : public QObject
     Q_PROPERTY(QString externalSignerError READ externalSignerError NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString suggestedExternalSignerWalletName READ suggestedExternalSignerWalletName NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
+    //! How much of its rescan a view-only import has done, in percent, or -1.
+    Q_PROPERTY(int importProgress READ importProgress NOTIFY importProgressChanged)
 
 public:
     using OpenLocalPathFn = std::function<bool(const QString&)>;
@@ -105,6 +107,8 @@ public:
     Q_INVOKABLE void migrateWallet(const QString& path, const QString& passphrase = QString());
     Q_INVOKABLE void clearWalletMigrationStatus();
     Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text, const QString& address_type = {}) const;
+    //! Stops a view-only import. Its wallet is deleted.
+    Q_INVOKABLE void cancelViewOnlyImport();
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const;
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE QString homePath() const;
@@ -143,6 +147,7 @@ public:
     QString externalSignerError() const { return m_external_signer_error; }
     QString suggestedExternalSignerWalletName() const { return m_suggested_external_signer_wallet_name; }
     QString walletLocationOpenError() const { return m_wallet_location_open_error; }
+    int importProgress() const { return m_import_progress; }
     void setOpenLocalPathFnForTesting(OpenLocalPathFn fn);
     void setResumeImportFnForTesting(ResumeImportFn fn);
 
@@ -180,6 +185,7 @@ Q_SIGNALS:
     void openReceiveRequested(WalletQmlModel* wallet);
     void closePaymentRequestDetailRequested(WalletQmlModel* wallet);
     void walletLocationOpenErrorChanged();
+    void importProgressChanged();
 
 public Q_SLOTS:
     void initialize();
@@ -209,7 +215,9 @@ private:
                            WalletLoadAction load_action,
                            bool report_create_error,
                            WalletSetupFn setup_wallet = {},
-                           WalletCheckFn check_before_create = {});
+                           WalletCheckFn check_before_create = {},
+                           //! A cancel that wins after setup discards the wallet instead of publishing it.
+                           std::shared_ptr<RescanControl> import_control = {});
     void startWalletImport(const QString& path);
     void startWalletLoad(const QString& path, const QString& wallet_format = QString());
     void startWalletMigration(const QString& path, SecureString passphrase);
@@ -234,6 +242,7 @@ private:
     void publishWalletInfo(WalletQmlModel* wallet_model);
     void subscribeWalletInfo(WalletQmlModel* wallet_model);
     void setWalletLocationOpenError(const QString& error);
+    void setImportProgress(int progress);
 
     bool m_initialized{false};
     bool m_shutting_down{false};
@@ -274,6 +283,8 @@ private:
     //! Rescans that finish a view-only import a crash interrupted, by wallet name.
     std::map<QString, std::shared_ptr<RescanControl>> m_import_rescans;
     std::unique_ptr<BackendExecutor> m_import_rescan_executor;
+    std::shared_ptr<RescanControl> m_import_control;
+    int m_import_progress{-1};
 
     // Suppress the global wallet-loaded notification while a multi-step create
     // flow (watch-only) finishes setup. The worker result publishes the wallet

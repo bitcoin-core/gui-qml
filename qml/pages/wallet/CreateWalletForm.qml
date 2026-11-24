@@ -108,6 +108,10 @@ OnboardingView {
     primaryButtonText: creating ? (watchOnly ? qsTr("Importing…") : qsTr("Creating…")) : qsTr("Create wallet")
     primaryButtonObjectName: "createWalletFormCreateButton"
     primaryButtonEnabled: canCreate
+    readonly property bool importRunning: watchOnly && creating && walletController.walletLoadInProgress
+    secondaryButtonText: importRunning ? qsTr("Cancel import") : ""
+    secondaryButtonObjectName: "createWalletFormCancelImportButton"
+    onSecondaryClicked: walletController.cancelViewOnlyImport()
     onCloseClicked: root.cancel()
     onPrimaryClicked: {
         if (!root.canCreate) return
@@ -156,6 +160,8 @@ OnboardingView {
         LabeledTextField {
             id: nameEntry
             objectName: "createWalletNameEntry"
+            // Editing clears the load status, which would hide Cancel import.
+            enabled: !root.creating
             Layout.fillWidth: true
             label: qsTr("Wallet name")
             fieldObjectName: "createWalletNameInput"
@@ -247,6 +253,7 @@ OnboardingView {
             id: xpubEntry
             objectName: "createWalletXpubEntry"
             visible: root.watchOnly
+            enabled: !root.creating
             Layout.fillWidth: true
             label: qsTr("Descriptors or extended public key")
             inputObjectName: "watchOnlyXpubInput"
@@ -390,6 +397,7 @@ OnboardingView {
         FormSection {
             objectName: "watchOnlyAddressType"
             visible: root.watchOnly && root.needsAddressType
+            enabled: !root.creating
             Layout.fillWidth: true
             Layout.topMargin: 8
             showBackground: false
@@ -424,6 +432,7 @@ OnboardingView {
         FormSection {
             objectName: "watchOnlyBirthDate"
             visible: root.watchOnly && root.needsBirthDate
+            enabled: !root.creating
             Layout.fillWidth: true
             Layout.topMargin: 8
             showBackground: false
@@ -455,15 +464,29 @@ OnboardingView {
             }
         }
 
-        CoreText {
-            objectName: "watchOnlyScanNote"
+        RowLayout {
             visible: root.watchOnly && root.creating
             Layout.fillWidth: true
-            text: qsTr("Looking for this wallet's transactions. This can take a while.")
-            color: Theme.color.neutral7
-            textStyle: Theme.text.caption
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignLeft
+            spacing: 8
+
+            SpinningIndicator {
+                Layout.alignment: Qt.AlignTop
+                running: parent.visible
+                color: Theme.color.neutral7
+            }
+            CoreText {
+                objectName: "watchOnlyScanNote"
+                Layout.fillWidth: true
+                text: walletController.importProgress >= 0
+                    //: %1 is how much of the blockchain has been searched, in percent.
+                    ? qsTr("Looking for this wallet's transactions, %1% done. Cancelling deletes the new wallet.")
+                        .arg(walletController.importProgress)
+                    : qsTr("Looking for this wallet's transactions. This can take a while.")
+                color: Theme.color.neutral7
+                textStyle: Theme.text.caption
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignLeft
+            }
         }
 
         CoreText {

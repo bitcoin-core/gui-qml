@@ -44,6 +44,7 @@
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QSettings>
@@ -733,7 +734,8 @@ void WalletQmlController::createWalletAsync(const QString& name,
                                             WalletLoadAction load_action,
                                             bool report_create_error,
                                             WalletSetupFn setup_wallet,
-                                            WalletCheckFn check_before_create)
+                                            WalletCheckFn check_before_create,
+                                            std::shared_ptr<RescanControl> import_control)
 {
     const QString wallet_name = name.trimmed();
     if (setup_wallet) {
@@ -766,10 +768,19 @@ void WalletQmlController::createWalletAsync(const QString& name,
             out.wallet = std::move(*wallet);
         }
         return out;
-    }, [this, wallet_name, load_action, report_create_error](WalletCommandResult out) {
+    }, [this, wallet_name, load_action, report_create_error, import_control](WalletCommandResult out) {
         if (m_deferred_wallet_name == wallet_name) m_deferred_wallet_name.clear();
         setWalletLoadWarnings(out.warnings);
         setWalletLoadInProgress(false);
+        // A cancel can arrive after the worker last checked for one.
+        if (out.wallet && import_control && import_control->cancelled()) {
+            setWalletLoadError(tr("The import was cancelled, and its wallet was deleted."));
+            m_wallet_command_executor->submit(this, [node = &m_node, wallet = std::move(out.wallet), wallet_name]() mutable {
+                DiscardCreatedWallet(node->walletLoader(), std::move(wallet));
+                SetPendingImport(WalletPath(node->walletLoader(), wallet_name.toStdString()), std::nullopt);
+            }, [] {});
+            return;
+        }
         if (!out.wallet) {
             if (report_create_error) setWalletCreateError(out.error);
             else setWalletLoadError(out.error);
@@ -909,12 +920,20 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
     }
     const std::optional<int64_t> chosen_date{input.undated.empty() ? std::nullopt : std::optional{birth_time}};
     std::vector<wallet::ImportDescriptorRequest> requests{std::move(input.requests)};
+    auto control{std::make_shared<RescanControl>()};
+    m_import_control = control;
+    setImportProgress(-1);
     createWalletAsync(name.trimmed(),
                       SecureString{},
                       creation_flags,
                       WalletLoadAction::Create,
                       /*report_create_error=*/false,
-                      [node = &m_node, requests](interfaces::Wallet& wallet, bool& keep_wallet) mutable {
+                      [node = &m_node, requests, control, guard = QPointer{this},
+                       bridge = m_notification_bridge](interfaces::Wallet& wallet, bool& keep_wallet) mutable {
+        const QString cancelled{WalletQmlController::tr("The import was cancelled, and its wallet was deleted.")};
+        if (!control->attach([&wallet] { wallet.abortRescan(); })) return cancelled;
+        // The abort refers to this wallet, which is gone once this returns or throws.
+        const auto detach{qScopeGuard([&control] { control->detach(); })};
         const std::string path{WalletPath(node->walletLoader(), wallet.getWalletName())};
         // Resolved here, so the marker starts where the wallet's rescan does.
         const int64_t start{ResolveImportTimes(requests, ChainNow(node->walletLoader()))};
@@ -926,14 +945,21 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
         {
             // The rescan starts after every request is handled, even when some failed.
             bool checked{false};
-            const auto scanning{wallet.handleShowProgress([&](const std::string&, int) {
-                if (std::exchange(checked, true)) return;
-                const wallet::CWallet* raw_wallet{wallet.wallet()};
-                if (raw_wallet && DescriptorsSaved(*raw_wallet, requests)) SetPendingImport(path, PendingImport{start, /*installed=*/true});
+            const auto progress{wallet.handleShowProgress([&, control, guard, bridge](const std::string&, int percent) {
+                if (!std::exchange(checked, true)) {
+                    const wallet::CWallet* raw_wallet{wallet.wallet()};
+                    if (raw_wallet && DescriptorsSaved(*raw_wallet, requests)) SetPendingImport(path, PendingImport{start, /*installed=*/true});
+                }
+                // Starting a rescan clears an earlier abort.
+                if (control->cancelled()) wallet.abortRescan();
+                QMetaObject::invokeMethod(bridge.get(), [guard, percent] {
+                    if (guard) guard->setImportProgress(percent < 100 ? percent : -1);
+                }, Qt::QueuedConnection);
             })};
             // Imports the descriptors, then rescans from the oldest timestamp.
             results = wallet.importDescriptors(requests);
         }
+        if (control->cancelled()) return cancelled;
         for (const wallet::ImportResult& result : results) {
             if (result.has_error()) return ImportErrorText(*result.error);
         }
@@ -956,7 +982,7 @@ void WalletQmlController::createWatchOnlyWallet(const QString& name, const QStri
             return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
         }
         return QString{};
-    });
+    }, control);
 }
 
 void WalletQmlController::importWallet(const QString& path)
@@ -998,6 +1024,18 @@ void WalletQmlController::clearWalletMigrationStatus()
 QVariantMap WalletQmlController::describeViewOnlyImport(const QString& import_text, const QString& address_type) const
 {
     return DescribeViewOnlyImport(import_text, address_type);
+}
+
+void WalletQmlController::cancelViewOnlyImport()
+{
+    if (m_import_control) m_import_control->cancel();
+}
+
+void WalletQmlController::setImportProgress(int progress)
+{
+    if (m_import_progress == progress) return;
+    m_import_progress = progress;
+    Q_EMIT importProgressChanged();
 }
 
 void WalletQmlController::requestOpenWalletSettings(WalletQmlModel* wallet)

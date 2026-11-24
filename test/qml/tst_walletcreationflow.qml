@@ -196,6 +196,37 @@ TestCase {
         compare(findChild(form, "watchOnlyAddressType").visible, false)
     }
 
+    function test_watch_only_import_shows_progress_and_can_be_cancelled() {
+        walletController.holdWatchOnlyImport = true
+        const flow = createFlow()
+        findChild(flow, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Imported"
+        findChild(form, "watchOnlyXpubInput").text = '{"wallet_name": "hot", "descriptors": []}'
+        const cancel = findChild(form, "createWalletFormCancelImportButton")
+        verify(!cancel.visible)
+        findChild(form, "createWalletFormCreateButton").clicked()
+
+        const note = findChild(form, "watchOnlyScanNote")
+        verify(note.visible)
+        verify(note.text.indexOf("This can take a while") > 0)
+        walletController.importProgress = 42
+        verify(note.text.indexOf("42% done") > 0)
+        verify(cancel.visible)
+        verify(!form.showBackButton)
+        verify(!findChild(form, "watchOnlyXpubInput").enabled)
+        verify(!findChild(form, "createWalletNameInput").enabled)
+        cancel.clicked()
+        compare(walletController.cancelImportCalls, 1)
+        tryCompare(form, "creating", false)
+        verify(!cancel.visible)
+        verify(!note.visible)
+        compare(findChild(form, "createWalletFormErrorText").text, "The import was cancelled, and its wallet was deleted.")
+        verify(form.showBackButton)
+        verify(findChild(form, "watchOnlyXpubInput").enabled)
+    }
+
     function test_external_signer_uses_onboarding_form_and_ready_page() {
         walletController.canCreateExternalSignerWallet = true
         walletController.externalSignerName = "trezor_t"

@@ -1841,11 +1841,17 @@ class MockWalletController : public QObject
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
     Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
     Q_PROPERTY(int retryHistoryRecoveryCalls MEMBER m_retry_history_recovery_calls)
+    Q_PROPERTY(int importProgress MEMBER m_import_progress NOTIFY importProgressChanged)
+    Q_PROPERTY(bool holdWatchOnlyImport MEMBER m_hold_watch_only_import)
+    Q_PROPERTY(int cancelImportCalls MEMBER m_cancel_import_calls)
 
 public:
     int m_retry_history_recovery_calls{0};
     Q_INVOKABLE void retryHistoryRecovery(QObject*) { ++m_retry_history_recovery_calls; }
     bool m_initialized{true};
+    int m_import_progress{-1};
+    bool m_hold_watch_only_import{false};
+    int m_cancel_import_calls{0};
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
@@ -1925,7 +1931,20 @@ public:
         m_last_watch_only_import = import_text;
         m_last_watch_only_birth_time = birth_time;
         m_last_watch_only_address_type = address_type;
+        if (m_hold_watch_only_import) {
+            m_wallet_load_in_progress = true;
+            Q_EMIT walletLoadInProgressChanged();
+            return;
+        }
         Q_EMIT walletCreateSucceeded(reportedWallet());
+    }
+    Q_INVOKABLE void cancelViewOnlyImport()
+    {
+        ++m_cancel_import_calls;
+        m_wallet_load_in_progress = false;
+        m_wallet_load_error = QStringLiteral("The import was cancelled, and its wallet was deleted.");
+        Q_EMIT walletLoadInProgressChanged();
+        Q_EMIT walletLoadErrorChanged();
     }
     Q_INVOKABLE QString lastWatchOnlyImport() const { return m_last_watch_only_import; }
     Q_INVOKABLE double lastWatchOnlyBirthTime() const { return m_last_watch_only_birth_time; }
@@ -2031,6 +2050,10 @@ public:
         m_external_signer_error.clear();
         m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");
         m_retry_history_recovery_calls = 0;
+        m_import_progress = -1;
+        m_hold_watch_only_import = false;
+        m_cancel_import_calls = 0;
+        Q_EMIT importProgressChanged();
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
@@ -2146,6 +2169,7 @@ Q_SIGNALS:
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
     void openWalletLocationCallsChanged();
+    void importProgressChanged();
 };
 
 class MockCoreSettingsModel;
