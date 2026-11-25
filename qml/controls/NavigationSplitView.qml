@@ -54,6 +54,10 @@ Item {
         if (moveFocus) (shownLoader.item || shownLoader).forceActiveFocus()
     }
 
+    function mirroredX(x, itemWidth) {
+        return LayoutMirroring.enabled ? root.width - x - itemWidth : x
+    }
+
     clip: true
 
     // States drive these plain flags rather than the loaders' own visible
@@ -72,6 +76,7 @@ Item {
         id: primaryLoader
         objectName: "navigationSplitPrimary"
         sourceComponent: root.primaryComponent
+        x: root.mirroredX(0, width)
         width: root.isCompact ? root.width : root.effectivePrimaryWidth
         height: root.height
         visible: columns.primaryShown
@@ -82,7 +87,7 @@ Item {
         id: separator
         objectName: "navigationSplitSeparator"
         visible: !root.isCompact && root.separatorWidth > 0
-        x: primaryLoader.width
+        x: root.mirroredX(primaryLoader.width, width)
         width: root.separatorWidth
         height: root.height
         color: root.separatorColor
@@ -92,7 +97,7 @@ Item {
         id: detailLoader
         objectName: "navigationSplitDetail"
         sourceComponent: root.detailComponent
-        x: root.isCompact ? 0 : primaryLoader.width + root.separatorWidth
+        x: root.mirroredX(root.isCompact ? 0 : primaryLoader.width + root.separatorWidth, width)
         width: root.isCompact
             ? root.width
             : Math.max(0, root.width - primaryLoader.width - root.separatorWidth)
@@ -111,7 +116,7 @@ Item {
             when: root.isCompact && root.compactColumn === NavigationSplitView.Primary
             PropertyChanges {
                 target: detailLoader
-                x: root.width
+                x: root.mirroredX(root.width, detailLoader.width)
                 opacity: Theme.motion.reduced ? 0 : 1
             }
             PropertyChanges {
@@ -125,7 +130,7 @@ Item {
             when: root.isCompact && root.compactColumn === NavigationSplitView.Detail
             PropertyChanges {
                 target: primaryLoader
-                x: -root.width
+                x: root.mirroredX(-root.width, primaryLoader.width)
                 opacity: Theme.motion.reduced ? 0 : 1
             }
             PropertyChanges {

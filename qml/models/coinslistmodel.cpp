@@ -3,11 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qml/models/coinslistmodel.h>
 #include <qml/bitcoinamount.h>
+#include <qml/localeformat.h>
 #include <qml/models/walletqmlmodel.h>
 #include <key_io.h>
 #include <script/solver.h>
 #include <algorithm>
-#include <QLocale>
 
 CoinsListModel::CoinsListModel(WalletQmlModel* parent)
     : QAbstractListModel(parent), m_wallet_model(parent)
@@ -17,6 +17,9 @@ CoinsListModel::CoinsListModel(WalletQmlModel* parent)
         connect(parent, &WalletQmlModel::addressListChanged, this, &CoinsListModel::update);
         connect(parent, &WalletQmlModel::balanceChanged, this, &CoinsListModel::update);
     }
+    connect(&LocaleFormat::instance(), &LocaleFormat::localeChanged, this, [this] {
+        if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {GroupRole});
+    });
     update();
 }
 
@@ -28,7 +31,11 @@ int CoinsListModel::rowCount(const QModelIndex& parent) const { return parent.is
 QString CoinsListModel::groupTitle(const Coin& coin) const
 {
     if (m_group == "address") return coin.address;
-    return QLocale().toString(coin.date, m_group == "month" ? "MMMM yyyy" : "MMM d, yyyy");
+    return m_group == "month"
+        //: Qt date format pattern for a coin list month heading
+        ? LocaleFormat::format(coin.date, tr("MMMM yyyy"))
+        //: Qt date format pattern for a coin list day heading
+        : LocaleFormat::format(coin.date, tr("MMM d, yyyy"));
 }
 QVariant CoinsListModel::data(const QModelIndex& index, int role) const
 {

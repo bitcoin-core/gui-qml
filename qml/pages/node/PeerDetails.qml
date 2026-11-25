@@ -201,7 +201,7 @@ Page {
                         id: actionMenu
                         objectName: "peerActionsMenu"
                         y: actionButton.height + 4
-                        x: actionButton.width - width
+                        x: actionButton.mirrored ? 0 : actionButton.width - width
                         onBanRequested: (duration, label) => root.requestBan(duration, label)
                         onDisconnectRequested: root.requestDisconnect()
                     }

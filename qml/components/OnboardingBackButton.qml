@@ -10,13 +10,13 @@ NeutralButton {
     id: root
 
     buttonSize: NeutralButton.Medium
-    leftPadding: Theme.space.xxs
+    leftPadding: mirrored ? horizontalPadding : Theme.space.xxs
+    rightPadding: mirrored ? Theme.space.xxs : horizontalPadding
     text: qsTr("Back")
     textStyle: Theme.text.caption
 
-    contentItem: Item {
-        implicitWidth: backChevron.width - 3 + backLabel.implicitWidth
-        implicitHeight: Math.max(backChevron.height, backLabel.implicitHeight)
+    contentItem: Row {
+        spacing: -3
 
         Icon {
             id: backChevron
@@ -27,7 +27,6 @@ NeutralButton {
         }
         CoreText {
             id: backLabel
-            x: backChevron.width - 3
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
             textStyle: root.textStyle

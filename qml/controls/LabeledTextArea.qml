@@ -72,6 +72,7 @@ LabeledField {
         leftPadding: 0
         rightPadding: 0
         wrapMode: TextEdit.WrapAnywhere
+        horizontalAlignment: TextEdit.AlignLeft
         verticalAlignment: TextEdit.AlignVCenter
         textFormat: TextEdit.PlainText
         font: root.textStyle.font

@@ -10,7 +10,8 @@ StackView {
     property bool vertical: false
     readonly property bool canGoBack: depth > 1 && currentItem && currentItem.navigationBackEnabled !== false
     // Under reduced motion pages crossfade in place instead of sliding.
-    readonly property real slideDistance: Theme.motion.reduced || !parent ? 0 : vertical ? parent.height : parent.width
+    readonly property real slideDistance: Theme.motion.reduced || !parent ? 0
+        : vertical ? parent.height : mirrored ? -parent.width : parent.width
     readonly property real exitOpacity: Theme.motion.reduced ? 0 : 1
 
     function goBack() {

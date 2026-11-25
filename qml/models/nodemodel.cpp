@@ -5,6 +5,8 @@
 #include <qml/models/nodemodel.h>
 #include <qml/asyncjoin.h>
 
+#include <qml/localeformat.h>
+
 #include <common/args.h>
 #include <common/system.h>
 #include <chainparams.h>
@@ -966,12 +968,14 @@ QVariantList NodeModel::nodeInformationRows()
     rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion), /*mono=*/true));
     rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet())), /*mono=*/true));
     rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath())), /*mono=*/true));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
+    //: Qt date and time format pattern for the node information times
+    const QString time_pattern{tr("MMMM d, yyyy h:mm AP")};
+    rows.push_back(InformationRow(tr("Startup time"), LocaleFormat::format(QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())), time_pattern)));
     rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
     rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
     rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
-    rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? LocaleFormat::format(QDateTime::fromSecsSinceEpoch(header_time), time_pattern) : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? LocaleFormat::format(QDateTime::fromSecsSinceEpoch(last_block_time), time_pattern) : tr("Unknown")));
     rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
     rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
     rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));

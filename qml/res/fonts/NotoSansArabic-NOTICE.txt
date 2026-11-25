@@ -1,0 +1,14 @@
+Noto Sans Arabic, with modified vertical metrics.
+
+Source:
+- https://github.com/notofonts/arabic/releases/tag/NotoSansArabic-v2.013
+- Files: NotoSansArabic/unhinted/otf/NotoSansArabic-{Regular,SemiBold}.otf
+
+Modification:
+- The hhea and OS/2 typo ascender and descender were set to BitcoinCoreSans's
+  (969 and -241 units per 1000), and the line gaps to 0, so Arabic text that
+  falls back to this font shares a baseline with BitcoinCoreSans. The OS/2 win
+  metrics are unchanged so tall marks are not clipped.
+
+License:
+- See NotoSansArabic-OFL-1.1.txt

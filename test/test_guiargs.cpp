@@ -30,6 +30,7 @@ void GuiArgsTests::qmlGuiArgsParseGuiOnlyFlags()
         std::string{"-resetguisettings"},
         std::string{"-lang=de"},
         std::string{"-min"},
+        std::string{"-reverselayout"},
 #ifdef ENABLE_TEST_AUTOMATION
         std::string{"-test-automation=/tmp/test-bridge.sock"},
         std::string{"-test-settings-dir=/tmp/qml-settings"},
@@ -44,6 +45,7 @@ void GuiArgsTests::qmlGuiArgsParseGuiOnlyFlags()
     QVERIFY(args.GetBoolArg("-choosedatadir", false));
     QVERIFY(args.GetBoolArg("-resetguisettings", false));
     QVERIFY(args.GetBoolArg("-min", false));
+    QVERIFY(args.GetBoolArg("-reverselayout", false));
     QCOMPARE(args.GetArg("-lang", ""), std::string{"de"});
 #ifdef ENABLE_TEST_AUTOMATION
     QCOMPARE(args.GetArg("-test-automation", ""), std::string{"/tmp/test-bridge.sock"});

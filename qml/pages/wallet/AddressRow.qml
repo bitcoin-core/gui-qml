@@ -68,6 +68,7 @@ AbstractButton {
 
             AddressLabel {
                 objectName: "addressRowAddressText"
+                anchors.left: parent.left
                 width: Math.min(naturalWidth, parent.width)
                 address: root.address
                 truncateWhenNeeded: true
@@ -82,6 +83,7 @@ AbstractButton {
                 id: noteField
                 objectName: "addressRowNoteField"
                 property string submittedText: root.label
+                anchors.left: parent.left
                 width: Math.min(350, parent.width)
                 implicitHeight: 30
                 text: root.pendingLabel
@@ -92,6 +94,7 @@ AbstractButton {
                 placeholderTextColor: Theme.color.placeholder
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
                 font: Theme.text.description.font
+                horizontalAlignment: TextInput.AlignLeft
                 readOnly: !root.canEditLabel
                 activeFocusOnPress: root.canEditLabel
                 activeFocusOnTab: root.canEditLabel

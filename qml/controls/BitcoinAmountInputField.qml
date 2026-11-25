@@ -174,7 +174,9 @@ ColumnLayout {
             anchors.left: lbl.right
             anchors.right: unitToggle.left
             anchors.verticalCenter: parent.verticalCenter
-            leftPadding: 0
+            leftPadding: LayoutMirroring.enabled ? padding : 0
+            rightPadding: LayoutMirroring.enabled ? 0 : padding
+            horizontalAlignment: TextInput.AlignLeft
             enabled: root.enabled
             font: Theme.text.body.font
             color: Theme.color.neutral9

@@ -51,6 +51,7 @@ Controls.CheckBox {
 
         implicitWidth: 20
         implicitHeight: 20
+        x: root.mirrored ? root.width - width - root.rightPadding : root.leftPadding
         y: (root.height - height) / 2
         radius: 6
         color: root.checked ? root.checkedColor : "transparent"
@@ -125,9 +126,9 @@ Controls.CheckBox {
 
         CoreText {
             id: label
-            x: parent.textX
+            x: root.mirrored ? 0 : parent.textX
             y: Math.max(0, (parent.height - parent.textHeight) / 2)
-            width: Math.max(0, parent.width - x)
+            width: Math.max(0, parent.width - parent.textX)
             text: root.text
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignLeft
@@ -140,9 +141,9 @@ Controls.CheckBox {
         CoreText {
             id: descriptionLabel
             visible: root.description.length > 0
-            x: parent.textX
+            x: root.mirrored ? 0 : parent.textX
             y: label.y + label.height + Theme.space.xxs
-            width: Math.max(0, parent.width - x)
+            width: Math.max(0, parent.width - parent.textX)
             text: root.description
             horizontalAlignment: Text.AlignLeft
             textStyle: Theme.text.caption

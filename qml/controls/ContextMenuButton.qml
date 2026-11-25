@@ -34,8 +34,8 @@ AbstractButton {
     Accessible.name: text
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
-    leftPadding: 10
-    rightPadding: Theme.space.m
+    leftPadding: mirrored ? Theme.space.m : 10
+    rightPadding: mirrored ? 10 : Theme.space.m
     topPadding: 0
     bottomPadding: 0
     opacity: enabled ? 1.0 : 0.5

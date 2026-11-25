@@ -16,6 +16,11 @@ function nodeConnectionIcon(numPeers) {
     return "image://images/node-4-connections"
 }
 
+// Icons that point along the reading direction flip in right-to-left layouts.
+function isDirectionalIcon(source) {
+    return /\/caret-(left|right)(\.svg)?$/.test(String(source))
+}
+
 function formatRelativeTime(isoString) {
     if (!isoString) return ""
     var then = new Date(isoString)

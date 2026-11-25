@@ -31,8 +31,10 @@
 #include <qml/datadir.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
+#include <qml/fonts.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
+#include <qml/localeformat.h>
 #include <qml/onboarding_settings.h>
 #include <qml/urlopener.h>
 #ifdef __ANDROID__
@@ -100,12 +102,12 @@
 #include <QDebug>
 #include <QEvent>
 #include <QEventLoop>
-#include <QFontDatabase>
 #include <QIcon>
 #include <QMetaObject>
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QJSEngine>
+#include <QLocale>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -279,13 +281,6 @@ void setupChainQSettings(QGuiApplication* app, const QString& chain)
     app->setApplicationName(ChainQSettingsName(chain));
 }
 
-void LoadFontResource(const QString& path)
-{
-    if (QFontDatabase::addApplicationFont(path) < 0) {
-        qWarning() << "Failed to load font resource:" << path;
-    }
-}
-
 #ifdef ENABLE_TEST_AUTOMATION
 void ApplyTestSettingsDir()
 {
@@ -350,6 +345,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return new MotionPreference(StartupMotionMode());
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
+    qmlRegisterSingletonInstance<LocaleFormat>("org.bitcoincore.qt", 1, 0, "LocaleFormat", &LocaleFormat::instance());
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
@@ -584,6 +580,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
                 { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
         }
+        LocaleFormat::setLanguage(lang);
+        const bool rtl = !lang.isEmpty() && QLocale(lang).textDirection() == Qt::RightToLeft;
+        const bool reverse = gArgs.GetBoolArg("-reverselayout", false);
+        QGuiApplication::setLayoutDirection(rtl != reverse ? Qt::RightToLeft : Qt::LeftToRight);
     };
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
@@ -610,9 +610,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         }
     }
 
-    LoadFontResource(":/fonts/bitcoincoresans/regular");
-    LoadFontResource(":/fonts/bitcoincoresans/semibold");
-    LoadFontResource(":/fonts/robotomono/regular");
+    LoadBundledFonts();
 
     AppMode app_mode = SetupAppMode();
     BuildInfo build_info;

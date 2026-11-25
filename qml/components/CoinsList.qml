@@ -216,7 +216,8 @@ ColumnLayout {
                     const point = coinRow.mapToItem(Overlay.overlay, mouse.x, mouse.y)
                     root.contextCoinId = coinRow.coinId
                     root.contextCoinLocked = coinRow.locked
-                    coinContextMenu.x = Math.max(12, Math.min(point.x, Overlay.overlay.width - coinContextMenu.width - 12))
+                    const menuX = coinRow.LayoutMirroring.enabled ? point.x - coinContextMenu.width : point.x
+                    coinContextMenu.x = Math.max(12, Math.min(menuX, Overlay.overlay.width - coinContextMenu.width - 12))
                     coinContextMenu.y = Math.max(12, Math.min(point.y, Overlay.overlay.height - coinContextMenu.height - 12))
                     coinContextMenu.open()
                 }
@@ -258,7 +259,8 @@ ColumnLayout {
                         width: 24
                         height: 28
                         anchors.verticalCenter: parent.verticalCenter
-                        x: checkboxSlot.shown ? 0 : -width
+                        x: mirrored ? (checkboxSlot.shown ? parent.width - width : parent.width)
+                            : (checkboxSlot.shown ? 0 : -width)
                         opacity: checkboxSlot.shown ? 1 : 0
                         checkable: false
                         enabled: checkboxSlot.shown && coinRow.enabled
@@ -281,7 +283,14 @@ ColumnLayout {
                         CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.subheading; wrap: false; elide: Text.ElideRight }
                     }
                     CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.monoCaption; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
-                    CoreText { Layout.fillWidth: true; text: coinRow.date ? new Date(coinRow.date).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
+                    CoreText {
+                        Layout.fillWidth: true
+                        text: LocaleFormat.formatDate(coinRow.date, LocaleFormat.shortDateTimePattern)
+                        horizontalAlignment: Text.AlignLeft
+                        textStyle: Theme.text.caption
+                        color: Theme.color.neutral7
+                        wrap: false
+                    }
                 }
                 RowLayout {
                     spacing: Theme.space.s

@@ -103,6 +103,26 @@ def test_language_selection(gui):
             pass
 
 
+def test_language_direction(gui):
+    print("\n── test_language_direction ───────────────────────────────────")
+    try:
+        assert gui.get_property("displayLanguageRow", "mirrored") is False
+        select_language(gui, "arabic", "language_ar")
+        gui.wait_for_property("displayLanguageRow", "mirrored", True, timeout_ms=3000)
+        language_title = gui.get_property("displayLanguageRow", "title")
+        assert language_title == "اللغة", language_title
+        print("  Arabic mirrors and translates the layout  PASSED")
+
+        select_language(gui, "español", "language_es")
+        gui.wait_for_property("displayLanguageRow", "mirrored", False, timeout_ms=3000)
+        print("  A left-to-right language restores the layout  PASSED")
+    finally:
+        try:
+            reset_language_to_system_default(gui)
+        except QmlDriverError:
+            pass
+
+
 def test_settings_persistence(datadir):
     print("\n── test_settings_persistence ─────────────────────────────────")
     harness = QmlTestHarness(
@@ -142,6 +162,7 @@ def run_tests():
         assert_display_rows_have_no_descriptions(gui)
         test_display_unit_selection(gui)
         test_language_selection(gui)
+        test_language_direction(gui)
 
         select_display_unit(gui, "displayUnitSAT", "sat")
         select_language(gui, "español", "language_es")

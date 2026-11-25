@@ -46,6 +46,7 @@ add_executable(bitcoinqml_unit_tests
   test_networktraffictower.cpp
   test_qmlinitexecutor_api.cpp
   test_shutdownproducers.cpp
+  test_fonts.cpp
   test_guiargs.cpp
   test_options_model.cpp
   test_async_options.cpp
@@ -141,6 +142,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/globalsettings.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/motionpreference.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/localeformat.cpp
   ${QMLTESTS_QRC_CPP}
 )
 

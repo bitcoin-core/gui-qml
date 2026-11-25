@@ -18,7 +18,7 @@ ColumnLayout {
     readonly property real calendarCellWidth: {
         let width = 36
         for (let day = 1; day <= 7; ++day)
-            width = Math.max(width, weekdayMetrics.advanceWidth(Qt.locale().dayName(day, Locale.ShortFormat)) + Theme.space.m)
+            width = Math.max(width, weekdayMetrics.advanceWidth(root.dateLocale.dayName(day, root.dayNameFormat)) + Theme.space.m)
         return Math.ceil(width)
     }
     property FontMetrics weekdayMetrics: FontMetrics { font: Theme.text.caption.font }
@@ -65,6 +65,20 @@ ColumnLayout {
 
     // Internal state --------------------------------------------------------
 
+    // The in-app language, not the system locale; digits go through
+    // LocaleFormat.latinDigits.
+    readonly property var dateLocale: Qt.locale(LocaleFormat.name)
+    // Locales without real abbreviations (Arabic) repeat the full day name as
+    // the short one, which overflows the 36px column; use narrow names there.
+    readonly property int dayNameFormat: {
+        for (var day = 1; day <= 7; ++day) {
+            if (root.dateLocale.dayName(day, Locale.ShortFormat) === root.dateLocale.dayName(day, Locale.LongFormat)) {
+                return Locale.NarrowFormat
+            }
+        }
+        return Locale.ShortFormat
+    }
+
     // Every date the calendar renders goes through toLocaleDateString with a
     // Locale format rather than an explicit pattern, so the locale decides the
     // field order as well as the month and weekday names. The chips take the
@@ -84,7 +98,7 @@ ColumnLayout {
     // (1 = Monday .. 7 = Sunday). The mod-7 arithmetic in calendarCells() and
     // the weekday header maps it onto JS getDay()'s 0 = Sunday .. 6 = Saturday
     // numbering (7 % 7 == 0).
-    readonly property int weekStart: Qt.locale().firstDayOfWeek
+    readonly property int weekStart: root.dateLocale.firstDayOfWeek
     property var todayDate: new Date()
     // Day the keyboard focus ring is on while the day grid has active focus;
     // null until the grid is first focused after opening.
@@ -96,7 +110,7 @@ ColumnLayout {
         if (!date || isNaN(date.getTime())) {
             return ""
         }
-        return date.toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+        return LocaleFormat.latinDigits(date.toLocaleDateString(root.dateLocale, Locale.ShortFormat))
     }
 
     function isoDate(date) {
@@ -234,7 +248,7 @@ ColumnLayout {
     // selection state, so the state is announced to a screen reader and not
     // conveyed by color alone.
     function dayCellAccessibleName(cell) {
-        var base = cell.modelData.toLocaleDateString(Qt.locale(), Locale.LongFormat)
+        var base = LocaleFormat.latinDigits(cell.modelData.toLocaleDateString(root.dateLocale, Locale.LongFormat))
         if (cell.endpoint) {
             //: Screen reader label for a chosen start or end day in the Activity custom date range calendar. %1 is the date.
             return qsTr("%1, selected range endpoint").arg(base)
@@ -309,7 +323,7 @@ ColumnLayout {
             // format to ask for. toLocaleDateString still localizes the month name
             // here (a Qt.formatDate format string would render C-locale English),
             // so only the field order is fixed.
-            text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
+            text: LocaleFormat.latinDigits((new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(root.dateLocale, "MMMM yyyy"))
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
             textStyle: Theme.text.subheading
@@ -348,7 +362,8 @@ ColumnLayout {
                 readonly property int jsDay: (root.weekStart + index) % 7
                 width: root.calendarCellWidth
                 height: Math.max(22, implicitHeight)
-                text: Qt.locale().dayName(jsDay === 0 ? 7 : jsDay, Locale.ShortFormat)
+                objectName: "calendarDayName_" + index
+                text: root.dateLocale.dayName(jsDay === 0 ? 7 : jsDay, root.dayNameFormat)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 color: Theme.color.neutral6
@@ -375,7 +390,7 @@ ColumnLayout {
         //: Screen reader name of the day grid in the Activity custom date range calendar.
         Accessible.name: qsTr("Calendar")
         Accessible.description: root.calendarFocusDate
-            ? root.calendarFocusDate.toLocaleDateString(Qt.locale(), Locale.LongFormat) : ""
+            ? LocaleFormat.latinDigits(root.calendarFocusDate.toLocaleDateString(root.dateLocale, Locale.LongFormat)) : ""
         onActiveFocusChanged: {
             if (activeFocus) {
                 root.ensureCalendarFocusDate()
@@ -383,8 +398,8 @@ ColumnLayout {
         }
         Keys.onPressed: function(event) {
             switch (event.key) {
-            case Qt.Key_Left: root.moveCalendarFocus(-1); break
-            case Qt.Key_Right: root.moveCalendarFocus(1); break
+            case Qt.Key_Left: root.moveCalendarFocus(dayGrid.effectiveLayoutDirection === Qt.RightToLeft ? 1 : -1); break
+            case Qt.Key_Right: root.moveCalendarFocus(dayGrid.effectiveLayoutDirection === Qt.RightToLeft ? -1 : 1); break
             case Qt.Key_Up: root.moveCalendarFocus(-7); break
             case Qt.Key_Down: root.moveCalendarFocus(7); break
             case Qt.Key_PageUp:

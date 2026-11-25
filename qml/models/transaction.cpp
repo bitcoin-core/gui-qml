@@ -5,12 +5,12 @@
 #include <qml/models/transaction.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/localeformat.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
 #include <wallet/types.h>
 
 #include <QDateTime>
-#include <QLocale>
 
 namespace {
     const int RecommendedNumConfirmations = 6;
@@ -81,15 +81,13 @@ QString Transaction::dateTimeString() const
         return hours == 1 ? tr("1 hour ago") : tr("%1 hours ago").arg(hours);
     }
 
-    // QLocale() is the system locale, which the in-app language setting does
-    // not change; Core's Widgets GUI formats its dates the same way.
     int currentYear = QDate::currentDate().year();
     if (dateTime.date().year() == currentYear) {
         //: Qt date format pattern for a current-year date; translators may reorder the fields for their locale
-        return QLocale().toString(dateTime, tr("MMMM d"));
+        return LocaleFormat::format(dateTime, tr("MMMM d"));
     } else {
         //: Qt date format pattern for a date in an earlier year; translators may reorder the fields for their locale
-        return QLocale().toString(dateTime, tr("MMMM d, yyyy"));
+        return LocaleFormat::format(dateTime, tr("MMMM d, yyyy"));
     }
 }
 

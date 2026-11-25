@@ -21,6 +21,8 @@ ApplicationWindow {
     minimumWidth: 500
     minimumHeight: 250
     color: Theme.color.background
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
 
     AlertPopup {
         id: errorAlert

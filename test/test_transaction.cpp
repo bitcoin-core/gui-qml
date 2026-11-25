@@ -4,6 +4,8 @@
 
 #include <qml/models/transaction.h>
 
+#include <qml/localeformat.h>
+
 #include <chainparams.h>
 #include <interfaces/wallet.h>
 #include <primitives/transaction.h>
@@ -70,6 +72,7 @@ private Q_SLOTS:
     void dateTimeString_usedAddressRequestKeepsDate();
     void updateStatus_setsCountsForBalance();
     void dateTimeString_localizesMonthNames();
+    void dateTimeString_followsAppLanguageWithLatinDigits();
 };
 
 void TransactionTests::initTestCase()
@@ -195,6 +198,20 @@ void TransactionTests::dateTimeString_localizesMonthNames()
     QLocale::setDefault(previous);
 
     QVERIFY(localized.contains(QStringLiteral("März")));
+    QVERIFY(localized.contains(QStringLiteral("2000")));
+}
+
+void TransactionTests::dateTimeString_followsAppLanguageWithLatinDigits()
+{
+    const QDateTime past{QDate{2000, 3, 15}, QTime{12, 0}};
+    Transaction tx{uint256{1}, past.toSecsSinceEpoch()};
+
+    LocaleFormat::setLanguage(QStringLiteral("ar"));
+    const QString localized{tx.dateTimeString()};
+    LocaleFormat::setLanguage(QString{});
+
+    QVERIFY(localized.contains(QLocale{QLocale::Arabic}.monthName(3)));
+    QVERIFY(localized.contains(QStringLiteral("15")));
     QVERIFY(localized.contains(QStringLiteral("2000")));
 }
 

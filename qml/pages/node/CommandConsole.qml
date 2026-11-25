@@ -123,6 +123,9 @@ Page {
     MonospaceOutputView {
         id: outputView
         objectName: "consoleOutputArea"
+        // Commands and results stay in English, so they read left to right.
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         anchors {
             top: parent.top
             left: parent.left
@@ -186,6 +189,9 @@ Page {
         ListView {
             id: autocompleteList
             objectName: "consoleAutocompleteList"
+            // Popup content follows the window, not the left-to-right input row.
+            LayoutMirroring.enabled: false
+            LayoutMirroring.childrenInherit: true
             Layout.preferredWidth: autocompletePopup.width - 2 * autocompletePopup.menuPadding
             Layout.preferredHeight: Math.min(contentHeight, 216)
             clip: true
@@ -222,6 +228,8 @@ Page {
     Rectangle {
         id: inputArea
         objectName: "consoleInputRow"
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         anchors {
             left: parent.left
             right: parent.right
@@ -276,6 +284,9 @@ Page {
                 rightPadding: 12
                 topPadding: 0
                 bottomPadding: 0
+                // The translated placeholder follows the page; typed commands read left to right.
+                horizontalAlignment: text.length === 0 && root.LayoutMirroring.enabled
+                    ? TextInput.AlignRight : TextInput.AlignLeft
                 verticalAlignment: TextInput.AlignVCenter
                 background: Rectangle {
                     color: Theme.color.surface2

@@ -52,11 +52,14 @@ LabeledField {
             placeholderTextColor: root.placeholderColor
             font: root.fieldTextStyle.font
             selectByMouse: true
+            horizontalAlignment: TextInput.AlignLeft
             verticalAlignment: TextInput.AlignVCenter
-            leftPadding: root.fieldSurface ? 0 : root.fieldHorizontalPadding
-            rightPadding: trailingLoader.active
+            readonly property real leadingPadding: root.fieldSurface ? 0 : root.fieldHorizontalPadding
+            readonly property real trailingPadding: trailingLoader.active
                 ? trailingLoader.width + (root.fieldSurface ? root.fieldHorizontalPadding : root.fieldHorizontalPadding * 2)
-                : (root.fieldSurface ? 0 : root.fieldHorizontalPadding)
+                : leadingPadding
+            leftPadding: root.mirrored ? trailingPadding : leadingPadding
+            rightPadding: root.mirrored ? leadingPadding : trailingPadding
             Accessible.name: root.accessibleName
             Accessible.description: root.accessibleDescription
 
