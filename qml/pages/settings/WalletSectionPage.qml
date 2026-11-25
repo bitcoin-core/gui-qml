@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
+import "../../components"
 import "../../controls"
 import "../../components"
 
@@ -21,12 +22,14 @@ SettingsPage {
     readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
+    readonly property bool canShowDescriptors: root.walletLoaded && !!root.wallet && root.wallet.canShowDescriptors
 
     signal selectWalletRequested()
     signal passwordRequested()
     signal signVerifyMessageRequested()
     signal addressesRequested()
     signal coinsRequested()
+    signal descriptorsRequested()
 
     function backupFileName() {
         const walletName = root.wallet && root.wallet.name.length > 0
@@ -168,6 +171,18 @@ SettingsPage {
             title: qsTr("Addresses")
             showsDisclosureIndicator: true
             onClicked: root.addressesRequested()
+        }
+
+        ListRow {
+            objectName: "walletDescriptorsRow"
+            visible: root.canShowDescriptors
+            Layout.fillWidth: true
+            //: Shows the wallet's public output descriptors and extended public keys.
+            title: qsTr("Descriptors")
+            //: Under the Descriptors row, so people looking for their xpub find it here.
+            description: qsTr("Public descriptors and extended keys (xpub) for watch-only wallets.")
+            showsDisclosureIndicator: true
+            onClicked: root.descriptorsRequested()
         }
 
         ListRow {

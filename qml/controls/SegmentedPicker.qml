@@ -14,7 +14,7 @@ TabBar {
     // Set by a hosting FormRow, whose label names the picker.
     property string rowTitle: ""
     property string rowDescription: ""
-    readonly property string currentText: model.length > currentIndex ? optionText(model[currentIndex]) : ""
+    readonly property string currentText: currentIndex >= 0 && model.length > currentIndex ? optionText(model[currentIndex]) : ""
 
     signal selected(int index, var option)
 
@@ -73,6 +73,7 @@ TabBar {
                 : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
             width: Math.max(0, (root.availableWidth - root.spacing * (root.model.length - 1)) / Math.max(1, root.model.length))
             height: root.availableHeight
+            enabled: typeof modelData !== "object" || modelData === null || modelData.enabled !== false
             activeFocusOnTab: checked
             autoExclusive: true
             checked: index === root.currentIndex
@@ -102,7 +103,8 @@ TabBar {
         contentItem: CoreText {
             text: segment.text
             textStyle: segment.checked ? Theme.text.captionStrong : Theme.text.caption
-            color: segment.checked ? Theme.color.accentForeground : Theme.color.neutral9
+            color: !segment.enabled ? Theme.color.disabledContent
+                : segment.checked ? Theme.color.accentForeground : Theme.color.neutral9
 
             Behavior on color {
                 enabled: Theme.motion.animated

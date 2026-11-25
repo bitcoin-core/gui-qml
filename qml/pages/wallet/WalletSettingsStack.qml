@@ -33,6 +33,19 @@ PageStack {
         root.push(addressListPage, {}, StackView.Immediate)
     }
 
+    // A wallet with one descriptor and no previous keys has nothing to list.
+    function openDescriptors() {
+        if (!root.wallet) return
+        const exports = root.wallet.descriptorExports()
+        const inactive = root.wallet.inactiveDescriptorExports()
+        if (exports.length === 0 && inactive.length === 0) return
+        if (exports.length === 1 && inactive.length === 0) {
+            root.push(descriptorDetailPage, { "addressType": exports[0].id, "standalone": true })
+        } else {
+            root.push(descriptorsPage)
+        }
+    }
+
     function openPassword(updating) {
         if (!root.wallet) return
         root.resetToRoot()
@@ -62,6 +75,7 @@ PageStack {
         })
         onSignVerifyMessageRequested: root.push(signVerifyPage)
         onCoinsRequested: root.push(coinsPage)
+        onDescriptorsRequested: root.openDescriptors()
         onAddressesRequested: {
             if (!root.wallet) return
             root.wallet.addressListModel.refresh()
@@ -72,6 +86,25 @@ PageStack {
     Component {
         id: coinsPage
         WalletCoins {
+            wallet: root.wallet
+            onBack: root.pop()
+        }
+    }
+
+    Component {
+        id: descriptorsPage
+        WalletDescriptors {
+            wallet: root.wallet
+            onBack: root.pop()
+            onDescriptorRequested: function(addressType) {
+                root.push(descriptorDetailPage, { "addressType": addressType })
+            }
+        }
+    }
+
+    Component {
+        id: descriptorDetailPage
+        WalletDescriptorDetail {
             wallet: root.wallet
             onBack: root.pop()
         }

@@ -122,6 +122,20 @@ def prepare_managed_wallet(harness, wallet_name, password):
         stop_node(process, harness.gui_rpc_port)
 
 
+def prepare_wallet_funded_before_encryption(harness, wallet_name, password):
+    harness.bitcoind_binary = harness.bitcoind_binary or find_bitcoind()
+    process = start_node(harness.bitcoind_binary, harness.gui_datadir, harness.gui_rpc_port)
+    try:
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": wallet_name})
+        address = rpc_call(harness.gui_rpc_port, "getnewaddress", [], wallet=wallet_name)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, address])
+        # Encrypting replaces the active descriptors with ones from a new seed.
+        rpc_call(harness.gui_rpc_port, "encryptwallet", [password], wallet=wallet_name)
+    finally:
+        stop_node(process, harness.gui_rpc_port)
+    return address
+
+
 def dismiss_create_wallet_wizard(gui):
     gui.wait_for_property("onboardingCloseButton", "visible", True, timeout_ms=10000)
     gui.click("onboardingCloseButton")
@@ -418,6 +432,77 @@ def case_wrong_current_password_preserves_current_field(harness, checkpoints):
     checkpoints.checkpoint("wrong current password rejected and preserved", gui)
 
 
+def case_descriptor_imports_one_address_type(harness, checkpoints):
+    wallet_name = "settings_descriptors_wallet"
+    watch_name = "settings_descriptors_import_wallet"
+
+    prepare_managed_wallet(harness, wallet_name, WALLET_PASSWORD)
+    checkpoints.checkpoint("managed wallet fixture prepared")
+
+    harness.start_gui()
+    gui = harness.driver
+    checkpoints.checkpoint("GUI launched", gui)
+    harness.finish_onboarding()
+    checkpoints.checkpoint("onboarding completed", gui)
+    dismiss_create_wallet_wizard(gui)
+    load_wallet(gui, harness, wallet_name)
+    checkpoints.checkpoint("managed wallet loaded", gui)
+
+    open_wallet_settings(gui)
+    gui.wait_for_property("walletDescriptorsRow", "visible", True, timeout_ms=5000)
+    gui.click("walletDescriptorsRow")
+    gui.wait_for_property("walletDescriptorsPage", "visible", True, timeout_ms=5000)
+    assert gui.get_property("descriptorsTypeList", "visible") is True
+    checkpoints.checkpoint("descriptors list opened", gui)
+
+    gui.click("descriptorsType_bech32")
+    gui.wait_for_property("walletDescriptorDetailPage", "addressType", "bech32", timeout_ms=5000)
+    gui.wait_for_property("descriptorsDetail", "visible", True, timeout_ms=5000)
+    descriptor = gui.get_property("walletDescriptorDetailPage", "payload")
+    assert descriptor.startswith("wpkh(") and "/<0;1>/*" in descriptor, descriptor
+    assert gui.get_property("descriptorsQRImage", "code") == descriptor
+    assert gui.get_text("descriptorsDetailPath") == "/<0;1>/*"
+    checkpoints.checkpoint("native segwit descriptor shown", gui)
+
+    gui.click("descriptorsFormatPickerOption_1")
+    gui.wait_for_property("walletDescriptorDetailPage", "extendedKeyFormat", True, timeout_ms=5000)
+    assert gui.get_property("walletDescriptorDetailPage", "payload").startswith("vpub")
+    checkpoints.checkpoint("native segwit extended key shown", gui)
+
+    gui.click("walletDescriptorDetailBackButton")
+    gui.wait_for_property("walletDescriptorsPage", "visible", True, timeout_ms=5000)
+    gui.click("descriptorsType_bech32m")
+    gui.wait_for_property("walletDescriptorDetailPage", "addressType", "bech32m", timeout_ms=5000)
+    assert gui.get_property("walletDescriptorDetailPage", "payload").startswith("tr(")
+    gui.click("descriptorsFormatPickerOption_1")
+    gui.wait_for_property("walletDescriptorDetailPage", "extendedKeyFormat", True, timeout_ms=5000)
+    assert gui.get_property("walletDescriptorDetailPage", "payload").startswith("tpub")
+
+    gui.click("walletDescriptorDetailBackButton")
+    gui.wait_for_property("walletDescriptorsPage", "visible", True, timeout_ms=5000)
+    gui.click("walletDescriptorsBackButton")
+    gui.wait_for_property("walletDescriptorsRow", "visible", True, timeout_ms=5000)
+
+    # Loading the watch-only wallet selects it in the GUI, so this runs last.
+    rpc_call(
+        harness.gui_rpc_port,
+        "createwallet",
+        {"wallet_name": watch_name, "disable_private_keys": True, "blank": True, "load_on_startup": False},
+    )
+    imported = rpc_call(
+        harness.gui_rpc_port,
+        "importdescriptors",
+        [[{"desc": descriptor, "timestamp": "now", "active": True}]],
+        wallet=watch_name,
+    )
+    assert all(result["success"] for result in imported), imported
+    for method, params in (("getnewaddress", ["", "bech32"]), ("getrawchangeaddress", ["bech32"])):
+        original = rpc_call(harness.gui_rpc_port, method, params, wallet=wallet_name)
+        watched = rpc_call(harness.gui_rpc_port, method, params, wallet=watch_name)
+        assert original == watched, f"{method}: {original} != {watched}"
+    checkpoints.checkpoint("descriptor imported as watch-only", gui)
+
+
 def run_test(args):
     screenshot_root = None
     if args.save_screenshots:
@@ -431,6 +516,7 @@ def run_test(args):
         ("qml_wallet_settings_subpage_close", 430, case_subpages_close_when_wallet_becomes_unselected),
         ("qml_wallet_settings_password_context_change", 440, case_password_page_closes_when_selected_wallet_changes),
         ("qml_wallet_settings_password_failure_preserves_current", 450, case_wrong_current_password_preserves_current_field),
+        ("qml_wallet_settings_descriptor_import", 460, case_descriptor_imports_one_address_type),
     ]
 
     exit_code = 0

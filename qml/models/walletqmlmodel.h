@@ -23,6 +23,7 @@
 #include <policy/feerate.h>
 #include <psbt.h>
 #include <support/allocators/secure.h>
+#include <uint256.h>
 #include <wallet/coincontrol.h>
 
 #include <atomic>
@@ -30,6 +31,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include <QHash>
@@ -124,6 +126,7 @@ private:
     Q_PROPERTY(QString privateKeysStatus READ privateKeysStatus CONSTANT)
     Q_PROPERTY(QString externalSignerStatus READ externalSignerStatus CONSTANT)
     Q_PROPERTY(bool canManagePassphrase READ canManagePassphrase CONSTANT)
+    Q_PROPERTY(bool canShowDescriptors READ canShowDescriptors NOTIFY descriptorExportsChanged)
     Q_PROPERTY(QString transactionError READ transactionError NOTIFY transactionErrorChanged)
     Q_PROPERTY(bool transactionNeedsUnlock READ transactionNeedsUnlock NOTIFY transactionNeedsUnlockChanged)
     Q_PROPERTY(bool currentTransactionCanSend READ currentTransactionCanSend NOTIFY currentTransactionChanged)
@@ -208,6 +211,11 @@ public:
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE void setDefaultReceiveAddressType(const QString& address_type);
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& address_type) const;
+    Q_INVOKABLE QVariantList descriptorExports() const;
+    Q_INVOKABLE QVariantList inactiveDescriptorExports() const;
+    Q_INVOKABLE QString descriptorImportJson() const;
+    //! Descriptors left out of descriptorImportJson because they need private keys to derive.
+    Q_INVOKABLE int descriptorImportOmittedCount() const;
     Q_INVOKABLE PsbtImportResult importPsbtFromFile(const QString& path);
     Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path);
     Q_INVOKABLE void discardCurrentTransaction();
@@ -282,6 +290,7 @@ public:
     QString privateKeysStatus() const;
     QString externalSignerStatus() const;
     bool canManagePassphrase() const;
+    bool canShowDescriptors() const;
     QString transactionError() const { return m_transaction_error; }
     bool transactionNeedsUnlock() const { return m_transaction_needs_unlock; }
     bool currentTransactionCanSend() const { return m_current_transaction && m_current_transaction_can_send; }
@@ -312,6 +321,7 @@ Q_SIGNALS:
     void externalSignerApprovalFailed(const QString& message, bool signerNotFound);
     void displayUnitChanged(int unit);
     void securityStateChanged();
+    void descriptorExportsChanged();
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
     void availableChanged();
@@ -425,6 +435,10 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
+    std::unique_ptr<interfaces::Handler> m_handler_can_get_addresses_changed;
+    // Descriptor IDs, with whether each inactive one is used, as canShowDescriptors last saw them.
+    mutable std::vector<std::pair<uint256, bool>> m_descriptor_state;
+    mutable bool m_can_show_descriptors{false};
     std::shared_ptr<std::atomic<bool>> m_unload_requested{std::make_shared<std::atomic<bool>>(false)};
     int m_display_unit{0};
     PsbtQmlModel* m_imported_psbt_model{nullptr};
