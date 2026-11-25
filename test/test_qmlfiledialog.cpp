@@ -31,11 +31,13 @@ class QmlFileDialogTests : public QObject
 
 private Q_SLOTS:
     void saveModeAsksToSaveNotToOpen();
+    void overwriteConfirmationCanBeTurnedOff();
     void openModeRequiresAnExistingFile();
     void directoryModeShowsDirectoriesOnly();
     void onlyDirectoryModeShowsHiddenEntries();
     void propertiesReachTheDialog();
     void acceptedCarriesTheSelectedFile();
+    void currentFileIsPreselected();
 };
 
 void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
@@ -52,6 +54,22 @@ void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
     // the dialog builds its widgets, which an offscreen platform never does.
     QCOMPARE(dialog->acceptMode(), QFileDialog::AcceptSave);
     QCOMPARE(dialog->fileMode(), QFileDialog::AnyFile);
+    chooser.close();
+}
+
+void QmlFileDialogTests::overwriteConfirmationCanBeTurnedOff()
+{
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.open();
+    QFileDialog* dialog = VisibleFileDialog();
+    QVERIFY(dialog);
+    QVERIFY(!dialog->testOption(QFileDialog::DontConfirmOverwrite));
+    chooser.close();
+
+    chooser.setConfirmOverwrite(false);
+    chooser.open();
+    QVERIFY(dialog->testOption(QFileDialog::DontConfirmOverwrite));
     chooser.close();
 }
 
@@ -150,6 +168,24 @@ void QmlFileDialogTests::acceptedCarriesTheSelectedFile()
     QCOMPARE(selected_on_accept, expected);
     QCOMPARE(chooser.selectedFile(), expected);
     QVERIFY(!chooser.isVisible());
+}
+
+void QmlFileDialogTests::currentFileIsPreselected()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path{dir.filePath(QStringLiteral("wallet-watch-only.txt"))};
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::SaveFile);
+    chooser.setCurrentFolder(QUrl::fromLocalFile(dir.path()));
+    chooser.setCurrentFile(QUrl::fromLocalFile(path));
+    chooser.open();
+
+    QFileDialog* dialog = VisibleFileDialog();
+    QVERIFY(dialog);
+    QCOMPARE(dialog->directory().absolutePath(), QDir{dir.path()}.absolutePath());
+    QCOMPARE(dialog->selectedFiles(), QStringList{path});
+    chooser.close();
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
