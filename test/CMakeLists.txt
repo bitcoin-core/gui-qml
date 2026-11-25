@@ -55,6 +55,8 @@ add_executable(bitcoinqml_unit_tests
   test_walletlistmodel.cpp
   test_bumptransactionmodel.cpp
   test_walletqmlcontroller.cpp
+  test_viewonlyimport.cpp
+  test_descriptorhighlighter.cpp
   test_display_settings.cpp
   test_addresslistmodel.cpp
   test_receiverequesthistorymodel.cpp
@@ -139,6 +141,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/buttonkeyactivation.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/descriptorhighlighter.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/globalsettings.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/motionpreference.h
   ${QMLTESTS_QRC_CPP}

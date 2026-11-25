@@ -235,6 +235,35 @@ Page {
             }
         }
 
+        // Not dismissable: the history stays incomplete until the rescan ends.
+        InfoBanner {
+            objectName: "activityHistoryRecoveryBanner"
+            readonly property string state: root.wallet && root.wallet.historyRecovery ? root.wallet.historyRecovery : ""
+            readonly property int progress: root.wallet && root.wallet.historyRecoveryProgress !== undefined
+                ? root.wallet.historyRecoveryProgress : -1
+            visible: state.length > 0
+            Layout.fillWidth: true
+            Layout.leftMargin: root.activitySideInset
+            Layout.rightMargin: root.activitySideInset
+            Layout.bottomMargin: 20
+            contentMargin: Theme.space.l
+            bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+            titleObjectName: "activityHistoryRecoveryTitle"
+            messageObjectName: "activityHistoryRecoveryMessage"
+            title: state === "running" ? qsTr("Finishing this wallet's import") : qsTr("This wallet's import didn't finish")
+            message: state === "running"
+                ? (progress >= 0
+                    //: %1 is how much of the blockchain has been searched, in percent.
+                    ? qsTr("The app closed while it was looking for this wallet's transactions. Older ones may be missing until the search ends. %1% done.").arg(progress)
+                    : qsTr("The app closed while it was looking for this wallet's transactions. Older ones may be missing until the search ends."))
+                : state === "failed"
+                ? qsTr("The search for this wallet's older transactions stopped before the end, so some may be missing.")
+                : qsTr("The app closed before all of this wallet's descriptors were added, so some addresses and transactions may be missing. Import it again into a new wallet.")
+            primaryButtonText: state === "failed" ? qsTr("Try again") : ""
+            primaryButtonOutlined: true
+            onPrimaryClicked: walletController.retryHistoryRecovery(root.wallet)
+        }
+
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: root.activitySideInset

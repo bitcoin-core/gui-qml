@@ -7,33 +7,46 @@
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/util.h>
+#include <qml/viewonlyimport.h>
 
+#include <chain.h>
 #include <common/args.h>
 #include <common/settings.h>
+#include <interfaces/chain.h>
+#include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <key_io.h>
-#include <script/descriptor.h>
+#include <interfaces/wallet.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
+#include <util/fs.h>
 #include <util/result.h>
-#include <util/time.h>
+#include <wallet/context.h>
+#include <wallet/imports.h>
+#include <wallet/scan.h>
 #include <wallet/walletutil.h>
-#include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
 #include <util/translation.h>
 #include <util/threadnames.h>
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
+#include <vector>
 
+#include <QByteArray>
+#include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QMetaObject>
+#include <QPointer>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QStringList>
 #include <QTimer>
@@ -78,7 +91,160 @@ bool ErrorContains(const QString& error, const QString& needle)
 {
     return error.contains(needle, Qt::CaseInsensitive);
 }
+
+// The import rescans from the oldest timestamp, which a pruned node may no longer have.
+bool ScanBlocksPruned(interfaces::Chain& chain, std::optional<int64_t> oldest)
+{
+    if (!chain.havePruned()) return false;
+    int height{0};
+    if (!oldest || !chain.findFirstBlockWithTimeAndHeight(*oldest - TIMESTAMP_WINDOW, 0, interfaces::FoundBlock().height(height))) {
+        return false;
+    }
+    const std::optional<int> prune_height{chain.getPruneHeight()};
+    return prune_height && height <= *prune_height;
+}
+
+// remove() only unloads the wallet. Its files are deleted too, so the name can be used again.
+void DiscardCreatedWallet(interfaces::WalletLoader& loader, std::unique_ptr<interfaces::Wallet> wallet)
+{
+    const std::string name{wallet->getWalletName()};
+    wallet::WalletContext* context{loader.context()};
+    std::shared_ptr<wallet::CWallet> shared{context ? wallet::GetWallet(*context, name) : nullptr};
+    wallet->remove();
+    wallet.reset();
+    if (!shared) return;
+    std::vector<fs::path> paths{shared->GetDatabase().Files()};
+    if (!name.empty() && !paths.empty()) paths.push_back(paths.front().parent_path());
+    // The database closes once the last reference is gone.
+    wallet::WaitForDeleteWallet(std::move(shared));
+    std::error_code error;
+    // A directory is only removed when empty.
+    for (const fs::path& path : paths) fs::remove(path, error);
+}
+
+// A view-only import saves its descriptors before it rescans. The wallet's
+// best block is already the tip then, so after a crash it would load without
+// the older transactions. This records where the rescan starts until it ends,
+// and whether every descriptor was saved.
+struct PendingImport {
+    int64_t start{0};
+    bool installed{false};
+};
+
+// The marker belongs to the wallet file, not to its name.
+std::string WalletPath(interfaces::WalletLoader& loader, const std::string& wallet_name)
+{
+    const fs::path path{fs::PathFromString(loader.getWalletDir()) / fs::PathFromString(wallet_name)};
+    std::error_code error;
+    const fs::path canonical{fs::weakly_canonical(path, error)};
+    return fs::PathToString(error ? path : canonical);
+}
+
+QString PendingImportKey(const std::string& wallet_path)
+{
+    return QStringLiteral("pendingViewOnlyImports/%1").arg(QString::fromLatin1(QByteArray::fromStdString(wallet_path).toHex()));
+}
+
+bool SetPendingImport(const std::string& wallet_path, std::optional<PendingImport> pending)
+{
+    QSettings settings;
+    const QString key{PendingImportKey(wallet_path)};
+    settings.remove(key);
+    if (pending) {
+        settings.setValue(key + QStringLiteral("/start"), qlonglong(pending->start));
+        settings.setValue(key + QStringLiteral("/installed"), pending->installed);
+    }
+    settings.sync();
+    return settings.status() == QSettings::NoError;
+}
+
+std::optional<PendingImport> ReadPendingImport(const std::string& wallet_path)
+{
+    QSettings settings;
+    const QString key{PendingImportKey(wallet_path)};
+    const QVariant start{settings.value(key + QStringLiteral("/start"))};
+    if (!start.isValid()) return std::nullopt;
+    return PendingImport{start.toLongLong(), settings.value(key + QStringLiteral("/installed")).toBool()};
+}
+
+// What the wallet takes as now for an import: the median time of the tip.
+int64_t ChainNow(interfaces::WalletLoader& loader)
+{
+    wallet::WalletContext* context{loader.context()};
+    int64_t time{0};
+    if (context && context->chain) {
+        interfaces::Chain& chain{*context->chain};
+        if (const std::optional<int> height{chain.getHeight()};
+            height && chain.findBlock(chain.getBlockHash(*height), interfaces::FoundBlock().mtpTime(time))) {
+            return time;
+        }
+    }
+    return QDateTime::currentSecsSinceEpoch();
+}
+
+ImportRescanResult ResumeImport(interfaces::Node& node, const std::string& wallet_name, int64_t time, RescanControl& control,
+                                const std::function<void(int)>& progress)
+{
+    using Status = ImportRescanResult::Status;
+    wallet::WalletContext* context{node.walletLoader().context()};
+    const std::shared_ptr<wallet::CWallet> wallet{context ? wallet::GetWallet(*context, wallet_name) : nullptr};
+    if (!wallet) return {Status::Stopped};
+    wallet::WalletRescanReserver reserver{*wallet};
+    // Another rescan of this wallet is running.
+    if (!reserver.reserve()) return {Status::Failed};
+    if (!control.attach([&wallet] { wallet->Scanner().Abort(); })) return {Status::Stopped};
+    // The abort refers to this frame, and Scan can throw.
+    const auto detach{qScopeGuard([&control] { control.detach(); })};
+    const auto progress_handler{interfaces::MakeSignalHandler(
+        wallet->ShowProgress.connect([&progress](const std::string&, int percent) { progress(percent); }))};
+    int start_height{0};
+    uint256 start_block;
+    if (!wallet->chain().findFirstBlockWithTimeAndHeight(time - TIMESTAMP_WINDOW, 0,
+                                                         interfaces::FoundBlock().hash(start_block).height(start_height))) {
+        return {Status::Done};
+    }
+    const wallet::ScanResult result{wallet->Scanner().Scan(start_block, start_height, /*max_height=*/{}, reserver, /*save_progress=*/true)};
+    if (result.status == wallet::ScanResult::SUCCESS) return {Status::Done};
+    if (result.status == wallet::ScanResult::FAILURE) return {Status::Failed};
+    int64_t last_time{0};
+    const bool checkpoint{result.last_failed_block.IsNull() && !result.last_scanned_block.IsNull() &&
+                          wallet->chain().findBlock(result.last_scanned_block, interfaces::FoundBlock().time(last_time))};
+    return {Status::Stopped, checkpoint ? std::optional<int64_t>{last_time} : std::nullopt};
+}
+
+QString ImportErrorText(const wallet::ImportError& error)
+{
+    const bilingual_str& message{error.wallet_error.message};
+    return QString::fromStdString(message.translated.empty() ? message.original : message.translated);
+}
 } // namespace
+
+bool RescanControl::attach(std::function<void()> abort)
+{
+    const std::lock_guard lock{m_mutex};
+    if (m_cancelled) return false;
+    m_abort = std::move(abort);
+    return true;
+}
+
+void RescanControl::detach()
+{
+    const std::lock_guard lock{m_mutex};
+    m_abort = nullptr;
+}
+
+void RescanControl::cancel()
+{
+    const std::lock_guard lock{m_mutex};
+    m_cancelled = true;
+    if (m_abort) m_abort();
+}
+
+bool RescanControl::cancelled() const
+{
+    const std::lock_guard lock{m_mutex};
+    return m_cancelled;
+}
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, QObject *parent)
     : QObject(parent)
@@ -93,6 +259,10 @@ WalletQmlController::WalletQmlController(interfaces::Node& node, QObject *parent
     })
     , m_open_local_path_fn([](const QString& path) {
         return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    })
+    , m_resume_import_fn([&node](const std::string& wallet_name, int64_t time, RescanControl& control,
+                                 const std::function<void(int)>& progress) {
+        return ResumeImport(node, wallet_name, time, control, progress);
     })
 {
     m_empty_wallet->setNode(&m_node);
@@ -346,6 +516,8 @@ void WalletQmlController::beginShutdown()
     const auto wallets = m_wallets;
     for (auto* wallet : wallets) removeWalletModel(wallet);
     retireWallet(m_empty_wallet, false);
+    for (const auto& [name, control] : m_import_rescans) control->cancel();
+    if (m_import_rescan_executor) m_import_rescan_executor->shutdown();
     m_notification_cleanup_executor = std::make_unique<BackendExecutor>();
     m_notification_cleanup_executor->setObjectName(QStringLiteral("wallet-notifications"));
     connect(m_notification_cleanup_executor.get(), &BackendExecutor::drained, this, [this] {
@@ -381,7 +553,8 @@ void WalletQmlController::retireWallet(WalletQmlModel* model, bool remove)
 
 void WalletQmlController::checkShutdownFinished()
 {
-    if (m_shutting_down && m_controller_drained && m_notifications_drained && m_retiring_wallets.empty() && !m_shutdown_complete) {
+    if (m_shutting_down && m_controller_drained && m_notifications_drained && m_import_rescans_drained &&
+        m_retiring_wallets.empty() && !m_shutdown_complete) {
         m_shutdown_complete = true;
         Q_EMIT walletsDrained();
     }
@@ -392,6 +565,67 @@ void WalletQmlController::registerWalletModel(WalletQmlModel* wallet_model)
     connect(wallet_model, &WalletQmlModel::walletUnloaded, this, [this, wallet_model]() {
         removeWalletModel(wallet_model);
     }, Qt::QueuedConnection);
+    resumeInterruptedImport(wallet_model);
+}
+
+void WalletQmlController::resumeInterruptedImport(WalletQmlModel* wallet_model)
+{
+    const QString name{wallet_model->name()};
+    if (m_import_rescans.contains(name)) return;
+    const std::string path{WalletPath(m_node.walletLoader(), name.toStdString())};
+    const std::optional<PendingImport> pending{ReadPendingImport(path)};
+    if (!pending) return;
+    // Rescanning can't add the descriptors that were never saved.
+    if (!pending->installed) {
+        wallet_model->setHistoryRecovery(QStringLiteral("incomplete"));
+        return;
+    }
+    if (!m_import_rescan_executor) {
+        m_import_rescan_executor = std::make_unique<BackendExecutor>();
+        m_import_rescan_executor->setObjectName(QStringLiteral("wallet-import-rescan"));
+        m_import_rescans_drained = false;
+        connect(m_import_rescan_executor.get(), &BackendExecutor::drained, this, [this] {
+            m_import_rescans_drained = true;
+            checkShutdownFinished();
+        });
+    }
+    auto control{std::make_shared<RescanControl>()};
+    m_import_rescans[name] = control;
+    wallet_model->setHistoryRecovery(QStringLiteral("running"));
+    const QPointer<WalletQmlModel> model{wallet_model};
+    auto progress = [bridge = m_notification_bridge, model](int percent) {
+        QMetaObject::invokeMethod(bridge.get(), [model, percent] {
+            if (model) model->setHistoryRecovery(QStringLiteral("running"), percent < 100 ? percent : -1);
+        }, Qt::QueuedConnection);
+    };
+    const auto finished = [this, name, control, model](bool failed) {
+        const auto it{m_import_rescans.find(name)};
+        if (it != m_import_rescans.end() && it->second == control) m_import_rescans.erase(it);
+        if (model) model->setHistoryRecovery(failed ? QStringLiteral("failed") : QString{});
+    };
+    m_import_rescan_executor->submit(this, [resume = m_resume_import_fn, name = name.toStdString(), path, start = pending->start,
+                                            control, progress = std::move(progress)] {
+        using Status = ImportRescanResult::Status;
+        const ImportRescanResult result{resume(name, start, *control, progress)};
+        if (result.status == Status::Done) {
+            SetPendingImport(path, std::nullopt);
+        } else if (result.status == Status::Stopped && result.checkpoint && *result.checkpoint > start) {
+            // The next rescan starts a window before the last block read.
+            SetPendingImport(path, PendingImport{*result.checkpoint, /*installed=*/true});
+        }
+        // The marker stays otherwise, so the next load tries again.
+        return result.status;
+    }, [finished](ImportRescanResult::Status status) {
+        finished(status != ImportRescanResult::Status::Done);
+    }, [finished](std::exception_ptr) {
+        finished(/*failed=*/true);
+    });
+}
+
+void WalletQmlController::retryHistoryRecovery(WalletQmlModel* wallet)
+{
+    if (!wallet || m_shutting_down || wallet->historyRecovery() != QStringLiteral("failed")) return;
+    resumeInterruptedImport(wallet);
 }
 
 void WalletQmlController::removeWalletModel(WalletQmlModel* wallet_model, bool remove)
@@ -431,6 +665,7 @@ void WalletQmlController::removeWalletModel(WalletQmlModel* wallet_model, bool r
                                   WalletListModel::LoadState::Closed,
                                   QString{});
     setWalletLoaded(next_selected_wallet != nullptr);
+    if (const auto it{m_import_rescans.find(wallet_name)}; it != m_import_rescans.end()) it->second->cancel();
     retireWallet(wallet_model, remove);
 }
 
@@ -498,7 +733,9 @@ void WalletQmlController::createWalletAsync(const QString& name,
                                             uint64_t wallet_creation_flags,
                                             WalletLoadAction load_action,
                                             bool report_create_error,
-                                            WalletSetupFn setup_wallet)
+                                            WalletSetupFn setup_wallet,
+                                            WalletCheckFn check_before_create,
+                                            std::shared_ptr<RescanControl> import_control)
 {
     const QString wallet_name = name.trimmed();
     if (setup_wallet) {
@@ -507,8 +744,13 @@ void WalletQmlController::createWalletAsync(const QString& name,
     setWalletLoadInProgress(true);
 
     m_wallet_command_executor->submit(this, [node = &m_node, wallet_name, passphrase = std::move(passphrase),
-                            wallet_creation_flags, setup_wallet = std::move(setup_wallet)]() mutable {
+                            wallet_creation_flags, setup_wallet = std::move(setup_wallet),
+                            check_before_create = std::move(check_before_create)]() mutable {
         WalletCommandResult out;
+        if (check_before_create && !(out.error = check_before_create()).isEmpty()) {
+            QmlUtil::ClearSecureString(passphrase);
+            return out;
+        }
         std::vector<bilingual_str> warnings;
         auto wallet = node->walletLoader().createWallet(wallet_name.toStdString(), passphrase, wallet_creation_flags, warnings);
         QmlUtil::ClearSecureString(passphrase);
@@ -517,16 +759,28 @@ void WalletQmlController::createWalletAsync(const QString& name,
             const auto error = util::ErrorString(wallet);
             out.error = QString::fromStdString(error.translated.empty() ? error.original : error.translated);
             if (out.error.isEmpty()) out.error = tr("Wallet creation failed.");
-        } else if (setup_wallet && !(out.error = setup_wallet(**wallet)).isEmpty()) {
-            (*wallet)->remove();
+        } else if (bool keep_wallet{false}; setup_wallet && !(out.error = setup_wallet(**wallet, keep_wallet)).isEmpty()) {
+            if (!keep_wallet) {
+                DiscardCreatedWallet(node->walletLoader(), std::move(*wallet));
+                SetPendingImport(WalletPath(node->walletLoader(), wallet_name.toStdString()), std::nullopt);
+            }
         } else {
             out.wallet = std::move(*wallet);
         }
         return out;
-    }, [this, wallet_name, load_action, report_create_error](WalletCommandResult out) {
+    }, [this, wallet_name, load_action, report_create_error, import_control](WalletCommandResult out) {
         if (m_deferred_wallet_name == wallet_name) m_deferred_wallet_name.clear();
         setWalletLoadWarnings(out.warnings);
         setWalletLoadInProgress(false);
+        // A cancel can arrive after the worker last checked for one.
+        if (out.wallet && import_control && import_control->cancelled()) {
+            setWalletLoadError(tr("The import was cancelled, and its wallet was deleted."));
+            m_wallet_command_executor->submit(this, [node = &m_node, wallet = std::move(out.wallet), wallet_name]() mutable {
+                DiscardCreatedWallet(node->walletLoader(), std::move(wallet));
+                SetPendingImport(WalletPath(node->walletLoader(), wallet_name.toStdString()), std::nullopt);
+            }, [] {});
+            return;
+        }
         if (!out.wallet) {
             if (report_create_error) setWalletCreateError(out.error);
             else setWalletLoadError(out.error);
@@ -615,7 +869,8 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
     return true;
 }
 
-void WalletQmlController::createWatchOnlyWallet(const QString &name, const QString &xpub)
+void WalletQmlController::createWatchOnlyWallet(const QString& name, const QString& import_text, qint64 birth_time,
+                                                const QString& address_type)
 {
     if (m_wallet_load_in_progress) {
         return;
@@ -627,11 +882,25 @@ void WalletQmlController::createWatchOnlyWallet(const QString &name, const QStri
         return;
     }
 
-    const std::string xpub_str = xpub.trimmed().toStdString();
-    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub_str);
-    if (!ext_pubkey.pubkey.IsValid()) {
-        setWalletLoadError(tr("Invalid extended public key."));
+    ViewOnlyImport input{ParseViewOnlyImport(import_text, address_type)};
+    if (input.kind == ViewOnlyImport::Kind::Empty) {
+        setWalletLoadError(tr("Enter descriptors, or an extended public key (xpub)."));
         return;
+    }
+    if (!input.error.isEmpty()) {
+        setWalletLoadError(input.error);
+        return;
+    }
+    if (input.requests.empty()) {
+        setWalletLoadError(tr("Choose the address type of this key."));
+        return;
+    }
+    if (!input.undated.empty()) {
+        if (birth_time < 0) {
+            setWalletLoadError(tr("Choose when this wallet was created."));
+            return;
+        }
+        for (const size_t index : input.undated) input.requests[index].timestamp = birth_time;
     }
 
     const QString name_error = walletNameAvailabilityError(name);
@@ -643,55 +912,77 @@ void WalletQmlController::createWatchOnlyWallet(const QString &name, const QStri
     const uint64_t creation_flags = wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS |
                                     wallet::WALLET_FLAG_DESCRIPTORS |
                                     wallet::WALLET_FLAG_BLANK_WALLET;
-    std::vector<std::pair<std::string, bool>> descriptors = {
-        {"wpkh(" + xpub_str + "/0/*)", /*internal=*/false},
-        {"wpkh(" + xpub_str + "/1/*)", /*internal=*/true},
-    };
-
+    // Only undated requests take the chosen date, so a dated one can need pruned blocks whatever the date.
+    std::optional<int64_t> oldest_dated;
+    for (size_t i = 0; i < input.requests.size(); ++i) {
+        const std::optional<int64_t>& time{input.requests[i].timestamp};
+        if (time && std::ranges::find(input.undated, i) == input.undated.end()) oldest_dated = std::min(oldest_dated.value_or(*time), *time);
+    }
+    const std::optional<int64_t> chosen_date{input.undated.empty() ? std::nullopt : std::optional{birth_time}};
+    std::vector<wallet::ImportDescriptorRequest> requests{std::move(input.requests)};
+    auto control{std::make_shared<RescanControl>()};
+    m_import_control = control;
+    setImportProgress(-1);
     createWalletAsync(name.trimmed(),
                       SecureString{},
                       creation_flags,
                       WalletLoadAction::Create,
                       /*report_create_error=*/false,
-                      [descriptors = std::move(descriptors)](interfaces::Wallet& wallet) {
-        int descriptors_added = 0;
-        wallet::CWallet* raw_wallet = wallet.wallet();
-        if (!raw_wallet) {
-            return WalletQmlController::tr("Failed to import descriptors into watch-only wallet.");
+                      [node = &m_node, requests, control, guard = QPointer{this},
+                       bridge = m_notification_bridge](interfaces::Wallet& wallet, bool& keep_wallet) mutable {
+        const QString cancelled{WalletQmlController::tr("The import was cancelled, and its wallet was deleted.")};
+        if (!control->attach([&wallet] { wallet.abortRescan(); })) return cancelled;
+        // The abort refers to this wallet, which is gone once this returns or throws.
+        const auto detach{qScopeGuard([&control] { control->detach(); })};
+        const std::string path{WalletPath(node->walletLoader(), wallet.getWalletName())};
+        // Resolved here, so the marker starts where the wallet's rescan does.
+        const int64_t start{ResolveImportTimes(requests, ChainNow(node->walletLoader()))};
+        // Without the marker, a crash during the rescan would leave the wallet missing history unnoticed.
+        if (!SetPendingImport(path, PendingImport{start, /*installed=*/false})) {
+            return WalletQmlController::tr("The app couldn't save its settings, which it needs to finish the import if it closes during it. Check that its settings can be written, then try again.");
         }
-
-        LOCK(raw_wallet->cs_wallet);
-        for (const auto& [desc_str, internal] : descriptors) {
-            FlatSigningProvider keys;
-            std::string error;
-            auto parsed = Parse(desc_str, keys, error, /*require_checksum=*/false);
-            if (parsed.empty()) {
-                continue;
-            }
-            wallet::WalletDescriptor w_desc(
-                std::move(parsed.at(0)),
-                TicksSinceEpoch<std::chrono::seconds>(Now<NodeSeconds>()),
-                /*range_start=*/0,
-                /*range_end=*/0,
-                /*next_index=*/0);
-            auto spk_manager_res = raw_wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", internal);
-            if (spk_manager_res) {
-                raw_wallet->AddActiveScriptPubKeyMan(
-                    spk_manager_res.value().get().GetID(),
-                    OutputType::BECH32,
-                    internal);
-                ++descriptors_added;
-            }
+        std::vector<wallet::ImportResult> results;
+        {
+            // The rescan starts after every request is handled, even when some failed.
+            bool checked{false};
+            const auto progress{wallet.handleShowProgress([&, control, guard, bridge](const std::string&, int percent) {
+                if (!std::exchange(checked, true)) {
+                    const wallet::CWallet* raw_wallet{wallet.wallet()};
+                    if (raw_wallet && DescriptorsSaved(*raw_wallet, requests)) SetPendingImport(path, PendingImport{start, /*installed=*/true});
+                }
+                // Starting a rescan clears an earlier abort.
+                if (control->cancelled()) wallet.abortRescan();
+                QMetaObject::invokeMethod(bridge.get(), [guard, percent] {
+                    if (guard) guard->setImportProgress(percent < 100 ? percent : -1);
+                }, Qt::QueuedConnection);
+            })};
+            // Imports the descriptors, then rescans from the oldest timestamp.
+            results = wallet.importDescriptors(requests);
         }
-        raw_wallet->ConnectScriptPubKeyManNotifiers();
-
-        // A watch-only wallet needs both external and internal descriptors;
-        // succeeding with only one would leave a half-created wallet.
-        if (descriptors_added != static_cast<int>(descriptors.size())) {
-            return WalletQmlController::tr("Failed to import descriptors into watch-only wallet.");
+        if (control->cancelled()) return cancelled;
+        for (const wallet::ImportResult& result : results) {
+            if (result.has_error()) return ImportErrorText(*result.error);
+        }
+        // Shutdown stops the rescan early without an error. The next start finishes it.
+        if (node->shutdownRequested()) {
+            SetPendingImport(path, PendingImport{start, /*installed=*/true});
+            keep_wallet = true;
+            return WalletQmlController::tr("The import will finish the next time the app starts.");
+        }
+        SetPendingImport(path, std::nullopt);
+        return QString{};
+    }, [node = &m_node, oldest_dated, chosen_date] {
+        // Checked before the wallet file exists, so another date can be tried with the same name.
+        wallet::WalletContext* context{node->walletLoader().context()};
+        if (!context || !context->chain) return QString{};
+        if (ScanBlocksPruned(*context->chain, oldest_dated)) {
+            return WalletQmlController::tr("This node no longer has the blocks from when these descriptors were created, so it can't find their older transactions. Import them on a node that keeps all blocks.");
+        }
+        if (ScanBlocksPruned(*context->chain, chosen_date)) {
+            return WalletQmlController::tr("This node no longer has the blocks from when this wallet was created, so it can't find the older transactions. Choose a later date, or import it on a node that keeps all blocks.");
         }
         return QString{};
-    });
+    }, control);
 }
 
 void WalletQmlController::importWallet(const QString& path)
@@ -730,10 +1021,21 @@ void WalletQmlController::clearWalletMigrationStatus()
     setWalletMigrationError(QString());
 }
 
-bool WalletQmlController::validateXpub(const QString& xpub) const
+QVariantMap WalletQmlController::describeViewOnlyImport(const QString& import_text, const QString& address_type) const
 {
-    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub.trimmed().toStdString());
-    return ext_pubkey.pubkey.IsValid();
+    return DescribeViewOnlyImport(import_text, address_type);
+}
+
+void WalletQmlController::cancelViewOnlyImport()
+{
+    if (m_import_control) m_import_control->cancel();
+}
+
+void WalletQmlController::setImportProgress(int progress)
+{
+    if (m_import_progress == progress) return;
+    m_import_progress = progress;
+    Q_EMIT importProgressChanged();
 }
 
 void WalletQmlController::requestOpenWalletSettings(WalletQmlModel* wallet)
@@ -1405,4 +1707,9 @@ void WalletQmlController::setWalletLocationOpenError(const QString& error)
 void WalletQmlController::setOpenLocalPathFnForTesting(OpenLocalPathFn fn)
 {
     m_open_local_path_fn = std::move(fn);
+}
+
+void WalletQmlController::setResumeImportFnForTesting(ResumeImportFn fn)
+{
+    m_resume_import_fn = std::move(fn);
 }

@@ -107,12 +107,46 @@ TestCase {
         xpub.text = "line\nline\nline\nline\nline\nline"
         tryVerify(function() { return xpubEntry.height > initialHeight })
         name.text = "Watch wallet"
+        const highlighter = findChild(form, "watchOnlyImportHighlighter")
+        verify(highlighter.textDocument !== null)
+        compare(highlighter.errorLine, -1)
         xpub.text = "invalid"
         compare(form.canCreate, false)
+        compare(xpubEntry.errorText, "Enter descriptors, or an extended public key (xpub).")
         xpub.text = validXpub
+        compare(xpubEntry.errorText, "")
+        compare(xpubEntry.supportingText, "Extended key. Choose its address type below.")
+        compare(findChild(form, "watchOnlyImportRows").visible, false)
+        verify(findChild(form, "watchOnlyAddressType").visible)
+        const birthDate = findChild(form, "watchOnlyBirthDate")
+        verify(birthDate.visible)
+        findChild(form, "watchOnlyBirth_year").clicked()
+        compare(form.canCreate, false)
+        const taproot = findChild(form, "watchOnlyAddressType_bech32m")
+        taproot.clicked()
+        compare(findChild(form, "watchOnlyAddressType_bech32m"), taproot)
+        verify(taproot.checked)
+        verify(xpubEntry.supportingText.indexOf("Bech32m (Taproot)") >= 0)
         compare(form.canCreate, true)
 
+        xpub.text = " " + validXpub + "\n"
+        compare(form.canCreate, true)
+        const otherXpub = "xpub" + validXpub.slice(5) + "A"
+        xpub.text = otherXpub
+        compare(form.canCreate, false)
+        verify(!findChild(form, "watchOnlyAddressType_bech32m").checked)
+        verify(!findChild(form, "watchOnlyBirth_year").checked)
+        xpub.text = validXpub
+        findChild(form, "watchOnlyBirth_year").clicked()
+        findChild(form, "watchOnlyAddressType_bech32m").clicked()
+        compare(form.canCreate, true)
+
+        const before = Math.floor(Date.now() / 1000)
         findChild(form, "createWalletFormCreateButton").clicked()
+        compare(walletController.lastWatchOnlyImport(), validXpub)
+        compare(walletController.lastWatchOnlyAddressType(), "bech32m")
+        const birthTime = walletController.lastWatchOnlyBirthTime()
+        verify(birthTime <= before - 366 * 86400 + 1 && birthTime >= before - 366 * 86400 - 5)
         tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
         const ready = findChild(flow, "walletCreationReadyPage")
         compare(ready.backupRequired, false)
@@ -125,6 +159,72 @@ TestCase {
         flow.finished.connect(function(openActivity) { finished = openActivity })
         findChild(ready, "createWalletReadyDoneButton").clicked()
         compare(finished, true)
+    }
+
+    function test_watch_only_descriptor_json_keeps_its_dates() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Imported"
+        const json = '{"wallet_name": "hot", "descriptors": []}'
+        findChild(form, "watchOnlyXpubInput").text = json
+        const entry = findChild(form, "createWalletXpubEntry")
+        verify(entry.supportingText.indexOf("4 descriptors") === 0)
+        verify(entry.supportingText.indexOf("Created ") > 0)
+        verify(findChild(form, "watchOnlyImportRows").visible)
+        tryVerify(function() { return findChild(form, "watchOnlyImportRow_1") !== null })
+        const segwitRow = findChild(form, "watchOnlyImportRow_0")
+        compare(findChild(segwitRow, "watchOnlyImportRowCoverage").text, "receive and change")
+        compare(findChild(segwitRow, "watchOnlyImportRowInactive").visible, false)
+        compare(findChild(segwitRow, "watchOnlyImportRowCreated").text, "")
+        const segwitCoverage = findChild(segwitRow, "watchOnlyImportRowCoverage")
+        const taprootCoverage = findChild(findChild(form, "watchOnlyImportRow_1"), "watchOnlyImportRowCoverage")
+        compare(segwitCoverage.mapToItem(form, 0, 0).x, taprootCoverage.mapToItem(form, 0, 0).x)
+        compare(segwitCoverage.width, taprootCoverage.width)
+        const taprootRow = findChild(form, "watchOnlyImportRow_1")
+        compare(findChild(taprootRow, "watchOnlyImportRowCoverage").text, "receive")
+        verify(findChild(taprootRow, "watchOnlyImportRowInactive").visible)
+        verify(findChild(taprootRow, "watchOnlyImportRowCreated").text.indexOf("created ") === 0)
+        compare(findChild(form, "watchOnlyBirthDate").visible, false)
+        compare(form.canCreate, true)
+
+        findChild(form, "createWalletFormCreateButton").clicked()
+        compare(walletController.lastWatchOnlyImport(), json)
+        compare(walletController.lastWatchOnlyBirthTime(), -1)
+        compare(walletController.lastWatchOnlyAddressType(), "")
+        compare(findChild(form, "watchOnlyAddressType").visible, false)
+    }
+
+    function test_watch_only_import_shows_progress_and_can_be_cancelled() {
+        walletController.holdWatchOnlyImport = true
+        const flow = createFlow()
+        findChild(flow, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Imported"
+        findChild(form, "watchOnlyXpubInput").text = '{"wallet_name": "hot", "descriptors": []}'
+        const cancel = findChild(form, "createWalletFormCancelImportButton")
+        verify(!cancel.visible)
+        findChild(form, "createWalletFormCreateButton").clicked()
+
+        const note = findChild(form, "watchOnlyScanNote")
+        verify(note.visible)
+        verify(note.text.indexOf("This can take a while") > 0)
+        walletController.importProgress = 42
+        verify(note.text.indexOf("42% done") > 0)
+        verify(cancel.visible)
+        verify(!form.showBackButton)
+        verify(!findChild(form, "watchOnlyXpubInput").enabled)
+        verify(!findChild(form, "createWalletNameInput").enabled)
+        cancel.clicked()
+        compare(walletController.cancelImportCalls, 1)
+        tryCompare(form, "creating", false)
+        verify(!cancel.visible)
+        verify(!note.visible)
+        compare(findChild(form, "createWalletFormErrorText").text, "The import was cancelled, and its wallet was deleted.")
+        verify(form.showBackButton)
+        verify(findChild(form, "watchOnlyXpubInput").enabled)
     }
 
     function test_external_signer_uses_onboarding_form_and_ready_page() {

@@ -131,6 +131,11 @@ private:
     Q_PROPERTY(QString currentTransactionReviewMessage READ currentTransactionReviewMessage NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsErrorChanged)
     Q_PROPERTY(PsbtQmlModel* importedPsbt READ importedPsbt CONSTANT)
+    Q_PROPERTY(QVariantList availableReceiveAddressTypes READ availableReceiveAddressTypes NOTIFY availableReceiveAddressTypesChanged)
+    //! Finishing an import a crash interrupted: "running", "failed", "incomplete", or empty.
+    Q_PROPERTY(QString historyRecovery READ historyRecovery NOTIFY historyRecoveryChanged)
+    //! Percent done while running, or -1.
+    Q_PROPERTY(int historyRecoveryProgress READ historyRecoveryProgress NOTIFY historyRecoveryChanged)
 
 public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, interfaces::Node* node = nullptr, QObject* parent = nullptr);
@@ -196,7 +201,7 @@ public:
     Q_INVOKABLE bool sendTransaction();
     Q_INVOKABLE bool sendTransactionWithPassphrase(const QString& passphrase);
     Q_INVOKABLE bool broadcastCurrentTransaction();
-    Q_INVOKABLE QVariantList availableReceiveAddressTypes() const;
+    QVariantList availableReceiveAddressTypes() const;
     Q_INVOKABLE QString defaultReceiveAddressType() const;
     Q_INVOKABLE QString estimatedFeeForTarget(unsigned int target_blocks) const;
     Q_INVOKABLE int feeTargetIndex(unsigned int target_blocks) const;
@@ -288,6 +293,9 @@ public:
     bool currentTransactionCanBroadcast() const { return m_current_transaction && m_current_transaction_can_broadcast; }
     QString currentTransactionReviewMessage() const { return m_current_transaction_review_message; }
     QString settingsError() const { return m_settings_error; }
+    QString historyRecovery() const { return m_history_recovery; }
+    int historyRecoveryProgress() const { return m_history_recovery_progress; }
+    void setHistoryRecovery(const QString& state, int progress = -1);
     void setNode(interfaces::Node* node);
 
 Q_SIGNALS:
@@ -318,6 +326,8 @@ Q_SIGNALS:
     void walletUnloaded();
     void settingsErrorChanged();
     void addressListChanged();
+    void availableReceiveAddressTypesChanged();
+    void historyRecoveryChanged();
     // Forwarded on the GUI thread; models must not read wallet state from the
     // Core callback while it holds the wallet lock.
     void transactionChanged(const QString& txid, int change);
@@ -421,10 +431,13 @@ private:
     bool m_transaction_needs_unlock{false};
     QString m_settings_error;
     QString m_display_name;
+    QString m_history_recovery;
+    int m_history_recovery_progress{-1};
     std::unique_ptr<interfaces::Handler> m_handler_status_changed;
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
+    std::unique_ptr<interfaces::Handler> m_handler_can_get_addresses_changed;
     std::shared_ptr<std::atomic<bool>> m_unload_requested{std::make_shared<std::atomic<bool>>(false)};
     int m_display_unit{0};
     PsbtQmlModel* m_imported_psbt_model{nullptr};

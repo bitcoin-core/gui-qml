@@ -4,13 +4,16 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end GUI tests for watch-only wallet creation flow."""
 
+import hashlib
+import json
 import os
 import re
 import sys
+import time
 
 from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
-from qml_wallet_test_lib import WalletFlowHarness, rpc_call
+from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
 
 def open_create_wallet_page(gui):
@@ -64,6 +67,10 @@ def case_watchonly_creation_flow(harness, test_xpub):
     gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", "watchonly_test")
     gui.set_text("watchOnlyXpubInput", test_xpub)
+    gui.wait_for_property("watchOnlyAddressType", "visible", True, timeout_ms=5000)
+    gui.click("watchOnlyBirth_month")
+    assert gui.get_property("createWalletFormCreateButton", "enabled") is False
+    gui.click("watchOnlyAddressType_bech32")
     gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
     gui.click("createWalletFormCreateButton")
     gui.wait_for_page("walletCreationReadyPage", timeout_ms=15000)
@@ -82,6 +89,245 @@ def case_watchonly_creation_flow(harness, test_xpub):
     print("  RPC confirms wallet is watch-only (private_keys_enabled=false)")
 
     print("  Watch-only creation flow PASSED")
+
+
+def fund_hot_wallet(harness):
+    """Fund a wallet on the GUI node with Taproot and SegWit payments, before any view-only import."""
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    harness.driver.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    taproot = rpc_call(port, "getnewaddress", ["", "bech32m"], wallet="hot")
+    segwit = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "generatetoaddress", [101, taproot])
+    rpc_call(port, "sendtoaddress", [segwit, 5], wallet="hot")
+    rpc_call(port, "generatetoaddress", [1, taproot])
+    return taproot, segwit
+
+
+BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def with_key_version(key, version):
+    """Re-encode an extended key with another version, such as a tpub as a vpub."""
+    number = 0
+    for char in key:
+        number = number * 58 + BASE58.index(char)
+    payload = bytes.fromhex(version) + number.to_bytes(82, "big")[4:78]
+    data = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    number = int.from_bytes(data, "big")
+    encoded = ""
+    while number:
+        number, rest = divmod(number, 58)
+        encoded = BASE58[rest] + encoded
+    return encoded
+
+
+def create_view_only(gui, name, import_text, birth_choice=None):
+    open_type_selector(gui)
+    gui.click("walletTypeViewOnly")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
+    gui.set_text("createWalletNameInput", name)
+    gui.set_text("watchOnlyXpubInput", import_text)
+    assert gui.get_property("watchOnlyAddressType", "visible") is False
+    if birth_choice:
+        gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+        gui.click(f"watchOnlyBirth_{birth_choice}")
+    else:
+        assert gui.get_property("watchOnlyBirthDate", "visible") is False
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=30000)
+    gui.click("createWalletReadyDoneButton")
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=15000)
+
+
+def case_listdescriptors_json_restores_history(harness):
+    """listdescriptors output keeps the creation times, so the rescan finds payments made before the import."""
+    harness.start_gui()
+    gui = harness.driver
+    fund_hot_wallet(harness)
+    listed = rpc_call(harness.gui_rpc_port, "listdescriptors", wallet="hot")
+
+    create_view_only(gui, "watch_json", json.dumps(listed))
+    port = harness.gui_rpc_port
+    assert rpc_call(port, "getwalletinfo", wallet="watch_json")["private_keys_enabled"] is False
+    original = rpc_call(port, "getbalances", wallet="hot")["mine"]
+    watched = rpc_call(port, "getbalances", wallet="watch_json")["mine"]
+    assert original["trusted"] > 0 and original["immature"] > 0, original
+    assert original == watched, f"{original} != {watched}"
+    # Descriptors carry no address book, so a payment to an own address lists as change.
+    # Compare coins and known transactions instead of listed entries.
+    def coins(wallet):
+        return sorted((utxo["txid"], utxo["vout"], utxo["amount"]) for utxo in rpc_call(port, "listunspent", [0], wallet=wallet))
+    assert coins("hot") == coins("watch_json"), (coins("hot"), coins("watch_json"))
+    for tx in rpc_call(port, "listtransactions", ["*", 1000], wallet="hot"):
+        rpc_call(port, "gettransaction", [tx["txid"]], wallet="watch_json")
+    for method, params in (("getnewaddress", ["", "bech32m"]), ("getrawchangeaddress", ["bech32"])):
+        assert rpc_call(port, method, params, wallet="hot") == rpc_call(port, method, params, wallet="watch_json"), method
+    print("  listdescriptors JSON restored balance, history and next addresses")
+
+
+def case_descriptor_lines_keep_their_address_type(harness):
+    """Taproot descriptors pasted as lines watch Taproot addresses, scanned from the chosen date."""
+    harness.start_gui()
+    gui = harness.driver
+    taproot, segwit = fund_hot_wallet(harness)
+    listed = rpc_call(harness.gui_rpc_port, "listdescriptors", wallet="hot")["descriptors"]
+    lines = [item["desc"] for item in listed if item["active"] and item["desc"].startswith("tr(")]
+    assert len(lines) == 2, lines
+
+    create_view_only(gui, "watch_taproot", "\n".join(lines), birth_choice="unknown")
+    port = harness.gui_rpc_port
+    assert rpc_call(port, "getaddressinfo", [taproot], wallet="watch_taproot")["ismine"] is True
+    assert rpc_call(port, "getaddressinfo", [segwit], wallet="watch_taproot")["ismine"] is False
+    received = [rpc_call(port, "getreceivedbyaddress", [taproot, 0, True], wallet=wallet) for wallet in ("hot", "watch_taproot")]
+    assert received[0] > 0 and received[0] == received[1], received
+    print("  Taproot lines watch Taproot addresses, history found")
+
+
+def case_keys_keep_their_address_type(harness):
+    """A Taproot account key with its origin, and a vpub, watch the addresses their wallet used."""
+    harness.start_gui()
+    gui = harness.driver
+    taproot, segwit = fund_hot_wallet(harness)
+    port = harness.gui_rpc_port
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+
+    def account_key(script):
+        desc = next(item["desc"] for item in listed if item["active"] and not item["internal"] and item["desc"].startswith(script))
+        return re.search(r"(\[[0-9a-f]{8}[^\]]*\])(tpub[A-Za-z0-9]+)", desc).groups()
+
+    origin, key = account_key("tr(")
+    create_view_only(gui, "watch_taproot_key", origin + key, birth_choice="unknown")
+    assert rpc_call(port, "getaddressinfo", [taproot], wallet="watch_taproot_key")["ismine"] is True
+    received = [rpc_call(port, "getreceivedbyaddress", [taproot, 0, True], wallet=wallet) for wallet in ("hot", "watch_taproot_key")]
+    assert received[0] > 0 and received[0] == received[1], received
+    print("  Taproot account key with its origin watches Taproot addresses")
+
+    vpub = with_key_version(account_key("wpkh(")[1], "045f1cf6")
+    create_view_only(gui, "watch_vpub", vpub, birth_choice="unknown")
+    assert rpc_call(port, "getaddressinfo", [segwit], wallet="watch_vpub")["ismine"] is True
+    assert rpc_call(port, "getreceivedbyaddress", [segwit], wallet="watch_vpub") == 5
+    print("  vpub watches SegWit addresses and finds the earlier payment")
+
+
+def case_pruned_blocks_are_checked_before_creating(harness):
+    """A date before the pruned blocks is refused before the wallet file exists, so a later date can reuse the name."""
+    harness.start_gui(extra_args=["-prune=1", "-fastprune"])
+    gui = harness.driver
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    address = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "setmocktime", [int(time.time()) - 400 * 24 * 60 * 60])
+    rpc_call(port, "generatetoaddress", [700, address])
+    rpc_call(port, "setmocktime", [0])
+    rpc_call(port, "generatetoaddress", [400, address])
+    assert rpc_call(port, "pruneblockchain", [600]) > 0
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+    lines = "\n".join(item["desc"] for item in listed if item["active"] and item["desc"].startswith("wpkh("))
+
+    open_type_selector(gui)
+    gui.click("walletTypeViewOnly")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
+    gui.set_text("createWalletNameInput", "watch_pruned")
+    gui.set_text("watchOnlyXpubInput", json.dumps([dict(item, timestamp=0) for item in listed]))
+    assert gui.get_property("watchOnlyBirthDate", "visible") is False
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletFormErrorText", "text",
+                          lambda text: "Import them on a node that keeps all blocks" in text, timeout_ms=15000)
+    print("  Dated descriptors before the pruned blocks are refused without asking for a date")
+
+    gui.set_text("watchOnlyXpubInput", lines)
+    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+    gui.click("watchOnlyBirth_unknown")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletFormErrorText", "text", lambda text: "Choose a later date" in text, timeout_ms=15000)
+    names = [entry["name"] for entry in rpc_call(port, "listwalletdir")["wallets"]]
+    assert "watch_pruned" not in names, names
+    print("  Pruned start refused before the wallet was created")
+
+    dated = [dict(item, timestamp=0) for item in listed if item["desc"].startswith("wpkh(")]
+    undated = [{k: v for k, v in item.items() if k != "timestamp"} for item in listed if not item["desc"].startswith("wpkh(")]
+    gui.set_text("watchOnlyXpubInput", json.dumps(dated + undated))
+    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+    gui.click("watchOnlyBirth_month")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletFormErrorText", "text",
+                          lambda text: "Import them on a node that keeps all blocks" in text, timeout_ms=15000)
+    print("  A later date is not suggested when dated descriptors need the pruned blocks")
+
+    gui.set_text("watchOnlyXpubInput", lines)
+    gui.wait_for_property("watchOnlyBirthDate", "visible", True, timeout_ms=5000)
+    gui.click("watchOnlyBirth_month")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=30000)
+    assert rpc_call(port, "getwalletinfo", wallet="watch_pruned")["private_keys_enabled"] is False
+    print("  A later date reuses the name")
+
+
+def gui_settings_file(harness):
+    """The GUI's QSettings file, <org>/<app>.ini, with the org directory named per platform."""
+    paths = [os.path.join(harness.config_home, org_dir, "BitcoinCore-App-regtest.ini") for org_dir in ("BitcoinCore", "bitcoincore.org")]
+    return next(path for path in paths if os.path.exists(path))
+
+
+def case_interrupted_import_is_finished_on_restart(harness):
+    """A crash after an import saves its descriptors, but before its rescan ends, is finished on the next start."""
+    harness.start_gui()
+    gui = harness.driver
+    port = harness.gui_rpc_port
+    wait_for_rpc(port, timeout=60)
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    # A wallet skips blocks from before its keys, so it is created at the old time too.
+    rpc_call(port, "setmocktime", [int(time.time()) - 30 * 24 * 60 * 60])
+    rpc_call(port, "createwallet", {"wallet_name": "hot", "load_on_startup": False})
+    segwit = rpc_call(port, "getnewaddress", ["", "bech32"], wallet="hot")
+    rpc_call(port, "generatetoaddress", [101, segwit])
+    rpc_call(port, "setmocktime", [0])
+    # Enough new blocks that the median time, which "now" means to the import, is recent.
+    rpc_call(port, "generatetoaddress", [11, rpc_call(port, "getnewaddress", ["", "bech32m"], wallet="hot")])
+    received = rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="hot")
+    assert received > 0, received
+
+    # What a crashed import leaves: its descriptors saved, the best block at the tip, the rescan not done.
+    keys = ("desc", "active", "internal", "range", "next_index")
+    listed = rpc_call(port, "listdescriptors", wallet="hot")["descriptors"]
+    requests = [dict({key: item[key] for key in keys if key in item}, timestamp="now") for item in listed]
+    # Where the interrupted import's rescan started: the creation time of the descriptors.
+    start = min(item["timestamp"] for item in listed)
+    rpc_call(port, "createwallet", {"wallet_name": "watch_resumed", "disable_private_keys": True, "blank": True,
+                                    "load_on_startup": True})
+    rpc_call(port, "importdescriptors", [requests], wallet="watch_resumed")
+    assert rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="watch_resumed") == 0
+    harness.stop_gui()
+    settings_path = gui_settings_file(harness)
+    # Keyed by the wallet's canonical path.
+    marker = os.path.realpath(os.path.join(harness.gui_wallets_path, "watch_resumed")).encode().hex()
+    with open(settings_path, "a", encoding="utf-8") as settings:
+        settings.write(f"\n[pendingViewOnlyImports]\n{marker}\\start={start}\n{marker}\\installed=true\n")
+
+    harness.start_gui()
+    wait_for_rpc(port, timeout=60)
+    deadline = time.time() + 60
+    while rpc_call(port, "getreceivedbyaddress", [segwit, 0, True], wallet="watch_resumed") != received:
+        assert time.time() < deadline, "the interrupted import was not finished"
+        time.sleep(0.5)
+
+    def pending():
+        with open(settings_path, encoding="utf-8") as settings:
+            return marker in settings.read()
+    deadline = time.time() + 10
+    while pending():
+        assert time.time() < deadline, "the finished import is still pending"
+        time.sleep(0.2)
+    print("  An interrupted import is rescanned from its start on the next start")
 
 
 def case_type_selector_regular_flow(harness):
@@ -168,6 +414,36 @@ def run_tests():
         "watchonly_creation_flow",
         port_offset=80,
         case_body=lambda h: case_watchonly_creation_flow(h, test_xpub),
+    )
+
+    failures += run_case(
+        "listdescriptors_json",
+        port_offset=120,
+        case_body=case_listdescriptors_json_restores_history,
+    )
+
+    failures += run_case(
+        "descriptor_lines",
+        port_offset=130,
+        case_body=case_descriptor_lines_keep_their_address_type,
+    )
+
+    failures += run_case(
+        "extended_keys",
+        port_offset=140,
+        case_body=case_keys_keep_their_address_type,
+    )
+
+    failures += run_case(
+        "pruned_blocks",
+        port_offset=150,
+        case_body=case_pruned_blocks_are_checked_before_creating,
+    )
+
+    failures += run_case(
+        "interrupted_import",
+        port_offset=160,
+        case_body=case_interrupted_import_is_finished_on_restart,
     )
 
     failures += run_case(

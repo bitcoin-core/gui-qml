@@ -73,6 +73,8 @@
 #include <variant>
 #include <vector>
 
+using QmlUtil::OutputTypeLabel;
+
 namespace {
 constexpr unsigned int DEFAULT_STANDARD_FEE_TARGET{6};
 constexpr int FEE_ESTIMATE_DEBOUNCE_MS{250};
@@ -166,6 +168,27 @@ void ApplySelectedInputsPolicy(wallet::CCoinControl& coin_control)
 {
     // Manually selected coins should be the only wallet inputs used.
     coin_control.m_allow_other_inputs = !coin_control.HasSelected();
+}
+
+// Core picks a change type from the recipients, then Taproot, SegWit and the
+// default address type. A wallet that only watches nested SegWit or legacy
+// addresses may have no change descriptor of that type, so use one it has.
+void ApplyChangeTypeFallback(interfaces::Wallet& wallet, const std::vector<wallet::CRecipient>& recipients,
+                             wallet::CCoinControl& coin_control)
+{
+    const wallet::CWallet* raw_wallet{wallet.wallet()};
+    if (coin_control.m_change_type || !raw_wallet) return;
+    // An import can change the active descriptors meanwhile.
+    LOCK(raw_wallet->cs_wallet);
+    if (raw_wallet->m_default_change_type) return;
+    const auto has_change = [&](OutputType type) { return raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true) != nullptr; };
+    if (has_change(raw_wallet->TransactionChangeType(std::nullopt, recipients))) return;
+    for (const OutputType type : {OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+        if (has_change(type)) {
+            coin_control.m_change_type = type;
+            return;
+        }
+    }
 }
 
 CAmount MinimumCustomFeeRatePerKvB(interfaces::Wallet* wallet)
@@ -544,23 +567,6 @@ QString OutputTypeIdFromDestination(const CTxDestination& destination)
     return {};
 }
 
-QString OutputTypeLabel(OutputType type)
-{
-    switch (type) {
-    case OutputType::BECH32M:
-        return QObject::tr("Bech32m (Taproot)");
-    case OutputType::BECH32:
-        return QObject::tr("Bech32 (SegWit)");
-    case OutputType::P2SH_SEGWIT:
-        return QObject::tr("Base58 (P2SH-SegWit)");
-    case OutputType::LEGACY:
-        return QObject::tr("Base58 (Legacy)");
-    case OutputType::UNKNOWN:
-        return {};
-    }
-    return {};
-}
-
 QString OutputTypeDescription(OutputType type)
 {
     switch (type) {
@@ -695,7 +701,8 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
     auto handlers = std::make_tuple(std::move(m_handler_status_changed), std::move(m_handler_address_list_changed),
-                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload));
+                                   std::move(m_handler_transaction_changed), std::move(m_handler_unload),
+                                   std::move(m_handler_can_get_addresses_changed));
     if (m_bump_transaction_model) m_bump_transaction_model->detachWallet();
     if (m_imported_psbt_model) m_imported_psbt_model->detachWallet();
     auto wallet = std::move(m_wallet);
@@ -1078,6 +1085,11 @@ bool WalletQmlModel::backupWallet(const QString& path)
         setSettingsError(tr("Choose a location for the wallet backup."));
         return false;
     }
+    // A backup restored elsewhere loses the state that finishes the import.
+    if (!m_history_recovery.isEmpty()) {
+        setSettingsError(tr("This wallet's import hasn't finished, so a backup could be missing older transactions. Back it up once the import is done."));
+        return false;
+    }
 
     if (!m_wallet->backupWallet(path.toStdString())) {
         setSettingsError(tr("The wallet could not be backed up."));
@@ -1087,6 +1099,14 @@ bool WalletQmlModel::backupWallet(const QString& path)
     return true;
 }
 
+void WalletQmlModel::setHistoryRecovery(const QString& state, int progress)
+{
+    if (m_history_recovery == state && m_history_recovery_progress == progress) return;
+    m_history_recovery = state;
+    m_history_recovery_progress = progress;
+    Q_EMIT historyRecoveryChanged();
+}
+
 void WalletQmlModel::clearSettingsError()
 {
     setSettingsError(QString());
@@ -1094,29 +1114,29 @@ void WalletQmlModel::clearSettingsError()
 
 QVariantList WalletQmlModel::availableReceiveAddressTypes() const
 {
-    if (!m_wallet || !m_wallet->canGetAddresses()) {
-        return {};
-    }
-
-    QVariantList types;
-    const std::array ordered_types{
-        OutputType::BECH32M,
-        OutputType::BECH32,
-        OutputType::P2SH_SEGWIT,
-        OutputType::LEGACY,
-    };
-
-    for (const OutputType type : ordered_types) {
-        if (type == OutputType::BECH32M && (!m_wallet || !m_wallet->taprootEnabled())) {
-            continue;
+    if (!m_wallet) return {};
+    const wallet::CWallet* raw_wallet{m_wallet->wallet()};
+    const auto list_types = [&] {
+        QVariantList types;
+        if (!m_wallet->canGetAddresses()) return types;
+        for (const OutputType type : {OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+            // Only a type with an active receive descriptor can give out addresses.
+            if (raw_wallet ? !raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false)
+                           : type == OutputType::BECH32M && !m_wallet->taprootEnabled()) {
+                continue;
+            }
+            QVariantMap item;
+            item.insert(QStringLiteral("id"), OutputTypeId(type));
+            item.insert(QStringLiteral("label"), OutputTypeLabel(type));
+            item.insert(QStringLiteral("description"), OutputTypeDescription(type));
+            types.append(item);
         }
-        QVariantMap item;
-        item.insert(QStringLiteral("id"), OutputTypeId(type));
-        item.insert(QStringLiteral("label"), OutputTypeLabel(type));
-        item.insert(QStringLiteral("description"), OutputTypeDescription(type));
-        types.append(item);
-    }
-    return types;
+        return types;
+    };
+    if (!raw_wallet) return list_types();
+    // An import can change the active descriptors meanwhile.
+    LOCK(raw_wallet->cs_wallet);
+    return list_types();
 }
 
 QString WalletQmlModel::defaultReceiveAddressType() const
@@ -2162,7 +2182,8 @@ void WalletQmlModel::requestFeeEstimatesNow()
 
     const int remainder_index = m_send_recipients->recipients().indexOf(m_maximum_recipient);
     const quint64 request_id = ++m_fee_estimate_request_id;
-    const wallet::CCoinControl base_coin_control{m_coin_control};
+    wallet::CCoinControl base_coin_control{m_coin_control};
+    ApplyChangeTypeFallback(*m_wallet, *recipients, base_coin_control);
     const OutputType preview_change_type{base_coin_control.m_change_type.value_or(m_wallet->getDefaultAddressType())};
     const bool custom_fee_enabled{m_custom_fee_enabled};
     const std::optional<CAmount> custom_fee_rate_per_kvb{
@@ -2355,6 +2376,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
 
     wallet::CCoinControl coin_control{m_coin_control};
     ApplySelectedInputsPolicy(coin_control);
+    ApplyChangeTypeFallback(*m_wallet, *vec_send, coin_control);
     if (m_custom_fee_enabled) {
         const auto custom_fee_rate_per_kvb = ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get()));
         if (!custom_fee_rate_per_kvb.has_value()) {
@@ -3219,6 +3241,11 @@ void WalletQmlModel::subscribeToWalletSignals()
             if (guard && !guard->m_stopping) Q_EMIT guard->addressListChanged();
         }, Qt::QueuedConnection);
     });
+    m_handler_can_get_addresses_changed = m_wallet->handleCanGetAddressesChanged([guard, bridge] {
+        QMetaObject::invokeMethod(bridge.get(), [guard] {
+            if (guard && !guard->m_stopping) Q_EMIT guard->availableReceiveAddressTypesChanged();
+        }, Qt::QueuedConnection);
+    });
     m_handler_transaction_changed = handleTransactionChanged([guard, bridge, pending](const uint256& txid, ChangeType change) {
         pending->fetch_add(1);
         QMetaObject::invokeMethod(bridge.get(), [guard, pending, txid, change] {
@@ -3262,6 +3289,9 @@ void WalletQmlModel::unsubscribeFromWalletSignals()
     }
     if (m_handler_unload) {
         m_handler_unload->disconnect();
+    }
+    if (m_handler_can_get_addresses_changed) {
+        m_handler_can_get_addresses_changed->disconnect();
     }
 }
 

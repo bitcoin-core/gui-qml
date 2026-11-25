@@ -42,6 +42,7 @@
 #include <qml/buttonkeyactivation.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/descriptorhighlighter.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
 
@@ -1164,6 +1165,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool available MEMBER m_available NOTIFY availableChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
+    Q_PROPERTY(QString historyRecovery MEMBER m_history_recovery NOTIFY historyRecoveryChanged)
+    Q_PROPERTY(int historyRecoveryProgress MEMBER m_history_recovery_progress NOTIFY historyRecoveryChanged)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
@@ -1178,6 +1181,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool ensureReceivingAddressResult MEMBER m_ensure_receiving_address_result)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
+    Q_PROPERTY(QVariantList availableReceiveAddressTypes READ availableReceiveAddressTypes CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending MEMBER m_receive_request_reconciliation_pending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(MockAddressListModel* addressListModel READ addressListModel CONSTANT)
     Q_PROPERTY(bool hasExternalSigner MEMBER m_has_external_signer NOTIFY walletInfoChanged)
@@ -1308,7 +1312,7 @@ public:
     QObject* detailPaymentRequest() { return &m_detail_payment_request; }
     QObject* receiveRequests() { return &m_receive_requests; }
     MockAddressListModel* addressListModel() { return &m_address_list_model; }
-    Q_INVOKABLE QVariantList availableReceiveAddressTypes() const
+    QVariantList availableReceiveAddressTypes() const
     {
         return {
             QVariantMap{
@@ -1675,7 +1679,11 @@ public:
         return true;
     }
 
+    QString m_history_recovery;
+    int m_history_recovery_progress{-1};
+
 Q_SIGNALS:
+    void historyRecoveryChanged();
     void availableChanged();
     void nameChanged();
     void balanceChanged();
@@ -1832,13 +1840,25 @@ class MockWalletController : public QObject
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
     Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
+    Q_PROPERTY(int retryHistoryRecoveryCalls MEMBER m_retry_history_recovery_calls)
+    Q_PROPERTY(int importProgress MEMBER m_import_progress NOTIFY importProgressChanged)
+    Q_PROPERTY(bool holdWatchOnlyImport MEMBER m_hold_watch_only_import)
+    Q_PROPERTY(int cancelImportCalls MEMBER m_cancel_import_calls)
 
 public:
+    int m_retry_history_recovery_calls{0};
+    Q_INVOKABLE void retryHistoryRecovery(QObject*) { ++m_retry_history_recovery_calls; }
     bool m_initialized{true};
+    int m_import_progress{-1};
+    bool m_hold_watch_only_import{false};
+    int m_cancel_import_calls{0};
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
     QString m_wallet_load_error;
+    QString m_last_watch_only_import;
+    double m_last_watch_only_birth_time{-1};
+    QString m_last_watch_only_address_type;
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
     bool m_wallet_migration_in_progress{false};
@@ -1904,11 +1924,31 @@ public:
         Q_EMIT walletMigrationInProgressChanged();
         Q_EMIT walletMigrationErrorChanged();
     }
-    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& /*xpub*/)
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& import_text, double birth_time = -1,
+                                           const QString& address_type = {})
     {
         clearWalletLoadStatus();
+        m_last_watch_only_import = import_text;
+        m_last_watch_only_birth_time = birth_time;
+        m_last_watch_only_address_type = address_type;
+        if (m_hold_watch_only_import) {
+            m_wallet_load_in_progress = true;
+            Q_EMIT walletLoadInProgressChanged();
+            return;
+        }
         Q_EMIT walletCreateSucceeded(reportedWallet());
     }
+    Q_INVOKABLE void cancelViewOnlyImport()
+    {
+        ++m_cancel_import_calls;
+        m_wallet_load_in_progress = false;
+        m_wallet_load_error = QStringLiteral("The import was cancelled, and its wallet was deleted.");
+        Q_EMIT walletLoadInProgressChanged();
+        Q_EMIT walletLoadErrorChanged();
+    }
+    Q_INVOKABLE QString lastWatchOnlyImport() const { return m_last_watch_only_import; }
+    Q_INVOKABLE double lastWatchOnlyBirthTime() const { return m_last_watch_only_birth_time; }
+    Q_INVOKABLE QString lastWatchOnlyAddressType() const { return m_last_watch_only_address_type; }
     Q_INVOKABLE void createSingleSigWallet(const QString&, const QString&)
     {
         clearWalletCreateStatus();
@@ -2009,6 +2049,11 @@ public:
         m_external_signer_name.clear();
         m_external_signer_error.clear();
         m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");
+        m_retry_history_recovery_calls = 0;
+        m_import_progress = -1;
+        m_hold_watch_only_import = false;
+        m_cancel_import_calls = 0;
+        Q_EMIT importProgressChanged();
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT lastClosedWalletNameChanged();
         Q_EMIT closeWalletCallsChanged();
@@ -2030,10 +2075,44 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         if (wallet) Q_EMIT openReceiveRequested(wallet);
     }
-    Q_INVOKABLE bool validateXpub(const QString& xpub)
+    Q_INVOKABLE QVariantMap describeViewOnlyImport(const QString& import_text, const QString& address_type = {}) const
     {
-        QString t = xpub.trimmed();
-        return t.length() >= 100 && (t.startsWith("xpub") || t.startsWith("tpub"));
+        const QString text{import_text.trimmed()};
+        QVariantMap result;
+        if (text.isEmpty()) {
+            result.insert("status", "empty");
+            return result;
+        }
+        const bool key{text.length() >= 100 && (text.startsWith("xpub") || text.startsWith("tpub"))};
+        const bool json{text.startsWith('[') || text.startsWith('{')};
+        if (!key && !json && !text.contains('(')) {
+            result.insert("status", "invalid");
+            result.insert("error", "Enter descriptors, or an extended public key (xpub).");
+            return result;
+        }
+        result.insert("status", "valid");
+        result.insert("kind", key ? "extendedKey" : json ? "descriptorJson" : "descriptors");
+        result.insert("descriptorCount", json ? 4 : 2);
+        result.insert("addressTypes", json ? QStringList{"Bech32 (SegWit)", "Bech32m (Taproot)"} : QStringList{"Bech32 (SegWit)"});
+        result.insert("needsBirthDate", !json);
+        result.insert("createdTime", json ? 1700000000LL : -1LL);
+        result.insert("needsAddressType", key);
+        result.insert("importId", text);
+        if (json) {
+            const QVariantMap segwit{{"addressType", "Bech32 (SegWit)"}, {"key", "[d34db33f/84h/0h/0h]"}, {"receive", true},
+                                     {"change", true}, {"active", true}, {"ranged", true}, {"createdTime", 1700000000LL}};
+            const QVariantMap taproot{{"addressType", "Bech32m (Taproot)"}, {"key", "[d34db33f/86h/0h/0h]"}, {"receive", true},
+                                      {"change", false}, {"active", false}, {"ranged", true}, {"createdTime", 1800000000LL}};
+            result.insert("rows", QVariantList{segwit, taproot});
+        }
+        if (key) {
+            const QVariantMap taproot{{"id", "bech32m"}, {"label", "Bech32m (Taproot)"}};
+            const QVariantMap segwit{{"id", "bech32"}, {"label", "Bech32 (SegWit)"}};
+            result.insert("addressTypeOptions", QVariantList{segwit, taproot});
+            result.insert("addressTypes", address_type == "bech32m" ? QStringList{"Bech32m (Taproot)"}
+                                          : address_type == "bech32" ? QStringList{"Bech32 (SegWit)"} : QStringList{});
+        }
+        return result;
     }
     Q_INVOKABLE void setOpenWalletLocationResult(const bool result, const QString& error = QString())
     {
@@ -2090,6 +2169,7 @@ Q_SIGNALS:
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
     void openWalletLocationCallsChanged();
+    void importProgressChanged();
 };
 
 class MockCoreSettingsModel;
@@ -4510,6 +4590,7 @@ public Q_SLOTS:
         qmlRegisterType<MockFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+        qmlRegisterType<DescriptorHighlighter>("org.bitcoincore.qt", 1, 0, "DescriptorHighlighter");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
         engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);

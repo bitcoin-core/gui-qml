@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 import "../../components"
@@ -18,20 +19,64 @@ OnboardingView {
     property bool modalView: false
     property bool creating: false
     property string nameError: ""
-    readonly property bool validXpub: loadedChildView
-        && loadedChildView.xpubText.trim().length >= 100
-        && walletController.validateXpub(loadedChildView.xpubText.trim())
+    // Without the chosen type, so the type options stay put while choosing.
+    readonly property var keyInfo: watchOnly && loadedChildView
+        ? walletController.describeViewOnlyImport(loadedChildView.importText) : ({ "status": "empty" })
+    readonly property bool needsAddressType: keyInfo.status === "valid" && keyInfo.needsAddressType === true
+    readonly property string importId: keyInfo.status === "valid" && keyInfo.importId ? keyInfo.importId : ""
+    property string previousImportId: ""
+    readonly property var importInfo: needsAddressType && loadedChildView.addressTypeChoice.length > 0
+        ? walletController.describeViewOnlyImport(loadedChildView.importText, loadedChildView.addressTypeChoice) : keyInfo
+    readonly property bool needsBirthDate: importInfo.status === "valid" && importInfo.needsBirthDate === true
+    readonly property bool importReady: importInfo.status === "valid"
+        && (!needsAddressType || loadedChildView.addressTypeChoice.length > 0)
+        && (!needsBirthDate || loadedChildView.birthChoice.length > 0)
     readonly property bool passwordsMatch: loadedChildView
         && loadedChildView.passwordText.length > 0
         && loadedChildView.passwordText === loadedChildView.confirmText
     readonly property bool canCreate: loadedChildView && walletController.initialized && !creating
         && !walletController.walletLoadInProgress && loadedChildView.walletName.trim().length > 0
-        && (watchOnly ? validXpub : loadedChildView.encryptWallet
+        && (watchOnly ? importReady : loadedChildView.encryptWallet
             ? passwordsMatch && loadedChildView.passwordLossAcknowledged
             : loadedChildView.unencryptedWalletAcknowledged)
 
     signal cancel()
-    signal createRequested(string name, string xpub, string passphrase)
+    // birthTime is in seconds, or -1 when the input has its own dates.
+    signal createRequested(string name, string importText, string passphrase, real birthTime, string addressType)
+
+    function birthTime() {
+        if (!needsBirthDate) return -1
+        const now = Math.floor(Date.now() / 1000)
+        const day = 24 * 60 * 60
+        switch (loadedChildView.birthChoice) {
+        case "month": return now - 31 * day
+        case "year": return now - 366 * day
+        default: return 0
+        }
+    }
+
+    function importSummary() {
+        if (importInfo.status !== "valid") return qsTr("Only public information is imported. Private keys stay with your signer.")
+        const types = importInfo.addressTypes.join(", ")
+        if (importInfo.kind === "extendedKey" && importInfo.addressTypes.length === 0) {
+            return qsTr("Extended key. Choose its address type below.")
+        }
+        if (importInfo.kind === "extendedKey") {
+            //: %1 is an address type, such as "Bech32 (SegWit)".
+            const summary = qsTr("Extended key. Imported as %1 receive and change addresses.").arg(types)
+            return importInfo.warning ? summary + " " + importInfo.warning : summary
+        }
+        let summary = importInfo.descriptorCount === 1
+            //: %1 is an address type, such as "Bech32 (SegWit)".
+            ? qsTr("1 descriptor: %1.").arg(types)
+            //: %1 is a number of descriptors, %2 lists address types, such as "Bech32 (SegWit), Bech32m (Taproot)".
+            : qsTr("%1 descriptors: %2.").arg(importInfo.descriptorCount).arg(types)
+        if (importInfo.createdTime >= 0) {
+            //: %1 is the date the oldest pasted descriptor was created.
+            summary += " " + qsTr("Created %1.").arg(new Date(importInfo.createdTime * 1000).toLocaleDateString(Qt.locale(), "d MMM yyyy"))
+        }
+        return importInfo.warning ? summary + " " + importInfo.warning : summary
+    }
 
     function submit() {
         if (!canCreate) return
@@ -40,8 +85,10 @@ OnboardingView {
             nameError = availabilityError
             return
         }
-        createRequested(loadedChildView.walletName.trim(), loadedChildView.xpubText.trim(),
-            watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText)
+        createRequested(loadedChildView.walletName.trim(), watchOnly ? loadedChildView.importText.trim() : "",
+            watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText,
+            watchOnly ? birthTime() : -1,
+            watchOnly && needsAddressType ? loadedChildView.addressTypeChoice : "")
     }
 
     function clearSecrets() {
@@ -58,14 +105,28 @@ OnboardingView {
         ? (navigationStack.canGoBack !== undefined
             ? navigationStack.canGoBack : navigationStack.depth > 1) : false
     showCloseButton: modalView && !creating
-    primaryButtonText: creating ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creating ? (watchOnly ? qsTr("Importing…") : qsTr("Creating…")) : qsTr("Create wallet")
     primaryButtonObjectName: "createWalletFormCreateButton"
     primaryButtonEnabled: canCreate
+    readonly property bool importRunning: watchOnly && creating && walletController.walletLoadInProgress
+    secondaryButtonText: importRunning ? qsTr("Cancel import") : ""
+    secondaryButtonObjectName: "createWalletFormCancelImportButton"
+    onSecondaryClicked: walletController.cancelViewOnlyImport()
     onCloseClicked: root.cancel()
     onPrimaryClicked: {
         if (!root.canCreate) return
         if (root.watchOnly || root.loadedChildView.encryptWallet) root.submit()
         else root.loadedChildView.openUnencryptedWarning()
+    }
+
+    // Choices made for one key or set of descriptors do not carry over to another.
+    onImportIdChanged: {
+        if (importId.length === 0) return
+        if (previousImportId.length > 0 && importId !== previousImportId && loadedChildView) {
+            loadedChildView.addressTypeChoice = ""
+            loadedChildView.birthChoice = ""
+        }
+        previousImportId = importId
     }
 
     Component.onCompleted: {
@@ -77,7 +138,9 @@ OnboardingView {
     childView: ColumnLayout {
         id: fields
         property alias walletName: nameEntry.text
-        property alias xpubText: xpubEntry.text
+        property alias importText: xpubEntry.text
+        property string addressTypeChoice: ""
+        property string birthChoice: ""
         property alias encryptWallet: encryptCheck.checked
         property alias passwordText: passwordEntry.text
         property alias confirmText: confirmEntry.text
@@ -97,6 +160,8 @@ OnboardingView {
         LabeledTextField {
             id: nameEntry
             objectName: "createWalletNameEntry"
+            // Editing clears the load status, which would hide Cancel import.
+            enabled: !root.creating
             Layout.fillWidth: true
             label: qsTr("Wallet name")
             fieldObjectName: "createWalletNameInput"
@@ -188,18 +253,240 @@ OnboardingView {
             id: xpubEntry
             objectName: "createWalletXpubEntry"
             visible: root.watchOnly
+            enabled: !root.creating
             Layout.fillWidth: true
-            label: qsTr("Extended public key (xpub)")
+            label: qsTr("Descriptors or extended public key")
             inputObjectName: "watchOnlyXpubInput"
-            placeholderText: qsTr("Enter your key…")
-            supportingText: qsTr("Only public information is imported. Private keys stay with your signer.")
+            textStyle: Theme.text.monoDescription
+            maximumInputHeight: 200
+            //: "listdescriptors" is a Bitcoin Core command and is not translated.
+            placeholderText: qsTr("Paste descriptors one per line, the output of listdescriptors, or an xpub…")
+            supportingText: root.importSummary()
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
             fieldBackgroundColor: Theme.color.surface2
-            errorText: text.trim().length > 0 && !root.validXpub
-                ? qsTr("Enter a valid extended public key (xpub)") : ""
+            errorText: root.importInfo.status === "invalid" ? root.importInfo.error : ""
             onTextEdited: walletController.clearWalletLoadStatus()
+        }
+
+        DescriptorHighlighter {
+            objectName: "watchOnlyImportHighlighter"
+            textDocument: root.watchOnly ? xpubEntry.textDocument : null
+            scriptColor: Theme.color.accentText
+            originColor: Theme.color.neutral7
+            keyColor: Theme.color.neutral9
+            keyAlternateColor: Theme.color.neutral7
+            pathColor: Theme.color.infoText
+            checksumColor: Theme.color.neutral6
+            jsonNameColor: Theme.color.syntaxKey
+            jsonValueColor: Theme.color.neutral8
+            errorColor: Theme.color.dangerTint
+            errorLine: root.importInfo.status === "invalid" && root.importInfo.errorLine !== undefined
+                ? root.importInfo.errorLine : -1
+        }
+
+        ColumnLayout {
+            id: importRows
+            objectName: "watchOnlyImportRows"
+            // Columns take the widest row's width, so they line up.
+            function columnWidth(column) {
+                let width = 0
+                for (let i = 0; i < rowRepeater.count; ++i) {
+                    const item = rowRepeater.itemAt(i)
+                    if (item) width = Math.max(width, item[column])
+                }
+                return width
+            }
+            readonly property real typeWidth: columnWidth("typeWidth")
+            readonly property real coverageWidth: columnWidth("coverageWidth")
+            readonly property real createdWidth: columnWidth("createdWidth")
+            readonly property real inactiveWidth: columnWidth("inactiveWidth")
+            visible: root.watchOnly && root.importReady && root.importInfo.kind !== "extendedKey"
+            Layout.fillWidth: true
+            Layout.topMargin: -8
+            spacing: 4
+
+            Repeater {
+                id: rowRepeater
+                model: importRows.visible ? root.importInfo.rows : []
+                RowLayout {
+                    required property var modelData
+                    required property int index
+                    readonly property bool inactive: modelData.ranged && !modelData.active
+                    readonly property real typeWidth: typeText.implicitWidth
+                    readonly property real coverageWidth: coverageText.implicitWidth
+                    readonly property real createdWidth: createdText.text.length > 0 ? createdText.implicitWidth : 0
+                    readonly property real inactiveWidth: inactive ? inactivePill.implicitWidth : 0
+                    objectName: "watchOnlyImportRow_" + index
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    CoreText {
+                        id: typeText
+                        Layout.preferredWidth: importRows.typeWidth
+                        text: modelData.addressType
+                        color: Theme.color.neutral8
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        text: modelData.key
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.monoCaption
+                        wrap: false
+                        elide: Text.ElideMiddle
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        id: coverageText
+                        objectName: "watchOnlyImportRowCoverage"
+                        Layout.preferredWidth: importRows.coverageWidth
+                        text: !modelData.ranged ? qsTr("single address")
+                            : modelData.receive && modelData.change ? qsTr("receive and change")
+                            : modelData.receive ? qsTr("receive") : qsTr("change")
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        id: createdText
+                        objectName: "watchOnlyImportRowCreated"
+                        visible: importRows.createdWidth > 0
+                        Layout.preferredWidth: importRows.createdWidth
+                        text: {
+                            const format = "d MMM yyyy"
+                            const created = new Date(modelData.createdTime * 1000).toLocaleDateString(Qt.locale(), format)
+                            if (modelData.createdTime < 0 || root.importInfo.createdTime < 0
+                                    || created === new Date(root.importInfo.createdTime * 1000).toLocaleDateString(Qt.locale(), format)) {
+                                return ""
+                            }
+                            //: %1 is the date a descriptor was created.
+                            return qsTr("created %1").arg(created)
+                        }
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.caption
+                        wrap: false
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    Item {
+                        visible: importRows.inactiveWidth > 0
+                        Layout.preferredWidth: importRows.inactiveWidth
+                        Layout.preferredHeight: inactivePill.implicitHeight
+                        StatusPill {
+                            id: inactivePill
+                            objectName: "watchOnlyImportRowInactive"
+                            visible: inactive
+                            text: qsTr("Not active")
+                            showDot: false
+                            leftPadding: 6
+                            rightPadding: 6
+                            topPadding: 1
+                            bottomPadding: 1
+                            implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
+                        }
+                    }
+                }
+            }
+        }
+
+        FormSection {
+            objectName: "watchOnlyAddressType"
+            visible: root.watchOnly && root.needsAddressType
+            enabled: !root.creating
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            showBackground: false
+            title: qsTr("Which addresses does this key use?")
+            description: qsTr("An xpub does not say. Check the wallet it came from.")
+            rowSpacing: 10
+
+            ButtonGroup { id: addressTypeGroup }
+
+            Repeater {
+                model: root.needsAddressType ? root.keyInfo.addressTypeOptions : []
+                OptionButton {
+                    required property var modelData
+                    readonly property var descriptions: ({
+                        "bech32": qsTr("Native SegWit, BIP84. Often exported as a zpub."),
+                        "bech32m": qsTr("Taproot, BIP86."),
+                        "p2sh-segwit": qsTr("Nested SegWit, BIP49. Often exported as a ypub."),
+                        "legacy": qsTr("Legacy, BIP44.")
+                    })
+                    objectName: "watchOnlyAddressType_" + modelData.id
+                    Layout.fillWidth: true
+                    ButtonGroup.group: addressTypeGroup
+                    surfaceSelectionStyle: true
+                    text: modelData.label
+                    description: descriptions[modelData.id] || ""
+                    selected: fields.addressTypeChoice === modelData.id
+                    onClicked: fields.addressTypeChoice = modelData.id
+                }
+            }
+        }
+
+        FormSection {
+            objectName: "watchOnlyBirthDate"
+            visible: root.watchOnly && root.needsBirthDate
+            enabled: !root.creating
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            showBackground: false
+            title: qsTr("When was this wallet created?")
+            rowSpacing: 10
+
+            ButtonGroup { id: birthGroup }
+
+            Repeater {
+                model: [
+                    { "choice": "month", "text": qsTr("In the last month"),
+                      "description": qsTr("Fastest. Finds transactions from the last 31 days.") },
+                    { "choice": "year", "text": qsTr("In the last year"),
+                      "description": qsTr("Finds transactions from the last 12 months.") },
+                    { "choice": "unknown", "text": qsTr("Earlier, or not sure"),
+                      "description": qsTr("Searches the whole blockchain. This can take hours.") }
+                ]
+                OptionButton {
+                    required property var modelData
+                    objectName: "watchOnlyBirth_" + modelData.choice
+                    Layout.fillWidth: true
+                    ButtonGroup.group: birthGroup
+                    surfaceSelectionStyle: true
+                    text: modelData.text
+                    description: modelData.description
+                    selected: fields.birthChoice === modelData.choice
+                    onClicked: fields.birthChoice = modelData.choice
+                }
+            }
+        }
+
+        RowLayout {
+            visible: root.watchOnly && root.creating
+            Layout.fillWidth: true
+            spacing: 8
+
+            SpinningIndicator {
+                Layout.alignment: Qt.AlignTop
+                running: parent.visible
+                color: Theme.color.neutral7
+            }
+            CoreText {
+                objectName: "watchOnlyScanNote"
+                Layout.fillWidth: true
+                text: walletController.importProgress >= 0
+                    //: %1 is how much of the blockchain has been searched, in percent.
+                    ? qsTr("Looking for this wallet's transactions, %1% done. Cancelling deletes the new wallet.")
+                        .arg(walletController.importProgress)
+                    : qsTr("Looking for this wallet's transactions. This can take a while.")
+                color: Theme.color.neutral7
+                textStyle: Theme.text.caption
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignLeft
+            }
         }
 
         CoreText {
