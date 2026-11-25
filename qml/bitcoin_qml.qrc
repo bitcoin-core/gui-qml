@@ -14,8 +14,12 @@
         <file>components/DesktopMenuActions.qml</file>
         <file>components/DesktopNativeMenuBar.qml</file>
         <file>components/MenuCommand.qml</file>
+        <file>components/DescriptorCopyAll.qml</file>
+        <file>components/DescriptorPrivacyNote.qml</file>
+        <file>components/DescriptorText.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
+        <file>components/BackupWalletPopup.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/SendRecipientEditor.qml</file>
         <file>components/CoinsList.qml</file>
@@ -198,6 +202,8 @@
         <file>pages/wallet/SendComplete.qml</file>
         <file>pages/wallet/SpeedUpComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
+        <file>pages/wallet/WalletDescriptorDetail.qml</file>
+        <file>pages/wallet/WalletDescriptors.qml</file>
         <file>pages/wallet/CreateWalletForm.qml</file>
         <file>pages/wallet/WalletCreationTypePage.qml</file>
         <file>pages/wallet/WalletCreationReadyPage.qml</file>

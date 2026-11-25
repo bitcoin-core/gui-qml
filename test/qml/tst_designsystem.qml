@@ -63,7 +63,8 @@ TestCase {
         "designSystemSkeleton", "designSystemSpinningIndicator",
         "designSystemContextMenu",
         "designSystemAlertPopup", "designSystemDialogPopup",
-        "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemSelectableText",
+        "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemDescriptorText",
+        "designSystemSelectableText",
         "designSystemQRImage"
     ]
 
@@ -90,7 +91,9 @@ TestCase {
                 "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
-                "NodeWarningsPopup", "OnboardingSettingsPopup"]
+                "NodeWarningsPopup", "OnboardingSettingsPopup"],
+            "feature modal built from DialogPopup, tested with its page": ["BackupWalletPopup"],
+            "part of the descriptor pages, tested with them": ["DescriptorCopyAll", "DescriptorPrivacyNote"]
         }
         const exemptions = {}
         for (const reason in reasons) {
