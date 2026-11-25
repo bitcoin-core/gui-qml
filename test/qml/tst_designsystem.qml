@@ -92,6 +92,7 @@ TestCase {
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
                 "NodeWarningsPopup", "OnboardingSettingsPopup"],
+            "feature modal built from DialogPopup, tested with its page": ["BackupWalletPopup"],
             "part of the descriptor pages, tested with them": ["DescriptorCopyAll", "DescriptorPrivacyNote"]
         }
         const exemptions = {}

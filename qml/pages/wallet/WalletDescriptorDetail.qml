@@ -171,10 +171,11 @@ SettingsPage {
         Layout.fillWidth: true
         text: {
             if (!root.exportItem) return ""
-            let note = qsTr("Only includes funds on %1 addresses.").arg(root.exportItem.label)
+            //: "Back up or export wallet" is the wallet settings action that saves a watch-only copy of the whole wallet.
+            let note = qsTr("Only includes funds on %1 addresses. For a copy of the whole wallet, use Back up or export wallet.").arg(root.exportItem.label)
             if (root.hasPreviousKeys) {
                 //: %1 is an address type. "Copy all for Bitcoin Core" is a button on the Descriptors page.
-                note += " " + qsTr("Funds on previous %1 keys are not included. To include them, use Copy all for Bitcoin Core on Descriptors.").arg(root.exportItem.label)
+                note += " " + qsTr("Funds on previous %1 keys are not included. To include them, use Copy all for Bitcoin Core on Descriptors, or save a watch-only copy.").arg(root.exportItem.label)
             }
             return note
         }

@@ -3,10 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/walletqmlcontroller.h>
+
 #include <qml/backendexecutor.h>
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/util.h>
+#include <qml/walletfiledestination.h>
 
 #include <common/args.h>
 #include <common/settings.h>
@@ -29,6 +31,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QDesktopServices>
 #include <QFileInfo>
@@ -192,21 +196,56 @@ QString WalletQmlController::homePath() const
     return QDir::homePath();
 }
 
+QUrl WalletQmlController::homeFileUrl(const QString& file_name) const
+{
+    return QUrl::fromLocalFile(file_name.isEmpty() ? QDir::homePath() : QDir::home().filePath(file_name));
+}
+
+QString WalletQmlController::defaultWalletFilePath(WalletQmlModel* wallet, bool watch_only, const QString& folder) const
+{
+    const QString name{wallet && wallet != m_empty_wallet ? wallet->name() : QString{}};
+    const QDir dir{folder.isEmpty() ? QDir::homePath() : normalizeWalletPath(folder)};
+    return QDir::toNativeSeparators(dir.filePath(DefaultWalletFileName(name, watch_only, QDate::currentDate())));
+}
+
+QVariantMap WalletQmlController::walletFileDestination(WalletQmlModel* wallet, const QString& path, bool watch_only) const
+{
+    // The exact name: a trimmed one can name a different folder.
+    const auto location = [this](const WalletQmlModel* model) {
+        return model && model != m_empty_wallet ? walletLocationPath(model->name()) : QString{};
+    };
+    QStringList protected_paths{QString::fromStdString(m_node.walletLoader().getWalletDir())};
+    // A wallet loaded by path can live outside the wallets folder. Replacing
+    // any loaded wallet's file would bypass its database lock.
+    protected_paths.append(location(wallet));
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        for (const WalletQmlModel* loaded : m_wallets) protected_paths.append(location(loaded));
+    }
+    // A closing wallet keeps its database open until it finishes.
+    for (const QString& retiring : m_retiring_wallet_names) protected_paths.append(walletLocationPath(retiring));
+    const QString name{wallet && wallet != m_empty_wallet ? wallet->name() : QString{}};
+    return DescribeWalletFileDestination(path, watch_only, name, protected_paths, QDateTime::currentDateTime());
+}
+
 QString WalletQmlController::walletLocationPath(const WalletQmlModel* wallet) const
 {
     if (!wallet || wallet == m_empty_wallet) {
         return {};
     }
+    return walletLocationPath(wallet->name().trimmed());
+}
 
-    const QString wallet_name{wallet->name().trimmed()};
-    if (wallet_name.isEmpty()) {
+QString WalletQmlController::walletLocationPath(const QString& name) const
+{
+    if (name.isEmpty()) {
         return {};
     }
 
-    QFileInfo wallet_path{wallet_name};
+    QFileInfo wallet_path{name};
     if (!wallet_path.isAbsolute()) {
         const QDir wallet_dir{QString::fromStdString(m_node.walletLoader().getWalletDir())};
-        wallet_path = QFileInfo{wallet_dir.filePath(wallet_name)};
+        wallet_path = QFileInfo{wallet_dir.filePath(name)};
     }
 
     return wallet_path.absoluteFilePath();

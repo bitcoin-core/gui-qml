@@ -14,6 +14,8 @@ RowLayout {
     property string description: ""
     property string closeButtonObjectName: ""
     property bool showCloseButton: true
+    // Off while the dialog can't be closed, such as while it saves.
+    property bool closeEnabled: true
     readonly property alias closeButton: closeButton
 
     signal closeRequested()
@@ -52,6 +54,7 @@ RowLayout {
         objectName: root.closeButtonObjectName
         Layout.alignment: Qt.AlignTop
         visible: root.showCloseButton
+        enabled: root.closeEnabled
         onClicked: root.closeRequested()
     }
 }

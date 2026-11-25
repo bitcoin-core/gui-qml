@@ -17,6 +17,7 @@
 #include <wallet/types.h>
 #include <wallet/walletutil.h>
 
+#include <QDate>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -326,6 +327,10 @@ private Q_SLOTS:
     void validateXpubRejectsGarbage();
     void validateXpubRejectsEmpty();
     void validateXpubTrimsWhitespace();
+    void homeFileUrlIsALocalFileUrl();
+    void walletFileDestinationProtectsTheWalletsFolder();
+    void walletFileDestinationProtectsOtherLoadedWallets();
+    void walletFileDestinationProtectsAWalletFolderEndingInASpace();
     void createWatchOnlyInvalidXpubSetsError();
     void createWatchOnlyCleansUpWhenDescriptorImportFails();
     void externalSignerCreationRequiresConfiguredPath();
@@ -623,6 +628,125 @@ void WalletQmlControllerTests::validateXpubRejectsEmpty()
     DrainingWalletController controller(node);
 
     QVERIFY(!controller.validateXpub(""));
+}
+
+void WalletQmlControllerTests::homeFileUrlIsALocalFileUrl()
+{
+    MockNode node;
+    DrainingWalletController controller(node);
+
+    QCOMPARE(controller.homeFileUrl(), QUrl::fromLocalFile(QDir::homePath()));
+    const QUrl file{controller.homeFileUrl(QStringLiteral("wallet-watch-only.txt"))};
+    QVERIFY(file.isLocalFile());
+    QCOMPARE(file.toLocalFile(), QDir::home().filePath(QStringLiteral("wallet-watch-only.txt")));
+}
+
+void WalletQmlControllerTests::walletFileDestinationProtectsTheWalletsFolder()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString wallets{dir.filePath(QStringLiteral("wallets"))};
+    QVERIFY(QDir{}.mkpath(wallets));
+    MockNode node;
+    FakeWalletLoader loader;
+    loader.wallet_dir = wallets.toStdString();
+    node.wallet_loader_fn = [&loader]() -> interfaces::WalletLoader& { return loader; };
+    DrainingWalletController controller(node);
+
+    const QString today{QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"))};
+    QCOMPARE(controller.defaultWalletFilePath(nullptr, true, dir.path()),
+             QDir::toNativeSeparators(dir.filePath(QStringLiteral("wallet-watchonly-%1.dat").arg(today))));
+
+    QVariantMap result{controller.walletFileDestination(nullptr, QDir{wallets}.filePath(QStringLiteral("copy.bak")), false)};
+    QCOMPARE(result.value("status").toString(), QStringLiteral("blocked"));
+    result = controller.walletFileDestination(nullptr, dir.filePath(QStringLiteral("copy.bak")), false);
+    QCOMPARE(result.value("status").toString(), QStringLiteral("available"));
+}
+
+void WalletQmlControllerTests::walletFileDestinationProtectsOtherLoadedWallets()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString wallets{dir.filePath(QStringLiteral("wallets"))};
+    const QString elsewhere{dir.filePath(QStringLiteral("elsewhere"))};
+    QVERIFY(QDir{}.mkpath(wallets));
+    QVERIFY(QDir{}.mkpath(elsewhere));
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir = wallets.toStdString();
+    loader.get_wallets_fn = [&]() {
+        std::vector<std::unique_ptr<interfaces::Wallet>> loaded;
+        loaded.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
+        loaded.emplace_back(std::make_unique<FakeWallet>(elsewhere.toStdString(), &beta_state));
+        return loaded;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+    DrainingWalletController controller(node);
+    controller.initialize();
+    QCOMPARE(controller.selectedWallet()->name(), QString{"alpha_wallet"});
+
+    // Saving the selected wallet over the other wallet's database.
+    QVariantMap result{controller.walletFileDestination(controller.selectedWallet(), QDir{elsewhere}.filePath(QStringLiteral("wallet.dat")), true)};
+    QCOMPARE(result.value("status").toString(), QStringLiteral("blocked"));
+    result = controller.walletFileDestination(controller.selectedWallet(), dir.filePath(QStringLiteral("copy.dat")), true);
+    QCOMPARE(result.value("status").toString(), QStringLiteral("available"));
+
+    // Still protected while it closes.
+    controller.setSelectedWallet(elsewhere);
+    WalletQmlModel* const beta{controller.selectedWallet()};
+    QCOMPARE(beta->name(), elsewhere);
+    QSemaphore entered, release;
+    const auto executor = beta->backendExecutor();
+    QSignalSpy retired{beta, &WalletQmlModel::shutdownFinished};
+    executor->submit(this, [&] { entered.release(); release.acquire(); }, [] {});
+    const auto release_on_exit = qScopeGuard([&] { release.release(); });
+    QTRY_VERIFY(entered.available() > 0);
+    controller.setSelectedWallet(QStringLiteral("alpha_wallet"));
+    controller.closeWallet(elsewhere);
+    QVERIFY(!controller.isWalletOpen(elsewhere));
+    result = controller.walletFileDestination(controller.selectedWallet(), QDir{elsewhere}.filePath(QStringLiteral("wallet.dat")), false);
+    QCOMPARE(result.value("status").toString(), QStringLiteral("blocked"));
+    release.release();
+    QTRY_COMPARE(retired.size(), 1);
+}
+
+void WalletQmlControllerTests::walletFileDestinationProtectsAWalletFolderEndingInASpace()
+{
+#ifdef Q_OS_WIN
+    QSKIP("Windows folder names can't end in a space.");
+#else
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString wallets{dir.filePath(QStringLiteral("wallets"))};
+    const QString spaced{dir.filePath(QStringLiteral("external "))};
+    QVERIFY(QDir{}.mkpath(wallets));
+    QVERIFY(QDir{}.mkpath(spaced));
+    QVERIFY(QDir{}.mkpath(dir.filePath(QStringLiteral("external"))));
+    FakeWallet::State alpha_state;
+    FakeWallet::State spaced_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir = wallets.toStdString();
+    loader.get_wallets_fn = [&]() {
+        std::vector<std::unique_ptr<interfaces::Wallet>> loaded;
+        loaded.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
+        loaded.emplace_back(std::make_unique<FakeWallet>(spaced.toStdString(), &spaced_state));
+        return loaded;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+    DrainingWalletController controller(node);
+    controller.initialize();
+    QVERIFY(controller.isWalletOpen(spaced));
+
+    QVariantMap result{controller.walletFileDestination(controller.selectedWallet(), QDir{spaced}.filePath(QStringLiteral("wallet.dat")), true)};
+    QCOMPARE(result.value("status").toString(), QStringLiteral("blocked"));
+    result = controller.walletFileDestination(controller.selectedWallet(), dir.filePath(QStringLiteral("external/wallet.dat")), true);
+    QCOMPARE(result.value("status").toString(), QStringLiteral("available"));
+#endif
 }
 
 void WalletQmlControllerTests::validateXpubTrimsWhitespace()

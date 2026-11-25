@@ -208,6 +208,17 @@ TestCase {
         verify(note.text.indexOf("left out") < 0)
         page.wallet = makeWallet([segwit], [], 2)
         verify(note.text.indexOf("2 older descriptors") > 0)
+        verify(note.text.indexOf("watch-only copy") > 0)
+    }
+
+    function test_copy_all_waits_for_a_watch_only_export() {
+        const page = createList([segwit])
+        const button = findChild(page, "descriptorsCopyAll")
+        verify(button.enabled)
+        const wallet = makeWallet([segwit])
+        wallet.watchOnlyWalletExportPending = true
+        page.wallet = wallet
+        verify(!button.enabled)
     }
 
     function test_copy_all_is_hidden_without_descriptors() {
@@ -248,7 +259,7 @@ TestCase {
         verify(findChild(page, "descriptorsDetailPlain").visible)
         compare(findChild(page, "descriptorsDetailPlain").text, legacy.descriptor)
         compare(findChild(page, "descriptorsNote").text,
-                "Only includes funds on Base58 (Legacy) addresses.")
+                "Only includes funds on Base58 (Legacy) addresses. For a copy of the whole wallet, use Back up or export wallet.")
     }
 
     function test_clicking_descriptor_copies_it() {

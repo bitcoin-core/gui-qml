@@ -47,6 +47,7 @@ ColumnLayout {
     NeutralButton {
         objectName: "descriptorsCopyAll"
         buttonSize: NeutralButton.Large
+        enabled: !(root.wallet && root.wallet.watchOnlyWalletExportPending)
         Layout.fillWidth: true
         //: Copies every descriptor as JSON for Bitcoin Core's importdescriptors command.
         text: copyAllTimer.running ? qsTr("Copied") : qsTr("Copy all for Bitcoin Core")
@@ -60,9 +61,9 @@ ColumnLayout {
         text: qsTr("Copies every descriptor, with when it was created, as JSON for importdescriptors. Import it into a Bitcoin Core wallet without private keys.")
             + (root.omittedCount === 0 ? ""
                : " " + (root.omittedCount === 1
-                   ? qsTr("1 older descriptor needs private keys to find its addresses, so it is left out.")
+                   ? qsTr("1 older descriptor needs private keys to find its addresses, so it is left out. To keep it, save a watch-only copy from Back up or export wallet.")
                    //: %1 is a number of descriptors.
-                   : qsTr("%1 older descriptors need private keys to find their addresses, so they are left out.").arg(root.omittedCount)))
+                   : qsTr("%1 older descriptors need private keys to find their addresses, so they are left out. To keep them, save a watch-only copy from Back up or export wallet.").arg(root.omittedCount)))
         textStyle: Theme.text.caption
         color: Theme.color.neutral7
         horizontalAlignment: Text.AlignLeft
