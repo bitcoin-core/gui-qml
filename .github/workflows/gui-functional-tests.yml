@@ -128,14 +128,23 @@ jobs:
       - name: Configure
         run: |
           cmake -B build \
-            -DBUILD_APP_TESTS=OFF \
+            -DBUILD_APP_TESTS=ON \
             -DENABLE_TEST_AUTOMATION=ON \
             -DBUILD_DAEMON=ON \
             -DENABLE_IPC=OFF
 
       - name: Build
         run: |
-          cmake --build build -j"$(nproc)"
+          # The startup error windows need both app tests and test automation;
+          # this is the only job that enables both. Build just what runs here.
+          cmake --build build -j"$(nproc)" --target bitcoin-core-app bitcoind bitcoinqml_startup_error_tests
+
+      - name: Run startup error window tests
+        env:
+          QT_QUICK_BACKEND: software
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          xvfb-run -a ctest --test-dir build -R '^bitcoinqml_startup_error_tests$' --no-tests=error --output-on-failure
 
       - name: Run QML test automation suite
         env:
