@@ -15,6 +15,8 @@ add_executable(bitcoinqml_integration_tests
   test_node.cpp
 )
 target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application)
+
+bitcoin_qml_add_application_sources(bitcoinqml_integration_tests)
 add_test(NAME bitcoinqml_integration_tests COMMAND bitcoinqml_integration_tests
   --profile-dir=${PROJECT_BINARY_DIR}/test-profiles
   -o ${PROJECT_BINARY_DIR}/test-reports/integration.xml,junitxml -o -,txt
