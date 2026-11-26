@@ -37,6 +37,7 @@
 #include <utility>
 #include <vector>
 
+#include <qml/datelocale.h>
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buttonkeyactivation.h>
@@ -4412,6 +4413,7 @@ public Q_SLOTS:
         static TestImage test_image;
         static TestResources test_resources;
         static MockBuildInfo build_info;
+        static DateLocale date_locale;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
         static MockBlockClockModel block_clock_model;
@@ -4468,6 +4470,7 @@ public Q_SLOTS:
         second_wallet_model.setProperty("name", QStringLiteral("second"));
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
+        qmlRegisterSingletonInstance<DateLocale>("org.bitcoincore.qt", 1, 0, "DateLocale", &date_locale);
         qmlRegisterSingletonInstance<MockUrlOpener>("org.bitcoincore.qt", 1, 0, "UrlOpener", &url_opener);
         qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
             return new GlobalSettings(QCoreApplication::applicationName());

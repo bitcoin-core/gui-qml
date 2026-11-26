@@ -27,6 +27,7 @@
 #include <qml/startupdialog.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buildinfo.h>
+#include <qml/datelocale.h>
 #include <qml/clipboard.h>
 #include <qml/datadir.h>
 #include <qml/globalsettings.h>
@@ -330,6 +331,9 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterSingletonType<BuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(build_info_instance, QQmlEngine::CppOwnership);
         return build_info_instance;
+    });
+    qmlRegisterSingletonType<DateLocale>("org.bitcoincore.qt", 1, 0, "DateLocale", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        return new DateLocale;
     });
     qmlRegisterSingletonType<Clipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(clipboard_instance, QQmlEngine::CppOwnership);
