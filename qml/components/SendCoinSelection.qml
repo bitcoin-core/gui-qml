@@ -42,7 +42,11 @@ DialogPopup {
                 id: browser
                 objectName: "sendCoinsList"
                 width: bodyScroll.availableWidth
-                height: Math.max(implicitHeight, bodyScroll.availableHeight)
+                // Qt 6.2 can recalculate the implicit height during layout.
+                Binding on height {
+                    value: Math.max(browser.implicitHeight, bodyScroll.availableHeight)
+                    delayed: true
+                }
                 wallet: root.wallet
                 coins: root.editingCoins
             }

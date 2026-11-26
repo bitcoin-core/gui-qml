@@ -11,6 +11,10 @@ import "../../qml/components"
 import "../../qml/components/TransactionFlowLayout.js" as FlowLayout
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "TransactionFlow"
     when: windowShown
     visible: true
@@ -318,6 +322,10 @@ TestCase {
         const recipient = findChild(flow, "transactionFlowOutput_0")
         const received = findChild(flow, "transactionFlowOutput_1")
         verify(received.height > recipient.height)
+        // Qt 6.4 positioners skip zero-width rows; the request cards must be clickable.
+        const request = findChild(flow, "transactionFlowRequest_91")
+        verify(request !== null)
+        tryVerify(function() { return request.width > 0 && request.height > 0 })
         const oldX = flow.geometry.outputX
         flow.width = 720
         tryVerify(function() { return flow.geometry.outputX < oldX })

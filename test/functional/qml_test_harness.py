@@ -328,6 +328,10 @@ class QmlTestHarness:
             try:
                 gui = self.reconnect(timeout=1)
                 gui.wait_for_object("mainPageStack", timeout_ms=1000)
+                # The short timeout bounds each probe only. Later commands
+                # wait up to their own timeout_ms, so restore the normal one.
+                gui.timeout = GUI_STARTUP_TIMEOUT
+                gui.sock.settimeout(GUI_STARTUP_TIMEOUT)
                 return gui
             except Exception as err:
                 last_error = err

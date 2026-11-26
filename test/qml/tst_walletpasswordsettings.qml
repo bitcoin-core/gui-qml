@@ -9,6 +9,10 @@ import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "WalletPasswordSettings"
     when: windowShown
     width: 520

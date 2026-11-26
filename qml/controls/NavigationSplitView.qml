@@ -66,12 +66,18 @@ Item {
         property bool primaryActive: true
         property bool detailShown: true
         property bool detailActive: true
+        // Drive column x through plain QML properties: binding QQuickItem's
+        // BINDABLE x inside PropertyChanges leaks QQmlPropertyBinding in Qt 6.4
+        // when the state reverts.
+        property real primaryX: 0
+        property real detailX: root.isCompact ? 0 : primaryLoader.width + root.separatorWidth
     }
 
     Loader {
         id: primaryLoader
         objectName: "navigationSplitPrimary"
         sourceComponent: root.primaryComponent
+        x: columns.primaryX
         width: root.isCompact ? root.width : root.effectivePrimaryWidth
         height: root.height
         visible: columns.primaryShown
@@ -92,7 +98,7 @@ Item {
         id: detailLoader
         objectName: "navigationSplitDetail"
         sourceComponent: root.detailComponent
-        x: root.isCompact ? 0 : primaryLoader.width + root.separatorWidth
+        x: columns.detailX
         width: root.isCompact
             ? root.width
             : Math.max(0, root.width - primaryLoader.width - root.separatorWidth)
@@ -111,11 +117,11 @@ Item {
             when: root.isCompact && root.compactColumn === NavigationSplitView.Primary
             PropertyChanges {
                 target: detailLoader
-                x: root.width
                 opacity: Theme.motion.reduced ? 0 : 1
             }
             PropertyChanges {
                 target: columns
+                detailX: root.width
                 detailActive: false
                 detailShown: false
             }
@@ -125,11 +131,11 @@ Item {
             when: root.isCompact && root.compactColumn === NavigationSplitView.Detail
             PropertyChanges {
                 target: primaryLoader
-                x: -root.width
                 opacity: Theme.motion.reduced ? 0 : 1
             }
             PropertyChanges {
                 target: columns
+                primaryX: -root.width
                 primaryActive: false
                 primaryShown: false
             }
@@ -146,8 +152,8 @@ Item {
                 PropertyAction { target: columns; property: "detailShown" }
                 ParallelAnimation {
                     NumberAnimation {
-                        targets: [primaryLoader, detailLoader]
-                        property: "x"
+                        target: columns
+                        properties: "primaryX,detailX"
                         duration: Theme.motion.travel(root.transitionDuration)
                         easing.type: Theme.motion.easing.move
                     }
@@ -170,8 +176,8 @@ Item {
                 PropertyAction { target: columns; property: "primaryShown" }
                 ParallelAnimation {
                     NumberAnimation {
-                        targets: [primaryLoader, detailLoader]
-                        property: "x"
+                        target: columns
+                        properties: "primaryX,detailX"
                         duration: Theme.motion.travel(root.transitionDuration)
                         easing.type: Theme.motion.easing.move
                     }

@@ -9,6 +9,10 @@ import "../../qml/controls"
 import "../../qml/components"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     id: testCase
     name: "SettingsHeader"
     when: windowShown

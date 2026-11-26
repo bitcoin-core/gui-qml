@@ -362,7 +362,8 @@ public:
             complete = options.sign;
             return std::nullopt;
         };
-    std::set<Txid> known_txids;
+    std::map<Txid, CTransactionRef> known_transactions;
+    bool tx_status_available{true};
     std::function<bool(const CTxIn&)> txin_is_mine_fn = [](const CTxIn&) {
         return false;
     };
@@ -540,7 +541,12 @@ public:
     bool txoutIsMine(const CTxOut& txout) override { return txout_is_mine_fn(txout); }
     bool tryGetTxStatus(const Txid& txid, interfaces::WalletTxStatus&, int&, int64_t&) override
     {
-        return known_txids.contains(txid);
+        return tx_status_available && known_transactions.contains(txid);
+    }
+    CTransactionRef getTx(const Txid& txid) override
+    {
+        const auto it = known_transactions.find(txid);
+        return it == known_transactions.end() ? nullptr : it->second;
     }
     CAmount getDebit(const CTxIn&) override { return 0; }
     CAmount getCredit(const CTxOut&) override { return 0; }
@@ -777,6 +783,7 @@ private Q_SLOTS:
     void importPsbtFromFile_skipsZeroValueOpReturnOutputs();
     void importPsbtFromFile_opensUnsignedMultisigPsbtForReviewOnly();
     void importPsbtFromFile_blocksBroadcastWhenFeeIsInvalid();
+    void importPsbtFromFile_returnsTransactionAlreadyKnownWhenTxIsInWallet_data();
     void importPsbtFromFile_returnsTransactionAlreadyKnownWhenTxIsInWallet();
     void sendTransactionWithPrivateKeysDisabledDoesNotCommit();
     void bumpTransactionOnLockedWalletRequiresPassword();
@@ -2696,6 +2703,8 @@ void WalletQmlModelTests::prepareTransactionWithPrivateKeysDisabledDoesNotRequir
     QVERIFY(model->isLocked());
     QVERIFY(!model->transactionNeedsUnlock());
     QVERIFY(wallet->create_transaction_sign_args == std::vector<bool>{false});
+    QVERIFY(!model->currentTransactionCanSend());
+    QVERIFY(!model->currentTransactionCanBroadcast());
     QCOMPARE(wallet->unlock_calls, 0);
     QCOMPARE(wallet->lock_calls, 0);
 }
@@ -3638,8 +3647,16 @@ void WalletQmlModelTests::importPsbtFromFile_blocksBroadcastWhenFeeIsInvalid()
     QCOMPARE(model->transactionError(), QString("This transaction is not ready to broadcast."));
 }
 
+void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenTxIsInWallet_data()
+{
+    QTest::addColumn<bool>("tx_status_available");
+    QTest::newRow("status-available") << true;
+    QTest::newRow("status-lock-busy") << false;
+}
+
 void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenTxIsInWallet()
 {
+    QFETCH(bool, tx_status_available);
     auto [wallet, model] = MakePasswordWalletModel();
 
     CMutableTransaction mtx;
@@ -3649,7 +3666,8 @@ void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenT
     psbt.inputs[0].witness_utxo = CTxOut{2'000, CScript{}};
 
     const Txid psbt_txid{UnsignedTx(psbt).GetHash()};
-    wallet->known_txids.insert(psbt_txid);
+    wallet->known_transactions.emplace(psbt_txid, MakeTransactionRef(UnsignedTx(psbt)));
+    wallet->tx_status_available = tx_status_available;
     wallet->fill_psbt_sign_args.clear();
 
     QTemporaryDir temp_dir;

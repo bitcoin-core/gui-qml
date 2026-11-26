@@ -129,6 +129,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         firstCreated = 0
         firstDestroyed = 0
         pushedCreated = 0
@@ -906,6 +907,8 @@ TestCase {
 
         settingsWindow.requestActivate()
         tryCompare(settingsWindow, "active", true)
+        // The console focuses its input in a deferred call once shown; let it run first.
+        wait(0)
         searchBar.navigationEnabled = true
         search.forceActiveFocus()
         tryCompare(search, "activeFocus", true)

@@ -94,6 +94,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false

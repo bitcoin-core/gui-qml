@@ -2400,7 +2400,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         m_current_psbt.reset();
         m_current_transaction_source = CurrentTransactionSource::SendDraft;
         m_current_transaction_sweeps_wallet = !result->change_pos && TransactionSweepsAvailableFunds(*m_wallet, *newTx, coin_control);
-        m_current_transaction_can_send = true;
+        m_current_transaction_can_send = sign || m_wallet->hasExternalSigner();
         m_current_transaction_can_broadcast = false;
         m_current_transaction_review_message.clear();
         m_current_transaction->setWtx(newTx);
@@ -2723,10 +2723,7 @@ WalletQmlModel::PsbtImportResult WalletQmlModel::importPsbtFromFile(const QStrin
     const auto unsigned_tx{psbt.GetUnsignedTx()};
     if (m_wallet && unsigned_tx) {
         const Txid psbt_txid{unsigned_tx->GetHash()};
-        interfaces::WalletTxStatus tx_status;
-        int num_blocks{0};
-        int64_t block_time{0};
-        if (m_wallet->tryGetTxStatus(psbt_txid, tx_status, num_blocks, block_time)) {
+        if (m_wallet->getTx(psbt_txid)) {
             m_imported_psbt_model->setMatchedTxid(QString::fromStdString(psbt_txid.GetHex()));
             return PsbtImportResult::TransactionAlreadyKnown;
         }

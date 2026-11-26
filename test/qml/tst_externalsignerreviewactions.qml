@@ -7,6 +7,10 @@ import QtTest 1.2
 import "../../qml/components"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "ExternalSignerReviewActions"
     when: windowShown
     width: 500
@@ -176,7 +180,7 @@ TestCase {
         review.beginApproval()
         review.destroy()
         // destroy() queues deletion. Process it before wait() can dispatch the approval timer.
-        testEventLoop.processDeferredDeletes()
+        testSetup.processDeferredDeletes()
         verify(!Qt.isQtObject(review))
         wait(50)
 
