@@ -47,27 +47,37 @@ SettingsPage {
         }
 
         LinkRow {
+            objectName: "aboutLicenseRow"
             Layout.fillWidth: true
             dividerColor: Theme.color.surfaceDivider
             title: qsTr("License")
             value: "MIT"
-            link: "https://opensource.org/licenses/MIT"
+            link: "https://github.com/bitcoin/bitcoin/blob/master/COPYING"
             onActivated: function(link) { root.openExternalLink(link) }
         }
 
-        LinkRow {
+        FormRow {
             objectName: "aboutVersionRow"
             Layout.fillWidth: true
             dividerColor: Theme.color.surfaceDivider
+            showDivider: !root.onboardingModal
             title: qsTr("Version")
-            value: BuildInfo.fullClientVersion
-            link: "https://bitcoin.org/en/download"
-            onActivated: function(link) { root.openExternalLink(link) }
+            trailingItem: CoreText {
+                objectName: "aboutVersionRowValue"
+                Layout.maximumWidth: 300
+                text: BuildInfo.fullClientVersion
+                color: Theme.color.neutral9
+                textStyle: Theme.text.description
+                horizontalAlignment: Text.AlignRight
+                wrap: false
+                elide: Text.ElideMiddle
+            }
         }
 
         ListRow {
             objectName: "aboutDeveloperRow"
             Layout.fillWidth: true
+            visible: !root.onboardingModal
             title: qsTr("Developer options")
             description: qsTr("Only use these if you have development experience.")
             showDivider: false

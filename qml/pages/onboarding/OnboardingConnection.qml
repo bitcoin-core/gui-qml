@@ -21,7 +21,7 @@ OnboardingView {
     autoNavigateBack: false
     maximumContentWidth: 640
     childTopMargin: 24
-    heading: qsTr("Starting initial download")
+    heading: qsTr("Connect to the network")
     subheading: qsTr("The application will connect to the Bitcoin network and start downloading and verifying transactions. This may take several hours, or even days, based on your connection.")
     imageSource: Theme.image.storage
     imageSize: 200

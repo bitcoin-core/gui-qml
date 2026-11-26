@@ -42,6 +42,7 @@ private Q_SLOTS:
     void pruneRecommendationUsesValidityAndMargin();
     void existingProfileDoesNotRecommendPruneOrRequireFreshChainSpace();
     void existingProfileBelowOperationalMinimumWarns();
+    void existingProfileCanChangeStorageWithoutFreshDownloadSpace();
 };
 
 void OnboardingStorageTests::pendingCheckReturnsCheckingStatus()
@@ -190,6 +191,21 @@ void OnboardingStorageTests::existingProfileBelowOperationalMinimumWarns()
     QVERIFY(!info.enough_for_full);
     QCOMPARE(info.warning_text, QStringLiteral("About 1GB is needed for the selected storage option."));
     QVERIFY(!QmlOnboardingStorage::ShouldRecommendPrune(state));
+}
+
+void OnboardingStorageTests::existingProfileCanChangeStorageWithoutFreshDownloadSpace()
+{
+    auto state = MakeState();
+    state.existing_profile = true;
+    state.available_bytes = GB(5);
+    for (bool prune : {true, false}) {
+        state.prune = prune;
+        const auto info = QmlOnboardingStorage::Evaluate(state);
+        QVERIFY(info.enough_for_selected);
+        QVERIFY(info.enough_for_full);
+        QCOMPARE(info.selected_required_gb, 1);
+        QVERIFY(info.warning_text.isEmpty());
+    }
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
