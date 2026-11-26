@@ -33,15 +33,15 @@ ColumnLayout {
     spacing: Theme.space.l
     onWalletChanged: { markedIds = []; walletSelectionActive = false; pendingLockedCoinId = ""; errorText = "" }
 
-    BitcoinAmount { id: targetAmount; unit: optionsModel.displayUnit; satoshi: root.target }
-    BitcoinAmount { id: selectedAmountText; unit: optionsModel.displayUnit; satoshi: root.selectedAmount }
-    BitcoinAmount { id: remainingAmountText; unit: optionsModel.displayUnit; satoshi: root.remainingAmount }
-    BitcoinAmount { id: changeAmountText; unit: optionsModel.displayUnit; satoshi: root.changeAmount }
-    BitcoinAmount { id: totalAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
-    BitcoinAmount { id: spendableAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lockedAmountText; unit: optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
-    BitcoinAmount { id: lowerAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
-    BitcoinAmount { id: upperAmountText; unit: optionsModel.displayUnit; satoshi: amountSlider.upperValue }
+    BitcoinAmount { id: targetAmount; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.target }
+    BitcoinAmount { id: selectedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.selectedAmount }
+    BitcoinAmount { id: remainingAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.remainingAmount }
+    BitcoinAmount { id: changeAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.changeAmount }
+    BitcoinAmount { id: totalAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi : 0 }
+    BitcoinAmount { id: spendableAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.totalSatoshi - root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lockedAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: root.coins ? root.coins.lockedSatoshi : 0 }
+    BitcoinAmount { id: lowerAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.lowerValue }
+    BitcoinAmount { id: upperAmountText; unit: ApplicationModels.optionsModel.displayUnit; satoshi: amountSlider.upperValue }
 
     function toggleRow(row, coinId, locked, marked) {
         if (selectionMode && locked && !marked) {
@@ -222,7 +222,7 @@ ColumnLayout {
                 }
             }
             Accessible.name: (label.length ? label + " " : "") + address + " "
-                + (root.hidesAmounts && optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
+                + (root.hidesAmounts && ApplicationModels.optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
             Accessible.checkable: root.selectionMode || root.walletSelectionActive
             Accessible.checked: marked
             background: GroupedRowBackground {
@@ -237,7 +237,7 @@ ColumnLayout {
                 dividerLeftInset: coinRow.leftPadding
                 dividerRightInset: coinRow.rightPadding
             }
-            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }
+            BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: ApplicationModels.optionsModel.displayUnit }
             contentItem: RowLayout {
                 spacing: 0
                 Item {
@@ -385,7 +385,7 @@ ColumnLayout {
             BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); hidesAmount: root.hidesAmounts; textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
-                valuesHidden: root.hidesAmounts && optionsModel.hideAmounts
+                valuesHidden: root.hidesAmounts && ApplicationModels.optionsModel.hideAmounts
                 minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0
                 maxValue: root.coins && root.coins.availableMaxAmount !== undefined ? root.coins.availableMaxAmount : 0
                 Accessible.name: qsTr("Coin amount range")

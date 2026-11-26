@@ -156,7 +156,7 @@ Popup {
         if (!focused || contains(focused)) return
         returnFocusItem = focused
         returnFocusWindow = window
-        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason
+        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason // qmllint disable missing-property
         let page = focused
         while (page && !isPage(page)) page = page.parent
         returnFocusPage = page

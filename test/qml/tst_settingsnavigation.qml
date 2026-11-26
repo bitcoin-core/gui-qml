@@ -129,6 +129,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         firstCreated = 0
         firstDestroyed = 0
         pushedCreated = 0
@@ -906,6 +907,8 @@ TestCase {
 
         settingsWindow.requestActivate()
         tryCompare(settingsWindow, "active", true)
+        // The console focuses its input in a deferred call once shown; let it run first.
+        wait(0)
         searchBar.navigationEnabled = true
         search.forceActiveFocus()
         tryCompare(search, "activeFocus", true)
@@ -968,6 +971,31 @@ TestCase {
         } finally {
             settingsWindow.height = originalHeight
         }
+    }
+
+    function test_aboutDeveloperOptionsRequireLiveSettingsModel() {
+        compare(ApplicationModels.optionsModel, optionsModel)
+        compare(ApplicationModels.onboardingOptionsModel, null)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("about")
+        const developerRow = findChild(view, "aboutDeveloperRow")
+        verify(developerRow !== null)
+        compare(developerRow.visible, true)
+        compare(developerRow.enabled, true)
+        developerRow.clicked()
+        const developerPage = findChild(view, "settingsDeveloper")
+        verify(developerPage !== null)
+        const dbcacheField = findChild(developerPage, "developerDbcacheField")
+        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
+        verify(dbcacheField !== null)
+        verify(scriptThreadsField !== null)
+        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
+        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
+        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
+        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
+        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
+        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
     }
 
     function test_displayPageUsesInlineGenericPickers() {

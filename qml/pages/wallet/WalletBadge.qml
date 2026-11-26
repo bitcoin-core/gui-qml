@@ -99,8 +99,8 @@ Button {
                 visible: !root.loading && !root.noWalletLoaded
                 hidesAmount: true
                 amount: root.balance
-                unit: optionsModel.displayUnit === BitcoinAmount.SAT
-                    ? optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : optionsModel.displayUnitLabel
+                unit: ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                    ? ApplicationModels.optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : ApplicationModels.optionsModel.displayUnitLabel
                 color: Theme.color.neutral8
                 textStyle: Theme.text.amountCaption
                 horizontalAlignment: Text.AlignLeft

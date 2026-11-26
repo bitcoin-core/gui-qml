@@ -7,6 +7,10 @@ import QtTest 1.2
 import "../../qml/components"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     name: "WalletPassphrasePopup"
     when: windowShown
     width: 500

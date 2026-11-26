@@ -20,8 +20,17 @@ Page {
             ? qsTr("Based on the selected fee rate, it should confirm within %1 blocks.").arg(targetBlocks)
             : qsTr("Your transaction was broadcast. Confirmation depends on its fee rate.")
 
+    Translate { id: messageOffset; y: 12 }
+    Translate { id: actionsOffset; y: 12 }
+
     signal done()
     signal viewNewTransaction(string txid)
+
+    function focusInitialControl() {
+        doneButton.forceActiveFocus(Qt.TabFocusReason)
+    }
+
+    StackView.onActivated: root.focusInitialControl()
 
     background: Rectangle { color: Theme.color.background }
 
@@ -104,7 +113,7 @@ Page {
             Layout.topMargin: 28
             spacing: 10
             opacity: 0
-            transform: Translate { id: messageOffset; y: 12 }
+            transform: messageOffset
 
             CoreText {
                 Layout.fillWidth: true
@@ -131,7 +140,7 @@ Page {
             columnSpacing: 12
             rowSpacing: 12
             opacity: 0
-            transform: Translate { id: actionsOffset; y: 12 }
+            transform: actionsOffset
 
             NeutralButton {
                 objectName: "sendResultViewTransactionButton"
@@ -143,6 +152,7 @@ Page {
             }
 
             PrimaryButton {
+                id: doneButton
                 objectName: "sendResultDoneButton"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46

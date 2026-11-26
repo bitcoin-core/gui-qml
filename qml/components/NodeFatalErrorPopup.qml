@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 
 import "../controls"
 
@@ -12,13 +12,13 @@ AlertPopup {
     objectName: "nodeFatalErrorPopup"
 
     function syncOpenState() {
-        if (nodeModel.startupError.length > 0 && !opened) {
+        if (ApplicationModels.nodeModel.startupError.length > 0 && !opened) {
             open()
         }
     }
 
     Connections {
-        target: nodeModel
+        target: ApplicationModels.nodeModel
         function onStartupErrorChanged() {
             root.syncOpenState()
         }
@@ -29,7 +29,7 @@ AlertPopup {
     z: 100
     dismissible: false
     title: qsTr("Fatal node error")
-    message: nodeModel.startupError
+    message: ApplicationModels.nodeModel.startupError
     messageObjectName: "nodeFatalErrorText"
     messageAlignment: Text.AlignLeft
     tone: AlertPopup.Error
@@ -40,6 +40,6 @@ AlertPopup {
         text: qsTr("Shut down")
         buttonObjectName: "nodeFatalShutdownButton"
         closesPopup: false
-        onTriggered: nodeModel.requestShutdown()
+        onTriggered: ApplicationModels.nodeModel.requestShutdown()
     }
 }

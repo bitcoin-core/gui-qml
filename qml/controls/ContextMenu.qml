@@ -11,10 +11,17 @@ Popup {
 
     property string title: ""
     property bool keyboardOpening: false
+    // True while the exit transition runs: the menu is still drawn, but its
+    // items no longer take input. A menu that margins moved over its trigger
+    // would otherwise catch the next click meant for that trigger.
+    property bool closing: false
+    onAboutToHide: closing = true
+    onClosed: closing = false
     onAboutToShow: {
+        closing = false
         const window = contentItem ? contentItem.Window.window : null
         const item = window ? window.activeFocusItem : null
-        keyboardOpening = !!item && (item.visualFocus === true || item.keyboardActivation === true)
+        keyboardOpening = !!item && (item.visualFocus === true || item.keyboardActivation === true) // qmllint disable missing-property
     }
     onOpened: if (keyboardOpening) moveFocus("first")
     property int minMenuWidth: 240
@@ -90,6 +97,14 @@ Popup {
     height: implicitHeight
 
     background: Rectangle {
+        // Sits above the items while the menu closes and swallows presses.
+        MouseArea {
+            parent: root.contentItem ? root.contentItem.parent : null
+            anchors.fill: parent
+            z: 1
+            visible: root.closing
+            acceptedButtons: Qt.AllButtons
+        }
         color: root.backgroundColor
         border.color: Theme.color.menuBorder
         border.width: 1

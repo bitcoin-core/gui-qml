@@ -99,7 +99,7 @@ DialogPopup {
     function focusAction(action, reason) {
         const index = visibleActions.indexOf(action)
         const delegate = index >= 0 ? actionRepeater.itemAt(index) : null
-        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason)
+        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason) // qmllint disable missing-property
     }
 
     function cancelAction() {
@@ -129,7 +129,7 @@ DialogPopup {
         const window = contentItem ? contentItem.Window.window : null
         const focused = window ? window.activeFocusItem : null
         // Check boxes and switches ignore Return; it shouldn't submit past them.
-        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return
+        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return // qmllint disable missing-property
         const action = acceptAction()
         if (action) trigger(action)
     }

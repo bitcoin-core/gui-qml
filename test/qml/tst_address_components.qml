@@ -22,6 +22,7 @@ TestCase {
 
     // Tests the digit roll and copy feedback, so motion stays on.
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         Theme.motion.mode = "full"
     }
@@ -343,7 +344,8 @@ TestCase {
         label.amountOverride = "87654321"
         optionsModel.displayUnit = BitcoinAmount.SAT
         tryCompare(label, "animating", true)
-        wait(110)
+        label.rollProgress = 0.25
+        label.shiftProgress = 0.5
         const currentWidth = label.implicitWidth
         label.amountOverride = "12345678"
         optionsModel.displayUnit = BitcoinAmount.BTC

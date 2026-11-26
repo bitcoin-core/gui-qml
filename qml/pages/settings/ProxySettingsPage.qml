@@ -15,7 +15,7 @@ SettingsPage {
     title: qsTr("Proxy settings")
     backButtonObjectName: "proxySettingsBackButton"
 
-    property var settingsModel: optionsModel
+    required property var settingsModel
     property bool onboardingModal: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var proxySetting: coreSettingsModel.entry("proxy")

@@ -10,6 +10,10 @@ import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
+    function init() {
+        testSetup.failOnWarnings()
+    }
+
     id: testCase
     name: "SignVerifyMessage"
     when: windowShown

@@ -35,6 +35,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
@@ -503,6 +504,23 @@ TestCase {
         tryVerify(function() { return testWalletModel.scheduleFeeEstimatesCalls > callsBefore })
         compare(amountInput.text, "1")
         compare(testSendRecipient.amount.display, "1.00000000")
+    }
+
+    function test_finishing_unchanged_amount_does_not_restart_fee_estimation() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const amountInput = findChild(page, "sendAmountInput")
+        const review = findChild(page, "sendReviewButton")
+        amountInput.forceActiveFocus()
+        amountInput.selectAll()
+        const callsBeforeEdit = testWalletModel.scheduleFeeEstimatesCalls
+        keyClick("1")
+        compare(testSendRecipient.amount.display, "1.00000000")
+        verify(testWalletModel.scheduleFeeEstimatesCalls > callsBeforeEdit)
+        const callsBefore = testWalletModel.scheduleFeeEstimatesCalls
+        review.forceActiveFocus()
+        verify(!amountInput.activeFocus)
+        compare(testWalletModel.scheduleFeeEstimatesCalls, callsBefore)
     }
 
     function test_send_amount_allows_editing_whole_part_before_decimal() {
@@ -1173,6 +1191,29 @@ TestCase {
         keyClick(Qt.Key_Escape)
         tryCompare(popup, "opened", false)
         tryCompare(reviewButton, "activeFocus", true)
+    }
+
+    function test_fast_send_completion_before_popup_open_gets_done_focus() {
+        // The completion must arrive while the popup's enter transition runs.
+        Theme.motion.mode = "full"
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        const stack = popup.contentItem
+        compare(popup.opened, false)
+        verify(stack.currentItem !== null)
+        stack.currentItem.transactionSent("fast-completion")
+        tryVerify(function() { return stack.currentItem && stack.currentItem.objectName === "sendCompletePage" })
+        tryCompare(popup, "opened", true)
+        const done = findChild(stack.currentItem, "sendResultDoneButton")
+        verify(done !== null)
+        tryCompare(done, "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        tryCompare(popup, "visible", false)
     }
 
     function test_locked_coin_confirmation_uses_identity_after_refresh() {

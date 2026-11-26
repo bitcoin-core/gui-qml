@@ -17,11 +17,11 @@ public:
     std::set<COutPoint> locked;
     std::map<CTxDestination, std::string> labels;
     CoinsList listCoins() override { return coins; }
-    bool isLockedCoin(const COutPoint& p) override { return locked.count(p); }
+    bool isLockedCoin(const COutPoint& p) override { return locked.contains(p); }
     bool lockCoin(const COutPoint& p, bool) override { locked.insert(p); return true; }
     bool unlockCoin(const COutPoint& p) override { locked.erase(p); return true; }
     bool getAddress(const CTxDestination& d, std::string* name, wallet::AddressPurpose*) override {
-        if (!labels.count(d)) return false;
+        if (!labels.contains(d)) return false;
         if (name) *name = labels[d];
         return true;
     }
