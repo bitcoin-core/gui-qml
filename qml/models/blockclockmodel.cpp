@@ -51,6 +51,13 @@ void BlockClockModel::stop()
     m_clock_timer.stop();
 }
 
+void BlockClockModel::setTipTime(qint64 tip_time)
+{
+    if (m_stopped || m_tip_time == tip_time) return;
+    m_tip_time = tip_time;
+    updateLastBlockAge();
+}
+
 void BlockClockModel::scheduleHistoryRefresh()
 {
     if (m_history_refresh_pending.exchange(true)) return;
@@ -70,22 +77,27 @@ qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
 void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
 {
     if (m_stopped) return;
+    m_timeline.current_time = current_time.toSecsSinceEpoch();
     const qint64 period_start{PeriodStartFor(current_time)};
-    if (m_timeline.period_start != period_start) {
+    const bool period_changed{m_timeline.period_start != period_start};
+    if (period_changed) {
         m_timeline.period_start = period_start;
-        // Keep the previous period for ordinary backwards clock/DST changes,
-        // and retain future timestamps so rollover needs no backend reads.
-        m_history->setRetentionStart(period_start - PERIOD_SECONDS);
+        // Keep one window before the previous origin so a backwards clock step
+        // of up to twelve hours, and rollover, need no backend reads.
+        m_history->setRetentionStart(period_start - 2 * PERIOD_SECONDS);
         if (auto snapshot = m_history->takeSnapshot()) m_cached_block_timestamps = std::move(*snapshot);
-        replaceBlockHistory(m_cached_block_timestamps, /*period_changed=*/true);
-        Q_EMIT periodChanged();
     }
 
-    const qreal fraction{fractionForTimestamp(current_time.toSecsSinceEpoch())};
+    const qreal fraction{std::clamp<qreal>(
+        static_cast<qreal>(m_timeline.current_time - m_timeline.period_start) / PERIOD_SECONDS, 0.0, 1.0)};
     if (!qFuzzyCompare(m_current_time_fraction + 1.0, fraction + 1.0)) {
         m_current_time_fraction = fraction;
         Q_EMIT currentTimeFractionChanged();
     }
+
+    replaceBlockHistory(m_cached_block_timestamps);
+    if (period_changed) Q_EMIT periodChanged();
+    updateLastBlockAge();
 }
 
 void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
@@ -103,22 +115,29 @@ void BlockClockModel::refreshHistory()
     if (!snapshot) return;
     m_cached_block_timestamps = std::move(*snapshot);
     updateCurrentTime(m_current_time_provider());
-    replaceBlockHistory(m_cached_block_timestamps);
 }
 
-void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps, bool period_changed)
+void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps)
 {
-    const qint64 period_end{m_timeline.period_start + PERIOD_SECONDS};
+    const qint64 window_start{m_timeline.current_time - PERIOD_SECONDS};
     std::sort(block_timestamps.begin(), block_timestamps.end());
-    block_timestamps.erase(std::remove_if(block_timestamps.begin(), block_timestamps.end(), [this, period_end](qint64 timestamp) {
-        return timestamp < m_timeline.period_start || timestamp >= period_end;
+    block_timestamps.erase(std::remove_if(block_timestamps.begin(), block_timestamps.end(), [window_start](qint64 timestamp) {
+        return timestamp < window_start;
     }), block_timestamps.end());
 
-    if (m_timeline.block_timestamps == block_timestamps && !period_changed) return;
+    // Fractions can change without the list changing (new origin, future blocks).
     const auto previous_fractions{m_block_time_fractions};
     m_timeline.block_timestamps = std::move(block_timestamps);
     rebuildBlockTimeFractions();
     if (previous_fractions != m_block_time_fractions) Q_EMIT blockTimeFractionsChanged();
+}
+
+void BlockClockModel::updateLastBlockAge()
+{
+    const qint64 age{m_tip_time > 0 ? std::max<qint64>(0, m_timeline.current_time - m_tip_time) : -1};
+    if (age == m_last_block_age) return;
+    m_last_block_age = age;
+    Q_EMIT lastBlockAgeChanged();
 }
 
 void BlockClockModel::rebuildBlockTimeFractions()
@@ -135,6 +154,6 @@ qreal BlockClockModel::fractionForTimestamp(qint64 timestamp) const
     if (m_timeline.period_start == 0) return 0.0;
     return std::clamp<qreal>(
         static_cast<qreal>(timestamp - m_timeline.period_start) / PERIOD_SECONDS,
-        0.0,
-        1.0);
+        m_current_time_fraction - 1.0,
+        m_current_time_fraction);
 }

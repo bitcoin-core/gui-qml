@@ -192,12 +192,8 @@ DesignSystemSection {
             NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "SIGNET" } }
         }
         DesignSystemState {
-            label: "REGTEST, shorten: true"
-            NetworkIndicator {
-                textStyle: Theme.text.caption
-                shorten: true
-                chainModelRef: QtObject { readonly property string networkName: "REGTEST" }
-            }
+            label: "REGTEST"
+            NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "REGTEST" } }
         }
     }
 
@@ -276,32 +272,6 @@ DesignSystemSection {
         DesignSystemState {
             label: "loading: false"
             Skeleton { Layout.preferredWidth: 220; Layout.preferredHeight: 18; loading: false }
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemPeersIndicator"
-        Layout.fillWidth: true
-        name: "PeersIndicator"
-        note: "The block clock's outbound peer dots."
-
-        DesignSystemState {
-            label: "4 of 8, active"
-            PeersIndicator {
-                numOutboundPeers: 4
-                maxNumOutboundPeers: 8
-                paused: false
-                active: true
-            }
-        }
-        DesignSystemState {
-            label: "no peers: the first dot pulses"
-            PeersIndicator {
-                numOutboundPeers: 0
-                maxNumOutboundPeers: 8
-                paused: false
-                active: true
-            }
         }
     }
 

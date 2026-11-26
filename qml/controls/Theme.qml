@@ -109,7 +109,6 @@ Control {
         required property url network
         required property url storage
         required property url tooltipArrow
-        required property url onboardingClockFace
     }
 
     component EasingSet: QtObject {
@@ -262,7 +261,6 @@ Control {
         network: "image://images/network-dark"
         storage: "image://images/storage-dark"
         tooltipArrow: "qrc:/icons/tooltip-arrow-dark"
-        onboardingClockFace: "qrc:/icons/onboarding-clock-face-dark.svg"
     }
 
     ImageSet {
@@ -271,7 +269,6 @@ Control {
         network: "image://images/network-light"
         storage: "image://images/storage-light"
         tooltipArrow: "qrc:/icons/tooltip-arrow-light"
-        onboardingClockFace: "qrc:/icons/onboarding-clock-face-light.svg"
     }
 
     component TextSet: QtObject {

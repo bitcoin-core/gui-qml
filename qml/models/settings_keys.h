@@ -15,6 +15,7 @@ namespace SettingsKeys {
     inline constexpr const char* THIRD_PARTY_TRANSACTION_URLS = "strThirdPartyTxUrls";
     inline constexpr const char* MONEY_FONT_CHOICE = "FontForMoney";
     inline constexpr const char* HIDE_AMOUNTS = "HideAmounts";
+    inline constexpr const char* DISMISSED_WARNINGS = "nodeDismissedWarnings";
 } // namespace SettingsKeys
 
 #endif // BITCOIN_QML_MODELS_SETTINGS_KEYS_H
