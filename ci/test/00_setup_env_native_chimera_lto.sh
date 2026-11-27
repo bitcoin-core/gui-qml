@@ -16,7 +16,7 @@ export PIP_PACKAGES="--break-system-packages pyzmq pycapnp"
 export DEP_OPTS="build_CC=clang build_CXX=clang++ build_TAR=gtar AR=llvm-ar CC=clang CXX=clang++ NM=llvm-nm RANLIB=llvm-ranlib STRIP=llvm-strip NO_QT=1"
 printf -v BITCOIN_CONFIG "%q " \
  --preset=dev-mode \
- -DBUILD_GUI=OFF \
+ -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DREDUCE_EXPORTS=ON \
  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
 export BITCOIN_CONFIG

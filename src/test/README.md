@@ -33,10 +33,12 @@ To add more unit tests, add `BOOST_AUTO_TEST_CASE` functions to the existing
 .cpp files in the `test/` directory or add new .cpp files that
 implement new `BOOST_AUTO_TEST_SUITE` sections.
 
-To run the GUI unit tests manually, launch `build/bin/test_bitcoin-qt`
+To run the QML GUI C++ unit tests manually, launch `build/bin/test_bitcoin-qt`.
 
-To add more GUI unit tests, add them to the `src/qt/test/` directory and
-the `src/qt/test/test_main.cpp` file.
+To run the QML tests manually, launch `build/bin/test_bitcoin-qt --suite=qml -platform minimal`.
+
+To run the QML GUI integration tests manually, launch
+`build/bin/test_bitcoin-qt --suite=integration -platform minimal`.
 
 ### Running individual tests
 

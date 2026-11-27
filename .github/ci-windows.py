@@ -64,6 +64,8 @@ def github_import_vs_env(_ci_type):
 
 
 def generate(ci_type):
+    # Keep generated Qt source paths short enough for the MSVC toolchain.
+    vcpkg_installed_dir = Path(os.environ["RUNNER_TEMP"]) / "v"
     command = [
         "cmake",
         "-E",
@@ -74,6 +76,7 @@ def generate(ci_type):
         "build",
         "-Werror=dev",
         "--preset=windows",
+        f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}",
         # Using x64-windows-release for both host and target triplets
         # to ensure vcpkg builds only release packages, thereby optimizing
         # build time.
@@ -121,7 +124,6 @@ def check_manifests(ci_type):
     skips = {  # Skip as they currently do not have manifests
         "fuzz.exe",
         "bench_bitcoin.exe",
-        "test_bitcoin-qt.exe",
         "bitcoin-chainstate.exe",
     }
     for entry in release_dir.iterdir():
@@ -170,6 +172,7 @@ def run_tests(ci_type):
         os.environ["DIR_UNIT_TEST_DATA"] = str(workspace / "unit_test_data")
         test_envs = {
             "BITCOIN_BIN": "bitcoin.exe",
+            "BITCOINQT": "bitcoin-qt.exe",
             "BITCOIND": "bitcoind.exe",
             "BITCOINCLI": "bitcoin-cli.exe",
             "BITCOIN_BENCH": "bench_bitcoin.exe",
