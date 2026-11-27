@@ -4,12 +4,11 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import QtQml.Models 2.15
 import org.bitcoincore.qt 1.0
 import "../components"
 import "../controls"
 import "./node"
-import "./wallet"
 
 ApplicationWindow {
     id: appWindow
@@ -46,20 +45,81 @@ ApplicationWindow {
     readonly property bool desktopWalletMode: walletAvailableForUi && appModeDesktopForUi
     readonly property bool waitForPostOnboardingWalletRoute: preInitOnboardingRanForUi && desktopWalletMode
     property bool postOnboardingWalletRouteResolved: false
+    property bool onboardingWalletPresentationPending: false
     property bool shutdownInProgress: false
+    footer: DesktopRequestsBar {
+        mailbox: ApplicationModels.desktopIntentModel
+        visible: !appWindow.shutdownInProgress && mailbox !== null
+            && (mailbox.pendingCount > 0 || mailbox.hasInspection || mailbox.error.length > 0)
+        enabled: appWindow.menuNavigationEnabled
+        continuationAvailable: appWindow.desktopWalletMode && appWindow.menuNavigationEnabled
+            && appWindow.menuWalletController !== null && appWindow.menuWalletController.selectedWallet !== null
+            && appWindow.menuWalletController.selectedWallet.available
+        onContinueRequested: {
+            if (!continuationAvailable) return
+            const shell = appWindow.desktopShell
+            if (shell) shell.continueImportRequested(mailbox)
+        }
+    }
     readonly property var menuEditTarget: appWindow.editTarget(appWindow.activeFocusItem)
-    readonly property var menuWalletController: appWindow.desktopWalletMode ? walletController : null
+    readonly property var menuWalletController: appWindow.desktopWalletMode ? ApplicationModels.walletController : null
+    readonly property WalletShellPage desktopShell: main.currentItem as WalletShellPage
+    readonly property WalletCreationPort walletCreationHost: walletCreationModal.item as WalletCreationPort
+    readonly property NodeShell nodeShell: main.currentItem as NodeShell
+    // Native menus do not participate in Qt Quick's popup pointer grab. The
+    // same bounded presentation gate also rejects a delayed direct route.
+    readonly property bool modalNavigationBlocked: (appWindow.walletCreationHost !== null
+            && appWindow.walletCreationHost.modalVisible)
+        || ApplicationModels.nodeModel.runtimeDialogVisible
+        || (appWindow.desktopShell !== null && appWindow.desktopShell.modalNavigationBlocked)
+        || (appWindow.nodeShell !== null && appWindow.nodeShell.modalNavigationBlocked)
+        || (appWindow.menuWalletController !== null
+            && appWindow.menuWalletController.closeTarget !== null
+            && appWindow.menuWalletController.closeTarget.closeQuestion !== null)
     readonly property bool menuNavigationEnabled: main.depth === 1
         && (!appWindow.waitForPostOnboardingWalletRoute || appWindow.postOnboardingWalletRouteResolved)
+        && !appWindow.modalNavigationBlocked
+        && !appWindow.shutdownInProgress && !ApplicationModels.nodeModel.fatalException
+    readonly property bool onboardingWalletPresentationAdmitted: appWindow.onboardingWalletPresentationPending
+        && appWindow.desktopWalletMode && appWindow.menuNavigationEnabled
+        && walletCreationModal.item !== null && ApplicationModels.walletController.noWalletsFound
 
-    function routeToShell(method, argument) {
-        const shell = main.depth === 1 ? main.currentItem : null
-        if (shell && typeof shell[method] === "function") {
-            if (argument === undefined) {
-                shell[method]()
-            } else {
-                shell[method](argument)
+    onDesktopWalletModeChanged: {
+        if (!appWindow.desktopWalletMode) appWindow.onboardingWalletPresentationPending = false
+    }
+
+    enum NavigationRoute { RouteCloseWallet, RouteBackup, RouteImportUri, RouteSignMessage,
+        RouteVerifyMessage, RouteImportPsbt, RouteNode, RouteActivity, RouteSend,
+        RouteReceive, RouteConsole, RouteNetworkTraffic, RoutePeers }
+
+    function routeToShell(route: int) {
+        if (!appWindow.menuNavigationEnabled) return
+        const desktop = appWindow.desktopShell
+        if (desktop !== null) {
+            switch (route) {
+            case MainWindow.RouteCloseWallet: desktop.closeWalletRequested(); break
+            case MainWindow.RouteBackup: desktop.backupRequested(); break
+            case MainWindow.RouteImportUri: desktop.uriImportRequested(); break
+            case MainWindow.RouteSignMessage: desktop.signMessageRequested(); break
+            case MainWindow.RouteVerifyMessage: desktop.verifyMessageRequested(); break
+            case MainWindow.RouteImportPsbt: desktop.psbtImportRequested(); break
+            case MainWindow.RouteNode: desktop.nodeRequested(); break
+            case MainWindow.RouteActivity: desktop.activityRequested(); break
+            case MainWindow.RouteSend: desktop.sendRequested(); break
+            case MainWindow.RouteReceive: desktop.receiveRequested(); break
+            case MainWindow.RouteConsole: desktop.consoleRequested(); break
+            case MainWindow.RouteNetworkTraffic: desktop.networkTrafficRequested(); break
+            case MainWindow.RoutePeers: desktop.peersRequested(); break
             }
+            return
+        }
+        const node = appWindow.nodeShell
+        if (node === null) return
+        switch (route) {
+        case MainWindow.RouteNode: node.openNode(); break
+        case MainWindow.RouteConsole: node.openConsole(); break
+        case MainWindow.RouteNetworkTraffic: node.openNetworkTraffic(); break
+        case MainWindow.RoutePeers: node.openPeers(); break
         }
     }
 
@@ -90,15 +150,26 @@ ApplicationWindow {
         target[method]()
     }
 
-    function openSettings(section) {
-        appWindow.routeToShell("openSettings", section)
+    function openSettings(section: string) {
+        if (!appWindow.menuNavigationEnabled) return
+        if (appWindow.desktopShell !== null) appWindow.desktopShell.settingsRequested(section)
+        else if (appWindow.nodeShell !== null) appWindow.nodeShell.openSettings(section)
     }
 
     function openWalletCreation() {
-        if (!appWindow.menuNavigationEnabled) {
+        if (!appWindow.desktopWalletMode || !appWindow.menuNavigationEnabled) {
             return
         }
+        appWindow.onboardingWalletPresentationPending = false
         walletCreationModal.open()
+    }
+
+    // This consumes the exact retained operation result. Popup exit animation
+    // is presentation only and cannot turn its completion into a fresh route.
+    function presentCreatedWallet(wallet: QtObject) {
+        if (appWindow.shutdownInProgress || ApplicationModels.nodeModel.fatalException) return
+        const shell = main.depth === 1 ? appWindow.desktopShell : null
+        if (shell !== null) shell.presentWalletRequested(wallet)
     }
 
     function resolvePostOnboardingWalletRoute() {
@@ -108,28 +179,68 @@ ApplicationWindow {
         if (!appWindow.waitForPostOnboardingWalletRoute) {
             return
         }
-        if (!walletController.initialized || !walletListModel.walletDirLoaded) {
+        if (!ApplicationModels.walletController.initialized || !ApplicationModels.walletListModel.walletDirLoaded) {
             return
         }
         appWindow.postOnboardingWalletRouteResolved = true
-        if (walletController.noWalletsFound) {
-            main.currentItem.openNode()
-            Qt.callLater(function() { walletCreationModal.openForOnboarding() })
+        if (ApplicationModels.walletController.noWalletsFound) {
+            appWindow.onboardingWalletPresentationPending = true
         }
     }
 
-    AppSettings {
-        id: windowSettings
-        property real windowX
-        property real windowY
-        property real windowWidth
-        property real windowHeight
+    Timer {
+        id: onboardingWalletResolution
+        interval: 0
+        repeat: false
+        onTriggered: appWindow.resolvePostOnboardingWalletRoute()
     }
 
-    onXChanged: if (visibility === Window.Windowed) windowSettings.windowX = x
-    onYChanged: if (visibility === Window.Windowed) windowSettings.windowY = y
-    onWidthChanged: if (visibility === Window.Windowed) windowSettings.windowWidth = width
-    onHeightChanged: if (visibility === Window.Windowed) windowSettings.windowHeight = height
+    Timer {
+        id: onboardingWalletPresentation
+        interval: 0
+        repeat: false
+        running: appWindow.onboardingWalletPresentationAdmitted
+        onTriggered: {
+            if (!appWindow.onboardingWalletPresentationAdmitted) return
+            appWindow.routeToShell(MainWindow.RouteNode)
+            // Navigation can synchronously publish another owned modal or
+            // stopping state. Retain this presentation until it is admitted.
+            if (!appWindow.onboardingWalletPresentationAdmitted) return
+            appWindow.onboardingWalletPresentationPending = false
+            walletCreationModal.openForOnboarding()
+        }
+    }
+
+    property bool preferenceGeometryRestored: false
+    function restorePreferenceGeometry() {
+        if (preferenceGeometryRestored || !windowSettings.ready) return
+        windowSettings.restoreWindow(appWindow)
+        preferenceGeometryRestored = true
+        if (visibility === Window.Windowed) windowSettings.requestGeometry(x, y, width, height)
+    }
+    AppPreferences { id: windowSettings; onChanged: appWindow.restorePreferenceGeometry() }
+    // Geometry is a bounded native GUI handoff; storage is owned by the shared
+    // background store and always captures the original full rectangle.
+    onActiveChanged: if (active) {
+        windowSettings.refresh()
+        ApplicationModels.optionsModel.refreshDisplaySettings()
+        ApplicationModels.desktopWindowBehaviorModel.refreshSettings()
+    }
+    onXChanged: if (visibility === Window.Windowed && preferenceGeometryRestored && windowSettings.ready) windowSettings.requestGeometry(x, y, width, height)
+    onYChanged: if (visibility === Window.Windowed && preferenceGeometryRestored && windowSettings.ready) windowSettings.requestGeometry(x, y, width, height)
+    onWidthChanged: if (visibility === Window.Windowed && preferenceGeometryRestored && windowSettings.ready) windowSettings.requestGeometry(x, y, width, height)
+    onHeightChanged: if (visibility === Window.Windowed && preferenceGeometryRestored && windowSettings.ready) windowSettings.requestGeometry(x, y, width, height)
+    Popup {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        visible: windowSettings.error.length > 0
+        closePolicy: Popup.NoAutoClose
+        Column {
+            spacing: 12
+            CoreText { text: windowSettings.error; wrapMode: Text.WordWrap; width: 360 }
+            Button { text: qsTr("Retry preferences"); enabled: !windowSettings.pending; onClicked: windowSettings.retry() }
+        }
+    }
 
 
     Behavior on color {
@@ -180,27 +291,27 @@ ApplicationWindow {
             && appWindow.menuEditTarget.readOnly !== true
             && appWindow.menuEditTarget.enabled !== false
         navigationEnabled: appWindow.menuNavigationEnabled
-        shuttingDown: appWindow.shutdownInProgress || nodeModel.fatalException
-        fatalException: nodeModel.fatalException
+        shuttingDown: appWindow.shutdownInProgress || ApplicationModels.nodeModel.fatalException
+        fatalException: ApplicationModels.nodeModel.fatalException
         isMacOs: Qt.platform.os === "osx"
-        amountsHidden: optionsModel.hideAmounts
+        amountsHidden: ApplicationModels.optionsModel.hideAmounts
 
         onCreateWalletRequested: appWindow.openWalletCreation()
-        onCloseWalletRequested: appWindow.routeToShell("requestCloseWallet")
-        onBackupWalletRequested: appWindow.routeToShell("startWalletBackup")
-        onOpenUriRequested: appWindow.routeToShell("openUriImporter")
-        onSignMessageRequested: appWindow.routeToShell("openSignVerifyMessage", SignVerifyMessage.SignTab)
-        onVerifyMessageRequested: appWindow.routeToShell("openSignVerifyMessage", SignVerifyMessage.VerifyTab)
-        onLoadPsbtRequested: appWindow.routeToShell("openPsbtImporter")
-        onExitRequested: nodeModel.requestShutdown()
+        onCloseWalletRequested: appWindow.routeToShell(MainWindow.RouteCloseWallet)
+        onBackupWalletRequested: appWindow.routeToShell(MainWindow.RouteBackup)
+        onOpenUriRequested: appWindow.routeToShell(MainWindow.RouteImportUri)
+        onSignMessageRequested: appWindow.routeToShell(MainWindow.RouteSignMessage)
+        onVerifyMessageRequested: appWindow.routeToShell(MainWindow.RouteVerifyMessage)
+        onLoadPsbtRequested: appWindow.routeToShell(MainWindow.RouteImportPsbt)
+        onExitRequested: ApplicationModels.nodeModel.requestShutdown()
         onSettingsRequested: appWindow.openSettings("display")
         onUndoRequested: appWindow.invokeEditCommand("undo")
         onRedoRequested: appWindow.invokeEditCommand("redo")
         onCopyRequested: appWindow.invokeEditCommand("copy")
         onPasteRequested: appWindow.invokeEditCommand("paste")
-        onToggleDisplayUnitRequested: optionsModel.displayUnit = optionsModel.displayUnit === BitcoinAmount.SAT
+        onToggleDisplayUnitRequested: ApplicationModels.optionsModel.displayUnit = ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
             ? BitcoinAmount.BTC : BitcoinAmount.SAT
-        onToggleHideAmountsRequested: optionsModel.hideAmounts = !optionsModel.hideAmounts
+        onToggleHideAmountsRequested: ApplicationModels.optionsModel.hideAmounts = !ApplicationModels.optionsModel.hideAmounts
         onMinimizeRequested: appWindow.showMinimized()
         onZoomRequested: {
             if (appWindow.visibility === Window.Maximized) {
@@ -209,15 +320,15 @@ ApplicationWindow {
                 appWindow.showMaximized()
             }
         }
-        onMainWindowRequested: desktopTrayIconController.showMainWindow()
-        onNodeRequested: appWindow.routeToShell("openNode")
-        onActivityRequested: appWindow.routeToShell("openActivity")
-        onSendRequested: appWindow.routeToShell("openSend")
-        onReceiveRequested: appWindow.routeToShell("openReceive")
+        onMainWindowRequested: ApplicationModels.desktopTrayIconController.showMainWindow()
+        onNodeRequested: appWindow.routeToShell(MainWindow.RouteNode)
+        onActivityRequested: appWindow.routeToShell(MainWindow.RouteActivity)
+        onSendRequested: appWindow.routeToShell(MainWindow.RouteSend)
+        onReceiveRequested: appWindow.routeToShell(MainWindow.RouteReceive)
         onInformationRequested: appWindow.openNodeInformation()
-        onConsoleRequested: appWindow.routeToShell("openConsole")
-        onNetworkTrafficRequested: appWindow.routeToShell("openNetworkTraffic")
-        onPeersRequested: appWindow.routeToShell("openPeers")
+        onConsoleRequested: appWindow.routeToShell(MainWindow.RouteConsole)
+        onNetworkTrafficRequested: appWindow.routeToShell(MainWindow.RouteNetworkTraffic)
+        onPeersRequested: appWindow.routeToShell(MainWindow.RoutePeers)
         onRpcDocumentationRequested: rpcDocumentationLinkPopup.openLink("https://bitcoincore.org/en/doc/")
         onAboutRequested: appWindow.openSettings("about")
     }
@@ -231,10 +342,10 @@ ApplicationWindow {
 
     onClosing: (close) => {
         close.accepted = false
-        if (!nodeModel.fatalException && desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
+        if (!ApplicationModels.nodeModel.fatalException && ApplicationModels.desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
             showMinimized()
         } else {
-            nodeModel.requestShutdown()
+            ApplicationModels.nodeModel.requestShutdown()
         }
     }
 
@@ -248,28 +359,25 @@ ApplicationWindow {
         // assign that breaks the size binding doesn't re-trigger them), so without
         // this the initial size is never saved (windowWidth/Height stay 0).
         if (visibility === Window.Windowed) {
-            windowSettings.windowX = x
-            windowSettings.windowY = y
-            windowSettings.windowWidth = width
-            windowSettings.windowHeight = height
+            if (windowSettings.ready) windowSettings.requestGeometry(x, y, width, height)
         }
 
         if (visibility === Window.Minimized &&
                 prev !== Window.Hidden &&
-                desktopWindowBehaviorModel.shouldHideToTrayOnMinimize()) {
-            desktopTrayIconController.hideMainWindow()
+                ApplicationModels.desktopWindowBehaviorModel.shouldHideToTrayOnMinimize()) {
+            ApplicationModels.desktopTrayIconController.hideMainWindow()
         }
     }
 
     Connections {
-        target: desktopWindowBehaviorModel
+        target: ApplicationModels.desktopWindowBehaviorModel
         function onShowTrayIconChanged(show) {
-            desktopTrayIconController.visible = AppMode.isDesktop && show
+            ApplicationModels.desktopTrayIconController.visible = AppMode.isDesktop && show
         }
     }
 
     Binding {
-        target: desktopTrayIconController
+        target: ApplicationModels.desktopTrayIconController
         property: "windowVisible"
         value: appWindow.visible &&
                appWindow.visibility !== Window.Hidden &&
@@ -277,50 +385,64 @@ ApplicationWindow {
     }
 
     Connections {
-        target: desktopTrayIconController
+        target: ApplicationModels.desktopTrayIconController
         function onShowRequested() {
-            desktopTrayIconController.showMainWindow()
+            ApplicationModels.desktopTrayIconController.showMainWindow()
         }
         function onHideRequested() {
-            desktopTrayIconController.hideMainWindow()
+            ApplicationModels.desktopTrayIconController.hideMainWindow()
         }
         function onQuitRequested() {
-            nodeModel.requestShutdown()
+            ApplicationModels.nodeModel.requestShutdown()
         }
     }
 
     PageStack {
         id: main
         objectName: "mainPageStack"
-        enabled: !appWindow.shutdownInProgress && !nodeModel.fatalException
-        initialItem: appWindow.desktopWalletMode ? desktopWallets : node
+        enabled: !appWindow.shutdownInProgress && !ApplicationModels.nodeModel.fatalException
+        visible: !appWindow.shutdownInProgress
+        initialItem: appWindow.desktopWalletMode ? "qrc:/qml/pages/wallet/DesktopWallets.qml" : nodeShellComponent
         anchors.fill: parent
         focus: true
         Keys.onReleased: (event) => {
             if (event.key == Qt.Key_Back) {
-                nodeModel.requestShutdown()
+                ApplicationModels.nodeModel.requestShutdown()
                 event.accepted = true
             }
         }
     }
 
     Connections {
-        target: nodeModel
+        target: ApplicationModels.nodeModel
         function onFatalExceptionChanged() {
-            if (!nodeModel.fatalException) return
+            if (!ApplicationModels.nodeModel.fatalException) return
+            appWindow.onboardingWalletPresentationPending = false
             appWindow.showNormal()
             appWindow.raise()
             appWindow.requestActivate()
         }
         function onRequestedShutdown() {
+            appWindow.onboardingWalletPresentationPending = false
             appWindow.shutdownInProgress = true
-            main.clear()
-            main.push(shutdown)
+            // The Saving page is the only shutdown notice; a quit from the tray,
+            // the Dock or a signal can arrive with the window hidden or
+            // minimized, so bring it into view (#1126).
+            if (!appWindow.visible && ApplicationModels.desktopTrayIconController) {
+                ApplicationModels.desktopTrayIconController.showMainWindow()
+            }
+            if (!appWindow.visible || appWindow.visibility === Window.Minimized) appWindow.showNormal()
+            appWindow.raise()
         }
     }
 
-    NodeRuntimeDialog {
-        parent: Overlay.overlay
+    Instantiator {
+        model: ApplicationModels.nodeModel.runtimePrompts
+        delegate: NodeRuntimeDialog {
+            required property RuntimePromptModel modelData
+            prompt: modelData
+            parent: appWindow.Overlay.overlay
+        }
     }
 
     NodeFatalErrorPopup {
@@ -354,43 +476,56 @@ ApplicationWindow {
     }
 
     Connections {
-        target: appWindow.desktopWalletMode ? walletController : null
+        target: appWindow.desktopWalletMode ? ApplicationModels.walletController : null
         function onInitializedChanged() {
             appWindow.resolvePostOnboardingWalletRoute()
         }
         function onNoWalletsFoundChanged() {
+            if (!ApplicationModels.walletController.noWalletsFound) appWindow.onboardingWalletPresentationPending = false
             appWindow.resolvePostOnboardingWalletRoute()
         }
     }
 
     Connections {
-        target: appWindow.desktopWalletMode ? walletListModel : null
+        target: appWindow.desktopWalletMode ? ApplicationModels.walletListModel : null
         function onWalletDirLoadedChanged() {
             appWindow.resolvePostOnboardingWalletRoute()
         }
     }
 
-    Component {
-        id: desktopWallets
-        DesktopWallets {
-            objectName: "desktopWalletsPage"
-            onAddWallet: {
-                walletCreationModal.open()
-            }
-        }
+    Connections {
+        target: appWindow.desktopWalletMode && !appWindow.shutdownInProgress && main.depth === 1
+            ? main.currentItem : null
+        function onAddWallet() { appWindow.openWalletCreation() }
     }
 
-    WalletCreationModal {
+    Loader {
         id: walletCreationModal
-        parent: Overlay.overlay
-        onFinished: function(openActivity, wallet) {
-            if (openActivity) appWindow.routeToShell("openWallet", wallet)
+        active: appWindow.desktopWalletMode
+        source: active ? "../components/WalletCreationHost.qml" : ""
+        function open() { if (item) (item as WalletCreationPort).openRequested() }
+        function openForOnboarding() { if (item) (item as WalletCreationPort).onboardingOpenRequested() }
+    }
+
+    Connections {
+        target: walletCreationModal.item
+        function onFinished(openActivity, wallet) {
+            if (openActivity) appWindow.presentCreatedWallet(wallet)
         }
     }
 
     Component {
         id: shutdown
         Shutdown {}
+    }
+
+    // Keep page/delegate contexts alive until the scene is torn down after
+    // workers drain. Clearing a live Activity ListView during shutdown can
+    // invalidate Qt's pending section/delegate changes (upstream #1116).
+    Loader {
+        anchors.fill: parent
+        active: appWindow.shutdownInProgress
+        sourceComponent: shutdown
     }
 
     Component.onCompleted: {
@@ -400,94 +535,30 @@ ApplicationWindow {
         // no resize of an already-laid-out scene (which crashes Qt 6.4 Quick
         // Layouts). Position is restored imperatively; moving a window does not
         // relayout its contents.
-        if (windowSettings.windowWidth > 0) {
-            width = windowSettings.windowWidth
-        }
-        if (windowSettings.windowHeight > 0) {
-            height = windowSettings.windowHeight
-        }
-        if (windowSettings.windowWidth > 0 && windowSettings.windowHeight > 0) {
-            x = windowSettings.windowX
-            y = windowSettings.windowY
-        }
+        restorePreferenceGeometry()
         visible = true
         if (appWindow.desktopWalletMode) {
-            nodeModel.startNodeInitializionThread()
+            ApplicationModels.nodeModel.startNodeInitializionThread()
             if (appWindow.waitForPostOnboardingWalletRoute) {
-                Qt.callLater(appWindow.resolvePostOnboardingWalletRoute)
+                onboardingWalletResolution.restart()
             }
         }
     }
 
     Component {
-        id: node
-        PageStack {
-            id: nodeStack
-            vertical: true
-            initialItem: node
-
-            function resetToRoot() {
-                peerTableModel.stopAutoRefresh()
-                if (nodeStack.depth > 1) {
-                    nodeStack.pop(null, StackView.Immediate)
-                }
+        id: nodeShellComponent
+        NodeShell {
+            id: nodeShellItem
+            navigationAdmitted: appWindow.nodeShell === nodeShellItem && appWindow.menuNavigationEnabled
+            stopping: appWindow.shutdownInProgress || ApplicationModels.nodeModel.fatalException
+            settingsComponent: SettingsView {
+                wallet: typeof walletController !== "undefined" && ApplicationModels.walletController.isWalletLoaded
+                    ? ApplicationModels.walletController.selectedWallet : null
+                activeWalletName: wallet ? wallet.name : ""
+                onDoneClicked: nodeShellItem.closeSettings()
             }
-
-            function openSettings(section) {
-                nodeStack.resetToRoot()
-                const page = nodeStack.push(settingsPage, {}, StackView.Immediate)
-                if (section && page) {
-                    page.selectSection(section)
-                }
-            }
-
-            function openNode() {
-                nodeStack.resetToRoot()
-            }
-
-            function openPeers() {
-                nodeStack.resetToRoot()
-                peerTableModel.startAutoRefresh()
-                nodeStack.push(peersPage, {}, StackView.Immediate)
-            }
-
-            function openConsole() {
-                nodeStack.openSettings("rpc-console")
-            }
-
-            function openNetworkTraffic() {
-                nodeStack.openSettings("network-traffic")
-            }
-            Component {
-                id: node
-                NodeRunner {
-                    onSettingsClicked: {
-                        nodeStack.push(settingsPage)
-                    }
-                    onPeersClicked: {
-                        peerTableModel.startAutoRefresh()
-                        nodeStack.push(peersPage)
-                    }
-                }
-            }
-            Component {
-                id: settingsPage
-                SettingsView {
-                    wallet: typeof walletController !== "undefined" && walletController.isWalletLoaded
-                        ? walletController.selectedWallet : null
-                    activeWalletName: wallet ? wallet.name : ""
-                    onDoneClicked: nodeStack.pop()
-                }
-            }
-            Component {
-                id: peersPage
-                PeersView {
-                    onBack: {
-                        nodeStack.pop()
-                        peerTableModel.stopAutoRefresh()
-                    }
-                }
-            }
+            onSettingsRequested: (section) => appWindow.openSettings(section)
+            onPeersRequested: appWindow.routeToShell(MainWindow.RoutePeers)
         }
     }
 }

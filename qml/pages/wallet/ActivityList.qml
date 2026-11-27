@@ -12,6 +12,7 @@ PageStack {
     id: stackView
     objectName: "activityStack"
     property var wallet: null
+    property bool walletViewActive: true
 
     replaceEnter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.enter }
@@ -25,74 +26,40 @@ PageStack {
         paymentRequestModal.openRequest(requestId)
     }
 
-    function detailProperties(txid, outputIndex) {
-        if (!wallet) return {}
-        const transaction = wallet.transactionActivityModel.transactionDetails(txid, true)
-        if (!transaction.txid) return {}
-        return {
-            transactionData: transaction,
-            wallet: stackView.wallet,
-            outputIndex: outputIndex === undefined ? -1 : outputIndex
-        }
-    }
-
     function navigateToTransaction(txid, outputIndex) {
-        if (!wallet) return
-        wallet.transactionActivityModel.requestTransactionDetails(txid)
-        const details = detailProperties(txid, outputIndex)
-        if (!details.transactionData) return
+        if (!wallet || !wallet.available || !txid) return
+        const details = { transactionId: txid, wallet: stackView.wallet, walletViewActive: Qt.binding(function() { return stackView.walletViewActive }),
+            outputIndex: outputIndex === undefined ? -1 : outputIndex }
         let page
-        if (stackView.currentItem && stackView.currentItem.objectName === "activityDetailsPage") {
-            // Remove the old detail and insert the new one in the same stack
-            // position, without briefly revealing the list or sliding pages.
+        if (stackView.currentItem && stackView.currentItem.objectName === "activityDetailsPage")
             page = stackView.replace(stackView.currentItem, "TransactionDetail.qml", details, StackView.ReplaceTransition)
-        } else {
+        else {
             stackView.pop(null)
             page = stackView.push("TransactionDetail.qml", details)
         }
-        page.showTransaction.connect(stackView.navigateToTransaction)
+        if (page && page.showTransaction) page.showTransaction.connect(stackView.navigateToTransaction)
     }
 
-    function refreshOpenDetails() {
-        const page = stackView.currentItem
-        if (!page || page.objectName !== "activityDetailsPage") return
-        const details = detailProperties(page.txid, page.outputIndex)
-        if (!details.transactionData) {
-            stackView.pop(null)
-            return
-        }
-        for (const key in details) page[key] = details[key]
-    }
-
-    onCurrentItemChanged: {
-        refreshOpenDetails()
-        // Navigation can briefly pop to the list before pushing a new detail.
-        Qt.callLater(function() {
-            if (currentItem && currentItem.objectName === "activityPage" && wallet)
-                wallet.transactionActivityModel.requestTransactionDetails("")
-        })
-    }
-
-    onWalletChanged: { paymentRequestModal.close(); stackView.pop(null) }
+    onWalletChanged: { paymentRequestModal.cancelPending(); paymentRequestModal.close(); stackView.pop(null) }
 
     Connections {
-        target: walletController
+        target: ApplicationModels.walletController
         function onClosePaymentRequestDetailRequested(wallet) {
-            if (wallet === stackView.wallet) paymentRequestModal.close()
+            if (wallet === stackView.wallet) { paymentRequestModal.cancelPending(); paymentRequestModal.close() }
         }
-    }
-    Connections {
-        target: stackView.wallet ? stackView.wallet.transactionActivityModel : null
-        function onTransactionDetailsChanged() { stackView.refreshOpenDetails() }
     }
     Binding {
         target: stackView.wallet
         property: "displayUnit"
-        value: optionsModel.displayUnit
+        value: ApplicationModels.optionsModel.displayUnit
         when: stackView.wallet !== null
     }
 
-    PaymentRequestModal { id: paymentRequestModal; parent: Overlay.overlay; wallet: stackView.wallet }
+    ReceiveRequestModal {
+        id: paymentRequestModal
+        wallet: stackView.wallet
+        contextActive: stackView.walletViewActive
+    }
 
     initialItem: ActivityListPage {
         wallet: stackView.wallet

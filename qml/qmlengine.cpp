@@ -17,6 +17,8 @@
 #include <QQmlNetworkAccessManagerFactory>
 #include <QString>
 
+#include <utility>
+
 namespace {
 
 //! Fails without starting a DNS lookup or a connection. Bundled resources and
@@ -93,10 +95,13 @@ std::unique_ptr<QQmlApplicationEngine> CreatePreInitEngine(const NetworkStyle* n
     return engine;
 }
 
-std::unique_ptr<QQmlApplicationEngine> CreateMainEngine(const NetworkStyle* network_style)
+std::unique_ptr<QQmlApplicationEngine> CreateMainEngine(
+    const NetworkStyle* network_style,
+    std::shared_ptr<execution::SerialQueue> qr_queue)
 {
     auto engine = CreateQmlEngine();
     engine->addImageProvider(QStringLiteral("images"), new ImageProvider{network_style});
-    engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider);
+    engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider{
+        std::move(qr_queue), QRImageProvider::RenderImage, engine.get()});
     return engine;
 }

@@ -5,15 +5,22 @@
 #include <QtTest/QtTest>
 
 #include <qml/components/blockclockdial.h>
+#include <qml/executor.h>
+#include <test/mocks/manualstartupexecution.h>
 
 #include <QImage>
 #include <QPainter>
 #include <QPoint>
 #include <QQuickWindow>
+#include <QRegularExpression>
+#include <QScopeGuard>
 #include <QtMath>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 namespace {
 constexpr int DIAL_SIZE{120};
@@ -25,6 +32,36 @@ const QList<QColor> CONFIRMATION_COLORS{
     QColor{QStringLiteral("#EFA148")},
     QColor{QStringLiteral("#F0BB49")},
     QColor{QStringLiteral("#F1D54A")},
+};
+
+struct DialWork {
+    ManualStartupExecution worker;
+    ManualStartupExecution retirement;
+    std::deque<std::function<void()>> publications;
+    const std::shared_ptr<execution::SerialQueue> utility =
+        std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    PresentationServices services{{[this](auto publish) { publications.push_back(std::move(publish)); },
+        [this](auto release) { return retirement.outcomes.post(std::move(release)); }, {}, utility}};
+
+    void publish()
+    {
+        while (!publications.empty()) {
+            auto turn = std::move(publications.front());
+            publications.pop_front();
+            turn();
+        }
+    }
+
+    void settle()
+    {
+        for (int turn = 0; turn < 32 && (!worker.quiescent() || !retirement.quiescent() || !publications.empty()); ++turn) {
+            worker.drain();
+            retirement.drain();
+            publish();
+        }
+    }
+
+    bool quiescent() const { return worker.quiescent() && retirement.quiescent() && publications.empty(); }
 };
 
 class TestableBlockClockDial : public BlockClockDial
@@ -71,6 +108,11 @@ void ConfigureSyncedDial(BlockClockDial& dial, qreal current_fraction,
 
 QImage RenderDial(BlockClockDial& dial)
 {
+    if (!QTest::qWaitFor([&] { return !dial.renderPending(); }, 10000) || !dial.renderError().isEmpty()) {
+        const auto message = QStringLiteral("Native block overlay did not complete: pending=%1 error=%2")
+            .arg(dial.renderPending()).arg(dial.renderError());
+        QTest::qFail(qPrintable(message), __FILE__, __LINE__); return {};
+    }
     QImage image{DIAL_SIZE, DIAL_SIZE, QImage::Format_ARGB32_Premultiplied};
     image.fill(Qt::transparent);
 
@@ -121,6 +163,14 @@ class BlockClockDialTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase();
+    void cleanupTestCase();
+    void manualRendererCoalescesLatestViewportAndRejectsLatePublication();
+    void servicesCloseTheirDials();
+    void oversizedViewportUsesBoundedRasterWithoutDroppingBlocks();
+    void invalidPenGeometryReportsNativeFailureAndRecovers_data();
+    void invalidPenGeometryReportsNativeFailureAndRecovers();
+    void heldEarlierFailureKeepsNewerRenderPending();
     void ibdProgressRendersImmediateHalfArc();
     void syncedGradientToggleChangesRenderedColors();
     void syncedGradientRunsFromOlderToNewerConfirmationColors();
@@ -139,11 +189,169 @@ private Q_SLOTS:
     void coalescedBlocksSaturateAtHighestConfirmationColor();
     void blocksCoalescedWithCurrentTimePreserveConfirmationDepth();
     void blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth();
+private:
+    std::unique_ptr<execution::Executor> m_executor;
+    std::shared_ptr<execution::SerialQueue> m_utility;
+    std::unique_ptr<PresentationServices> m_services;
 };
+
+void BlockClockDialTests::initTestCase()
+{
+    m_executor = std::make_unique<execution::Executor>(execution::Executor::Config{});
+    m_utility = std::make_shared<execution::SerialQueue>(m_executor->makeQueue(execution::Lane::Utility));
+    const auto retirement = std::make_shared<execution::SerialQueue>(m_executor->makeQueue(execution::Lane::Utility));
+    m_services = std::make_unique<PresentationServices>(PresentationServices::Ports{
+        {}, [retirement](auto value) { return retirement->post(std::move(value)); }, {}, m_utility});
+}
+void BlockClockDialTests::cleanupTestCase()
+{
+    const auto drained = std::make_shared<std::atomic_bool>(false);
+    m_services->close();
+    m_utility->whenDrained([drained] { *drained = true; });
+    QTRY_VERIFY(drained->load());
+    QTRY_COMPARE(m_services->pendingRetirements(), size_t{0});
+    m_services.reset();
+    m_utility.reset();
+    m_executor->stopAndJoin();
+    m_executor.reset();
+}
+
+void BlockClockDialTests::manualRendererCoalescesLatestViewportAndRejectsLatePublication()
+{
+    DialWork fixture;
+    BlockClockDial dial{&fixture.services};
+    ConfigureSyncedDial(dial, 0.75, {0.5, 0.25, 0.5});
+    fixture.worker.drain(); // Native normalized and rendered original geometry; GUI output remains held.
+    QVERIFY(dial.renderPending());
+    dial.setWidth(240);
+    fixture.publish(); QVERIFY(dial.renderPending()); // The old viewport's image cannot become current.
+    fixture.settle();
+    QVERIFY(!dial.renderPending()); QVERIFY(dial.renderError().isEmpty());
+    QCOMPARE(dial.renderedPixelSize(), QSize(240, DIAL_SIZE));
+    const QList<qreal> expected{0.25, 0.5, 0.5}; QCOMPARE(dial.blockTimeFractions(), expected);
+    dial.setWidth(241);
+    const auto active = fixture.worker.take(execution::Lane::Utility); QVERIFY(active);
+    for (int width = 242; width < 400; ++width) dial.setWidth(width);
+    QVERIFY(fixture.worker.quiescent());
+    active();
+    fixture.settle();
+    QCOMPARE(dial.renderedPixelSize(), QSize(399, DIAL_SIZE));
+    QSignalSpy changes{&dial, &BlockClockDial::renderStateChanged};
+    dial.setWidth(400); fixture.worker.drain(); dial.close();
+    const int before = changes.count(); fixture.settle();
+    QCOMPARE(changes.count(), before); QVERIFY(fixture.quiescent());
+    QCOMPARE(fixture.services.pendingRetirements(), size_t{0});
+}
+void BlockClockDialTests::servicesCloseTheirDials()
+{
+    ManualStartupExecution worker;
+    const auto utility = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    const auto retirement = std::make_shared<execution::SerialQueue>(worker.executor().makeQueue(execution::Lane::Utility));
+    std::deque<std::function<void()>> publications, retries;
+    const auto publish_all = [&] { while (!publications.empty()) { auto publish = std::move(publications.front()); publications.pop_front(); publish(); } };
+    const auto reject_retirement = std::make_shared<bool>(false);
+    PresentationServices services{{[&](auto publish) { publications.push_back(std::move(publish)); },
+        [retirement, reject_retirement](auto release) { return !*reject_retirement && retirement->post(std::move(release)); },
+        [&](auto retry) { retries.push_back(std::move(retry)); }, utility}};
+    BlockClockDial dial{&services};
+    QCOMPARE(dial.services(), &services);
+    ConfigureSyncedDial(dial, 0.75, {0.5, 0.25, 0.5});
+    QVERIFY(!worker.quiescent());
+    worker.drain();
+    QVERIFY(dial.renderPending());
+    QSignalSpy changes{&dial, &BlockClockDial::renderStateChanged};
+    *reject_retirement = true;
+    services.close(); // Closes the dial through closed().
+    const int before = changes.count(); publish_all(); worker.drain();
+    QCOMPARE(changes.count(), before); QVERIFY(!dial.renderAvailable());
+
+    bool drained{false};
+    QObject receiver;
+    services.whenRetired(&receiver, [&] { drained = true; });
+    worker.drain(); // Finish the closed work queue while cleanup is still refused.
+    QCoreApplication::processEvents();
+    QVERIFY(!drained);
+    QVERIFY(services.pendingRetirements() > 0);
+    QVERIFY(!retries.empty());
+    const auto retry = [&] { auto next = std::move(retries.front()); retries.pop_front(); next(); };
+    *reject_retirement = false;
+    retry();
+    QVERIFY(!drained); // Enqueueing cleanup does not release the retained frame.
+    worker.drain();
+    QVERIFY(!retries.empty());
+    retry();
+    QVERIFY(drained);
+    QCOMPARE(services.pendingRetirements(), size_t{0});
+    // A dial given closed services starts closed and queues no background work.
+    BlockClockDial late{&services};
+    ConfigureSyncedDial(late, 0.75, {0.5});
+    QVERIFY(worker.quiescent());
+    QCOMPARE(worker.coreSubmissions(), size_t{0});
+    QVERIFY(publications.empty()); QVERIFY(!late.renderPending());
+}
+void BlockClockDialTests::invalidPenGeometryReportsNativeFailureAndRecovers_data()
+{
+    QTest::addColumn<qreal>("pen");
+    QTest::newRow("negative") << qreal{-1};
+    QTest::newRow("not-finite") << std::numeric_limits<qreal>::quiet_NaN();
+    QTest::newRow("infinite") << std::numeric_limits<qreal>::infinity();
+}
+void BlockClockDialTests::invalidPenGeometryReportsNativeFailureAndRecovers()
+{
+    QFETCH(qreal, pen);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+    QTest::failOnWarning(QRegularExpression{QStringLiteral("^QPen::setWidthF:.*")});
+#endif
+    DialWork fixture;
+    BlockClockDial dial{&fixture.services};
+    ConfigureSyncedDial(dial, 0.75, {0.5, 0.25}); fixture.settle();
+    QVERIFY(dial.renderAvailable());
+    dial.setPenWidth(pen);
+    QImage empty{DIAL_SIZE, DIAL_SIZE, QImage::Format_ARGB32_Premultiplied};
+    empty.fill(Qt::transparent);
+    {
+        QPainter painter{&empty};
+        dial.paint(&painter); // No Qt pen construction for invalid presentation input.
+    }
+    QCOMPARE(empty.pixelColor(DIAL_SIZE / 2, DIAL_SIZE / 2), QColor(Qt::transparent));
+    fixture.worker.drain(); QVERIFY(dial.renderPending());
+    fixture.settle(); QVERIFY(!dial.renderPending()); QVERIFY(!dial.renderError().isEmpty());
+    QVERIFY(!dial.renderAvailable());
+    dial.setPenWidth(12); fixture.settle();
+    QVERIFY(dial.renderError().isEmpty()); QVERIFY(dial.renderAvailable());
+    dial.close(); fixture.settle(); QVERIFY(fixture.quiescent());
+    QCOMPARE(fixture.services.pendingRetirements(), size_t{0});
+}
+void BlockClockDialTests::heldEarlierFailureKeepsNewerRenderPending()
+{
+    DialWork fixture;
+    BlockClockDial dial{&fixture.services};
+    ConfigureSyncedDial(dial, 0.75, {std::numeric_limits<qreal>::quiet_NaN()});
+    fixture.worker.drain(); // R1 typed failure exists; its GUI notice remains held.
+    dial.retryRendering(); // Same content epoch, newer R2 is admitted but not executed.
+    fixture.publish();
+    QVERIFY(dial.renderPending()); QVERIFY(dial.renderError().isEmpty());
+    fixture.worker.drain(); fixture.publish();
+    QVERIFY(!dial.renderPending()); QVERIFY(!dial.renderError().isEmpty());
+    dial.close(); fixture.settle(); QVERIFY(fixture.quiescent());
+    QCOMPARE(fixture.services.pendingRetirements(), size_t{0});
+}
+void BlockClockDialTests::oversizedViewportUsesBoundedRasterWithoutDroppingBlocks()
+{
+    BlockClockDial dial{m_services.get()}; ConfigureSyncedDial(dial, 0.75, {0.25, 0.5, 0.5});
+    dial.setWidth(1.0e12); dial.setHeight(1.0e12);
+    QVERIFY(QTest::qWaitFor([&] { return !dial.renderPending(); }, 10000));
+    QVERIFY(dial.renderError().isEmpty());
+    const auto pixels = dial.renderedPixelSize();
+    QVERIFY(pixels.width() > 0 && pixels.height() > 0);
+    QVERIFY(pixels.width() <= 1024 && pixels.height() <= 1024);
+    QVERIFY(qint64(pixels.width()) * pixels.height() <= 512 * 1024);
+    QCOMPARE(dial.blockTimeFractions(), (QList<qreal>{0.25, 0.5, 0.5}));
+}
 
 void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setAnimateDial(false);
     dial.setConnected(true);
@@ -162,7 +370,7 @@ void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
 
 void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setAnimateDial(false);
     dial.setConnected(true);
@@ -190,7 +398,7 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
 
 void BlockClockDialTests::syncedGradientRunsFromOlderToNewerConfirmationColors()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setAnimateDial(false);
     dial.setConnected(true);
@@ -216,7 +424,7 @@ void BlockClockDialTests::syncedGradientRunsFromOlderToNewerConfirmationColors()
 
 void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setAnimateDial(false);
     dial.setConnected(true);
@@ -245,7 +453,7 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
 
 void BlockClockDialTests::syncedGradientSpansCurrentPeriodAndUpdatesWithTime()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 1.0, {});
     dial.setShowBlockSegments(false);
     dial.setUseGradientArcWhenSynced(true);
@@ -267,7 +475,7 @@ void BlockClockDialTests::syncedGradientSpansCurrentPeriodAndUpdatesWithTime()
 
 void BlockClockDialTests::connectingDelayControlsInitialAnimation()
 {
-    TestableBlockClockDial delayed_dial;
+    TestableBlockClockDial delayed_dial{m_services.get()};
     ConfigureDial(delayed_dial);
     delayed_dial.setConnected(false);
     delayed_dial.setAnimateDial(true);
@@ -275,7 +483,7 @@ void BlockClockDialTests::connectingDelayControlsInitialAnimation()
     delayed_dial.complete();
     QCOMPARE(CountConfirmationPixels(RenderDial(delayed_dial)), 0);
 
-    TestableBlockClockDial immediate_dial;
+    TestableBlockClockDial immediate_dial{m_services.get()};
     ConfigureDial(immediate_dial);
     immediate_dial.setConnected(false);
     immediate_dial.setAnimateDial(true);
@@ -287,7 +495,7 @@ void BlockClockDialTests::connectingDelayControlsInitialAnimation()
 
 void BlockClockDialTests::inactiveDialStopsAnimationAndRetainsLatestState()
 {
-    TestableBlockClockDial dial;
+    TestableBlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setConnectingAnimationDelayMs(0);
     dial.complete();
@@ -326,7 +534,7 @@ void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
     QFETCH(bool, paused);
     QQuickWindow window;
     window.resize(DIAL_SIZE, DIAL_SIZE);
-    TestableBlockClockDial dial{window.contentItem()};
+    TestableBlockClockDial dial{m_services.get(), window.contentItem()};
     ConfigureDial(dial);
     dial.setAnimateDial(paused);
     dial.setPaused(paused);
@@ -337,7 +545,13 @@ void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
     dial.complete();
     window.show();
     QTRY_VERIFY(dial.paint_count.load() > 0);
-    QTest::qWait(50);
+    // Frames already requested paint after rendering is turned off; on a slow
+    // machine they come later than a fixed wait. Let painting settle first.
+    QTRY_VERIFY(([&] {
+        const int paints{dial.paint_count.load()};
+        QTest::qWait(100);
+        return dial.paint_count.load() == paints;
+    })());
 
     dial.setRenderingActive(false);
     const int paints_before{dial.paint_count.load()};
@@ -354,7 +568,7 @@ void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
 
 void BlockClockDialTests::equalBlockTimestampsPreserveConfirmationDepth()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setAnimateDial(false);
     dial.setConnected(true);
@@ -369,7 +583,7 @@ void BlockClockDialTests::equalBlockTimestampsPreserveConfirmationDepth()
 
 void BlockClockDialTests::paintDoesNotAdvanceAnimationState()
 {
-    TestableBlockClockDial dial;
+    TestableBlockClockDial dial{m_services.get()};
     ConfigureDial(dial);
     dial.setRenderingActive(false);
     dial.complete();
@@ -381,7 +595,7 @@ void BlockClockDialTests::paintDoesNotAdvanceAnimationState()
 
 void BlockClockDialTests::distinctBlocksUseExactConfirmationColors()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.90, {0.15, 0.30, 0.45, 0.60, 0.75});
 
     const QImage image{RenderDial(dial)};
@@ -407,7 +621,7 @@ void BlockClockDialTests::futureBlocksPreserveConfirmationDepth()
 {
     QFETCH(QList<qreal>, blocks);
     QFETCH(int, future_confirmations);
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.75, blocks);
 
     const QImage image{RenderDial(dial)};
@@ -419,7 +633,7 @@ void BlockClockDialTests::futureBlocksPreserveConfirmationDepth()
 
 void BlockClockDialTests::coalescedBlocksUseConfirmationGradient()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.75, {0.25, 0.2501, 0.2502});
 
     const QImage image{RenderDial(dial)};
@@ -440,7 +654,7 @@ void BlockClockDialTests::coalescedBlocksUseConfirmationGradient()
 
 void BlockClockDialTests::coalescedBlocksSaturateAtHighestConfirmationColor()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.75, {0.25, 0.2501, 0.2502, 0.2503, 0.2504, 0.2505});
 
     const QImage image{RenderDial(dial)};
@@ -450,7 +664,7 @@ void BlockClockDialTests::coalescedBlocksSaturateAtHighestConfirmationColor()
 
 void BlockClockDialTests::blocksCoalescedWithCurrentTimePreserveConfirmationDepth()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.75, {0.7498, 0.7499});
 
     const QImage image{RenderDial(dial)};
@@ -465,7 +679,7 @@ void BlockClockDialTests::blocksCoalescedWithCurrentTimePreserveConfirmationDept
 
 void BlockClockDialTests::blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth()
 {
-    BlockClockDial dial;
+    BlockClockDial dial{m_services.get()};
     ConfigureSyncedDial(dial, 0.75, {0.0001, 0.25});
 
     const QImage image{RenderDial(dial)};
@@ -479,4 +693,4 @@ BITCOINQML_REGISTER_QT_TEST(BlockClockDialTests)
 #else
 QTEST_MAIN(BlockClockDialTests)
 #endif
-#include "test_blockclockdial.moc"
+#include <test_blockclockdial.moc>

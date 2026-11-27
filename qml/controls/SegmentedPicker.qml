@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 TabBar {
@@ -14,7 +13,8 @@ TabBar {
     // Set by a hosting FormRow, whose label names the picker.
     property string rowTitle: ""
     property string rowDescription: ""
-    readonly property string currentText: model.length > currentIndex ? optionText(model[currentIndex]) : ""
+    // No selection (currentIndex -1) has no text.
+    readonly property string currentText: currentIndex >= 0 && currentIndex < model.length ? optionText(model[currentIndex]) : ""
 
     signal selected(int index, var option)
 
@@ -73,7 +73,8 @@ TabBar {
                 : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
             width: Math.max(0, (root.availableWidth - root.spacing * (root.model.length - 1)) / Math.max(1, root.model.length))
             height: root.availableHeight
-            activeFocusOnTab: checked
+            // Roving tab stop; a focused segment stays a stop until focus leaves it.
+            activeFocusOnTab: checked || activeFocus
             autoExclusive: true
             checked: index === root.currentIndex
             text: root.optionText(modelData)

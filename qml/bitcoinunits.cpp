@@ -5,13 +5,17 @@
 #include <qml/bitcoinunits.h>
 
 #include <cassert>
-#include <cstdlib>
-#include <limits>
 
 #include <QtGlobal>
 
 namespace {
 constexpr int THIN_SP_CP = 0x2009;
+
+quint64 UnsignedMagnitude(CAmount amount)
+{
+    // Negating the minimum signed value is undefined. Move towards zero first.
+    return amount < 0 ? static_cast<quint64>(-(amount + 1)) + 1 : static_cast<quint64>(amount);
+}
 }
 
 qint64 QmlBitcoinUnits::factor(Unit unit)
@@ -39,10 +43,10 @@ int QmlBitcoinUnits::decimals(Unit unit)
 QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, SeparatorStyle separators)
 {
     const qint64 n = static_cast<qint64>(amount);
-    const qint64 coin = factor(unit);
+    const quint64 coin = factor(unit);
     const int num_decimals = decimals(unit);
-    const qint64 n_abs = (n > 0 ? n : -n);
-    const qint64 quotient = n_abs / coin;
+    const quint64 n_abs = UnsignedMagnitude(amount);
+    const quint64 quotient = n_abs / coin;
 
     QString quotient_str = QString::number(quotient);
     QChar thin_sp(THIN_SP_CP);
@@ -63,16 +67,14 @@ QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, Separa
         return quotient_str;
     }
 
-    const qint64 remainder = n_abs % coin;
+    const quint64 remainder = n_abs % coin;
     const QString remainder_str = QString::number(remainder).rightJustified(num_decimals, '0');
     return quotient_str + "." + remainder_str;
 }
 
 QString QmlBitcoinUnits::formatForDisplay(Unit unit, CAmount amount, bool plussign, const QLocale& locale)
 {
-    const quint64 magnitude = amount == std::numeric_limits<CAmount>::min()
-        ? static_cast<quint64>(std::numeric_limits<CAmount>::max()) + 1
-        : static_cast<quint64>(std::abs(amount));
+    const quint64 magnitude = UnsignedMagnitude(amount);
     const quint64 divisor = factor(unit);
     QString result = locale.toString(magnitude / divisor);
     const int precision = decimals(unit);

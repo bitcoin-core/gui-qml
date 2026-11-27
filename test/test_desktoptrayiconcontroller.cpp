@@ -11,6 +11,12 @@
 #include <QWindow>
 #include <QtTest/QtTest>
 
+#include <memory>
+
+#if defined(Q_OS_MACOS)
+#include <qml/models/macdockiconhandler.h>
+#endif
+
 class DesktopTrayIconControllerTests : public QObject
 {
     Q_OBJECT
@@ -22,6 +28,9 @@ private Q_SLOTS:
     void showWithoutSystemTrayStaysHidden();
     void setToolTipIsReadable();
     void showRestoresGeometryCapturedAtHide();
+#if defined(Q_OS_MACOS)
+    void dockHandoffCoexistsWithCoreAndKeepsOnlyLiveReceivers();
+#endif
 };
 
 void DesktopTrayIconControllerTests::initiallyNotVisible()
@@ -103,10 +112,29 @@ void DesktopTrayIconControllerTests::showRestoresGeometryCapturedAtHide()
     QTRY_COMPARE(window.geometry(), captured);
 }
 
+#if defined(Q_OS_MACOS)
+void DesktopTrayIconControllerTests::dockHandoffCoexistsWithCoreAndKeepsOnlyLiveReceivers()
+{
+    auto* handler = appdesktop::MacDockIconHandler::instance();
+    QCOMPARE(QString::fromLatin1(handler->metaObject()->className()), QStringLiteral("appdesktop::MacDockIconHandler"));
+    auto first = std::make_unique<DesktopTrayIconController>();
+    DesktopTrayIconController second;
+    QSignalSpy first_show{first.get(), &DesktopTrayIconController::showRequested};
+    QSignalSpy second_show{&second, &DesktopTrayIconController::showRequested};
+    QVERIFY(QMetaObject::invokeMethod(handler, "dockIconClicked", Qt::DirectConnection));
+    QCOMPARE(first_show.size(), 1);
+    QCOMPARE(second_show.size(), 1);
+    first.reset();
+    QVERIFY(QMetaObject::invokeMethod(handler, "dockIconClicked", Qt::DirectConnection));
+    QCOMPARE(first_show.size(), 1);
+    QCOMPARE(second_show.size(), 2);
+}
+#endif
+
 #ifdef BITCOINQML_NO_TEST_MAIN
 #include <test/qt_test_registry.h>
 BITCOINQML_REGISTER_QT_TEST(DesktopTrayIconControllerTests)
 #else
 QTEST_MAIN(DesktopTrayIconControllerTests)
 #endif
-#include "test_desktoptrayiconcontroller.moc"
+#include <test_desktoptrayiconcontroller.moc>

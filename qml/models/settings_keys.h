@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_SETTINGS_KEYS_H
 #define BITCOIN_QML_MODELS_SETTINGS_KEYS_H
 
-// QSettings key names for display settings persisted by OptionsQmlModel.
+// QSettings key names for display settings persisted by SettingsModel.
 // Defined in a standalone header (no bitcoin build dependencies) so that
 // unit tests can reference them without pulling in bitcoin internals.
 namespace SettingsKeys {

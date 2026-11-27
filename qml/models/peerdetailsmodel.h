@@ -5,17 +5,24 @@
 #ifndef BITCOIN_QML_MODELS_PEERDETAILSMODEL_H
 #define BITCOIN_QML_MODELS_PEERDETAILSMODEL_H
 
-#include <qml/models/peerlistmodel.h>
-#include <qml/peerstatsutil.h>
+#include <qml/models/peeractionsinterface.h>
+#include <qml/models/peerrecord.h>
+#include <qml/peercommandinterface.h>
 
-#include <netaddress.h>
 #include <QObject>
-#include <util/time.h>
+#include <QPointer>
 
-class PeerDetailsModel : public QObject
+class PeerListModel;
+
+class PeerDetailsModel : public PeerActionsInterface, public PeerPresentationObserver
 {
     Q_OBJECT
-    Q_PROPERTY(int nodeId READ nodeId NOTIFY dataChanged)
+    Q_PROPERTY(qint64 nodeId READ nodeId NOTIFY dataChanged)
+    Q_PROPERTY(QString nodeIdText READ nodeIdText CONSTANT)
+    Q_PROPERTY(QString connectionId READ connectionId CONSTANT)
+    Q_PROPERTY(bool connected READ connected NOTIFY dataChanged)
+    Q_PROPERTY(bool canDisconnect READ canDisconnect NOTIFY dataChanged)
+    Q_PROPERTY(bool canBan READ canBan NOTIFY dataChanged)
     Q_PROPERTY(QString rawAddress READ rawAddress CONSTANT)
     Q_PROPERTY(QString address READ address NOTIFY dataChanged)
     Q_PROPERTY(QString addressLocal READ addressLocal NOTIFY dataChanged)
@@ -48,65 +55,58 @@ class PeerDetailsModel : public QObject
     Q_PROPERTY(QString permission READ permission NOTIFY dataChanged)
 
 public:
-    explicit PeerDetailsModel(const CNodeCombinedStats* nodeStats, PeerListModel* model);
-
-    int nodeId() const { return m_node_id; }
-    QString rawAddress() const { return QString::fromStdString(m_addr.ToStringAddr()); }
-    QString address() const { return QString::fromStdString(m_combinedStats->nodeStats.m_addr_name); }
-    QString addressLocal() const { return QString::fromStdString(m_combinedStats->nodeStats.addrLocal); }
-    QString type() const { return PeerStatsUtil::ConnectionTypeToQString(m_combinedStats->nodeStats.m_conn_type, /*prepend_direction=*/true); }
-    QString network() const { return PeerStatsUtil::NetworkToQString(m_combinedStats->nodeStats.m_network); }
-    QString transport() const { return PeerStatsUtil::TransportToQString(m_combinedStats->nodeStats.m_transport_type); }
-    QString sessionId() const { return QString::fromStdString(m_combinedStats->nodeStats.m_session_id); }
-    QString version() const { return QString::number(m_combinedStats->nodeStats.nVersion); }
-    QString userAgent() const { return QString::fromStdString(m_combinedStats->nodeStats.cleanSubVer); }
-    QString services() const { return PeerStatsUtil::FormatServicesStr(m_combinedStats->nodeStateStats.their_services); }
-    bool transactionRelay() const { return m_combinedStats->nodeStateStats.m_relay_txs; }
-    bool addressRelay() const { return m_combinedStats->nodeStateStats.m_addr_relay_enabled; }
-    bool highBandwidth() const { return m_combinedStats->nodeStats.m_bip152_highbandwidth_to || m_combinedStats->nodeStats.m_bip152_highbandwidth_from; }
-    QString addressesProcessed() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_processed); }
-    QString addressesRateLimited() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_rate_limited); }
-    QString startingHeight() const { return {}; }
-    QString syncedHeaders() const { return QString::number(m_combinedStats->nodeStateStats.nSyncHeight); }
-    QString syncedBlocks() const { return QString::number(m_combinedStats->nodeStateStats.nCommonHeight); }
-    QString direction() const { return QString::fromStdString(m_combinedStats->nodeStats.fInbound ? "Inbound" : "Outbound"); }
-    QString connectionDuration() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_connected); }
-    QString lastSend() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_last_send); }
-    QString lastReceived() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_last_recv); }
-    QString bytesSent() const { return PeerStatsUtil::FormatBytes(m_combinedStats->nodeStats.nSendBytes); }
-    QString bytesReceived() const { return PeerStatsUtil::FormatBytes(m_combinedStats->nodeStats.nRecvBytes); }
-    QString pingTime() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStats.m_last_ping_time); }
-    QString pingMin() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStats.m_min_ping_time); }
-    QString pingWait() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStateStats.m_ping_wait); }
-    QString timeOffset() const { return PeerStatsUtil::FormatTimeOffset(Ticks<std::chrono::seconds>(m_combinedStats->nodeStateStats.time_offset)); }
-    QString mappedAS() const { return m_combinedStats->nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats->nodeStats.m_mapped_as) : QString{}; }
-    QString permission() const {
-        if (m_combinedStats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
-            return {};
-        }
-        QStringList permissions;
-        for (const auto& permission : NetPermissions::ToStrings(m_combinedStats->nodeStats.m_permission_flags)) {
-            permissions.append(QString::fromStdString(permission));
-        }
-        return permissions.join(" & ");
-    }
-
+    explicit PeerDetailsModel(PeerStatsHandle stats, PeerListModel* model);
+    qint64 nodeId() const { return m_node_id; }
+    QString nodeIdText() const { return m_node_id < 0 ? QString{} : QString::number(m_node_id); }
+    QString connectionId() const { return m_connection.key; }
+    bool connected() const;
+    PeerConnection commandTarget() const { return m_connection; }
+    PeerListModel* source() const;
+    bool canDisconnect() const override;
+    bool canBan() const override;
+    PeerCommandOperation* prepareDisconnect() override;
+    PeerCommandOperation* prepareBan(PeerCommandOperation::BanDuration duration) override;
+    QString rawAddress() const { return m_cache.rawAddress; }
+    QString address() const { return m_cache.address; }
+    QString addressLocal() const { return m_cache.addressLocal; }
+    QString type() const { return m_cache.type; }
+    QString network() const { return m_cache.network; }
+    QString transport() const { return m_cache.transport; }
+    QString sessionId() const { return m_cache.sessionId; }
+    QString version() const { return m_cache.version; }
+    QString userAgent() const { return m_cache.userAgent; }
+    QString services() const { return m_cache.services; }
+    bool transactionRelay() const { return m_cache.transactionRelay; }
+    bool addressRelay() const { return m_cache.addressRelay; }
+    bool highBandwidth() const { return m_cache.highBandwidth; }
+    QString addressesProcessed() const { return m_cache.addressesProcessed; }
+    QString addressesRateLimited() const { return m_cache.addressesRateLimited; }
+    QString startingHeight() const { return m_cache.startingHeight; }
+    QString syncedHeaders() const { return m_cache.syncedHeaders; }
+    QString syncedBlocks() const { return m_cache.syncedBlocks; }
+    QString direction() const { return m_cache.direction; }
+    QString connectionDuration() const { return m_cache.connectionDuration; }
+    QString lastSend() const { return m_cache.lastSend; }
+    QString lastReceived() const { return m_cache.lastReceived; }
+    QString bytesSent() const { return m_cache.bytesSent; }
+    QString bytesReceived() const { return m_cache.bytesReceived; }
+    QString pingTime() const { return m_cache.pingTime; }
+    QString pingMin() const { return m_cache.pingMin; }
+    QString pingWait() const { return m_cache.pingWait; }
+    QString timeOffset() const { return m_cache.timeOffset; }
+    QString mappedAS() const { return m_cache.mappedAS; }
+    QString permission() const { return m_cache.permission; }
+    QObject* observerObject() override { return this; }
+    void update(const PeerPresentation& value, bool available) override;
+    void markDisconnected() override;
 Q_SIGNALS:
     void dataChanged();
     void disconnected();
-
-private Q_SLOTS:
-    void onModelRowsRemoved(const QModelIndex& parent, int first, int last);
-    void onModelDataChanged(const QModelIndex& top_left, const QModelIndex& bottom_right);
-    void onModelReset();
-
 private:
-    int m_row{-1};
-    int m_node_id{-1};
-    CNetAddr m_addr;
-    const CNodeCombinedStats* m_combinedStats{nullptr};
-    PeerListModel* m_model{nullptr};
-    bool m_disconnected{false};
+    qint64 m_node_id{-1};
+    QPointer<PeerListModel> m_model;
+    PeerPresentation m_cache;
+    PeerConnection m_connection;
+    bool m_disconnected{true};
 };
-
 #endif // BITCOIN_QML_MODELS_PEERDETAILSMODEL_H

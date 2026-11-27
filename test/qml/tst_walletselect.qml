@@ -19,6 +19,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         walletController.reset()
         walletListModel.reset()
     }
@@ -46,7 +47,7 @@ TestCase {
         const model = createTemporaryObject(typedWalletModel, this)
         model.append({ name: "testwallet", displayName: "Test wallet",
             format: "sqlite", loadState: 1, errorMessage: "",
-            balance: "0", balanceSatoshi: 0, keySchemeKind: 0, walletSection: "open" })
+            balance: "0", balanceSatoshi: 0, balanceKnown: true, keySchemeKind: 0, walletSection: "open" })
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
         popup.open()
         tryCompare(popup, "opened", true)
@@ -82,7 +83,7 @@ TestCase {
         const model = createTemporaryObject(typedWalletModel, this)
         model.append({ name: "typedwallet", displayName: "Typed wallet",
             format: "sqlite", loadState: 1, errorMessage: "",
-            balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: data.kind, walletSection: "open" })
+            balance: "1.23", balanceSatoshi: 123000000, balanceKnown: true, keySchemeKind: data.kind, walletSection: "open" })
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
         popup.open()
         tryCompare(popup, "opened", true)
@@ -112,7 +113,7 @@ TestCase {
         for (let i = 0; i < data.groups.length; ++i) {
             model.append({ name: "wallet" + i, displayName: "Wallet " + i,
                 format: "sqlite", loadState: data.groups[i] === "open" ? 1 : 0,
-                errorMessage: "", balance: "1.23", balanceSatoshi: 123000000, keySchemeKind: 0,
+                errorMessage: "", balance: "1.23", balanceSatoshi: 123000000, balanceKnown: true, keySchemeKind: 0,
                 walletSection: data.groups[i] })
         }
         const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
@@ -125,6 +126,22 @@ TestCase {
             compare(heading !== null && heading.visible, data.groups.indexOf(group) !== -1)
             if (heading !== null) compare(heading.text, group === "open" ? "Open wallets" : "Closed wallets")
         }
+    }
+
+    function test_open_wallet_unknown_balance_is_distinct_from_known_zero() {
+        const model = createTemporaryObject(typedWalletModel, this)
+        model.append({ name: "unknown", displayName: "Unknown balance",
+            format: "sqlite", loadState: 1, errorMessage: "",
+            balance: "0", balanceSatoshi: 0, balanceKnown: false, keySchemeKind: 0, walletSection: "open" })
+        const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
+        popup.open()
+        tryCompare(popup, "opened", true)
+        const list = findChild(popup, "walletSelectList")
+        tryVerify(function() { return list.itemAtIndex(0) !== null })
+        const row = list.itemAtIndex(0)
+        compare(row.statusText, "Balance unavailable")
+        model.setProperty(0, "balanceKnown", true)
+        compare(row.statusText, "0 " + optionsModel.displayUnitLabel)
     }
 
     function test_rows_are_reachable_and_selectable_by_keyboard() {
@@ -278,6 +295,39 @@ TestCase {
         compare(spy.signalArguments[0][0], "testwallet")
         compare(spy.signalArguments[0][1], "sqlite")
         tryCompare(popup, "opened", false)
+    }
+
+    function test_load_completion_keeps_the_picker_and_selection() {
+        const popup = openWalletSelect()
+        const original = walletController.selectedWallet
+        walletController.walletLoadSucceeded(original)
+        compare(popup.opened, true)
+        compare(walletController.selectedWallet, original)
+    }
+
+    function test_default_wallet_is_distinct_from_an_unavailable_selection() {
+        const oldName = testWalletModel.name
+        const oldAvailable = testWalletModel.available
+        try {
+            testWalletModel.name = ""
+            testWalletModel.available = false
+            walletController.setSelectedWalletObject(testWalletModel)
+            const model = createTemporaryObject(typedWalletModel, this)
+            model.append({ name: "", displayName: "Default wallet", format: "sqlite",
+                loadState: 1, errorMessage: "", balance: "0", balanceSatoshi: 0,
+                balanceKnown: true, keySchemeKind: 0, walletSection: "open" })
+            const popup = createTemporaryObject(walletSelectComponent, this, { model: model })
+            popup.open()
+            tryCompare(popup, "opened", true)
+            const list = findChild(popup, "walletSelectList")
+            tryVerify(function() { return list.itemAtIndex(0) !== null })
+            compare(list.itemAtIndex(0).checked, false)
+            testWalletModel.available = true
+            compare(list.itemAtIndex(0).checked, true)
+        } finally {
+            testWalletModel.name = oldName
+            testWalletModel.available = oldAvailable
+        }
     }
 
     Component {

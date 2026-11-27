@@ -50,6 +50,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         UrlOpener.reset()
         Clipboard.setText("")
     }

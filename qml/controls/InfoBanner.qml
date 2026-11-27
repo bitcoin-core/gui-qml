@@ -3,9 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
 
 Rectangle {
     id: root
@@ -47,11 +45,10 @@ Rectangle {
 
     Loader {
         id: contentLoader
-        anchors.left: parent.left
-        anchors.right: root.showsCloseButton ? closeButton.left : parent.right
+        objectName: root.objectName !== "" ? root.objectName + "Content" : ""
+        x: root.horizontalContentMargin
+        width: Math.max(0, (root.showsCloseButton ? closeButton.x - 8 : root.width - root.horizontalContentMargin) - x)
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: root.horizontalContentMargin
-        anchors.rightMargin: root.showsCloseButton ? 8 : root.horizontalContentMargin
         sourceComponent: root.bannerLayout === InfoBanner.Layout.Vertical
             ? verticalContent : horizontalContent
     }
@@ -86,8 +83,11 @@ Rectangle {
                 Layout.preferredHeight: root.iconSize
             }
 
-            ColumnLayout {
+            Column {
+                id: horizontalText
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
                 Layout.rightMargin: root.textRightMargin
                 spacing: Theme.space.xs
 
@@ -98,7 +98,7 @@ Rectangle {
                     textStyle: root.titleTextStyle
                     color: root.titleColor
                     horizontalAlignment: Text.AlignLeft
-                    Layout.fillWidth: true
+                    width: horizontalText.width
                 }
 
                 CoreText {
@@ -108,7 +108,7 @@ Rectangle {
                     textStyle: root.messageTextStyle
                     color: root.messageColor
                     horizontalAlignment: Text.AlignLeft
-                    Layout.fillWidth: true
+                    width: horizontalText.width
                     wrap: true
                 }
             }
@@ -153,6 +153,8 @@ Rectangle {
                 color: root.titleColor
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
             }
 
             CoreText {
@@ -163,6 +165,8 @@ Rectangle {
                 color: root.messageColor
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 0
                 Layout.bottomMargin: 10
                 wrap: true
             }

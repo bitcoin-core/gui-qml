@@ -13,11 +13,12 @@ Button {
     objectName: "walletBadge"
 
     property string balance: ""
-    property var balanceSatoshi: 0
+    property bool balanceKnown: true
+    property real balanceSatoshi: 0
     property bool loading: false
     property bool noWalletLoaded: false
     property bool noWalletsFound: false
-    property int keySchemeKind: WalletQmlModel.SingleKey
+    property int keySchemeKind: WalletModel.SingleKey
     property string walletType: ""
 
     implicitWidth: 240
@@ -73,8 +74,8 @@ Button {
             Layout.preferredHeight: 24
             size: 24
             source: {
-                if (root.keySchemeKind === WalletQmlModel.WatchOnly) return "image://images/visible-filled"
-                if (root.keySchemeKind === WalletQmlModel.MultiKey) return "image://images/two-keys-filled"
+                if (root.keySchemeKind === WalletModel.WatchOnly) return "image://images/visible-filled"
+                if (root.keySchemeKind === WalletModel.MultiKey) return "image://images/two-keys-filled"
                 return "image://images/key-filled"
             }
             color: Theme.color.neutral9
@@ -96,16 +97,24 @@ Button {
             BitcoinAmountDisplayLabel {
                 objectName: "walletBadgeBalanceText"
                 Layout.fillWidth: true
-                visible: !root.loading && !root.noWalletLoaded
+                visible: !root.loading && !root.noWalletLoaded && root.balanceKnown
                 hidesAmount: true
                 amount: root.balance
-                unit: optionsModel.displayUnit === BitcoinAmount.SAT
-                    ? optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : optionsModel.displayUnitLabel
+                unit: ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                    ? ApplicationModels.optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : ApplicationModels.optionsModel.displayUnitLabel
                 color: Theme.color.neutral8
                 textStyle: Theme.text.amountCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
+            }
+            CoreText {
+                objectName: "walletBadgeBalanceUnavailable"
+                Layout.fillWidth: true
+                visible: !root.loading && !root.noWalletLoaded && !root.balanceKnown
+                text: qsTr("Balance unavailable")
+                color: Theme.color.neutral8
+                textStyle: Theme.text.caption
             }
         }
 

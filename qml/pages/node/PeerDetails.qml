@@ -14,16 +14,19 @@ Page {
     objectName: "peerDetails"
 
     signal back
-    signal peerDisconnected(int nodeId)
+    signal peerDisconnected(string connectionId)
 
     property PeerDetailsModel details
     property bool compact: SizeClass.isCompact(width)
     property Item popupParent: null
     property int sectionIndex: 0
-    property var pendingBanTarget: null
-    property var pendingDisconnectTarget: null
-    property int pendingBanDuration: 3600
-    property string pendingBanLabel: qsTr("1 hour")
+    PeerCommandController { id: commands; objectName: "peerDetailsCommandController"; presenting: banConfirmation.visible || disconnectConfirmation.visible }
+    readonly property PeerCommandOperation operation: commands.operation
+    readonly property bool confirmationVisible: commands.prompt !== PeerCommandController.None
+    readonly property bool actionPending: operation !== null && operation.pending
+    readonly property string operationError: commands.errorText
+    readonly property string observationText: operation !== null && operation.resultPresent && operation.result.observationAvailable
+        ? operation.result.targetConnected ? qsTr("This peer is still connected.") : qsTr("This peer is no longer connected.") : ""
     property real maximumContentWidth: 840
     property real contentHorizontalPadding: Theme.space.pagePadding(width)
 
@@ -94,43 +97,14 @@ Page {
     }
     function elapsedValue(value) { return unavailable(value) ? "—" : qsTr("%1 ago").arg(value) }
     function totalValue(value) { return unavailable(value) ? "—" : qsTr("%1 total").arg(value) }
-    function showActionError(message) {
-        peerActionError.message = message
-        peerActionError.open()
-    }
-    function disconnectPeer() {
-        if (pendingDisconnectTarget && nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
-            peerTableModel.refresh()
-        } else {
-            showActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
-        }
-    }
-    function requestDisconnect() {
-        if (!details) return
-        pendingDisconnectTarget = { nodeId: details.nodeId, address: details.address }
-        disconnectConfirmation.open()
-    }
-    function requestBan(duration, label) {
-        if (!details) return
-        pendingBanTarget = { rawAddress: details.rawAddress, address: details.address }
-        pendingBanDuration = duration
-        pendingBanLabel = label
-        banConfirmation.open()
-    }
-    function confirmBan() {
-        if (pendingBanTarget && nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
-        } else {
-            showActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
-        }
-    }
-
+    function requestDisconnect() { commands.disconnectPeer(details) }
+    function requestBan(duration) { commands.banPeer(details, duration) }
+    function disconnectPeer() { commands.confirm() }
+    function confirmBan() { commands.confirm() }
     Connections {
-        target: details
+        target: root.details
         function onDisconnected() {
-            const disconnectedId = root.details ? root.details.nodeId : -1
-            root.peerDisconnected(disconnectedId)
+            if (root.details !== null) root.peerDisconnected(root.details.connectionId)
         }
     }
 
@@ -172,7 +146,7 @@ Page {
                         Layout.fillWidth: true
                         spacing: 10
                         CoreText {
-                            text: details ? qsTr("Peer #%1").arg(details.nodeId) : qsTr("Peer")
+                            text: root.details ? qsTr("Peer #%1").arg(root.details.nodeIdText) : qsTr("Peer")
                             textStyle: Theme.text.headline
                             color: Theme.color.neutral9
                             horizontalAlignment: Text.AlignLeft
@@ -181,7 +155,7 @@ Page {
                     }
                     CoreText {
                         Layout.fillWidth: true
-                        text: details ? details.address : ""
+                        text: root.details ? root.details.address : ""
                         textStyle: Theme.text.monoDescription
                         color: Theme.color.neutral6
                         horizontalAlignment: Text.AlignLeft
@@ -195,17 +169,48 @@ Page {
                     objectName: "peerActionsButton"
                     Layout.alignment: Qt.AlignTop
                     Accessible.name: qsTr("Peer actions")
+                    enabled: root.details !== null && (root.details.canBan || root.details.canDisconnect) && !root.actionPending && !root.confirmationVisible
                     checked: actionMenu.opened
                     onClicked: actionMenu.opened ? actionMenu.close() : actionMenu.open()
                     PeerActionsMenu {
                         id: actionMenu
                         objectName: "peerActionsMenu"
+                        canBan: root.details !== null && root.details.canBan && !root.actionPending && !root.confirmationVisible
+                        canDisconnect: root.details !== null && root.details.canDisconnect && !root.actionPending && !root.confirmationVisible
                         y: actionButton.height + 4
                         x: actionButton.width - width
-                        onBanRequested: (duration, label) => root.requestBan(duration, label)
+                        onBanRequested: (duration) => root.requestBan(duration)
                         onDisconnectRequested: root.requestDisconnect()
                     }
                 }
+            }
+
+            CoreText {
+                objectName: "peerCommandStatus"
+                Layout.fillWidth: true
+                visible: root.operation !== null && (root.operation.pending || root.operation.resultPresent)
+                text: root.operation === null ? "" : root.operation.queryPending ? qsTr("Refreshing peer status…")
+                    : root.operation.pending ? qsTr("Waiting for the peer command…")
+                    : !root.operation.outcomeKnown ? qsTr("The command may not have finished. Refresh to see its current state before doing anything else.")
+                    : root.operation.result.outcome === PeerCommandOperation.PartiallyApplied ? qsTr("The command was only partly applied.") : ""
+                font: Theme.text.description.font
+                color: Theme.color.neutral7
+            }
+            CoreText {
+                objectName: "peerCommandObservation"
+                Layout.fillWidth: true
+                visible: root.observationText.length > 0
+                text: root.observationText
+                font: Theme.text.description.font
+                color: Theme.color.neutral7
+            }
+            TextButton {
+                objectName: "peerCommandReconcileButton"
+                Layout.alignment: Qt.AlignLeft
+                visible: root.operation !== null && root.operation.resultPresent && !root.operation.outcomeKnown
+                enabled: root.operation !== null && !root.operation.pending
+                text: qsTr("Refresh peer status")
+                onClicked: commands.reconcile()
             }
 
             SegmentedPicker {
@@ -228,7 +233,8 @@ Page {
                     width: tableScroll.availableWidth
                     spacing: 16
 
-                    PeerTable {
+                    PeerDetailsTable {
+                        compact: root.compact
                         objectName: "peerInformationTable"
                         width: parent.width
                         visible: root.sectionIndex === 0
@@ -240,13 +246,15 @@ Page {
                         visible: root.sectionIndex === 1
                         spacing: 16
 
-                        PeerTable {
+                        PeerDetailsTable {
+                            compact: root.compact
                             objectName: "peerBlocksSection"
                             width: parent.width
                             title: qsTr("Blocks")
                             rows: root.blockRelayRows
                         }
-                        PeerTable {
+                        PeerDetailsTable {
+                            compact: root.compact
                             objectName: "peerAddressesSection"
                             width: parent.width
                             title: qsTr("Addresses")
@@ -254,7 +262,8 @@ Page {
                         }
                     }
 
-                    PeerTable {
+                    PeerDetailsTable {
+                        compact: root.compact
                         objectName: "peerNetworkTrafficTable"
                         width: parent.width
                         visible: root.sectionIndex === 2
@@ -268,109 +277,72 @@ Page {
     AlertPopup {
         id: banConfirmation
         objectName: "banConfirmationPopup"
+        readonly property string durationLabel: commands.banDurationText
+        shown: commands.prompt === PeerCommandController.Ban
+        onCloseRequested: commands.cancel()
+        // Closing by any route drops the command it asked about.
+        onClosed: commands.cancel()
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Ban peer?")
-        message: root.pendingBanTarget
-            ? qsTr("Ban %1 for %2?").arg(root.pendingBanTarget.address).arg(root.pendingBanLabel)
-            : qsTr("Ban this peer for %1?").arg(root.pendingBanLabel)
+        message: root.operation !== null
+            ? qsTr("Ban %1 for %2?").arg(root.operation.address).arg(banConfirmation.durationLabel)
+            : qsTr("Ban this peer for %1?").arg(banConfirmation.durationLabel)
         AlertAction {
             text: qsTr("Cancel")
             role: AlertAction.Cancel
             buttonObjectName: "banCancelButton"
+            onTriggered: commands.cancel()
         }
         AlertAction {
             text: qsTr("Ban")
             role: AlertAction.Destructive
             buttonObjectName: "banConfirmButton"
-            onTriggered: root.confirmBan()
+            enabled: commands.prompt === PeerCommandController.Ban
+            // Confirming ends the prompt, which closes the alert.
+            closesPopup: false
+            onTriggered: commands.confirm()
         }
     }
 
     AlertPopup {
         id: disconnectConfirmation
         objectName: "disconnectConfirmationPopup"
+        shown: commands.prompt === PeerCommandController.Disconnect
+        onCloseRequested: commands.cancel()
+        // Closing by any route drops the command it asked about.
+        onClosed: commands.cancel()
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Disconnect peer?")
-        message: root.pendingDisconnectTarget
-            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(root.pendingDisconnectTarget.address)
+        message: root.operation !== null
+            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(root.operation.address)
             : qsTr("Disconnect this peer? The peer may reconnect automatically.")
         AlertAction {
             text: qsTr("Cancel")
             role: AlertAction.Cancel
             buttonObjectName: "disconnectCancelButton"
+            onTriggered: commands.cancel()
         }
         AlertAction {
             text: qsTr("Disconnect")
             role: AlertAction.Destructive
             buttonObjectName: "disconnectConfirmButton"
-            onTriggered: root.disconnectPeer()
+            enabled: commands.prompt === PeerCommandController.Disconnect
+            // Confirming ends the prompt, which closes the alert.
+            closesPopup: false
+            onTriggered: commands.confirm()
         }
     }
 
     AlertPopup {
         id: peerActionError
         objectName: "peerActionErrorPopup"
+        shown: root.visible && commands.errorShown
+        onCloseRequested: commands.dismissError()
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Peer action failed")
         messageObjectName: "actionErrorMessage"
+        message: root.operationError
         AlertAction { text: qsTr("OK"); buttonObjectName: "actionErrorCloseButton" }
     }
 
-    // Keep the delegate outside inline components to avoid a Qt 6.2 compiler crash.
-    component PeerTable: Loader {
-        property string title: ""
-        required property var rows
-        sourceComponent: peerTableComponent
-    }
-
-    Component {
-        id: peerTableComponent
-        FormSection {
-            id: table
-            property var rows: parent.rows
-            title: parent ? parent.title : "" // qmllint disable missing-property
-            // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
-            Column {
-                id: tableColumn
-                Layout.fillWidth: true
-                spacing: 0
-                Repeater {
-                    // Updating values must not recreate selectable text fields.
-                    model: table.rows.length
-                    delegate: Component {
-                        FormRow {
-                            id: rowDelegate
-                            required property int index
-                            readonly property var rowData: table.rows[index]
-                            width: tableColumn.width
-                            implicitWidth: 0
-                            showDivider: rowDelegate.index < table.rows.length - 1
-                            contentItem: RowLayout {
-                                spacing: Theme.space.l
-                                SelectableText {
-                                    objectName: "peerDetailKey_" + rowDelegate.index
-                                    Layout.preferredWidth: root.compact ? 112 : 150
-                                    Layout.alignment: Qt.AlignVCenter
-                                    activeFocusOnTab: true
-                                    text: rowDelegate.rowData.label
-                                    textStyle: Theme.text.description
-                                    color: Theme.color.neutral7
-                                }
-                                SelectableText {
-                                    objectName: "peerDetailValue_" + rowDelegate.index
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    Layout.alignment: Qt.AlignVCenter
-                                    activeFocusOnTab: true
-                                    text: rowDelegate.rowData.value
-                                    textStyle: rowDelegate.rowData.mono ? Theme.text.monoDescription : Theme.text.description
-                                    wrapMode: TextEdit.WrapAnywhere
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

@@ -2,8 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <qml/models/texteditsessionmodel.h>
+#include <qml/models/exacttextdocument.h>
+#include <qml/atomicsharedptr.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
+#include <qml/models/filesaveoperation.h>
 #include <qml/bitcoin.h>
 #include <qml/bitcoinqmlapplication.h>
 
@@ -20,18 +24,27 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
-#include <qml/backendexecutor.h>
+#include <qml/applicationmodels.h>
+#include <qml/executor.h>
+#include <qml/components/ownedqrimage.h>
 #include <qml/buttonkeyactivation.h>
 #include <qml/quithandler.h>
 #include <qml/shutdowncoordinator.h>
 #include <qml/startupdialog.h>
+#include <qml/startupeffects.h>
+#include <qml/startuppolicy.h>
+#include <qml/startuppreparation.h>
+#include <qml/qtlogsink.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
 #include <qml/datadir.h>
+#include <qml/desktopintentargs.h>
+#include <qml/desktopintenttransport.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
 #include <qml/guiargs.h>
+#include <qml/guipresentation.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
 #include <qml/urlopener.h>
@@ -39,41 +52,58 @@
 #include <qml/androidnotifier.h>
 #endif
 #include <qml/components/blockclockdial.h>
+#include <qml/presentationservices.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
+#include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
-#include <qml/models/activityfilterproxymodel.h>
-#include <qml/models/addresslistmodel.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
+#include <qml/models/sendimportmodel.h>
+#include <qml/models/preparationoperation.h>
+#include <qml/models/psbtoperation.h>
+#include <qml/models/paymentrequestdeletecontroller.h>
+#include <qml/models/paymentrequestviewcontroller.h>
+#include <qml/models/senddraftcontroller.h>
+#include <qml/models/feebumpcontroller.h>
+#include <qml/models/walletbackupcontroller.h>
+#include <qml/models/walletpasswordcontroller.h>
+#include <qml/models/settingsnavigationcontroller.h>
+#include <qml/models/senddraftinterface.h>
+#include <qml/models/sendoperation.h>
+#include <qml/models/transactionreviewcontroller.h>
+#include <qml/models/transactionreviewinterface.h>
 #include <qml/models/blockclockmodel.h>
 #include <qml/models/blockclockhistory.h>
-#include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
+#include <qml/models/desktopintentmodel.h>
+#include <qml/models/flowdetailsmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/networkstatusmodel.h>
 #include <qml/models/nodemodel.h>
+#include <qml/models/monospaceoutputmodel.h>
 #include <qml/models/desktoptrayiconcontroller.h>
 #include <qml/models/desktopwindowbehaviormodel.h>
 #include <qml/models/onboardingoptionsmodel.h>
-#include <qml/models/options_model.h>
-#include <qml/models/paymentrequest.h>
+#include <qml/models/settingsmodel.h>
+#include <qml/models/uipreferences.h>
 #include <qml/models/peerdetailsmodel.h>
-#include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peercommandmodel.h>
+#include <qml/models/peercommandcontroller.h>
+#include <qml/models/peercommandoperation.h>
+#include <qml/models/peerselectionmodel.h>
+#include <qml/models/peerlistproxymodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <qml/models/settings_keys.h>
-#include <qml/models/sendrecipient.h>
-#include <qml/models/walletlistmodel.h>
-#include <qml/models/walletqmlmodel.h>
-#include <qml/models/walletqmlmodeltransaction.h>
 #include <qml/qmlengine.h>
 #include <qml/qmlfiledialog.h>
+#include <qml/qrimageprovider.h>
 #include <qml/networkstyle.h>
+#include <qml/nativelistmodel.h>
 #include <qml/util.h>
-#include <qml/walletqmlcontroller.h>
 #ifdef ENABLE_TEST_AUTOMATION
 #include <qml/test/testbridge.h>
 #endif
@@ -83,21 +113,45 @@
 #include <util/threadnames.h>
 #include <util/translation.h>
 #ifdef ENABLE_WALLET
+#include <qml/receivetyperegistration.h>
+#include <qml/models/activitydetailmodel.h>
 #include <wallet/wallet.h>
+#include <qml/models/activityfilterproxymodel.h>
+#include <qml/models/activityexportoperation.h>
+#include <qml/models/addresslistmodel.h>
+#include <qml/models/bumptransactionmodel.h>
+#include <qml/models/sendrecipient.h>
+#include <qml/models/walletlistmodel.h>
+#include <qml/models/walletselectionmodel.h>
+#include <qml/models/walletcreationmodel.h>
+#include <qml/models/walletoperationpresentationmodel.h>
+#include <qml/models/coinslistmodel.h>
+#include <qml/models/sendrecipientslistmodel.h>
+#include <qml/models/walletmodel.h>
+#include <qml/models/walletimporttarget.h>
+#include <qml/models/transactionreviewmodel.h>
+#include <qml/models/fileexportoperation.h>
+#include <qml/walletcontroller.h>
 #endif
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdio>
+#include <atomic>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <tuple>
+#include <mutex>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include <QApplication>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFontDatabase>
@@ -106,6 +160,9 @@
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QJSEngine>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -120,6 +177,7 @@
 #include <QTranslator>
 #include <QThread>
 #include <QUrl>
+#include <QUuid>
 #include <QVariant>
 
 QT_BEGIN_NAMESPACE
@@ -165,7 +223,42 @@ bool WalletEnabledFromArgs()
 #endif
 }
 
-AppMode SetupAppMode()
+struct AutomationConfig {
+    bool enabled{false};
+    QString socket,settings_directory,error;
+};
+// Native-only capture; GUI receives bounded presentation/native-handoff data.
+AutomationConfig ReadAutomationConfig(bool resolve_default_socket)
+{
+    AutomationConfig result;
+#ifdef ENABLE_TEST_AUTOMATION
+    result.enabled=gArgs.IsArgSet("-test-automation");
+    result.socket=QString::fromStdString(gArgs.GetArg("-test-automation",""));
+    result.settings_directory=QString::fromStdString(gArgs.GetArg("-test-settings-dir",""));
+    if(result.enabled&&result.socket.isEmpty()&&resolve_default_socket)
+        result.socket=QString::fromStdString((gArgs.GetDataDirNet()/"test_bridge.sock").utf8string());
+    if(result.socket.size()>32768||result.settings_directory.size()>32768){
+        result.socket.clear();result.settings_directory.clear();
+        result.error=QStringLiteral("The startup automation path exceeds its supported size.");
+    }
+#else
+    (void)resolve_default_socket;
+#endif
+    return result;
+}
+struct BootstrapPresentation {
+    bool wallet_enabled{false};
+    QString chain,language,error;
+    AutomationConfig automation;
+};
+struct RuntimePresentation {
+    bool wallet_enabled{false},log_enabled{false};
+    QString chain,error;
+    ChainType network{ChainType::MAIN};
+    fs::path log_file;
+    AutomationConfig automation;
+};
+AppMode SetupAppMode(bool wallet_enabled)
 {
     AppMode::Mode mode;
     #ifdef __ANDROID__
@@ -174,45 +267,15 @@ AppMode SetupAppMode()
         mode = AppMode::DESKTOP;
     #endif // __ANDROID__
 
-    return AppMode(mode, WalletEnabledFromArgs());
+    return AppMode(mode, wallet_enabled);
 }
 
 void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, UrlOpener& url_opener, BitcoinUriModel& bitcoin_uri_model);
 
-bool InitErrorMessageBox(
-    const bilingual_str& message,
-    QmlQuitHandler& quit_handler,
-    const std::function<void(QQmlApplicationEngine&)>& engine_created)
-{
-    qCritical().noquote() << QString::fromStdString(message.original);
-    static AppMode error_app_mode = SetupAppMode();
-    static BuildInfo error_build_info;
-    static Clipboard error_clipboard;
-    static UrlOpener error_url_opener;
-    static BitcoinUriModel error_bitcoin_uri_model;
-    RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_url_opener, error_bitcoin_uri_model);
-
-    const auto engine = CreateInitErrorEngine();
-    engine_created(*engine);
-
-    engine->rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
-    engine->load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
-    if (engine->rootObjects().isEmpty()) {
-        return EXIT_FAILURE;
-    }
-    auto* window = qobject_cast<QQuickWindow*>(engine->rootObjects().first());
-    if (window) ExecStartupDialog(*engine, *window, quit_handler);
-    return false;
-}
-
 // Shows a startup error as an alert inside a window that is already open (the
-// onboarding window) and waits until it is dismissed.
-bool StartupErrorInWindow(
-    QQuickWindow& window,
-    const bilingual_str& message,
-    QmlQuitHandler& quit_handler)
+// onboarding window) and waits until it is dismissed or the window closes.
+bool StartupErrorInWindow(QQuickWindow& window, const QString& summary, QmlQuitHandler& quit_handler)
 {
-    qCritical().noquote() << QString::fromStdString(message.original);
     QQuickItem* content{window.contentItem()};
     const bool content_enabled{content->isEnabled()};
     content->setEnabled(true);
@@ -220,43 +283,83 @@ bool StartupErrorInWindow(
     QObject::connect(&window, SIGNAL(startupErrorAcknowledged()), &dialog_loop, SLOT(quit()));
     QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
     QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
-    QMetaObject::invokeMethod(&window, "showStartupError",
-                              Q_ARG(QVariant, QString::fromStdString(message.translated)));
+    QMetaObject::invokeMethod(&window, "showStartupError", Q_ARG(QVariant, summary));
     if (!quit_handler.isQuitRequested()) dialog_loop.exec();
     content->setEnabled(content_enabled);
     return false;
 }
 
-void RecordStartupWarning(QStringList& startup_warnings, const bilingual_str& message)
+bool InitErrorMessageBox(
+    const QString& summary, presentation::Post post,
+    execution::Executor& executor, execution::Lane preferences_lane,
+    std::shared_ptr<const startupdiagnostics::Collection> full_message,
+    QmlQuitHandler& quit_handler,
+    const std::function<void(QQmlApplicationEngine&)>& engine_created,
+    PresentationServices& diagnostics, StartupDiagnosticsModel* existing_details = nullptr,
+    std::shared_ptr<std::atomic_bool> diagnostic_loss = {},bool wallet_enabled=false,
+    PresentationServices* presentation_services = nullptr, const QString& automation_socket = {})
 {
-    const QString warning{QString::fromStdString(message.translated).trimmed()};
-    if (!warning.isEmpty() && !startup_warnings.contains(warning)) {
-        startup_warnings.push_back(warning);
+    static AppMode error_app_mode = SetupAppMode(wallet_enabled);
+    error_app_mode.setWalletEnabled(wallet_enabled);
+    static BuildInfo error_build_info;
+    static Clipboard error_clipboard;
+    static UrlOpener error_url_opener;
+    static BitcoinUriModel error_bitcoin_uri_model;
+    RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_url_opener, error_bitcoin_uri_model);
+
+    // The source outlives QML root destruction and singleton callbacks.
+    startup::ErrorDetails details_owner;
+    const auto engine = CreateInitErrorEngine();
+    engine_created(*engine);
+    startup::InstallPreferences(*engine, executor, preferences_lane, post,
+        UiPreferencesNamespace::Capture(), startup::PreferencesPhase::ErrorHandoff);
+    details_owner = startup::PrepareErrorDetails(std::move(post), summary, std::move(full_message), existing_details, diagnostic_loss, diagnostics);
+    auto* details = details_owner.model;
+    if (details_owner.replacement_message) engine->rootContext()->setContextProperty("message", *details_owner.replacement_message);
+    if (engine->rootContext()->contextProperty("message").isNull()) engine->rootContext()->setContextProperty("message", summary);
+    QObject::connect(details, &StartupDiagnosticsModel::finished, engine.get(), [details, diagnostic_loss] {
+        startup::RecordProjectionOutcome(*details, diagnostic_loss);
+    });
+    engine->rootContext()->setContextProperty("startupDiagnostics", details);
+    // Without services, complete diagnostics report output as unavailable.
+    if (presentation_services) engine->rootContext()->setContextProperty("presentationServices", presentation_services);
+    engine->load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
+    if (engine->rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
     }
+    auto* window = qobject_cast<QQuickWindow*>(engine->rootObjects().first());
+#ifdef ENABLE_TEST_AUTOMATION
+    // Functional tests read and close a startup error shown before any other window.
+    std::unique_ptr<TestBridge> test_bridge;
+    if (!automation_socket.isEmpty()) test_bridge = std::make_unique<TestBridge>(engine.get(), automation_socket);
+#else
+    Q_UNUSED(automation_socket);
+#endif
+    if (window) ExecStartupDialog(*engine, *window, quit_handler);
+    return false;
 }
 
-/* qDebug() message handler --> debug.log */
-void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
-{
-    Q_UNUSED(context);
-    if (type == QtDebugMsg || (type == QtWarningMsg && IsBenignQtFontWarning(msg))) {
-        LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
-    } else {
-        LogInfo("GUI: %s\n", msg.toStdString());
-    }
-}
+ownership::AtomicSharedPtr<qtlog::Queue> g_qt_log_queue;
+ownership::AtomicSharedPtr<qtlog::FatalPolicy> g_qt_fatal_policy;
 
-void StartupDebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+bool WriteQtLog(const qtlog::Record& record)
 {
-    if (type == QtDebugMsg) {
-        DebugMessageHandler(type, context, msg);
-    } else {
-        // Preserve startup diagnostics on stderr until the main window is ready.
-        const QByteArray formatted = qFormatLogMessage(type, context, msg).toLocal8Bit() + '\n';
-        std::fputs(formatted.constData(), stderr);
-        std::fflush(stderr);
-    }
+    static const qtlog::Writer writer{{
+        [](const QByteArray& text) { return std::fwrite(text.constData(), 1, static_cast<size_t>(text.size()), stderr); },
+        [] { return std::fflush(stderr) == 0; },
+        [](const QString& message) { LogDebug(BCLog::QT, "GUI: %s\n", message.toStdString()); },
+        [](const QString& message) { LogInfo("GUI: %s\n", message.toStdString()); },
+        IsBenignQtFontWarning}};
+    return writer(record);
 }
+void ForwardQtLog(QtMsgType type, const QMessageLogContext& context, const QString& message, qtlog::Stage stage)
+{
+    qtlog::Forward(type, context, message, stage, g_qt_fatal_policy.load(), g_qt_log_queue.load());
+}
+void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+{ ForwardQtLog(type, context, message, qtlog::Stage::Main); }
+void StartupDebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+{ ForwardQtLog(type, context, message, qtlog::Stage::Startup); }
 
 QString ChainQSettingsName(const QString& chain)
 {
@@ -287,15 +390,14 @@ void LoadFontResource(const QString& path)
 }
 
 #ifdef ENABLE_TEST_AUTOMATION
-void ApplyTestSettingsDir()
+void ApplyTestSettingsDir(const QString& settings_dir)
 {
-    const std::string settings_dir{gArgs.GetArg("-test-settings-dir", "")};
-    if (settings_dir.empty()) {
+    if (settings_dir.isEmpty()) {
         return;
     }
 
     QSettings::setDefaultFormat(QSettings::IniFormat);
-    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QString::fromStdString(settings_dir));
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir);
 }
 #endif
 
@@ -323,6 +425,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     url_opener_instance = &url_opener;
     bitcoin_uri_model_instance = &bitcoin_uri_model;
 
+    qmlRegisterSingletonType<ApplicationModels>("org.bitcoincore.qt", 1, 0, "ApplicationModels",
+        [](QQmlEngine* qml_engine, QJSEngine*) -> QObject* { return new ApplicationModels(qml_engine); });
     qmlRegisterSingletonType<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(app_mode_instance, QQmlEngine::CppOwnership);
         return app_mode_instance;
@@ -343,6 +447,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         QQmlEngine::setObjectOwnership(bitcoin_uri_model_instance, QQmlEngine::CppOwnership);
         return bitcoin_uri_model_instance;
     });
+    qmlRegisterUncreatableType<FileSaveOperation>("org.bitcoincore.qt", 1, 0, "FileSaveOperation", "Started by a save request");
     qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
         return new GlobalSettings(QStringLiteral(QAPP_APP_NAME_DEFAULT));
     });
@@ -351,28 +456,154 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
+    qmlRegisterType<OwnedQrImage>("org.bitcoincore.qt", 1, 0, "OwnedQrImage");
+    qmlRegisterType<AppPreferences>("org.bitcoincore.qt", 1, 0, "AppPreferences");
+    qmlRegisterUncreatableType<UiPreferencesStore>("org.bitcoincore.qt", 1, 0, "UiPreferencesStore", "Owned by the application engine");
+    qmlRegisterUncreatableType<PresentationServices>("org.bitcoincore.qt", 1, 0, "PresentationServices", "Owned by the application");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
+    qmlRegisterUncreatableType<PeerCommandModel>("org.bitcoincore.qt", 1, 0, "PeerCommandModel", "Application peer commands");
+    qmlRegisterUncreatableType<PeerCommandOperation>("org.bitcoincore.qt", 1, 0, "PeerCommandOperation", "Captured peer command");
+    qmlRegisterUncreatableType<PeerActionsInterface>("org.bitcoincore.qt", 1, 0, "PeerActionsInterface", "A peer");
+    qmlRegisterType<PeerCommandController>("org.bitcoincore.qt", 1, 0, "PeerCommandController");
+    qmlRegisterType<PeerSelectionModel>("org.bitcoincore.qt", 1, 0, "PeerSelectionModel");
+    qRegisterMetaType<PeerCommandResult>();
+    qmlRegisterUncreatableMetaObject(PeerCommandResult::staticMetaObject, "org.bitcoincore.qt", 1, 0, "PeerCommandResult", "Retained peer result");
+    qmlRegisterUncreatableType<NodeModel>("org.bitcoincore.qt", 1, 0, "NodeModel", "Provided by ApplicationModels");
+    qmlRegisterUncreatableType<DesktopIntentModel>("org.bitcoincore.qt", 1, 0, "DesktopIntentModel", "Owned by the application");
+    qmlRegisterUncreatableType<NetworkModel>("org.bitcoincore.qt",1,0,"NetworkModel","Owned by node");
+    qmlRegisterUncreatableType<RuntimePromptModel>("org.bitcoincore.qt",1,0,"RuntimePromptModel","Owned by original node prompt");
+    qmlRegisterUncreatableMetaObject(nodelifecycle::staticMetaObject,"org.bitcoincore.qt",1,0,"NodeLifecycle","Lifecycle phase");
+    qmlRegisterAnonymousType<NativeListModel>("org.bitcoincore.qt", 1);
+    qmlRegisterUncreatableMetaObject(SettingsSaveResult::staticMetaObject,"org.bitcoincore.qt",1,0,"SettingsSaveResult","Retained settings outcome");
+    qRegisterMetaType<SettingsSaveResult>();
+    qmlRegisterUncreatableType<SettingsEditorModel>("org.bitcoincore.qt",1,0,"SettingsEditorModel","Owned by the settings form");
+    qmlRegisterUncreatableType<SettingsEditorFactoryInterface>("org.bitcoincore.qt",1,0,"SettingsEditorFactoryInterface","The options");
+    qmlRegisterType<SettingsNavigationController>("org.bitcoincore.qt",1,0,"SettingsNavigationController");
+    qmlRegisterUncreatableType<SettingsEntryModel>("org.bitcoincore.qt",1,0,"SettingsEntryModel","Owned by a settings editor");
+    qmlRegisterUncreatableType<CoreSettingsModel>("org.bitcoincore.qt",1,0,"CoreSettingsModel","Owned by settings");
+    qmlRegisterType<CoreProxyDraft>("org.bitcoincore.qt",1,0,"CoreProxyDraft");
+    qmlRegisterType<OptionsTransactionLinks>("org.bitcoincore.qt", 1, 0, "OptionsTransactionLinks");
+    qmlRegisterUncreatableType<FlowDetailsModel>("org.bitcoincore.qt", 1, 0, "FlowDetailsModel", "Owned by a transaction review");
     qmlRegisterUncreatableType<DebugLogModel>("org.bitcoincore.qt", 1, 0, "DebugLogModel", "");
     qmlRegisterUncreatableType<RpcConsoleModel>("org.bitcoincore.qt", 1, 0, "RpcConsoleModel", "");
+    qmlRegisterType<MonospaceOutputModel>("org.bitcoincore.qt", 1, 0, "MonospaceOutputModel");
     qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
     qmlRegisterType<BitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
-    qmlRegisterType<ActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
-    qmlRegisterUncreatableType<TransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Owned by WalletQmlModel");
-    qmlRegisterUncreatableType<AddressListModel>("org.bitcoincore.qt", 1, 0, "AddressListModel", "");
-    qmlRegisterType<PaymentRequest>("org.bitcoincore.qt", 1, 0, "PaymentRequest");
-    qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
-    qmlRegisterUncreatableType<SendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "");
-
+    qmlRegisterUncreatableType<ImportOperation>("org.bitcoincore.qt", 1, 0, "ImportOperation", "An import owned by its source");
+    qmlRegisterUncreatableType<ImportTarget>("org.bitcoincore.qt", 1, 0, "ImportTarget", "A send draft");
+    qmlRegisterType<SendImportModel>("org.bitcoincore.qt", 1, 0, "SendImportModel");
+    qmlRegisterUncreatableType<SendOperation>("org.bitcoincore.qt", 1, 0, "SendOperation", "Started by a wallet");
+    qmlRegisterUncreatableType<PsbtOperation>("org.bitcoincore.qt", 1, 0, "PsbtOperation", "Started by a wallet");
+    qmlRegisterUncreatableType<PreparationOperation>("org.bitcoincore.qt", 1, 0, "PreparationOperation", "Started by a wallet");
+    qmlRegisterUncreatableType<SendDraftInterface>("org.bitcoincore.qt", 1, 0, "SendDraftInterface", "A wallet");
+    qmlRegisterType<SendDraftController>("org.bitcoincore.qt", 1, 0, "SendDraftController");
+    qmlRegisterUncreatableType<TransactionReviewInterface>("org.bitcoincore.qt", 1, 0, "TransactionReviewInterface", "A wallet");
+    qmlRegisterType<TransactionReviewController>("org.bitcoincore.qt", 1, 0, "TransactionReviewController");
 #ifdef ENABLE_WALLET
+    qmlRegisterUncreatableType<PaymentImportOperation>("org.bitcoincore.qt", 1, 0, "PaymentImportOperation", "Owned by an import request");
+    qmlRegisterType<WalletImportTarget>("org.bitcoincore.qt", 1, 0, "WalletImportTarget");
+#else
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "PaymentImportOperation", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletImportTarget", "Wallet support is not compiled");
+#endif
+    qmlRegisterType<ExactTextDocument>("org.bitcoincore.qt", 1, 0, "ExactTextDocument");
+    qmlRegisterUncreatableType<TextEditSessionModel>("org.bitcoincore.qt", 1, 0, "TextEditSessionModel", "Owned by an editor factory");
+    qmlRegisterUncreatableType<TextEditInput>("org.bitcoincore.qt", 1, 0, "TextEditInput", "Owned by an editor");
+    qmlRegisterUncreatableType<TextEditClosePrompt>("org.bitcoincore.qt", 1, 0, "TextEditClosePrompt", "Owned by an editor");
+    qRegisterMetaType<TextEditError>(); qRegisterMetaType<TextEditSaveResult>(); qRegisterMetaType<TextEditConflict>(); qRegisterMetaType<QList<TextEditConflict>>();
+#ifdef ENABLE_WALLET
+    qmlRegisterType<PaymentRequestDeleteController>("org.bitcoincore.qt", 1, 0, "PaymentRequestDeleteController");
+    qmlRegisterType<PaymentRequestViewController>("org.bitcoincore.qt", 1, 0, "PaymentRequestViewController");
+    qmlRegisterType<ActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
+    qmlRegisterUncreatableType<TransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Owned by WalletModel");
+    qmlRegisterUncreatableType<ActivityDetailModel>("org.bitcoincore.qt", 1, 0, "ActivityDetailModel", "Owned by an Activity view");
+    qmlRegisterType<ActivityDetailController>("org.bitcoincore.qt", 1, 0, "ActivityDetailController");
+    qRegisterMetaType<MessageSigningError>(); qRegisterMetaType<MessageVerificationSnapshot>();
+    qmlRegisterUncreatableType<SignVerifyMessageModel>("org.bitcoincore.qt", 1, 0, "SignVerifyMessageModel", "Owned by a wallet");
+    qmlRegisterUncreatableType<MessageSigningPrompt>("org.bitcoincore.qt", 1, 0, "MessageSigningPrompt", "Owned by a signing attempt");
+    qmlRegisterUncreatableType<AddressListModel>("org.bitcoincore.qt", 1, 0, "AddressListModel", "");
+    qmlRegisterUncreatableType<SignerDiscoveryModel>("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Owned by application signer discovery");
+    qmlRegisterUncreatableMetaObject(SignerDiscoveryError::staticMetaObject, "org.bitcoincore.qt", 1, 0, "SignerDiscoveryError", "Error value");
+    qRegisterMetaType<SignerDiscoveryError>();
+    qmlRegisterType<WalletCreationModel>("org.bitcoincore.qt", 1, 0, "WalletCreationModel");
+    qmlRegisterUncreatableType<WalletCreationText>("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Owned by a creation form");
+    qmlRegisterUncreatableType<WalletOperationModel>("org.bitcoincore.qt", 1, 0, "WalletOperationModel", "Owned by an immutable wallet operation");
+    qmlRegisterUncreatableType<WalletOperationPrompt>("org.bitcoincore.qt", 1, 0, "WalletOperationPrompt", "Owned by an immutable wallet operation");
+    qmlRegisterType<WalletOperationPresentationModel>("org.bitcoincore.qt", 1, 0, "WalletOperationPresentationModel");
+    qRegisterMetaType<WalletOperationError>(); qRegisterMetaType<WalletOperationResult>(); qRegisterMetaType<WalletCreationReceipt>();
+    qmlRegisterUncreatableType<WalletProvisioningCheck>("org.bitcoincore.qt", 1, 0, "WalletProvisioningCheck", "Owned by the wallet controller");
+    qmlRegisterUncreatableType<WalletSelectionModel>("org.bitcoincore.qt", 1, 0, "WalletSelectionModel", "Owned by a window");
+    qmlRegisterUncreatableType<WalletNamesController>("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Owned by the wallet controller");
+    qmlRegisterUncreatableType<WalletCreationController>("org.bitcoincore.qt", 1, 0, "WalletCreationController", "Owned by the wallet controller");
+    RegisterReceiveTypes();
+    qmlRegisterUncreatableType<ReceiveRequestOperation>("org.bitcoincore.qt", 1, 0, "ReceiveRequestOperation", "Owned by a receive request command");
+    qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
+    qmlRegisterUncreatableType<FeeSelectionModel>("org.bitcoincore.qt", 1, 0, "FeeSelectionModel", "");
+    qmlRegisterUncreatableType<FeeRateEntry>("org.bitcoincore.qt", 1, 0, "FeeRateEntry", "");
+    qmlRegisterUncreatableType<SendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "");
+    qmlRegisterUncreatableType<SendRecipientsListModel>("org.bitcoincore.qt", 1, 0, "SendRecipientsListModel", "Owned by a wallet");
+    qmlRegisterUncreatableType<CoinsListModel>("org.bitcoincore.qt", 1, 0, "CoinsListModel", "Owned by a wallet");
+
     qmlRegisterUncreatableType<BumpTransactionModel>("org.bitcoincore.qt", 1, 0, "BumpTransactionModel",
                                                       "BumpTransactionModel cannot be instantiated from QML");
-    qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
-                                               "WalletQmlModel cannot be instantiated from QML");
-    qmlRegisterUncreatableType<WalletQmlModelTransaction>("org.bitcoincore.qt", 1, 0, "WalletQmlModelTransaction",
-                                                          "WalletQmlModelTransaction cannot be instantiated from QML");
+    qmlRegisterUncreatableType<WalletSecurityInterface>("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "A wallet");
+    qmlRegisterUncreatableType<SecurityOperation>("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Started by a wallet");
+    qmlRegisterType<WalletPasswordController>("org.bitcoincore.qt", 1, 0, "WalletPasswordController");
+    qmlRegisterUncreatableType<WalletBackupInterface>("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "A wallet");
+    qmlRegisterType<WalletBackupController>("org.bitcoincore.qt", 1, 0, "WalletBackupController");
+    qmlRegisterUncreatableType<FeeBumpOperation>("org.bitcoincore.qt", 1, 0, "FeeBumpOperation", "Opened by a FeeBumpController");
+    qmlRegisterUncreatableType<FeeBumpInterface>("org.bitcoincore.qt", 1, 0, "FeeBumpInterface", "A wallet");
+    qmlRegisterType<FeeBumpController>("org.bitcoincore.qt", 1, 0, "FeeBumpController");
+    qmlRegisterUncreatableType<WalletSecurityModel>("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Owned by a wallet opening");
+    qmlRegisterUncreatableType<SecurityOperationModel>("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Owned by a security command");
+    qmlRegisterUncreatableType<WalletModel>("org.bitcoincore.qt", 1, 0, "WalletModel",
+                                               "WalletModel cannot be instantiated from QML");
+    qmlRegisterUncreatableType<WalletCloseQuestion>("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Owned by a wallet");
+    qmlRegisterUncreatableType<TransactionReviewModel>("org.bitcoincore.qt", 1, 0, "TransactionReviewModel",
+                                                          "TransactionReviewModel cannot be instantiated from QML");
     qmlRegisterUncreatableType<WalletListModel>("org.bitcoincore.qt", 1, 0, "WalletListModel",
                                                 "WalletListModel cannot be instantiated from QML");
+#else
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "ActivityDetailModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "ActivityDetailController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SignVerifyMessageModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "MessageSigningPrompt", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "AddressListModel", "Wallet support is not compiled");
+    for (const auto* type : {"WalletReceiveModel", "PaymentRequestDeleteController", "PaymentRequestViewController", "PaymentRequestEditorModel", "AddressReservationModel", "ReceiveAuthorizationPrompt", "RequestSharingModel", "ShareOperationModel", "RequestImageExportOperation", "ReceiveError", "ReceiveTypeStatus", "SharingError", "RequestImageExportError"})
+        qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, type, "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "ReceiveRequestOperation", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "Transaction", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "FeeSelectionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "FeeRateEntry", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SendRecipient", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SendRecipientsListModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "CoinsListModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "BumpTransactionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSecurityInterface", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SecurityOperation", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletPasswordController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletBackupInterface", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletBackupController", "Wallet support is not compiled");
+    for (const auto* type : {"FeeBumpOperation", "FeeBumpInterface", "FeeBumpController"})
+        qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, type, "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSecurityModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SecurityOperationModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCloseQuestion", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "TransactionReviewModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletListModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletSelectionModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletNamesController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationController", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "SignerDiscoveryModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletCreationText", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletOperationModel", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletOperationPrompt", "Wallet support is not compiled");
+    qmlRegisterTypeNotAvailable("org.bitcoincore.qt", 1, 0, "WalletOperationPresentationModel", "Wallet support is not compiled");
 #endif
 
     registered = true;
@@ -393,6 +624,12 @@ struct PreInitOnboardingContext {
     std::unique_ptr<TestBridge> test_bridge;
 #endif
     QPointer<QQuickWindow> window;
+    QPointer<UiPreferencesStore> preferences;
+
+    void finishPreferences()
+    {
+        startup::FinishPreferences(preferences, window);
+    }
 
     void close()
     {
@@ -403,55 +640,66 @@ struct PreInitOnboardingContext {
             window->close();
         }
         engine.reset();
+        preferences.clear();
         network_style.reset();
         onboarding_options_model.reset();
     }
 };
 
-bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_listen_ipc)
-{
-    const auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc);
-    return !status.ok || status.should_show_onboarding;
-}
-
 PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc, QmlQuitHandler& quit_handler,
+    const presentation::Post& post, execution::Executor& executor,
+    execution::SerialQueue& core, execution::SerialQueue& outcomes,
     const std::function<void(QQmlApplicationEngine&)>& engine_created,
-    const std::function<void(QQmlApplicationEngine&)>& window_created)
+    const std::function<void(QQmlApplicationEngine&)>& window_created,const AutomationConfig& automation)
 {
-    const bool show_onboarding = ShouldShowPreInitOnboarding(argv, can_listen_ipc);
+    const auto status = startup::Run(&core, &outcomes, [argv, can_listen_ipc] { return QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc); });
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
-    if (!show_onboarding) {
-        QmlDataDir::ApplyGuiDataDirSetting(gArgs);
+    if (!status.ok) {
+        const auto error = status.error.toStdString();
+        startup::Run(&core, &outcomes, [error] { return InitError(Untranslated(error)); });
+        return PreInitOnboardingStatus::FAILED;
+    }
+    if (!status.should_show_onboarding) {
+        startup::Run(&core, &outcomes, [] { QmlDataDir::ApplyGuiDataDirSetting(gArgs); return true; });
         return quit_handler.isQuitRequested() ? PreInitOnboardingStatus::CANCELED : PreInitOnboardingStatus::NOT_SHOWN;
     }
 
+    ChainType onboarding_chain{ChainType::MAIN};
     try {
-        SelectParams(gArgs.GetChainType());
+        onboarding_chain=startup::Run(&core, &outcomes, [] { SelectParams(gArgs.GetChainType()); return Params().GetChainType(); });
     } catch (const std::exception& e) {
-        InitError(Untranslated(e.what()));
+        const std::string error{e.what()};
+        startup::Run(&core, &outcomes, [error] { return InitError(Untranslated(error)); });
         return PreInitOnboardingStatus::FAILED;
     }
 
-    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc);
+    context.onboarding_options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc, nullptr, post, &executor);
+    context.onboarding_options_model->configureSettingsCommit(gArgs);
 
-    context.network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
+    context.network_style.reset(NetworkStyle::instantiate(onboarding_chain));
     assert(!context.network_style.isNull());
 
     context.engine = CreatePreInitEngine(context.network_style.data());
     engine_created(*context.engine);
+    context.preferences = startup::InstallPreferences(*context.engine, executor, execution::Lane::Core,
+        post, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
+    if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
     context.engine->rootContext()->setContextProperty("optionsModel", context.onboarding_options_model.get());
+    context.engine->rootContext()->setContextProperty("onboardingOptionsModel", context.onboarding_options_model.get());
     context.engine->load(QUrl(QStringLiteral("qrc:///qml/pages/preinit.qml")));
     if (context.engine->rootObjects().isEmpty()) {
         return PreInitOnboardingStatus::FAILED;
     }
 
 #ifdef ENABLE_TEST_AUTOMATION
-    if (gArgs.IsArgSet("-test-automation")) {
-        const QString socket_path = QString::fromStdString(gArgs.GetArg("-test-automation", ""));
-        if (!socket_path.isEmpty()) {
-            context.test_bridge = std::make_unique<TestBridge>(context.engine.get(), socket_path);
+    if (automation.enabled) {
+        if (!automation.socket.isEmpty()) {
+            context.test_bridge = std::make_unique<TestBridge>(context.engine.get(), automation.socket);
         }
     }
+#endif
+#ifndef ENABLE_TEST_AUTOMATION
+    (void)automation;
 #endif
 
     context.window = qobject_cast<QQuickWindow*>(context.engine->rootObjects().first());
@@ -468,8 +716,14 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 
     const bool completed = context.engine->rootObjects().first()->property("completed").toBool();
     if (!completed || quit_handler.isQuitRequested()) {
+        const auto receipt=context.onboarding_options_model->setupCommitReceipt();
+        QEventLoop drain;bool drained{false};
+        QObject::connect(context.onboarding_options_model.get(),&OnboardingOptionsModel::shutdownFinished,&drain,[&]{drained=true;drain.quit();});
+        context.onboarding_options_model->beginShutdown();
+        while(!drained)drain.exec();
+        const auto outcome=receipt->load();
         context.close();
-        return PreInitOnboardingStatus::CANCELED;
+        return outcome==OnboardingOptionsModel::SetupFailed||outcome==OnboardingOptionsModel::SetupUncertain?PreInitOnboardingStatus::FAILED:PreInitOnboardingStatus::CANCELED;
     }
 
     if (context.window) context.window->contentItem()->setEnabled(false);
@@ -486,522 +740,1058 @@ int QmlGuiMain(int argc, char* argv[])
 
 int BitcoinQmlApplication::runFromCommandLine(int argc, char* argv[])
 {
-#ifdef WIN32
-    common::WinCmdLineArgs winArgs;
-    std::tie(argc, argv) = winArgs.get();
-#endif // WIN32
-
+    // The Windows executable uses Core's UTF-8 application manifest. Its CRT
+    // arguments already have the same UTF-8 encoding as Core's entry points.
     return run(argc, argv);
+}
+
+namespace {
+// Core factories and destruction both run on Native. This owner deliberately
+// holds no executor lease: actor drain must finish before interface retirement.
+struct NativeApplicationInterfaces {
+    std::unique_ptr<interfaces::Init> init;
+    std::unique_ptr<interfaces::Node> node;
+    std::unique_ptr<interfaces::Chain> chain;
+    bool can_listen_ipc{false};
+    std::vector<std::string> arguments;
+    std::vector<char*> argument_pointers;
+    void retire() { chain.reset(); node.reset(); init.reset(); argument_pointers.clear(); arguments.clear(); }
+};
+struct StartupArguments {
+    desktopintent::Arguments parsed;
+    std::vector<std::string> options;
+};
+// Plain bounded transport facts can cross to GUI. Saved-profile recovery and
+// the preparation owner's full Native Result never enter this DTO.
+struct StartupPreparationSummary {
+    startup::preparation::Disposition disposition{startup::preparation::Disposition::Failed};
+    bool closing{false},cancelled{false},request_dropped{false},error_reported{false};
+    QString error;
+    std::optional<desktopintent::transport::StartResult> transport;
+};
+struct StartupProbeSummary {
+    desktopintent::transport::ProbeStatus status{desktopintent::transport::ProbeStatus::Rejected};
+    desktopintent::transport::StartResult transfer;
+    bool request_dropped{false};
+};
+bool DroppedTransfer(const desktopintent::transport::StartResult& result)
+{
+    return std::any_of(result.receipts.begin(),result.receipts.end(),
+        [](const auto& receipt){return receipt.disposition==desktopintent::Disposition::DroppedOnStop;});
+}
+#ifdef ENABLE_TEST_AUTOMATION
+bool PrintStartupTransfer(const desktopintent::transport::StartResult& result)
+{
+    using Status=desktopintent::transport::StartStatus;
+    QString status;
+    switch(result.status){
+    case Status::Primary:status=QStringLiteral("primary");break;
+    case Status::Forwarded:status=QStringLiteral("forwarded");break;
+    case Status::Rejected:status=QStringLiteral("rejected");break;
+    case Status::Unknown:status=QStringLiteral("unknown");break;
+    }
+    QJsonArray keys,receipts;
+    for(const auto& key:result.producer_keys)keys.append(key);
+    for(const auto& receipt:result.receipts)receipts.append(QJsonObject{
+        {QStringLiteral("delivery"),QString::number(receipt.delivery)},
+        {QStringLiteral("inspection"),QString::number(receipt.inspection)},
+        {QStringLiteral("disposition"),static_cast<int>(receipt.disposition)}});
+    const QJsonObject object{{QStringLiteral("version"),1},{QStringLiteral("status"),status},
+        {QStringLiteral("producer_keys"),keys},{QStringLiteral("receipts"),receipts}};
+    const QByteArray line=QByteArray{"R40_TRANSFER_JSON "}+QJsonDocument{object}.toJson(QJsonDocument::Compact)+'\n';
+    return std::fwrite(line.constData(),1,static_cast<size_t>(line.size()),stdout)==static_cast<size_t>(line.size())&&std::fflush(stdout)==0;
+}
+#endif
 }
 
 int BitcoinQmlApplication::run(int argc, char* argv[])
 {
-    noui_connect();
-    Q_INIT_RESOURCE(bitcoin_qml);
-    Q_INIT_RESOURCE(bitcoin_compat);
-    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-
-    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
-    // Qt gets a synthetic argument list so it never parses the process command line:
-    // a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
-    // before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
-    int qt_argc = 1;
-    char qt_application_name[]{"bitcoin-core-app"};
-    char* qt_argv[]{qt_application_name, nullptr};
-    QApplication app(qt_argc, qt_argv);
-    // Route onboarding worker diagnostics to Core's logger as soon as logging is configured.
-    qInstallMessageHandler(StartupDebugMessageHandler);
-    QmlQuitHandler quit_handler;
-    ButtonKeyActivation button_key_activation;
-    app.setQuitOnLastWindowClosed(false);
-    const auto drain_workers_before_application_destruction = qScopeGuard([] {
-        QEventLoop worker_drain_loop;
-        bool all_workers_drained{false};
-        BackendExecutor::shutdownAll(&worker_drain_loop, [&] {
-            all_workers_drained = true;
-            worker_drain_loop.quit();
-        });
-        while (!all_workers_drained) worker_drain_loop.exec();
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    });
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
-
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
-    QStringList startup_warnings;
-    bool startup_canceled{false};
-    // Set while the onboarding window is open, so errors show inside it.
-    QPointer<QQuickWindow> startup_error_window;
-    btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
-        [&](const bilingual_str& message, unsigned int style) {
-            bool result{false};
-            const auto handle_message = [&] {
-                if (style & CClientUIInterface::ICON_WARNING) {
-                    RecordStartupWarning(startup_warnings, message);
-                } else if (!startup_canceled && !quit_handler.isQuitRequested()) {
-                    result = startup_error_window
-                        ? StartupErrorInWindow(*startup_error_window, message, quit_handler)
-                        : InitErrorMessageBox(message, quit_handler,
-                                              [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
-                }
-            };
-            if (QThread::currentThread() == app.thread()) {
-                handle_message();
-            } else {
-                QMetaObject::invokeMethod(&app, handle_message, Qt::BlockingQueuedConnection);
-            }
-            return result;
-        })};
-
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
-
-    // must be set before parsing command-line options; otherwise,
-    // if invalid parameters were passed, QSetting initialization would fail
-    // and the error will be displayed on terminal.
-    // must be set before OptionsModel is initialized or translations are loaded,
-    // as it is used to locate QSettings
-    app.setOrganizationName(QAPP_ORG_NAME);
-    app.setOrganizationDomain(QAPP_ORG_DOMAIN);
-    app.setApplicationName(QAPP_APP_NAME_DEFAULT);
-
-    // Manages translators swapped on runtime language changes.
-    // app_translator: bitcoin-qt strings (shared C++ layer)
-    // qml_translator: QML-app-specific strings
-    std::unique_ptr<QTranslator> app_translator;
-    std::unique_ptr<QTranslator> qml_translator;
-    const auto reset_translator = [](std::unique_ptr<QTranslator>& t) {
-        if (t) { QCoreApplication::removeTranslator(t.get()); t.reset(); }
+    // The process sink outlives QApplication, including destructor diagnostics.
+    // Its only synchronous join occurs after GUI lifetime has ended.
+    qtlog::NativeSink qt_log_sink{WriteQtLog};
+    const auto diagnostic_loss = std::make_shared<std::atomic_bool>(false);
+    g_qt_log_queue.store(qt_log_sink.queue());
+    g_qt_fatal_policy.store(qtlog::CaptureFatalPolicy());
+    const auto previous_log_handler = qInstallMessageHandler(StartupDebugMessageHandler);
+    bool logging_finished{false};
+    const auto finish_qt_logging = [&] {
+        if (std::exchange(logging_finished, true)) return;
+        qInstallMessageHandler(previous_log_handler);
+        g_qt_log_queue.store({});
+        g_qt_fatal_policy.store({});
+        qt_log_sink.finishAfterGui();
     };
-    const auto install_language = [&](const QString& lang) {
-        reset_translator(app_translator);
-        reset_translator(qml_translator);
-        if (!lang.isEmpty()) {
-            auto t = std::make_unique<QTranslator>();
-            if (t->load(QStringLiteral(":/translations/bitcoin_%1.qm").arg(lang)))
-                { QCoreApplication::installTranslator(t.get()); app_translator = std::move(t); }
-
-            auto tq = std::make_unique<QTranslator>();
-            if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
-                { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
-        }
-    };
-
-    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-    SetupServerArgs(gArgs, init->canListenIpc());
-
-    SetupQmlGuiArgs(gArgs);
-    std::string error;
-    if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error)));
-        return EXIT_FAILURE;
-    }
-#ifdef ENABLE_TEST_AUTOMATION
-    ApplyTestSettingsDir();
+    const auto finish_logging_on_exception = qScopeGuard(finish_qt_logging);
+    const auto startup_failed=std::make_shared<std::atomic_bool>(false);
+    const auto setup_record_failed=std::make_shared<std::atomic_bool>(false);
+    const auto core_exit_status=std::make_shared<std::atomic_int>(EXIT_SUCCESS);
+    const auto lifecycle_failed=std::make_shared<std::atomic_bool>(false);
+    const auto run_gui = [&]() -> int {
+        Q_INIT_RESOURCE(bitcoin_qml);
+        Q_INIT_RESOURCE(bitcoin_compat);
+        qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
+        QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
+        // Qt gets a synthetic argument list so it never parses the process command line:
+        // a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
+        // before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
+        int qt_argc = 1;
+        char qt_application_name[]{"bitcoin-core-app"};
+        char* qt_argv[]{qt_application_name, nullptr};
+        QApplication app(qt_argc, qt_argv);
+#ifdef Q_OS_MACOS
+        // QMacStyle draws widgets through Cocoa views. With another platform
+        // plugin (the test suites use `minimal`) a widget file dialog crashes
+        // in QMacStylePrivate::drawNSViewInRect, so use Fusion there.
+        if (QGuiApplication::platformName() != QLatin1String("cocoa")) QApplication::setStyle(QStringLiteral("Fusion"));
 #endif
+        QmlQuitHandler quit_handler;
+        ButtonKeyActivation button_key_activation;
+        app.setQuitOnLastWindowClosed(false);
+        const auto native_interfaces = std::make_shared<NativeApplicationInterfaces>();
+        execution::Executor executor{execution::Executor::Config{}};
+        const auto drain_workers_before_application_destruction = qScopeGuard([native_interfaces, &executor] {
+            startup::DrainThenRetire([native_interfaces] { native_interfaces->retire(); },
+                                    [&executor] { executor.stopAndJoin(); });
+        });
+        QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        QString reset_error;
-        if (!QmlDataDir::ResetGuiSettings(gArgs, &reset_error) && reset_error.isEmpty()) reset_error = QObject::tr("Unable to reset settings.");
-        if (quit_handler.isQuitRequested()) return EXIT_SUCCESS;
-        if (!reset_error.isEmpty()) {
-            InitError(Untranslated(reset_error.toStdString()));
+        auto startup_core = executor.makeQueue(execution::Lane::Core);
+        auto startup_outcomes = executor.makeQueue(execution::Lane::Utility);
+        const auto run_startup = [&](auto work) {
+            return startup::Run(&startup_core, &startup_outcomes, std::move(work));
+        };
+        const auto startup_post = presentation::QueuedPost();
+        // A startup error can hold Core until the dialog closes.
+        const auto diagnostic_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices startup_diagnostics{{startup_post,
+            [diagnostic_retirement](auto work) { return diagnostic_retirement->post(std::move(work)); }, {},
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        const auto retire_diagnostic_value = startup_diagnostics.valueRetirement();
+        // FileOpen can arrive in the very first startup::Run event loop.
+        // Capture owned values now; factory/readiness follow actual Core init.
+        DesktopIntentModel desktop_intent_model{executor, startup_post, false};
+        desktop_intent_model.installFileOpenHandler();
+        std::shared_ptr<desktopintent::transport::Service> desktop_service;
+        std::shared_ptr<startup::preparation::Coordinator> startup_preparation;
+        std::shared_ptr<execution::OwnedCommand<StartupPreparationSummary>> preparation_summary;
+        const auto retire_startup_runtime=[&](std::function<void()> done){
+            startup_diagnostics.close();
+            desktop_intent_model.close();
+            auto service = std::exchange(desktop_service, {});
+            if (service) service->close();
+            if(startup_preparation)startup_preparation->close();
+            if (service) service->stop();
+            preparation_summary.reset();
+            auto finish = [&app, &startup_diagnostics, service = std::move(service), done = std::move(done)]() mutable {
+                QMetaObject::invokeMethod(&app, [&app, &startup_diagnostics, service = std::move(service), done = std::move(done)]() mutable {
+                    startup_diagnostics.whenRetired(&app, [&app, service = std::move(service), done = std::move(done)]() mutable {
+                        if (!service || service->retired()) {
+                            done();
+                            return;
+                        }
+                        const auto acknowledge = [app = &app, done] {
+                            QMetaObject::invokeMethod(app, done, Qt::QueuedConnection);
+                        };
+                        if (service->stop(acknowledge)) return;
+                        done();
+                    });
+                }, Qt::QueuedConnection);
+            };
+            auto drain = [&desktop_intent_model, finish = std::move(finish)]() mutable {
+                desktop_intent_model.whenDrained(std::move(finish));
+            };
+            if (startup_preparation) {
+                startup_preparation->whenDrained(std::move(drain));
+                startup_preparation.reset();
+            } else {
+                drain();
+            }
+        };
+        const auto retire_startup_before_exit=qScopeGuard([&]{
+            QEventLoop retirement;bool drained{false};
+            retire_startup_runtime([&]{drained=true;retirement.quit();});
+            while(!drained)retirement.exec();
+        });
+        run_startup([]{noui_connect();SetupEnvironment();return true;});
+        auto startup_warnings = startupdiagnostics::Create(retire_diagnostic_value);
+        if (!startup_warnings) { qCritical("Startup diagnostic retention is unavailable"); return EXIT_FAILURE; }
+        const auto startup_error_reported=std::make_shared<std::atomic_bool>(false);
+        const auto wallet_presentation=std::make_shared<std::atomic_bool>(AppMode::walletCompiled());
+        bool startup_canceled{false};
+        // Set while the onboarding window is open, so startup errors show inside it.
+        QPointer<QQuickWindow> startup_error_window;
+        // The automation socket, once known, for an error shown in its own window.
+        QString startup_error_automation_socket;
+        btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
+            [&](const bilingual_str& message, unsigned int style) {
+                const auto origin = QThread::currentThread() == app.thread()
+                    ? startup::DiagnosticOrigin::Gui : startup::DiagnosticOrigin::Native;
+                if (style & CClientUIInterface::ICON_WARNING) {
+                    startup::RecordWarning(startup_warnings, message, origin, diagnostic_loss); return false;
+                }
+                startup_error_reported->store(true);
+                const auto error = startup::PrepareError(message, origin, {
+                    [&] { return startupdiagnostics::Create(retire_diagnostic_value); },
+                    [](const QString& text) { qCritical().noquote() << text; }}, diagnostic_loss);
+                bool result{false};
+                const auto handle_message = [&] {
+                    result = startup::DeliverError(startup_canceled, quit_handler.isQuitRequested(), [&] {
+                        if (startup_error_window) return StartupErrorInWindow(*startup_error_window, error.summary, quit_handler);
+                        return InitErrorMessageBox(error.summary, startup_post,
+                            executor, execution::Lane::Utility, error.details, quit_handler,
+                            [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); }, startup_diagnostics, nullptr, diagnostic_loss, wallet_presentation->load(),
+                            nullptr, startup_error_automation_socket);
+                    });
+                };
+                if (origin == startup::DiagnosticOrigin::Gui) handle_message();
+                else QMetaObject::invokeMethod(&app, handle_message, Qt::BlockingQueuedConnection);
+                return result;
+            })};
+
+        util::ThreadSetInternalName("main");
+
+        // must be set before parsing command-line options; otherwise,
+        // if invalid parameters were passed, QSetting initialization would fail
+        // and the error will be displayed on terminal.
+        // must be set before OptionsModel is initialized or translations are loaded,
+        // as it is used to locate QSettings
+        app.setOrganizationName(QAPP_ORG_NAME);
+        app.setOrganizationDomain(QAPP_ORG_DOMAIN);
+        app.setApplicationName(QAPP_APP_NAME_DEFAULT);
+
+        auto command_line=run_startup([native_interfaces, argc, argv] {
+            StartupArguments captured;
+            captured.parsed=desktopintent::ParseArguments(argc,argv,
+                QStringLiteral("arguments:")+QUuid::createUuid().toString(QUuid::WithoutBraces),QDir::currentPath());
+            if(!captured.parsed.error.isEmpty())return captured;
+            auto& options=native_interfaces->arguments;
+            options.reserve(static_cast<size_t>(captured.parsed.options_argc));
+            for(int i=0;i<captured.parsed.options_argc;++i)options.emplace_back(argv[i]);
+            auto& pointers=native_interfaces->argument_pointers;
+            pointers.reserve(options.size()+1);
+            for(auto& option:options)pointers.push_back(option.data());
+            pointers.push_back(nullptr);
+            native_interfaces->init = interfaces::MakeGuiInit(captured.parsed.options_argc,pointers.data());
+            native_interfaces->can_listen_ipc = native_interfaces->init->canListenIpc();
+            captured.options=options;
+            return captured;
+        });
+        if(!command_line.parsed.error.isEmpty()){
+            run_startup([error=command_line.parsed.error]{return InitError(Untranslated(error.toStdString()));});
             return EXIT_FAILURE;
         }
-    }
+        auto& init = native_interfaces->init;
+        const bool can_listen_ipc = native_interfaces->can_listen_ipc;
 
-    LoadFontResource(":/fonts/bitcoincoresans/regular");
-    LoadFontResource(":/fonts/bitcoincoresans/semibold");
-    LoadFontResource(":/fonts/robotomono/regular");
+        // Manages translators swapped on runtime language changes.
+        // app_translator: bitcoin-qt strings (shared C++ layer)
+        // qml_translator: QML-app-specific strings
+        std::unique_ptr<QTranslator> app_translator;
+        std::unique_ptr<QTranslator> qml_translator;
+        const auto reset_translator = [](std::unique_ptr<QTranslator>& t) {
+            if (t) { QCoreApplication::removeTranslator(t.get()); t.reset(); }
+        };
+        const auto install_language = [&](const QString& lang) {
+            reset_translator(app_translator);
+            reset_translator(qml_translator);
+            if (!lang.isEmpty()) {
+                auto t = std::make_unique<QTranslator>();
+                if (t->load(QStringLiteral(":/translations/bitcoin_%1.qm").arg(lang)))
+                    { QCoreApplication::installTranslator(t.get()); app_translator = std::move(t); }
 
-    AppMode app_mode = SetupAppMode();
-    BuildInfo build_info;
-    Clipboard clipboard;
-    UrlOpener url_opener;
-    BitcoinUriModel bitcoin_uri_model;
-    RegisterQmlTypes(app_mode, build_info, clipboard, url_opener, bitcoin_uri_model);
-
-    const QString cli_lang = QString::fromStdString(gArgs.GetArg("-lang", ""));
-    const QString startup_language = cli_lang.isEmpty()
-        ? QSettings().value(SettingsKeys::LANGUAGE, QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(gArgs.GetChainTypeString()))).toString()
-        : cli_lang;
-    if (quit_handler.isQuitRequested()) return EXIT_SUCCESS;
-    install_language(startup_language);
-
-    std::vector<std::string> command_line_args;
-    command_line_args.reserve(argc);
-    for (int i = 0; i < argc; ++i) {
-        command_line_args.emplace_back(argv[i]);
-    }
-
-    PreInitOnboardingContext pre_init_onboarding_context;
-    const PreInitOnboardingStatus pre_init_onboarding_status{
-        RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc(), quit_handler,
-                            [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
-                            [this](QQmlApplicationEngine& engine) { onboardingCreated(engine); })
-    };
-    switch (pre_init_onboarding_status) {
-    case PreInitOnboardingStatus::COMPLETED:
-        break;
-    case PreInitOnboardingStatus::CANCELED:
-        return EXIT_SUCCESS;
-    case PreInitOnboardingStatus::FAILED:
-        return EXIT_FAILURE;
-    case PreInitOnboardingStatus::NOT_SHOWN:
-        break;
-    }
-
-    std::unique_ptr<interfaces::Node> node;
-    std::unique_ptr<interfaces::Chain> chain;
-    const auto prepare_node = [&] {
-        if (common::InitConfig(gArgs, [](const bilingual_str& message, const std::vector<std::string>& details) {
-                return InitError(message, details);
-            })) {
-            return false;
-        }
-        const auto legacy_migration = QmlLegacySettings::MigrateCoreSettings(gArgs, QmlLegacySettings::MigrationMode::Persist);
-        if (!legacy_migration.error.isEmpty()) {
-            return InitError(Untranslated(legacy_migration.error.toStdString()));
-        }
-        if (legacy_migration.settings_changed) {
-            std::vector<std::string> settings_errors;
-            if (!gArgs.WriteSettingsFile(&settings_errors)) {
-                return InitError(_("Settings file could not be written"), settings_errors);
+                auto tq = std::make_unique<QTranslator>();
+                if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
+                    { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
             }
-        }
-        // GUI programs should not print to the console unnecessarily.
-        gArgs.SoftSetBoolArg("-printtoconsole", false);
-        InitLogging(gArgs);
-        InitParameterInteraction(gArgs);
-        // Screen and style information belongs to the GUI thread.
-        if (QThread::currentThread() == app.thread()) {
-            QmlUtil::LogQtInfo();
-        } else {
-            QMetaObject::invokeMethod(&app, QmlUtil::LogQtInfo, Qt::BlockingQueuedConnection);
-        }
-        node = init->makeNode();
-        chain = init->makeChain();
-        if (!node->baseInitialize()) return false;
+        };
 
-        // Use Qt's effective settings identity with the resolved network, before
-        // any window-behavior model reads it. This also works on the onboarding worker.
-        if (gArgs.IsArgSet("-resetguisettings")) {
-            const QSettings defaults;
-            QSettings settings{defaults.format(), defaults.scope(), defaults.organizationName(),
-                               ChainQSettingsName(QString::fromStdString(gArgs.GetChainTypeString()).toUpper())};
-            settings.remove(QStringLiteral("fHideTrayIcon"));
-            settings.remove(QStringLiteral("fMinimizeToTray"));
-            settings.remove(QStringLiteral("fMinimizeOnClose"));
-            settings.sync();
-            if (settings.status() != QSettings::NoError) InitWarning(Untranslated(QObject::tr("Unable to save window settings after reset.").toStdString()));
-        }
-        return true;
-    };
-
-    bool prepared{false};
-    if (pre_init_onboarding_status == PreInitOnboardingStatus::COMPLETED) {
-        // The onboarding window stays visible until MainWindow is ready.
-        // Its model owns the settings write, node preparation and worker cleanup.
-        auto& context = pre_init_onboarding_context;
-        startup_error_window = context.window;
-        QEventLoop preparation_loop;
-        bool preparation_finished{false};
-        QObject::connect(context.window, &QWindow::visibleChanged, &preparation_loop,
-                         [&](bool visible) { if (!visible) startup_canceled = true; });
-        QObject::connect(context.onboarding_options_model.get(), &OnboardingOptionsModel::nodePrepared,
-                         &preparation_loop, [&](bool success, const QString& error) {
-            if (!error.isEmpty()) InitError(Untranslated(error.toStdString()));
-            prepared = success;
-            preparation_finished = true;
-            preparation_loop.quit();
+        // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+        const auto parse_result = run_startup([&, can_listen_ipc] {
+            SetupServerArgs(gArgs, can_listen_ipc);
+            SetupQmlGuiArgs(gArgs);
+            std::string error;
+            const bool parsed = gArgs.ParseParameters(static_cast<int>(native_interfaces->arguments.size()),native_interfaces->argument_pointers.data(),error);
+            return std::pair{parsed, QString::fromStdString(error)};
         });
-        context.onboarding_options_model->prepareNode(gArgs, prepare_node);
-        while (!preparation_finished) preparation_loop.exec();
-        startup_error_window.clear();
-        if (startup_canceled || quit_handler.isQuitRequested()) return EXIT_SUCCESS;
-    } else {
-        // No window is visible, so retain the original synchronous startup path.
-        prepared = prepare_node();
-    }
-    if (!prepared) return EXIT_FAILURE;
-    gui_startup_message_handler.disconnect();
+        if (!parse_result.first) {
+            run_startup([error = parse_result.second] {
+                return InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error.toStdString())));
+            });
+            return EXIT_FAILURE;
+        }
+        const auto bootstrap = run_startup([] {
+            BootstrapPresentation captured;
+            captured.wallet_enabled=WalletEnabledFromArgs();
+            captured.automation=ReadAutomationConfig(false);
+            captured.error=captured.automation.error;
+            try {captured.chain=QString::fromStdString(gArgs.GetChainTypeString()).toUpper();}
+            catch(const std::exception& error){captured.error=QString::fromUtf8(error.what()).left(16384);}
+            captured.language=QString::fromStdString(gArgs.GetArg("-lang",""));
+            if(captured.language.size()>4096){captured.language.clear();captured.error=QStringLiteral("The startup language setting exceeds its supported size.");}
+            return captured;
+        });
+        wallet_presentation->store(bootstrap.wallet_enabled);
+        startup_error_automation_socket = bootstrap.automation.socket;
+        if (!bootstrap.error.isEmpty()) {
+            run_startup([&] { return InitError(Untranslated(bootstrap.error.toStdString())); });
+            return EXIT_FAILURE;
+        }
+#ifdef ENABLE_TEST_AUTOMATION
+        ApplyTestSettingsDir(bootstrap.automation.settings_directory);
+#endif
+        setupChainQSettings(&app, bootstrap.chain);
+        // A reset is one captured onboarding mutation after final profile/path
+        // resolution. Do not empty settings or overwrite its backup at startup.
 
-    const bool wallet_enabled = WalletEnabledFromArgs();
-    app_mode.setWalletEnabled(wallet_enabled);
+        LoadFontResource(":/fonts/bitcoincoresans/regular");
+        LoadFontResource(":/fonts/bitcoincoresans/semibold");
+        LoadFontResource(":/fonts/robotomono/regular");
 
-    constexpr bool backend_ready{false};
-    NodeModel node_model{*node, backend_ready};
-    node_model.addStartupWarnings(startup_warnings);
-    auto block_clock_history{std::make_shared<BlockClockHistory>()};
-    QmlInitExecutor init_executor{*node, [history = block_clock_history, node = node.get(), chain = chain.get()] {
-        return SubscribeBlockClockHistory(*node, *chain, history);
-    }};
-    QmlShutdownCoordinator shutdown_coordinator{init_executor};
-    QPointer<QQuickWindow> main_window;
-    bool shutdown_requested{false};
-    bool shutdown_finished{false};
-    QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::finished, &app, [&] { shutdown_finished = true; });
-    // Read the file the node actually writes, so -debuglogfile=<file> and
-    // -nodebuglogfile are honoured rather than assuming <datadir>/debug.log.
-    DebugLogModel debug_log_model{LogInstance().m_file_path, LogInstance().m_print_to_file};
-#ifdef ENABLE_WALLET
-    std::unique_ptr<WalletQmlController> wallet_controller;
-    if (wallet_enabled) {
-        wallet_controller = std::make_unique<WalletQmlController>(*node);
-        QObject::connect(
-            &init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(),
-            [wallet_controller = wallet_controller.get(), &shutdown_requested](bool success, interfaces::BlockAndHeaderTipInfo, bool, bool backend_shutdown_requested) {
-                if (success && !shutdown_requested && !backend_shutdown_requested) {
-                    wallet_controller->initialize();
+        AppMode app_mode = SetupAppMode(bootstrap.wallet_enabled);
+        BuildInfo build_info;
+        Clipboard clipboard;
+        UrlOpener url_opener;
+        BitcoinUriModel bitcoin_uri_model;
+        RegisterQmlTypes(app_mode, build_info, clipboard, url_opener, bitcoin_uri_model);
+
+        const auto language=run_startup([cli=bootstrap.language]{
+            const QString value=cli.isEmpty()?QSettings().value(SettingsKeys::LANGUAGE,
+                QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(gArgs.GetChainTypeString()))).toString():cli;
+            return value.size()<=4096?std::pair{value,QString{}}:std::pair{QString{},QStringLiteral("The startup language setting exceeds its supported size.")};
+        });
+        if(!language.second.isEmpty()){
+            run_startup([error=language.second]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
+        }
+        if (quit_handler.isQuitRequested()) return EXIT_SUCCESS;
+        install_language(language.first);
+
+        const auto command_line_args=std::move(command_line.options);
+
+        // Forward to an existing peer before a reset wizard, without binding
+        // a Primary listener for a profile the user may still change.
+        const auto role_profile=run_startup([&]{
+            return QmlOnboardingSettings::ResolveOnboardingStartupStatus(command_line_args,can_listen_ipc,nullptr,
+                QmlOnboardingSettings::StartupReadMode::ProfileOnly);
+        });
+        if(!role_profile.ok){
+            run_startup([error=role_profile.error]{return InitError(Untranslated(error.toStdString()));});
+            return EXIT_FAILURE;
+        }
+        if(quit_handler.isQuitRequested())return EXIT_SUCCESS;
+        desktop_service=desktopintent::transport::Service::Create(desktop_intent_model.service());
+        if(!desktop_service){
+            run_startup([]{return InitError(Untranslated("The request could not start. Try again."));});
+            return EXIT_FAILURE;
+        }
+        if(role_profile.probe_eligible){
+            QEventLoop probe_loop;const QPointer<QEventLoop> probe_observer{&probe_loop};
+            auto probe=std::make_shared<execution::OwnedCommand<StartupProbeSummary>>(
+                [post=presentation::ReliablePost(startup_post),probe_observer]{
+                    post([probe_observer]{if(probe_observer)probe_observer->quit();});
+                });
+            probe->startWith([service=desktop_service,&role_profile,&command_line](auto done,auto){
+                try{
+                    const auto admitted=service->probeExisting(role_profile.network_data_dir,role_profile.network,
+                        command_line.parsed.intents,[done](desktopintent::transport::ProbeResult actual){
+                            const bool dropped=DroppedTransfer(actual.transfer);
+                            done(StartupProbeSummary{actual.status,std::move(actual.transfer),dropped});
+                        });
+                    if(!admitted)done(StartupProbeSummary{desktopintent::transport::ProbeStatus::Rejected,
+                        {desktopintent::transport::StartStatus::Rejected,QStringLiteral("Could not check for an app that is already running."),{}},false});
+                    return admitted;
+                }catch(...){
+                    done(StartupProbeSummary{desktopintent::transport::ProbeStatus::Unknown,
+                        {desktopintent::transport::StartStatus::Unknown,QStringLiteral("The request may not have reached the running app. Check it before trying again."),{}},false});
+                    return execution::SubmitResult{};
                 }
             });
-    }
+            auto actual=probe->result();
+            while(!actual){probe_loop.exec();actual=probe->result();}
+            if(!actual->value)return EXIT_FAILURE;
+            const auto outcome=std::move(*actual->value);
+            if(outcome.status!=desktopintent::transport::ProbeStatus::Missing){
+                desktop_service->close();desktop_intent_model.close();
+#ifdef ENABLE_TEST_AUTOMATION
+                if(!run_startup([transfer=outcome.transfer]{
+                    return !gArgs.IsArgSet("-test-automation")||PrintStartupTransfer(transfer);
+                }))*lifecycle_failed=true;
 #endif
-    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown,
-                     &shutdown_coordinator, &QmlShutdownCoordinator::requestShutdown);
-    QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &node_model, [&] {
-        shutdown_requested = true;
-        for (auto* window : QGuiApplication::allWindows()) {
-            if (auto* quick_window = qobject_cast<QQuickWindow*>(window)) quick_window->contentItem()->setEnabled(false);
+                if(outcome.status==desktopintent::transport::ProbeStatus::Forwarded&&!outcome.request_dropped)return EXIT_SUCCESS;
+                const QString error=outcome.request_dropped
+                    ?QStringLiteral("The running application stopped before processing a desktop request. Check that application before trying again.")
+                    :outcome.transfer.error.isEmpty()?QStringLiteral("The request may not have reached the running app. Check it before trying again."):outcome.transfer.error;
+                if(!quit_handler.isQuitRequested())run_startup([error]{return InitError(Untranslated(error.toStdString()));});
+                return EXIT_FAILURE;
+            }
+            if(quit_handler.isQuitRequested())return EXIT_SUCCESS;
         }
-        node_model.requestShutdown();
-    });
-    shutdown_coordinator.addParticipant(&node_model, &NodeModel::workDrained, [&] { node_model.beginShutdown(); });
-    shutdown_coordinator.addParticipant(&debug_log_model, &DebugLogModel::drained, [&] { debug_log_model.stop(); });
-#ifdef ENABLE_WALLET
-    if (wallet_controller) {
-        shutdown_coordinator.addParticipant(wallet_controller.get(), &WalletQmlController::walletsDrained,
-                                            [&] { wallet_controller->beginShutdown(); });
-    }
+
+        PreInitOnboardingContext pre_init_onboarding_context;
+        const PreInitOnboardingStatus pre_init_onboarding_status{
+            RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, can_listen_ipc, quit_handler, startup_post, executor, startup_core, startup_outcomes,
+                                [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
+                                [this](QQmlApplicationEngine& engine) { onboardingCreated(engine); },bootstrap.automation)
+        };
+        switch (pre_init_onboarding_status) {
+        case PreInitOnboardingStatus::COMPLETED:
+            break;
+        case PreInitOnboardingStatus::CANCELED:
+            return EXIT_SUCCESS;
+        case PreInitOnboardingStatus::FAILED:
+            return EXIT_FAILURE;
+        case PreInitOnboardingStatus::NOT_SHOWN:
+            break;
+        }
+
+        auto& node = native_interfaces->node;
+        auto& chain = native_interfaces->chain;
+        const auto qt_info = QmlUtil::CaptureQtInfo();
+        const auto prepare_node = [&, qt_info](const startup::preparation::Profile& expected_profile) {
+            const startup::PreparationPorts ports{
+                [] {
+                    const auto configured = common::InitConfig(gArgs, [](const bilingual_str& message, const std::vector<std::string>& details) {
+                        return InitError(message, details);
+                    });
+                    if (configured) InitError(configured->message, configured->details);
+                    return !configured;
+                },
+                [] {
+                    const auto migrated = QmlLegacySettings::MigrateCoreSettings(gArgs, QmlLegacySettings::MigrationMode::Persist);
+                    return startup::Migration{migrated.settings_changed, migrated.error, [migrated] {
+                        QString error;
+                        const bool completed = QmlLegacySettings::CompleteCoreSettingsMigration(gArgs, migrated, &error);
+                        return startup::SettingsWrite{completed, error.isEmpty() ? std::vector<std::string>{} : std::vector<std::string>{error.toStdString()}};
+                    }};
+                },
+                [] {
+                    startup::SettingsWrite result;
+                    result.success = gArgs.WriteSettingsFile(&result.errors);
+                    return result;
+                },
+                [](const bilingual_str& message, const std::vector<std::string>& details) { InitError(message, details); },
+                [qt_info] {
+                    gArgs.SoftSetBoolArg("-printtoconsole", false);
+                    InitLogging(gArgs);
+                    InitParameterInteraction(gArgs);
+                    QmlUtil::LogQtInfo(qt_info);
+                },
+                [&] { node = init->makeNode(); },
+                [&] { chain = init->makeChain(); },
+                [&] { return node->baseInitialize(); },
+                [] { return gArgs.IsArgSet("-resetguisettings"); },
+                [] {
+                    const QSettings defaults;
+                    QSettings settings{defaults.format(), defaults.scope(), defaults.organizationName(),
+                        ChainQSettingsName(QString::fromStdString(gArgs.GetChainTypeString()).toUpper())};
+                    return startup::ResetWindowSettings({
+                        [&settings](const QString& key) { settings.remove(key); },
+                        [&settings] { settings.sync(); return settings.status() == QSettings::NoError; }});
+                },
+                [](const bilingual_str& warning) { InitWarning(warning); },
+                [expected_profile] {
+                    const auto actual=startup::CurrentProfileIdentity(gArgs);
+                    return actual.directory==expected_profile.directory&&actual.network==expected_profile.network;
+                }};
+            return startup::PrepareNode(ports);
+        };
+
+        if(startup_canceled||quit_handler.isQuitRequested()){
+            if(pre_init_onboarding_context.onboarding_options_model){
+                const auto saved=pre_init_onboarding_context.onboarding_options_model->setupCommitReceipt()->load();
+                if(saved==OnboardingOptionsModel::SetupFailed||saved==OnboardingOptionsModel::SetupUncertain)return EXIT_FAILURE;
+            }
+            return EXIT_SUCCESS; // No preparation request was submitted.
+        }
+        startup::preparation::Ports preparation_ports;
+        preparation_ports.read_profile=[]{
+            auto profile=startup::ReadProfileIdentity(gArgs);
+            return startup::preparation::Profile{std::move(profile.directory),std::move(profile.network)};
+        };
+        preparation_ports.start_transport = [service = desktop_service,
+                                             inputs = std::move(command_line.parsed.intents)](auto profile, auto done) mutable {
+            return service->start(std::move(profile.directory), std::move(profile.network), std::move(inputs), std::move(done));
+        };
+        preparation_ports.prepare_native=prepare_node;
+        preparation_ports.retire_transport = [service = desktop_service](auto done) {
+            return service->stop(std::move(done));
+        };
+        preparation_ports.transport_retired=[service=desktop_service]{return service->retired();};
+        startup_preparation=std::make_shared<startup::preparation::Coordinator>(executor,std::move(preparation_ports));
+        QEventLoop preparation_loop;
+        const QPointer<QEventLoop> preparation_observer{&preparation_loop};
+        preparation_summary=std::make_shared<execution::OwnedCommand<StartupPreparationSummary>>(
+            [post=presentation::ReliablePost(startup_post),preparation_observer]{
+                post([preparation_observer]{if(preparation_observer)preparation_observer->quit();});
+            });
+        const auto start_preparation=[weak_owner=std::weak_ptr{startup_preparation},weak_summary=std::weak_ptr{preparation_summary},startup_error_reported](startup::preparation::Context context,startup::preparation::CompleteResult complete){
+            const auto owner=weak_owner.lock();const auto summary=weak_summary.lock();
+            if(!owner||!summary)return execution::SubmitResult{{},execution::Rejection::Closed};
+            return summary->startWith([owner,startup_error_reported,context=std::move(context),complete=std::move(complete)](auto done,auto)mutable{
+                try{
+                    const auto admitted=owner->start(std::move(context),[done,startup_error_reported,complete=std::move(complete)](auto actual){
+                        const bool dropped=actual->transport&&DroppedTransfer(*actual->transport);
+                        done(StartupPreparationSummary{actual->disposition,actual->closing,actual->cancelled,dropped,startup_error_reported->load(),actual->error,actual->transport});
+                        if(complete)complete(std::move(actual));
+                    });
+                    if(!admitted)done(StartupPreparationSummary{startup::preparation::Disposition::Failed,false,false,false,startup_error_reported->load(),
+                        QStringLiteral("Startup preparation could not start. Nothing was repeated."),{}});
+                    return admitted;
+                }catch(...){
+                    done(StartupPreparationSummary{startup::preparation::Disposition::Uncertain,false,false,false,startup_error_reported->load(),
+                        QStringLiteral("The request may not have reached the running app. Check it before trying again."),{}});
+                    return execution::SubmitResult{};
+                }
+            });
+        };
+        const auto startup_quit_connection=QObject::connect(&quit_handler,&QmlQuitHandler::quitRequested,&preparation_loop,
+            [weak=std::weak_ptr{startup_preparation}]{if(const auto owner=weak.lock())owner->close();});
+        if(startup_canceled||quit_handler.isQuitRequested())startup_preparation->close();
+        std::optional<StartupPreparationSummary> unstarted_preparation;
+        if (pre_init_onboarding_status == PreInitOnboardingStatus::COMPLETED) {
+            // The onboarding window stays visible until MainWindow is ready.
+            // Its model owns the settings write, node preparation and worker cleanup.
+            auto& context = pre_init_onboarding_context;
+            bool preparation_finished{false};
+            const auto visibility_connection=QObject::connect(context.window, &QWindow::visibleChanged, &preparation_loop,
+                             [&](bool visible) { if (!visible) {startup_canceled=true;startup_preparation->close();} });
+            const auto preparation_connection=QObject::connect(context.onboarding_options_model.get(), &OnboardingOptionsModel::nodePreparationFinished,
+                             &preparation_loop, [&](OnboardingOptionsModel::PreparationState outcome, const QString& error) {
+                // Rejection before the Flow reserves its external receiver
+                // legitimately never calls the stable preparation owner.
+                const auto saved=context.onboarding_options_model->setupCommitReceipt()->load();
+                unstarted_preparation=StartupPreparationSummary{
+                    outcome==OnboardingOptionsModel::PreparationUncertain||saved==OnboardingOptionsModel::SetupUncertain?startup::preparation::Disposition::Uncertain
+                        :startup::preparation::Disposition::Failed,
+                    startup_canceled||quit_handler.isQuitRequested(),
+                    false,false,startup_error_reported->load(),error,{}};
+                preparation_finished = true;
+                preparation_loop.quit();
+            });
+            startup_error_window = context.window;
+            context.onboarding_options_model->prepareNodeAsync(gArgs,{start_preparation,[owner=startup_preparation]{owner->close();}});
+            while (!preparation_finished) preparation_loop.exec();
+            startup_error_window.clear();
+            QObject::disconnect(visibility_connection);
+            QObject::disconnect(preparation_connection);
+        } else {
+            start_preparation({},{});
+        }
+        auto prepared=preparation_summary->result();
+        while(!prepared&&!unstarted_preparation){preparation_loop.exec();prepared=preparation_summary->result();}
+        QObject::disconnect(startup_quit_connection);
+        if(prepared&&!prepared->value)return EXIT_FAILURE;
+        const auto preparation=prepared?std::move(*prepared->value):std::move(*unstarted_preparation);
+#ifdef ENABLE_TEST_AUTOMATION
+        if(preparation.transport){
+            if(!run_startup([transfer=*preparation.transport]{
+                return !gArgs.IsArgSet("-test-automation")||PrintStartupTransfer(transfer);
+            })) *lifecycle_failed=true;
+        }
 #endif
-    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
-    QObject::connect(&init_executor, &QmlInitExecutor::runawayException, &node_model, [&](const QString& message) {
-        if (main_window) main_window->contentItem()->setEnabled(true);
-        node_model.handleRunawayException(message);
-        if (!main_window) {
-            InitErrorMessageBox(Untranslated(node_model.startupError().toStdString()), quit_handler,
-                                [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
+        if(preparation.disposition==startup::preparation::Disposition::Forwarded){
+            if(preparation.request_dropped){
+                run_startup([]{return InitError(Untranslated("The running application stopped before processing a desktop request. Check that application before trying again."));});
+                return EXIT_FAILURE;
+            }
+            return EXIT_SUCCESS;
+        }
+        if(preparation.disposition!=startup::preparation::Disposition::Ready){
+            // Closing the onboarding window, including over a startup error, cancels startup.
+            if(startup_canceled||(preparation.cancelled&&(preparation.closing||quit_handler.isQuitRequested())))return EXIT_SUCCESS;
+            if(!preparation.closing&&!preparation.error_reported&&!preparation.error.isEmpty())run_startup([error=preparation.error]{return InitError(Untranslated(error.toStdString()));});
+            return EXIT_FAILURE;
+        }
+        if(preparation.closing||startup_canceled||quit_handler.isQuitRequested())return EXIT_SUCCESS;
+        const auto runtime=run_startup([]{
+            RuntimePresentation captured;
+            captured.wallet_enabled=WalletEnabledFromArgs();
+            captured.chain=QString::fromStdString(gArgs.GetChainTypeString());
+            captured.network=Params().GetChainType();
+            captured.log_file=LogInstance().m_file_path;
+            captured.log_enabled=LogInstance().m_print_to_file;
+            captured.automation=ReadAutomationConfig(true);captured.error=captured.automation.error;
+            if(fs::PathToString(captured.log_file).size()>32768){
+                captured.log_file.clear();captured.error=QStringLiteral("The debug log path exceeds its supported size.");
+            }
+            return captured;
+        });
+        wallet_presentation->store(runtime.wallet_enabled);
+        if(!runtime.error.isEmpty()){
+            run_startup([error=runtime.error]{return InitError(Untranslated(error.toStdString()));});return EXIT_FAILURE;
+        }
+        gui_startup_message_handler.disconnect();
+        run_startup([startup_warnings] { startup_warnings->seal(); return true; });
+        startup_core.close();
+        startup_outcomes.close();
+
+        const bool wallet_enabled = runtime.wallet_enabled;
+        app_mode.setWalletEnabled(wallet_enabled);
+        desktop_intent_model.setWalletEnabled(wallet_enabled);
+
+        constexpr bool backend_ready{false};
+        const auto presentation_post = presentation::QueuedPost();
+        const auto node_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        // Fatal errors from interrupt or shutdown still need Utility after
+        // startup services and ordinary node work have drained.
+        PresentationServices node_values{{presentation_post, [node_retirement](auto work) {
+            return node_retirement->post(std::move(work));
+        }, {}, std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        NodeModel::Services node_services;
+        node_services.post = presentation_post;
+        node_services.diagnostic_loss = diagnostic_loss;
+        node_services.observation_executor = &executor;
+        node_services.diagnostics = &node_values;
+        node_services.network_retirement = node_values.valueRetirement();
+        NodeModel node_model{*node, backend_ready, std::move(node_services)};
+        // Background services for presentation objects that QML creates.
+        PresentationServices presentation_services{{presentation_post, node_model.valueRetirement(), {},
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility))}};
+        bitcoin_uri_model.setServices(presentation_post, wallet_enabled ? &executor : nullptr);
+#ifdef ENABLE_WALLET
+        if(wallet_enabled)desktop_intent_model.setFactory(&bitcoin_uri_model);
+#endif
+        node_model.addStartupWarnings(std::move(startup_warnings));
+        auto block_clock_history{std::make_shared<BlockClockHistory>()};
+        QmlInitExecutor init_executor{*node, std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Priority)),
+            [history = block_clock_history, node = node.get(), chain = chain.get()] {
+            return SubscribeBlockClockHistory(*node, *chain, history);
+        }, diagnostic_loss,[complete_setup=pre_init_onboarding_status==PreInitOnboardingStatus::COMPLETED,startup_failed,setup_record_failed](QmlInitExecutor::StartupOutcome outcome){
+            if(outcome==QmlInitExecutor::StartupOutcome::Cancelled)return;
+            // A runaway exception permits no further Core/settings effects.
+            if(outcome==QmlInitExecutor::StartupOutcome::Uncertain){*startup_failed=true;return;}
+            const bool ready=outcome==QmlInitExecutor::StartupOutcome::Ready;
+            if(!ready)*startup_failed=true;
+            if((ready&&!complete_setup)||!gArgs.GetSettingsPath(nullptr))return;
+            QString error;
+            if(!QmlOnboardingSettings::SetQmlOnboarded(gArgs,ready,&error)){
+                *setup_record_failed=true;
+                InitWarning(Untranslated(QString{QStringLiteral("The startup result could not be saved. Review setup once settings can be written. ")+error}.toStdString()));
+            }
+        }, [core_exit_status](int status) { core_exit_status->store(status); }, lifecycle_failed};
+        QObject::connect(&init_executor,&QmlInitExecutor::phaseChanged,&node_model,[&]{node_model.setLifecyclePhase(init_executor.phase());});
+        ShutdownCoordinator shutdown_coordinator{init_executor};
+        QPointer<QQuickWindow> main_window;
+        bool shutdown_requested{false};
+        bool shutdown_finished{false};
+        desktop_intent_model.setClosedFlag(init_executor.closedFlag());
+        const auto update_desktop_readiness=[&]{
+            desktop_intent_model.setReady(main_window&&!shutdown_requested&&init_executor.acceptingRequests()
+                &&init_executor.phase()==nodelifecycle::Phase::Ready);
+        };
+        QObject::connect(&init_executor,&QmlInitExecutor::phaseChanged,&desktop_intent_model,update_desktop_readiness);
+        QObject::connect(&init_executor,&QmlInitExecutor::acceptingRequestsChanged,&desktop_intent_model,update_desktop_readiness);
+        QObject::connect(&desktop_intent_model,&DesktopIntentModel::requestAttention,&app,[&]{
+            if(main_window&&!shutdown_requested){main_window->show();main_window->raise();main_window->requestActivate();}
+        });
+        const auto detach_desktop_presentation=qScopeGuard([&]{
+            // These cached window/lifecycle locals die before the earlier
+            // executor and mailbox; no later destructor signal may read them.
+            QObject::disconnect(&init_executor,nullptr,&desktop_intent_model,nullptr);
+            QObject::disconnect(&desktop_intent_model,nullptr,&app,nullptr);
+        });
+        QObject::connect(&shutdown_coordinator, &ShutdownCoordinator::finished, &app, [&] { shutdown_finished = true; });
+        // Read the file the node actually writes, so -debuglogfile=<file> and
+        // -nodebuglogfile are honoured rather than assuming <datadir>/debug.log.
+        DebugLogModel debug_log_model{runtime.log_file, runtime.log_enabled, executor, presentation_post};
+#ifdef ENABLE_WALLET
+        std::unique_ptr<WalletController> wallet_controller;
+        if (wallet_enabled) {
+            WalletController::Services wallet_services;
+            wallet_services.executor = &executor;
+            wallet_services.post = presentation_post;
+            const auto wallet_cleanup = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+            const auto native_cleanup = std::make_shared<execution::SerialQueue>(
+                executor.makeQueue(execution::Lane::Utility, execution::UtilityWorker::Cleanup));
+            wallet_services.make_wallet_services = [&executor, wallet_cleanup, native_cleanup](bool) {
+                WalletModel::Services services;
+                services.core = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core));
+                services.outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+                services.cleanup = wallet_cleanup;
+                services.native_cleanup = native_cleanup;
+                return services;
+            };
+            wallet_controller = std::make_unique<WalletController>(*node, walletopening::ChainPreferences(*chain),
+                walletopening::FeePolicy{[chain = chain.get()] { return chain->relayMinFee().GetFeePerK(); }},
+                std::move(wallet_services));
+            bitcoin_uri_model.setExportCoordinator(wallet_controller->backupInstallCoordinator());
+            wallet_controller->setPsbtPolicyRead(
+                psbtpolicy::ReadNode(node.get(), chain.get(), /*enforce_raw_fee_cap=*/true),
+                psbtpolicy::ReadNode(node.get(), chain.get(), /*enforce_raw_fee_cap=*/false));
+            wallet_controller->creation()->setSignerPorts(signerdiscovery::PublicPorts(*node, gArgs));
+            wallet_controller->creation()->setSignerExecutor(executor);
+            QObject::connect(
+                &init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(),
+                [wallet_controller = wallet_controller.get(), &shutdown_requested](bool success, interfaces::BlockAndHeaderTipInfo, bool, bool backend_shutdown_requested) {
+                    if (success && !shutdown_requested && !backend_shutdown_requested) {
+                        wallet_controller->initialize();
+                    }
+                });
+        }
+#endif
+        QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
+        QObject::connect(&node_model, &NodeModel::requestedShutdown,
+                         &shutdown_coordinator, &ShutdownCoordinator::requestShutdown);
+        shutdown_coordinator.addStopHook([&] {
+            if(desktop_service)desktop_service->close();
+            desktop_intent_model.close();
+        });
+        shutdown_coordinator.addStopHook([&] { init_executor.close(); });
+        shutdown_coordinator.addStopHook([&] { node_model.close(); });
+        shutdown_coordinator.addStopHook([&] { bitcoin_uri_model.close(); });
+        if (wallet_enabled) {
+            shutdown_coordinator.addAfterInterruptTask([&](auto done) { bitcoin_uri_model.whenDrained(std::move(done)); });
+        }
+        shutdown_coordinator.addBeforeInterruptTask(retire_startup_runtime);
+        shutdown_coordinator.addStopHook([&] { presentation_services.close(); });
+        shutdown_coordinator.addBeforeInterruptTask([&](std::function<void()> done) {
+            presentation_services.whenRetired(&shutdown_coordinator, std::move(done));
+        });
+        QObject::connect(&shutdown_coordinator, &ShutdownCoordinator::shutdownStarted, &node_model, [&] {
+            shutdown_requested = true;
+            for (auto* window : QGuiApplication::allWindows()) {
+                if (auto* quick_window = qobject_cast<QQuickWindow*>(window)) quick_window->contentItem()->setEnabled(false);
+            }
             node_model.requestShutdown();
+        });
+        shutdown_coordinator.addParticipant(&node_model, &NodeModel::workDrained, [&] { node_model.beginShutdown(); });
+        shutdown_coordinator.addParticipant(&debug_log_model, &DebugLogModel::drained, [&] { debug_log_model.stop(); });
+#ifdef ENABLE_WALLET
+        if (wallet_controller) {
+            shutdown_coordinator.addStopHook([&] { wallet_controller->close(); });
+            shutdown_coordinator.addParticipant(wallet_controller.get(), &WalletController::walletsDrained,
+                                                [&] { wallet_controller->beginShutdown(); });
         }
-    });
+#endif
+        QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
+        QObject::connect(&init_executor, &QmlInitExecutor::runawayException, &node_model, [&](const QString& message) {
+            if (main_window) main_window->contentItem()->setEnabled(true);
+            node_model.handleRunawayException(message);
+            if (!main_window) {
+                InitErrorMessageBox(QObject::tr("A fatal node error occurred."), presentation_post,
+                                    executor, execution::Lane::Core, {}, quit_handler,
+                                    [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
+                                    node_values, static_cast<StartupDiagnosticsModel*>(node_model.startupDiagnostics()), diagnostic_loss, wallet_enabled,
+                                    &presentation_services);
+                node_model.requestShutdown();
+            }
+        });
 
-    NetworkTrafficTower network_traffic_tower{*node};
-    QObject::connect(&node_model, &NodeModel::chainStateReady,
-                     &network_traffic_tower, &NetworkTrafficTower::startSampling);
-    shutdown_coordinator.addParticipant(&network_traffic_tower, &NetworkTrafficTower::drained,
-                                        [&] { network_traffic_tower.beginShutdown(); });
-    NetworkStatusModel network_status_model;
+        NetworkTrafficTower network_traffic_tower{*node, executor, 1000, presentation_post};
+        shutdown_coordinator.addStopHook([&] { network_traffic_tower.close(); });
+        QObject::connect(&node_model, &NodeModel::chainStateReady,
+                         &network_traffic_tower, &NetworkTrafficTower::startSampling);
+        shutdown_coordinator.addParticipant(&network_traffic_tower, &NetworkTrafficTower::drained,
+                                            [&] { network_traffic_tower.beginShutdown(); });
+        NetworkStatusModel network_status_model;
 #ifdef __ANDROID__
-    AndroidNotifier android_notifier{node_model};
+        AndroidNotifier android_notifier{node_model};
 #endif
 
-    ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
-    BlockClockModel block_clock_model{block_clock_history};
-    setupChainQSettings(&app, chain_model.networkName());
+        ChainModel chain_model{runtime.chain};
+        BlockClockModel block_clock_model{block_clock_history, presentation_services};
+        setupChainQSettings(&app, chain_model.networkName());
 
 
 
-    DesktopWindowBehaviorModel desktop_window_behavior_model;
-    DesktopTrayIconController desktop_tray_icon_controller;
-
-    qGuiApp->setQuitOnLastWindowClosed(false);
-    QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, &desktop_tray_icon_controller, [&] {
-        // When the tray icon is visible the node keeps running in the background.
-        if (desktop_tray_icon_controller.visible()) return;
-        node_model.requestShutdown();
-    });
-
-    PeerListModel peer_model{*node, nullptr, backend_ready};
-    QObject::connect(&node_model, &NodeModel::chainStateReady,
-                     &peer_model, &PeerListModel::backendInitialized);
-    PeerListSortProxy peer_model_sort_proxy{nullptr};
-    peer_model_sort_proxy.setSourceModel(&peer_model);
-
-    BanListModel ban_list_model{*node, nullptr, backend_ready};
-    QObject::connect(&node_model, &NodeModel::bannedListChanged,
-                     &ban_list_model, &BanListModel::refresh);
-    QObject::connect(&node_model, &NodeModel::chainStateReady,
-                     &ban_list_model, &BanListModel::backendInitialized);
-
-    QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &peer_model, [&] {
-        peer_model.beginShutdown();
-        ban_list_model.beginShutdown();
-        block_clock_model.stop();
-        QObject::disconnect(&node_model, nullptr, &ban_list_model, nullptr);
-        QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
-    });
-
-    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
-    assert(!network_style.isNull());
-    auto engine = CreateMainEngine(network_style.data());
-    qmlEngineCreated(*engine);
-
-    engine->rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
-    engine->rootContext()->setContextProperty("networkStatusModel", &network_status_model);
-    engine->rootContext()->setContextProperty("nodeModel", &node_model);
-    engine->rootContext()->setContextProperty("chainModel", &chain_model);
-    engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
-    engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
-    engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
-    engine->rootContext()->setContextProperty("banListModel", &ban_list_model);
-    engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
-
-    RpcConsoleModel rpc_console_model{*node};
-    shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
-                                        [&] { rpc_console_model.beginShutdown(); });
-    QObject::connect(&node_model, &NodeModel::nodeInitialized,
-                     &rpc_console_model, &RpcConsoleModel::onNodeInitialized);
-    engine->rootContext()->setContextProperty("rpcConsoleModel", &rpc_console_model);
-
-#ifdef ENABLE_WALLET
-    std::unique_ptr<WalletListModel> wallet_list_model;
-    if (wallet_enabled) {
-        wallet_list_model = std::make_unique<WalletListModel>(*node, nullptr);
-        QObject::connect(wallet_controller.get(), &WalletQmlController::walletLoadStateChanged,
-                         wallet_list_model.get(), &WalletListModel::setWalletLoadState);
-        QObject::connect(wallet_controller.get(), &WalletQmlController::walletInfoChanged,
-                         wallet_list_model.get(), &WalletListModel::setWalletInfo);
-        QObject::connect(wallet_controller.get(), &WalletQmlController::walletDisplayNamesChanged,
-                         wallet_list_model.get(), &WalletListModel::refreshDisplayNames);
-        QObject::connect(wallet_list_model.get(), &WalletListModel::walletListChanged,
-                         wallet_controller.get(), [controller = wallet_controller.get()](bool has_wallets) {
-                             controller->setNoWalletsFound(!has_wallets);
-                         });
-        // listWalletDir() rebuilds m_items from scratch — any per-row info
-        // pushed earlier (e.g. at controller initialize() time, before the
-        // picker was ever opened) has nowhere to land. Re-publish open wallets'
-        // info every time the model resets so newly created rows pick it up.
-        QObject::connect(wallet_list_model.get(), &QAbstractItemModel::modelReset,
-                         wallet_controller.get(), &WalletQmlController::publishOpenWalletsInfo);
-        QObject::connect(wallet_controller.get(), &WalletQmlController::initializedChanged,
-                         wallet_list_model.get(), [controller = wallet_controller.get(), list_model = wallet_list_model.get()]() {
-                             if (controller->initialized()) {
-                                 list_model->listWalletDir();
-                             }
-                         });
-        engine->rootContext()->setContextProperty("walletController", wallet_controller.get());
-        engine->rootContext()->setContextProperty("walletListModel", wallet_list_model.get());
-    }
-#endif
-
-    OptionsQmlModel options_model(*node);
-    shutdown_coordinator.addBeforeInterruptParticipant(&options_model, &OptionsQmlModel::shutdownFinished,
-                                        [&] { options_model.beginShutdown(); });
-#ifdef ENABLE_WALLET
-    if (wallet_list_model) {
-        wallet_list_model->setDisplayUnit(options_model.displayUnit());
-        QObject::connect(&options_model, &OptionsQmlModel::displayUnitChanged,
-                         wallet_list_model.get(), &WalletListModel::setDisplayUnit);
-    }
-#endif
-    engine->rootContext()->setContextProperty("optionsModel", &options_model);
-#ifdef ENABLE_TEST_AUTOMATION
-    engine->rootContext()->setContextProperty("testAutomationEnabled", true);
+        const auto desktop_preferences = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        DesktopWindowBehaviorModel desktop_window_behavior_model{
+#ifdef Q_OS_ANDROID
+            false,
 #else
-    engine->rootContext()->setContextProperty("testAutomationEnabled", false);
+            true,
 #endif
-    // Keep the startup language until the settings snapshot is ready.
-    if (options_model.settingsReady()) install_language(options_model.language());
+            presentation_post, {}, nullptr, desktop_preferences};
+        shutdown_coordinator.addStopHook([&] { desktop_window_behavior_model.close(); });
+        shutdown_coordinator.addAfterInterruptTask([desktop_preferences](auto done) {
+            desktop_preferences->whenDrained(std::move(done));
+        });
+        DesktopTrayIconController desktop_tray_icon_controller;
 
-    // Retranslate the QML UI immediately when the user picks a new language.
-    QObject::connect(&options_model, &OptionsQmlModel::languageChanged, [&]() {
-        install_language(options_model.language());
-        engine->retranslate();
-    });
+        qGuiApp->setQuitOnLastWindowClosed(false);
+        QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, &desktop_tray_icon_controller, [&] {
+            // When the tray icon is visible the node keeps running in the background.
+            if (desktop_tray_icon_controller.visible()) return;
+            node_model.requestShutdown();
+        });
 
-    desktop_tray_icon_controller.setBasePixmap(
-        network_style->getTrayAndWindowIcon().pixmap(QSize(256, 256)));
-    desktop_tray_icon_controller.setToolTip(
-        QString(QObject::tr("%1 client").arg(CLIENT_NAME) + " " + network_style->getTitleAddText()).trimmed());
-    desktop_tray_icon_controller.setVisible(
-        app_mode.isDesktop() && desktop_window_behavior_model.showTrayIcon());
-    QObject::connect(&desktop_tray_icon_controller, &DesktopTrayIconController::supportedChanged,
-        [&desktop_window_behavior_model](bool supported) {
-            if (!supported) desktop_window_behavior_model.setShowTrayIcon(false);
-    });
-    engine->rootContext()->setContextProperty("desktopWindowBehaviorModel", &desktop_window_behavior_model);
-    engine->rootContext()->setContextProperty("desktopTrayIconController", &desktop_tray_icon_controller);
+        const auto list_outcomes = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        const auto list_retirement = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        PresentationServices list_values{{presentation_post, [list_retirement](auto work) {
+            return list_retirement->post(std::move(work));
+        }, {}, list_outcomes}};
+        const NativeListModel::Queues list_queues{
+            std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Core)),
+            list_outcomes, list_values.valueRetirement(), {},
+        };
+        shutdown_coordinator.addAfterInterruptTask([list_queues, &list_values, &shutdown_coordinator, presentation_post](std::function<void()> done) {
+            const QPointer values{&list_values};
+            const QPointer receiver{&shutdown_coordinator};
+            list_queues.core->close();
+            list_queues.core->whenDrained([values, receiver, post = presentation_post, done = std::move(done)]() mutable {
+                post([values, receiver, done = std::move(done)]() mutable {
+                    if (!values || !receiver) return;
+                    values->close();
+                    values->whenRetired(receiver, std::move(done));
+                });
+            });
+        });
+        PeerListModel peer_model{*node, nullptr, backend_ready, presentation_post,
+                                [] { return NodeClock::now(); }, list_queues};
+        peer_model.setCommands(node_model.peerCommands());
+        shutdown_coordinator.addStopHook([&] { node_model.peerCommands()->close(); });
+        shutdown_coordinator.addStopHook([&] { peer_model.close(); });
+        QObject::connect(&node_model, &NodeModel::chainStateReady,
+                         &peer_model, &PeerListModel::backendInitialized);
+        PeerListProxyModel peer_model_sort_proxy{nullptr};
+        shutdown_coordinator.addStopHook([&] { peer_model_sort_proxy.close(); });
+        peer_model_sort_proxy.setSourceModel(&peer_model);
 
-    engine->setInitialProperties({
-        {QStringLiteral("walletAvailableForUi"), wallet_enabled},
-        {QStringLiteral("appModeDesktopForUi"), app_mode.mode() == AppMode::DESKTOP},
-        {QStringLiteral("preInitOnboardingRanForUi"), pre_init_onboarding_status == PreInitOnboardingStatus::COMPLETED},
-    });
-    const auto shutdown_before_startup_return = [&] {
-        pre_init_onboarding_context.close();
-        QEventLoop loop;
-        QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::finished, &loop, &QEventLoop::quit);
-        node_model.requestShutdown();
-        while (!shutdown_finished) loop.exec();
-    };
-    if (quit_handler.isQuitRequested()) {
-        shutdown_before_startup_return();
-        return EXIT_SUCCESS;
-    }
-    engine->load(QUrl(QStringLiteral("qrc:///qml/pages/MainWindow.qml")));
-    if (engine->rootObjects().isEmpty()) {
-        shutdown_before_startup_return();
-        return EXIT_FAILURE;
-    }
+        BanListModel ban_list_model{*node, nullptr, backend_ready, presentation_post, list_queues};
+        shutdown_coordinator.addStopHook([&] { ban_list_model.close(); });
+        QObject::connect(&node_model, &NodeModel::bannedListChanged,
+                         &ban_list_model, &BanListModel::refresh);
+        QObject::connect(&node_model, &NodeModel::chainStateReady,
+                         &ban_list_model, &BanListModel::backendInitialized);
+        QObject::connect(node_model.peerCommands(), &PeerCommandModel::finished, &peer_model,
+                         [&](quint64, PeerCommandOperation::Outcome outcome, const QString&) {
+            if (outcome == PeerCommandOperation::Outcome::Rejected || outcome == PeerCommandOperation::Outcome::Cancelled) return;
+            peer_model.refresh(); ban_list_model.refresh();
+        });
 
-    main_window = qobject_cast<QQuickWindow*>(engine->rootObjects().first());
-    if (!main_window) {
-        shutdown_before_startup_return();
-        return EXIT_FAILURE;
-    }
-    desktop_tray_icon_controller.setMainWindow(main_window);
-    if (pre_init_onboarding_context.window) {
-        main_window->setGeometry(pre_init_onboarding_context.window->geometry());
-    }
-    pre_init_onboarding_context.close();
+        QObject::connect(&shutdown_coordinator, &ShutdownCoordinator::shutdownStarted, &peer_model, [&] {
+            peer_model.beginShutdown();
+            ban_list_model.beginShutdown();
+            block_clock_model.close();
+            QObject::disconnect(&node_model, nullptr, &ban_list_model, nullptr);
+            QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
+        });
 
-    if (quit_handler.isQuitRequested() || shutdown_requested) {
-        shutdown_before_startup_return();
-        return EXIT_SUCCESS;
-    }
-    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested,
-                     &node_model, &NodeModel::requestShutdown);
-    const auto exit_main_event_loop = [] {
-        QCoreApplication::exit(0);
-    };
-    QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::finished,
-                     qGuiApp, exit_main_event_loop, Qt::QueuedConnection);
+        auto qr_queue = std::make_shared<execution::SerialQueue>(executor.makeQueue(execution::Lane::Utility));
+        shutdown_coordinator.addStopHook([qr_queue] { qr_queue->close(); });
+        shutdown_coordinator.addAfterInterruptTask([qr_queue](std::function<void()> done) {
+            qr_queue->whenDrained(std::move(done));
+        });
 
-#ifdef ENABLE_TEST_AUTOMATION
-    std::unique_ptr<TestBridge> test_bridge;
-    if (gArgs.IsArgSet("-test-automation")) {
-        QString socket_path = QString::fromStdString(gArgs.GetArg("-test-automation", ""));
-        if (socket_path.isEmpty()) {
-            // Default to a socket in the data directory.
-            socket_path = QString::fromStdString(
-                (gArgs.GetDataDirNet() / "test_bridge.sock").utf8string());
+        QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(runtime.network)};
+        assert(!network_style.isNull());
+        auto engine = CreateMainEngine(network_style.data(), std::move(qr_queue));
+        qmlEngineCreated(*engine);
+
+        // The pre-init engine can have written the same persisted keys. Finish
+        // those original writes before reading the final chain profile.
+        pre_init_onboarding_context.finishPreferences();
+        // Shutdown drains settings and preferences before interrupting Core. A
+        // wallet load can hold Core until that interrupt, so they avoid it.
+        auto* ui_preferences = startup::InstallPreferences(*engine, executor, execution::Lane::Utility,
+            presentation_post, UiPreferencesNamespace::Capture(), startup::PreferencesPhase::BeforeWindow);
+        shutdown_coordinator.addStopHook([ui_preferences] { ui_preferences->close(); });
+        shutdown_coordinator.addBeforeInterruptTask([ui_preferences](std::function<void()> done) {
+            ui_preferences->whenDrained(std::move(done));
+        });
+
+        engine->rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
+        engine->rootContext()->setContextProperty("networkStatusModel", &network_status_model);
+        engine->rootContext()->setContextProperty("nodeModel", &node_model);
+        engine->rootContext()->setContextProperty("chainModel", &chain_model);
+        engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
+        engine->rootContext()->setContextProperty("presentationServices", &presentation_services);
+        engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
+        engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
+        engine->rootContext()->setContextProperty("banListModel", &ban_list_model);
+        engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
+        engine->rootContext()->setContextProperty("desktopIntentModel", &desktop_intent_model);
+
+        RpcConsoleModel rpc_console_model{*node, executor, presentation_post};
+        shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
+                                            [&] { rpc_console_model.beginShutdown(); });
+        shutdown_coordinator.addStopHook([&] { rpc_console_model.close(); });
+        QObject::connect(&node_model, &NodeModel::nodeInitialized,
+                         &rpc_console_model, &RpcConsoleModel::onNodeInitialized);
+        engine->rootContext()->setContextProperty("rpcConsoleModel", &rpc_console_model);
+
+#ifdef ENABLE_WALLET
+        std::unique_ptr<WalletListModel> wallet_list_model;
+        if (wallet_enabled) {
+            wallet_list_model = std::make_unique<WalletListModel>(*node, executor, presentation_post);
+            wallet_list_model->setBackendAvailability(WalletListModel::BackendAvailability::Uninitialized);
+            shutdown_coordinator.addStopHook([&] { wallet_list_model->close(); });
+            shutdown_coordinator.addAfterInterruptTask([&](std::function<void()> done) {
+                wallet_list_model->whenRetired(std::move(done));
+            });
+            QObject::connect(wallet_controller.get(), &WalletController::walletLoadStateChanged,
+                             wallet_list_model.get(), &WalletListModel::setWalletLoadState);
+            QObject::connect(wallet_controller.get(), &WalletController::walletLoadStateChanged,
+                             wallet_list_model.get(), [controller = wallet_controller.get(), catalog = wallet_list_model.get()](const QString& id, WalletListModel::LoadState, const QString&) {
+                                 catalog->setOpenWallet(id, controller->walletForName(id));
+                             });
+            QObject::connect(wallet_controller.get(), &WalletController::walletOperationChanged,
+                             wallet_list_model.get(), [controller = wallet_controller.get(), catalog = wallet_list_model.get()] {
+                                 const auto* opening = controller->commandOpening();
+                                 if (opening && opening->operationId()) catalog->setOperationId(opening->target(), opening->busy() ? QString::number(opening->operationId()) : QString{});
+                             });
+            QObject::connect(wallet_controller->creation(), &WalletCreationController::operationChanged,
+                             wallet_list_model.get(), [creation = wallet_controller->creation(), catalog = wallet_list_model.get()] {
+                                 const auto* operation = creation->operation();
+                                 if (!operation) return;
+                                 catalog->setOperationId(operation->targetWalletId(), operation->busy() ? QString::number(operation->sequence()) : QString{});
+                                 if (operation->terminal() && operation->result().effect != WalletOperationResult::NoEffect) catalog->listWalletDir();
+                             });
+            QObject::connect(wallet_controller.get(), &WalletController::walletInfoChanged,
+                             wallet_list_model.get(), &WalletListModel::setWalletInfo);
+            QObject::connect(wallet_controller->names(), &WalletNamesController::namesChanged,
+                             wallet_list_model.get(), &WalletListModel::refreshDisplayNames);
+            QObject::connect(wallet_list_model.get(), &WalletListModel::walletListChanged,
+                             wallet_controller.get(), [controller = wallet_controller.get()](bool has_wallets) {
+                                 controller->setNoWalletsFound(!has_wallets);
+                             });
+            // listWalletDir() rebuilds m_items from scratch — any per-row info
+            // pushed earlier (e.g. at controller initialize() time, before the
+            // picker was ever opened) has nowhere to land. Re-publish open wallets'
+            // info every time the model resets so newly created rows pick it up.
+            QObject::connect(wallet_list_model.get(), &QAbstractItemModel::modelReset,
+                             wallet_controller.get(), &WalletController::publishOpenWalletsInfo);
+            QObject::connect(wallet_controller.get(), &WalletController::initializedChanged,
+                             wallet_list_model.get(), [controller = wallet_controller.get(), list_model = wallet_list_model.get()]() {
+                                 if (controller->initialized()) {
+                                     list_model->setBackendAvailability(WalletListModel::BackendAvailability::Available);
+                                     list_model->listWalletDir();
+                                 }
+                             });
+            engine->rootContext()->setContextProperty("walletController", wallet_controller.get());
+            engine->rootContext()->setContextProperty("walletListModel", wallet_list_model.get());
         }
-        test_bridge = std::make_unique<TestBridge>(engine.get(), socket_path);
-    }
 #endif
 
-    // Install qDebug() message handler to route to debug.log
-    qInstallMessageHandler(DebugMessageHandler);
-
-    qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(main_window);
-
-    node_model.startShutdownPolling();
-    m_node = node.get();
-    m_node_model = &node_model;
-    m_engine = engine.get();
-    const auto clear_runtime = qScopeGuard([this] {
-        m_node = nullptr;
-        m_node_model = nullptr;
-        m_engine = nullptr;
-    });
-    windowCreated();
-    const int exit_code{qGuiApp->exec()};
+        SettingsModel options_model(*node, gArgs, presentation_post, &executor, &presentation_services,
+                                    execution::Lane::Priority);
+        shutdown_coordinator.addStopHook([&] { options_model.close(); });
+        shutdown_coordinator.addBeforeInterruptParticipant(&options_model, &SettingsModel::shutdownFinished,
+                                            [&] { options_model.beginShutdown(); });
+#ifdef ENABLE_WALLET
+        if (wallet_controller) {
+            QObject::connect(wallet_controller->creation(), &WalletCreationController::signersChanged, &options_model,
+                [&options_model, creation = wallet_controller->creation()] { options_model.setSignerDiscoveryModel(creation->signers()); });
+            options_model.setSignerDiscoveryModel(wallet_controller->creation()->signers());
+        }
+        if (wallet_list_model) {
+            wallet_list_model->setDisplayUnit(options_model.displayUnit());
+            QObject::connect(&options_model, &SettingsModel::displayUnitChanged,
+                             wallet_list_model.get(), &WalletListModel::setDisplayUnit);
+        }
+#endif
+        engine->rootContext()->setContextProperty("optionsModel", &options_model);
 #ifdef ENABLE_TEST_AUTOMATION
-    test_bridge.reset();
+        engine->rootContext()->setContextProperty("testAutomationEnabled", true);
+#else
+        engine->rootContext()->setContextProperty("testAutomationEnabled", false);
 #endif
-    engine.reset();
-    return exit_code;
+        // Keep the startup language until the settings snapshot is ready.
+        if (options_model.settingsReady()) install_language(options_model.language());
+
+        // Retranslate the QML UI immediately when the user picks a new language.
+        QObject::connect(&options_model, &SettingsModel::languageChanged, [&]() {
+            install_language(options_model.language());
+            engine->retranslate();
+        });
+
+        desktop_tray_icon_controller.setBasePixmap(
+            network_style->getTrayAndWindowIcon().pixmap(QSize(256, 256)));
+        desktop_tray_icon_controller.setToolTip(
+            QString(QObject::tr("%1 client").arg(CLIENT_NAME) + " " + network_style->getTitleAddText()).trimmed());
+        desktop_tray_icon_controller.setVisible(
+            app_mode.isDesktop() && desktop_window_behavior_model.showTrayIcon());
+        QObject::connect(&desktop_tray_icon_controller, &DesktopTrayIconController::supportedChanged,
+            [&desktop_window_behavior_model](bool supported) {
+                if (!supported) desktop_window_behavior_model.setShowTrayIcon(false);
+        });
+        engine->rootContext()->setContextProperty("desktopWindowBehaviorModel", &desktop_window_behavior_model);
+        engine->rootContext()->setContextProperty("desktopTrayIconController", &desktop_tray_icon_controller);
+
+        engine->setInitialProperties({
+            {QStringLiteral("walletAvailableForUi"), wallet_enabled},
+            {QStringLiteral("appModeDesktopForUi"), app_mode.mode() == AppMode::DESKTOP},
+            {QStringLiteral("preInitOnboardingRanForUi"), pre_init_onboarding_status == PreInitOnboardingStatus::COMPLETED},
+        });
+        const auto shutdown_before_startup_return = [&] {
+            pre_init_onboarding_context.close();
+            QEventLoop loop;
+            QObject::connect(&shutdown_coordinator, &ShutdownCoordinator::finished, &loop, &QEventLoop::quit);
+            node_model.requestShutdown();
+            while (!shutdown_finished) loop.exec();
+        };
+        if (quit_handler.isQuitRequested()) {
+            shutdown_before_startup_return();
+            return EXIT_SUCCESS;
+        }
+        engine->load(QUrl(QStringLiteral("qrc:///qml/pages/MainWindow.qml")));
+        if (engine->rootObjects().isEmpty()) {
+            shutdown_before_startup_return();
+            return EXIT_FAILURE;
+        }
+
+        main_window = qobject_cast<QQuickWindow*>(engine->rootObjects().first());
+        if (!main_window) {
+            shutdown_before_startup_return();
+            return EXIT_FAILURE;
+        }
+        update_desktop_readiness();
+        QObject::connect(main_window,&QObject::destroyed,&desktop_intent_model,[&]{desktop_intent_model.setReady(false);});
+        desktop_tray_icon_controller.setMainWindow(main_window);
+        if (pre_init_onboarding_context.window) {
+            main_window->setGeometry(pre_init_onboarding_context.window->geometry());
+        }
+        pre_init_onboarding_context.close();
+
+        if (quit_handler.isQuitRequested() || shutdown_requested) {
+            shutdown_before_startup_return();
+            return EXIT_SUCCESS;
+        }
+        QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested,
+                         &node_model, &NodeModel::requestShutdown);
+        const auto exit_main_event_loop = [] {
+            QCoreApplication::exit(0);
+        };
+        QObject::connect(&shutdown_coordinator, &ShutdownCoordinator::finished,
+                         qGuiApp, exit_main_event_loop, Qt::QueuedConnection);
+
+#ifdef ENABLE_TEST_AUTOMATION
+        std::unique_ptr<TestBridge> test_bridge;
+        if (runtime.automation.enabled) {
+            test_bridge = std::make_unique<TestBridge>(engine.get(), runtime.automation.socket);
+        }
+#endif
+
+        // Install qDebug() message handler to route to debug.log
+        qInstallMessageHandler(DebugMessageHandler);
+
+        qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(main_window);
+
+        node_model.startShutdownPolling();
+        m_node = node.get();
+        m_node_model = &node_model;
+        m_engine = engine.get();
+        const auto clear_runtime = qScopeGuard([this] {
+            m_node = nullptr;
+            m_node_model = nullptr;
+            m_engine = nullptr;
+        });
+        windowCreated();
+        const int exit_code{qGuiApp->exec()};
+#ifdef ENABLE_TEST_AUTOMATION
+        test_bridge.reset();
+#endif
+        engine.reset();
+        return exit_code;
+    };
+    const auto gui_exit_code = run_gui();
+    const int native_exit_code=core_exit_status->load();
+    const int exit_code=native_exit_code!=EXIT_SUCCESS?native_exit_code
+        : lifecycle_failed->load()||startup_failed->load()||setup_record_failed->load()?EXIT_FAILURE:gui_exit_code;
+    // QApplication and every GUI owner have been destroyed. Flush and join the
+    // process writer before deciding the actual externally visible exit status.
+    finish_qt_logging();
+    const auto receipt = qt_log_sink.queue()->receipt();
+    return startupdiagnostics::FinalExitStatus(qtlog::FinalExitStatus(exit_code, receipt), diagnostic_loss->load());
 }
 
 interfaces::Node& BitcoinQmlApplication::node() const

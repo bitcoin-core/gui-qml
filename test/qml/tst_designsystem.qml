@@ -75,10 +75,13 @@ TestCase {
         const reasons = {
             "singleton": ["Theme", "SizeClass"],
             "not drawn by itself": ["AlertAction", "AppSettings", "MenuCommand", "AppFolderDialog",
-                "DesktopMenuActions", "DesktopNativeMenuBar"],
+                "DesktopMenuActions", "DesktopNativeMenuBar", "TextEditMenu", "WalletSettingsPort",
+                "WalletCreationPort", "WalletCreationHost"],
             "base type or part of a shown control": ["BitcoinAmountDigit", "BitcoinAmountDigitBase",
                 "BitcoinAmountDisplayLabelBase", "LabeledField", "FieldBorderRings", "SurfaceGradientBorder",
-                "TransactionFlowRibbon"],
+                "TransactionFlowRibbon", "BitcoinAmountColumn", "BitcoinAmountUnitGlyph", "MonospaceOutputRow",
+                "NodeInformationRow", "NodeWarningRow"],
+            "legacy control kept for existing callers": ["TextButton"],
             "acts for real (opens the browser)": ["ExternalPopup"],
             "feature-specific menu": ["TransactionActionsMenu", "PaymentRequestActionsMenu", "PeerActionsMenu",
                 "SendCreateOptionsPopup"],
@@ -86,11 +89,15 @@ TestCase {
                 "SettingsView", "OnboardingView", "OnboardingFooter", "OnboardingNavigationBar", "DeveloperOptions",
                 "StorageLocations", "StorageOptions", "TransactionDetailsSection"],
             "needs a live wallet or node model": ["BlockClock", "MiniBlockClock", "CoinsList", "NetworkTrafficGraph",
-                "NodeStatusActions", "PaymentRequestCard", "PaymentRequestModal", "PaymentRequestDeleteConfirmation",
-                "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
+                "NodeStatusActions", "PaymentRequestDeleteConfirmation",
+                "SendCoinSelection", "SendFeeSelection", "SendForm", "SendRecipientEditor", "ExternalSignerReviewActions",
                 "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
                 "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
-                "NodeWarningsPopup", "OnboardingSettingsPopup"]
+                "NodeWarningsPopup", "OnboardingSettingsPopup", "WalletOperationWarnings", "WalletShellPage",
+                "DesktopRequestsBar", "EffectiveSettingRow", "ReceiveEditorCloseQuestion",
+                "ReceiveEditorFields", "ReceiveRequestEditorCard", "ReceiveRequestModal", "SavedRequestSharing",
+                "SendRecipientCard", "SettingsEditorBar", "TransactionEntriesList", "TransactionEntryPopup",
+                "WalletOperationDialog"]
         }
         const exemptions = {}
         for (const reason in reasons) {
@@ -452,6 +459,7 @@ TestCase {
             ["designSystemSuccessAlertButton", "designSystemSuccessAlert"],
             ["designSystemErrorAlertButton", "designSystemErrorAlert"],
             ["designSystemInputAlertButton", "designSystemInputAlert"],
+            ["designSystemSaveConfirmationButton", "designSystemSaveConfirmation"],
             ["designSystemFeatureModalButton", "designSystemFeatureModal"],
             ["designSystemSheetButton", "designSystemSheet"]
         ]

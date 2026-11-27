@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 import "../../components"
@@ -13,11 +14,24 @@ SettingsPage {
     title: qsTr("Window behavior")
     showBackButton: false
 
-    property var windowBehaviorModel: desktopWindowBehaviorModel
+    property var windowBehaviorModel: ApplicationModels.desktopWindowBehaviorModel
+    onVisibleChanged: if (visible) windowBehaviorModel.refreshSettings()
 
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Window behavior")
+
+        FormRow {
+            Layout.fillWidth: true
+            visible: root.windowBehaviorModel.persistenceError.length > 0
+            title: qsTr("Desktop preferences")
+            description: root.windowBehaviorModel.persistenceError
+            trailingItem: TextButton {
+                text: qsTr("Retry")
+                enabled: !root.windowBehaviorModel.persistencePending
+                onClicked: root.windowBehaviorModel.retryPersistence()
+            }
+        }
 
         SwitchRow {
             Layout.fillWidth: true
@@ -34,6 +48,7 @@ SettingsPage {
             title: qsTr("Minimize to tray")
             description: qsTr("Hide the window in the tray when minimized.")
             enabled: root.windowBehaviorModel.desktopPlatform
+                && root.windowBehaviorModel.settingsReady
                 && root.windowBehaviorModel.showTrayIcon
             switchObjectName: "minimizeToTraySwitch"
             checked: root.windowBehaviorModel.minimizeToTray
@@ -44,7 +59,7 @@ SettingsPage {
             Layout.fillWidth: true
             title: qsTr("Minimize on close")
             description: qsTr("Keep the node running when the window is closed.")
-            enabled: root.windowBehaviorModel.desktopPlatform
+            enabled: root.windowBehaviorModel.desktopPlatform && root.windowBehaviorModel.settingsReady
             showDivider: false
             switchObjectName: "minimizeOnCloseSwitch"
             checked: root.windowBehaviorModel.minimizeOnClose

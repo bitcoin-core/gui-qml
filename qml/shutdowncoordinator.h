@@ -14,11 +14,11 @@
 
 class QmlInitExecutor;
 
-class QmlShutdownCoordinator : public QObject
+class ShutdownCoordinator : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlShutdownCoordinator(QmlInitExecutor& executor, QObject* parent = nullptr);
+    explicit ShutdownCoordinator(QmlInitExecutor& executor, QObject* parent = nullptr);
 
     template <typename Sender, typename Signal>
     void addParticipant(Sender* sender, Signal finished, std::function<void()> begin)
@@ -33,6 +33,17 @@ public:
     }
 
     void requestShutdown();
+    // Acknowledge actual asynchronous retirement before interrupting Core.
+    // The completion may arrive from any thread and is consumed once on GUI.
+    void addBeforeInterruptTask(std::function<void(std::function<void()>)> begin);
+    void addAfterInterruptTask(std::function<void(std::function<void()>)> begin);
+    // These callbacks only close admission. They must not emit UI signals or
+    // start draining: all producers must be fenced before focus can change.
+    void addStopHook(std::function<void()> fence)
+    {
+        Q_ASSERT(!m_shutdown_requested);
+        m_stop_hooks.push_back(std::move(fence));
+    }
     bool isStopping() const { return m_shutdown_requested; }
 
 Q_SIGNALS:
@@ -53,10 +64,12 @@ private:
         (before_interrupt ? m_before_interrupt_participants : m_after_interrupt_participants).push_back(std::move(begin));
     }
 
+    void addTask(std::function<void(std::function<void()>)> begin, bool before_interrupt);
     void drainAfterInterrupt();
     void participantFinished(bool before_interrupt);
 
     QmlInitExecutor& m_executor;
+    std::vector<std::function<void()>> m_stop_hooks;
     std::vector<std::function<void()>> m_after_interrupt_participants;
     std::vector<std::function<void()>> m_before_interrupt_participants;
     size_t m_pending_participants{0};

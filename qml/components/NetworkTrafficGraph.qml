@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
 
@@ -67,7 +66,7 @@ Item {
         anchors.fill: parent
         CoreText {
             //: Network traffic rate axis label. %1 is a size such as "10 KB".
-            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps)))
+            text: qsTr("%1/s").arg(root.formatBytes(root.formatMagnitude(root.maxRateBps)))
             color: root.unitLabelColor
             textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
@@ -75,7 +74,7 @@ Item {
             Layout.bottomMargin: Theme.space.s
         }
         CoreText {
-            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps / 10)))
+            text: qsTr("%1/s").arg(root.formatBytes(root.formatMagnitude(root.maxRateBps / 10)))
             color: root.unitLabelColor
             textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom

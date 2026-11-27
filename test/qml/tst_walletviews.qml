@@ -27,6 +27,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         walletController.reset()
         walletController.initialized = true
         walletController.isWalletLoaded = true
@@ -39,8 +40,46 @@ TestCase {
     function cleanup() {
         walletController.setOpenWallets([testWalletModel])
         walletController.setSelectedWalletObject(testWalletModel)
-        testWalletModel.currentPaymentRequest.label = ""
-        testSecondWalletModel.currentPaymentRequest.label = ""
+    }
+
+    function test_close_question_presentation_uses_original_context_data() {
+        return [{tag: "another-opening", sameOpening: false}, {tag: "new-question", sameOpening: true}]
+    }
+
+    function test_close_question_presentation_uses_original_context(data) {
+        testWalletModel.available = true
+        testSecondWalletModel.available = true
+        const page = createShell()
+        walletController.requestCloseWallet(testWalletModel)
+        const questions = findChild(page, "walletCloseQuestions")
+        verify(questions !== null)
+        let originalPopup = null
+        tryVerify(function() {
+            originalPopup = questions.count === 1 ? questions.itemAt(0).confirmation : null
+            return originalPopup && originalPopup.opened
+        })
+        const originalQuestion = originalPopup.question
+        verify(originalQuestion !== null)
+        const oldAction = findChild(originalPopup.contentItem, "walletCloseConfirmationConfirmButton")
+        verify(oldAction !== null)
+        const next = data.sameOpening ? testWalletModel : testSecondWalletModel
+        const before = walletController.closeWalletCalls
+        Qt.callLater(function() {
+            if (oldAction && typeof oldAction.clicked === "function") oldAction.clicked()
+        })
+        walletController.requestCloseWallet(next)
+        let currentPopup = null
+        tryVerify(function() {
+            currentPopup = questions.count === 1 ? questions.itemAt(0).confirmation : null
+            return currentPopup && currentPopup !== originalPopup && currentPopup.opened
+        })
+        compare(currentPopup.targetWallet, next)
+        compare(walletController.closeWalletCalls, before)
+        originalQuestion.accept()
+        compare(walletController.closeWalletCalls, before)
+        findChild(currentPopup.contentItem, "walletCloseConfirmationConfirmButton").clicked()
+        compare(walletController.closeWalletCalls, before + 1)
+        compare(walletController.lastClosedWalletName, next.name)
     }
 
     function createShell() {
@@ -89,18 +128,16 @@ TestCase {
 
     // Popups, menus and native file dialogs of the first wallet, opened
     // while it is shown. Each must close when another wallet is shown.
-    function openFirstWalletPopups(page, first) {
+    function openFirstWalletPopups(page, first, dialogName) {
         findChild(page, "sendTabButton").checked = true
         const popups = {
             review: findChild(first.sendPage, "transactionReviewPopup"),
             sendPassphrase: findChild(first.sendPage, "sendTransactionPassphrasePopup"),
-            receiveMenu: findChild(first.receivePage, "receiveMoreMenu"),
         }
         const dialogs = {
             exportCsv: findChild(first.activityPage, "activityExportDialog"),
             psbtOpen: findChild(first.sendPage, "sendPsbtOpenDialog"),
             psbtSave: findChild(first.sendPage, "sendTransactionReviewSaveDialog"),
-            requestQrSave: findChild(first.receivePage, "requestPaymentSaveQRDialog"),
             backup: findChild(first.settingsStack, "walletSettingsBackupDialog"),
         }
         for (const name in popups) {
@@ -110,8 +147,11 @@ TestCase {
         }
         for (const name in dialogs) {
             verify(dialogs[name] !== null, name)
-            dialogs[name].open()
-            compare(dialogs[name].visible, true, name)
+            if (name === dialogName) {
+                if (name === "backup") page.openSettingsRoute("wallet")
+                verify(dialogs[name].open(), name)
+                compare(dialogs[name].visible, true, name)
+            } else compare(dialogs[name].visible, false, name)
         }
         return { popups: popups, dialogs: dialogs }
     }
@@ -167,17 +207,21 @@ TestCase {
         compare(reviewPopup.visible, false)
     }
 
-    function test_switching_wallet_hides_view_and_closes_its_popups() {
+    function test_switching_wallet_hides_view_and_closes_its_popups_data() {
+        return ["exportCsv", "psbtOpen", "psbtSave", "backup"].map(function(name) { return {tag: name, dialogName: name} })
+    }
+    function test_switching_wallet_hides_view_and_closes_its_popups(data) {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)
         const second = page.viewForWallet(testSecondWalletModel)
-        const opened = openFirstWalletPopups(page, first)
+        const opened = openFirstWalletPopups(page, first, data.dialogName)
 
         walletController.setSelectedWalletObject(testSecondWalletModel)
         compare(page.activeView, second)
         compare(first.active, false)
         compare(first.visible, false)
-        compare(second.visible, true)
+        compare(second.visible, data.dialogName !== "backup")
+        if (data.dialogName === "backup") compare(second.settingsStack.visible, true)
         for (const name in opened.popups) tryCompare(opened.popups[name], "visible", false, 5000, name)
         for (const name in opened.dialogs) compare(opened.dialogs[name].visible, false, name)
     }
@@ -303,12 +347,8 @@ TestCase {
         const note = findChild(first.sendPage, "sendNoteInput")
         verify(note !== null)
         note.text = "rent"
-        first.sendPage.manualCoinSelection = true
+        testWalletModel.coinsListModel.setManualInputSelection(true)
 
-        testWalletModel.currentPaymentRequest.label = "Alice"
-        const firstName = findChild(first.receivePage, "requestPaymentYourNameInput")
-        verify(firstName !== null)
-        compare(firstName.text, "Alice")
 
         walletController.setSelectedWalletObject(testSecondWalletModel)
         // The second wallet opens on its own last tab.
@@ -323,15 +363,10 @@ TestCase {
         compare(findChild(page, "sendTabButton").checked, true)
         compare(note.text, "rent")
         compare(first.sendPage.manualCoinSelection, true)
-        compare(testWalletModel.currentPaymentRequest.label, "Alice")
-        compare(firstName.text, "Alice")
-        compare(findChild(second.receivePage, "requestPaymentYourNameInput").text, "")
 
         // Picking the wallet that is already shown changes nothing.
         walletController.setSelectedWallet("reselect-same-wallet")
         compare(page.viewForWallet(testWalletModel), first)
-        compare(testWalletModel.currentPaymentRequest.label, "Alice")
-        compare(firstName.text, "Alice")
         compare(note.text, "rent")
     }
 
@@ -376,8 +411,10 @@ TestCase {
         const reviewPopup = findChild(second.sendPage, "transactionReviewPopup")
         let reviewDestroyed = false
         reviewPopup.Component.destruction.connect(function() { reviewDestroyed = true })
+        walletController.setSelectedWalletObject(testSecondWalletModel)
+        findChild(page, "sendTabButton").checked = true
         const psbtOpen = findChild(second.sendPage, "sendPsbtOpenDialog")
-        psbtOpen.open()
+        verify(psbtOpen.open())
         compare(psbtOpen.visible, true)
 
         walletController.setOpenWallets([testWalletModel])
@@ -385,6 +422,9 @@ TestCase {
         verify(destroyed)
         verify(reviewDestroyed)
         compare(page.viewForWallet(testSecondWalletModel), null)
+        // The controller owns fallback selection; this view fixture supplies
+        // the resulting selection after removing the selected opening.
+        walletController.setSelectedWalletObject(testWalletModel)
         compare(page.activeView.wallet, testWalletModel)
 
         walletController.setOpenWallets([testWalletModel, testSecondWalletModel])

@@ -3,14 +3,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 Page {
     id: root
     objectName: "walletCoinsPage"
-    property WalletQmlModel wallet: null
+    property WalletModel wallet: null
     readonly property real contentHorizontalPadding: Theme.space.pagePadding(width)
     readonly property real maximumContentWidth: 840
     signal back()

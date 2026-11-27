@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_TEST_MOCKS_MOCKWALLET_H
 #define BITCOIN_QML_TEST_MOCKS_MOCKWALLET_H
 
-#include "wallet/imports.h"
+#include <wallet/imports.h>
 #include <interfaces/wallet.h>
 #include <outputtype.h>
 #include <test/mocks/callcounter.h>
@@ -154,12 +154,15 @@ public:
     std::function<std::set<interfaces::WalletTx>()> get_wallet_txs_fn;
     std::function<bool(const Txid&, interfaces::WalletTxStatus&, int&, int64_t&)> try_get_tx_status_fn;
     std::function<CAmount()> get_balance_fn;
+    std::function<bool(interfaces::WalletBalances&, uint256&)> try_get_balances_fn;
     std::function<CAmount(const wallet::CCoinControl&)> get_available_balance_fn;
     std::function<CAmount(unsigned int)> get_required_fee_fn;
     std::function<CAmount(const wallet::CCoinControl&)> get_minimum_fee_fn;
     std::function<CoinsList()> list_coins_fn;
     std::function<OutputType()> get_default_address_type_fn;
     std::function<std::unique_ptr<interfaces::Handler>(TransactionChangedFn)> handle_transaction_changed_fn;
+    std::function<CTransactionRef(const Txid&)> get_tx_fn;
+    std::function<std::vector<interfaces::WalletTxOut>(const std::vector<COutPoint>&)> get_coins_fn;
     std::function<bool(const Txid&)> transaction_can_be_bumped_fn;
     std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&)> create_bump_transaction_fn;
     std::function<bool(CMutableTransaction&)> sign_bump_transaction_fn;
@@ -172,6 +175,7 @@ public:
         CallCounter getWalletTxs{"getWalletTxs"};
         CallCounter tryGetTxStatus{"tryGetTxStatus"};
         CallCounter getBalance{"getBalance"};
+        CallCounter tryGetBalances{"tryGetBalances"};
         CallCounter getAvailableBalance{"getAvailableBalance"};
         CallCounter getRequiredFee{"getRequiredFee"};
         CallCounter listCoins{"listCoins"};
@@ -230,6 +234,14 @@ public:
         return try_get_tx_status_fn ? try_get_tx_status_fn(txid, tx_status, num_blocks, block_time) : false;
     }
 
+    bool tryGetBalances(interfaces::WalletBalances& balances, uint256& tip) override
+    {
+        ++calls.tryGetBalances;
+        if (try_get_balances_fn) return try_get_balances_fn(balances, tip);
+        balances.balance = get_balance_fn ? get_balance_fn() : 0;
+        tip = uint256{};
+        return true;
+    }
     CAmount getBalance() override
     {
         ++calls.getBalance;
@@ -294,6 +306,16 @@ public:
     {
         ++calls.commitBumpTransaction;
         return commit_bump_transaction_fn ? commit_bump_transaction_fn(txid, std::move(mtx), errors, bumped_txid) : false;
+    }
+
+    CTransactionRef getTx(const Txid& txid) override
+    {
+        return get_tx_fn ? get_tx_fn(txid) : StubWallet::getTx(txid);
+    }
+
+    std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>& outpoints) override
+    {
+        return get_coins_fn ? get_coins_fn(outpoints) : StubWallet::getCoins(outpoints);
     }
 
 private:

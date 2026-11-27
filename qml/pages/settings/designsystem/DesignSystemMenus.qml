@@ -97,6 +97,7 @@ DesignSystemSection {
         objectName: "designSystemAlertPopup"
         Layout.fillWidth: true
         name: "AlertPopup"
+        shows: ["SaveConfirmationPopup"]
 
         DesignSystemState {
             label: "default action"
@@ -144,6 +145,14 @@ DesignSystemSection {
                 objectName: "designSystemInputAlertButton"
                 text: "With a field"
                 onClicked: inputAlert.open()
+            }
+        }
+        DesignSystemState {
+            label: "SaveConfirmationPopup, replacing: Cancel, Destructive"
+            NeutralButton {
+                objectName: "designSystemSaveConfirmationButton"
+                text: "Replace file"
+                onClicked: saveConfirmation.open()
             }
         }
 
@@ -226,6 +235,18 @@ DesignSystemSection {
                 text: "Apply"
                 enabled: inputAlertField.text.indexOf("bitcoin:") === 0
             }
+        }
+
+        SaveConfirmationPopup {
+            id: saveConfirmation
+            objectName: "designSystemSaveConfirmation"
+            parent: Overlay.overlay
+            replacing: true
+            finalPath: "/home/user/Documents/wallet backup.bak"
+            saveTitle: "Save backup?"
+            replaceTitle: "Replace backup?"
+            onApproved: close()
+            onRefused: close()
         }
 
         AlertPopup {

@@ -35,6 +35,7 @@ Popup {
     }
 
     enter: Transition {
+        enabled: Theme.motion.animated
         NumberAnimation {
             property: "opacity"
             from: 0
@@ -59,6 +60,7 @@ Popup {
     }
 
     exit: Transition {
+        enabled: Theme.motion.animated
         NumberAnimation {
             property: "opacity"
             to: 0
@@ -97,11 +99,10 @@ Popup {
     }
 
     Connections {
-        target: walletController
-        function onWalletLoadSucceeded() {
-            root.close()
-        }
-        function onWalletMigrationRequired() {
+        target: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+        // A wallet that needs migration is offered as a migration; the picker
+        // gives way to its question.
+        function onMigrationOffered() {
             root.close()
         }
         // Intentionally no handler for the LoadError branch of
@@ -135,7 +136,7 @@ Popup {
                 enabled: listView.interactive
                 interactive: listView.interactive
             }
-            model: walletListModel
+            model: ApplicationModels.walletListModel
             section.property: "walletSection"
             section.criteria: ViewSection.FullString
             section.delegate: CoreText {
@@ -159,16 +160,17 @@ Popup {
                 required property int loadState;
                 required property string errorMessage;
                 required property string balance;
+                required property bool balanceKnown;
                 required property var balanceSatoshi;
                 required property int keySchemeKind;
 
                 readonly property string iconSource: {
                     if (loadState !== WalletListModel.Open) return "image://images/wallet"
                     const filled = delegate.checked
-                    if (keySchemeKind === WalletQmlModel.WatchOnly) {
+                    if (keySchemeKind === WalletModel.WatchOnly) {
                         return filled ? "image://images/visible-filled" : "image://images/visible"
                     }
-                    if (keySchemeKind === WalletQmlModel.MultiKey) {
+                    if (keySchemeKind === WalletModel.MultiKey) {
                         return filled ? "image://images/two-keys-filled" : "image://images/two-keys"
                     }
                     return filled ? "image://images/key-filled" : "image://images/key"
@@ -180,8 +182,9 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
-                        return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
-                            ? optionsModel.displayUnitLabelForAmount(balanceSatoshi) : optionsModel.displayUnitLabel)
+                        if (!balanceKnown) return qsTr("Balance unavailable")
+                        return balance + " " + (ApplicationModels.optionsModel.displayUnit === BitcoinAmount.SAT
+                            ? ApplicationModels.optionsModel.displayUnitLabelForAmount(balanceSatoshi) : ApplicationModels.optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
@@ -196,8 +199,10 @@ Popup {
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
-                checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
-                enabled: !walletController.walletLoadInProgress
+                checked: loadState === WalletListModel.Open
+                    && ApplicationModels.walletController.selectedWallet.available
+                    && ApplicationModels.walletController.selectedWallet.name === name
+                enabled: !ApplicationModels.walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
                 focusPolicy: Qt.StrongFocus
                 leftPadding: 10
@@ -206,7 +211,7 @@ Popup {
                 bottomPadding: 0
                 Accessible.role: Accessible.ListItem
                 Accessible.name: delegate.displayName
-                Accessible.description: delegate.loadState === WalletListModel.Open && optionsModel.hideAmounts
+                Accessible.description: delegate.loadState === WalletListModel.Open && ApplicationModels.optionsModel.hideAmounts
                     ? qsTr("Hidden amount") : delegate.statusText
                 Accessible.selected: delegate.checked
 
@@ -315,7 +320,7 @@ Popup {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             visible: delegate.loadState !== WalletListModel.Loading
-                            enabled: visible && !walletController.walletLoadInProgress
+                            enabled: visible && !ApplicationModels.walletController.walletLoadInProgress
                             size: Theme.size.controlSmall
                             iconColor: delegate.nameColor
                             activeIconColor: Theme.color.neutral9
@@ -400,15 +405,16 @@ Popup {
                 }
 
                 onClicked: {
-                    if (walletController.walletLoadInProgress) {
+                    if (ApplicationModels.walletController.walletLoadInProgress) {
                         return
                     }
-                    walletController.setSelectedWallet(name, format)
-                    if (walletController.isWalletOpen(name)) {
+                    ApplicationModels.walletController.setSelectedWallet(name, format)
+                    if (ApplicationModels.walletController.isWalletOpen(name)) {
                         root.close()
                     }
-                    // Otherwise: stay open until walletLoadSucceeded or
-                    // walletMigrationRequired arrives via Connections above.
+                    // A completed load updates its row. The next explicit
+                    // click opens that wallet; completion cannot select it
+                    // behind a newer selection or another dialog.
                 }
             }
         }
@@ -423,7 +429,7 @@ Popup {
             textColor: Theme.color.accentText
             hoverTextColor: Theme.color.accentText
             iconSource: "image://images/plus-filled"
-            enabled: !walletController.walletLoadInProgress
+            enabled: !ApplicationModels.walletController.walletLoadInProgress
             onTriggered: {
                 root.addWallet()
                 root.close()

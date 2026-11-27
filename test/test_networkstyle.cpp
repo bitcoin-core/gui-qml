@@ -62,4 +62,4 @@ BITCOINQML_REGISTER_QT_TEST(NetworkStyleTests)
 #else
 QTEST_MAIN(NetworkStyleTests)
 #endif
-#include "test_networkstyle.moc"
+#include <test_networkstyle.moc>

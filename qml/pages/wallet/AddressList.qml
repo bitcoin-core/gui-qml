@@ -18,8 +18,8 @@ SettingsPage {
     maximumContentWidth: 840
     contentSpacing: 16
 
-    property WalletQmlModel wallet: null
-    property AddressListModel addressModel: wallet.addressListModel
+    property WalletModel wallet: null
+    property AddressListModel addressModel: wallet ? wallet.addressListModel : null
     property string selectedAddress: ""
     property string selectedLabel: ""
     property string selectedAmount: ""
@@ -29,67 +29,45 @@ SettingsPage {
     property bool selectedUsed: false
     property bool selectedHasPaymentRequest: false
     property string errorText: ""
-    property var pendingNotesByAddress: ({})
-
+    property TextEditSessionModel selectedEditor: null
     signal paymentRequestRequested(string requestId)
     signal receiveRequested
 
     function createPaymentRequestFromSelected(closeAction) {
         root.errorText = "";
-        const requests = wallet && wallet.receiveRequests
-            ? wallet.receiveRequests.matchingEntriesForAddress(root.selectedAddress) : [];
-        if (requests.length > 0) {
+        const requestId = wallet && wallet.receiveRequests
+            ? wallet.receiveRequests.firstRequestIdForAddress(root.selectedAddress) : "";
+        if (requestId !== "") {
             if (closeAction) closeAction();
-            root.paymentRequestRequested(requests[0].requestId);
+            root.paymentRequestRequested(requestId);
             return;
         }
-        if (wallet && wallet.setCurrentPaymentRequestAddress(root.selectedAddress)) {
-            if (closeAction) {
-                closeAction();
-            }
-            root.receiveRequested();
+        if (wallet && wallet.receive) {
+            if (wallet.receive.useAddress(root.selectedAddress)) {
+                if (closeAction) closeAction();
+                root.receiveRequested();
+            } else root.errorText = wallet.receive.error.message;
             return;
         }
         if (closeAction) {
             closeAction();
         }
-        addressModel.refresh();
+        if (root.addressModel) root.addressModel.refresh();
         root.errorText = qsTr("This address is no longer available.");
     }
 
-    function pendingNote(address, fallbackLabel) {
-        const note = root.pendingNotesByAddress[address]
-        return note === undefined ? fallbackLabel : note
+    onWalletChanged: {
+        selectedEditor = null;
+        detailsPopup.close();
     }
 
-    function updatePendingNote(address, note) {
-        const notes = {}
-        for (const key in root.pendingNotesByAddress) {
-            notes[key] = root.pendingNotesByAddress[key]
-        }
-        notes[address] = note
-        root.pendingNotesByAddress = notes
+    Connections {
+        target: root.wallet
+        function onAvailableChanged() { if (!root.wallet || !root.wallet.available) detailsPopup.close() }
     }
-
-    function clearPendingNote(address) {
-        const notes = {}
-        for (const key in root.pendingNotesByAddress) {
-            if (key !== address) notes[key] = root.pendingNotesByAddress[key]
-        }
-        root.pendingNotesByAddress = notes
-    }
-
-    function updateAddressLabel(address, label) {
-        root.errorText = ""
-        if (root.addressModel.setAddressLabel(address, label)) {
-            if (root.selectedAddress === address) root.selectedLabel = label
-            root.clearPendingNote(address)
-            return true
-        }
-        root.clearPendingNote(address)
-        root.addressModel.refresh()
-        root.errorText = qsTr("This address is no longer available.")
-        return false
+    Connections {
+        target: root.selectedEditor
+        function onClosed() { detailsPopup.close() }
     }
 
     rightItem: OverflowMenuButton {
@@ -100,7 +78,7 @@ SettingsPage {
         }
     }
 
-    Component.onCompleted: addressModel.refresh()
+    Component.onCompleted: root.addressModel.refresh()
 
     ContextMenu {
         id: pageMenu
@@ -112,8 +90,9 @@ SettingsPage {
         ContextMenuToggle {
             checkable: false
             text: qsTr("Show used addresses")
-            checked: addressModel.showUsed
-            onClicked: addressModel.showUsed = !addressModel.showUsed
+            checked: root.addressModel ? root.addressModel.showUsed : false
+            enabled: root.addressModel !== null
+            onClicked: if (root.addressModel) root.addressModel.showUsed = !root.addressModel.showUsed
         }
     }
 
@@ -123,6 +102,8 @@ SettingsPage {
         parent: Overlay.overlay
         title: qsTr("Address details")
         implicitWidth: 640
+        // The note editor answers Escape and asks before discarding edits.
+        dismissible: false
         contentItem: ScrollView {
             id: detailsScroll
             contentWidth: availableWidth
@@ -133,7 +114,8 @@ SettingsPage {
                 id: addressDetails
                 width: detailsScroll.availableWidth
                 address: root.selectedAddress
-                label: root.selectedLabel
+                label: root.selectedEditor ? root.selectedEditor.committedText : root.selectedLabel
+                editor: root.selectedEditor
                 amount: root.selectedAmount
                 hasAmount: root.selectedHasAmount
                 category: root.selectedCategory
@@ -143,14 +125,6 @@ SettingsPage {
                 onCloseRequested: detailsPopup.close()
                 onCreatePaymentRequestRequested: {
                     root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
-                }
-                onEditLabelRequested: (address, label) => {
-                    if (root.updateAddressLabel(address, label)) {
-                        root.selectedLabel = label;
-                        noteErrorText = "";
-                    } else {
-                        noteErrorText = qsTr("This address is no longer available.");
-                    }
                 }
             }
         }
@@ -170,11 +144,11 @@ SettingsPage {
         Layout.fillWidth: true
         Layout.maximumWidth: 360
         Layout.alignment: Qt.AlignHCenter
-        model: addressModel.categoryOptions
-        currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
+        model: root.addressModel ? root.addressModel.categoryOptions : []
+        currentIndex: root.addressModel ? Math.max(0, root.addressModel.categoryOptions.findIndex(option => option.value === root.addressModel.category)) : 0
         onSelected: (index, option) => {
             root.errorText = "";
-            addressModel.category = option.value;
+            if (root.addressModel) root.addressModel.category = option.value;
         }
     }
 
@@ -189,12 +163,13 @@ SettingsPage {
 
     CoreText {
         Layout.fillWidth: true
-        visible: addressModel.count === 0
+        visible: root.addressModel !== null && root.addressModel.count === 0
         text: {
-            if (addressModel.category === AddressListModel.Change) {
+            if (!root.addressModel) return "";
+            if (root.addressModel.category === AddressListModel.Change) {
                 return qsTr("No current change addresses.");
             }
-            return addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
+            return root.addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
         }
         color: Theme.color.neutral6
         textStyle: Theme.text.description
@@ -203,7 +178,7 @@ SettingsPage {
 
     FormSection {
         objectName: "addressListSection"
-        visible: addressModel.count > 0
+        visible: root.addressModel !== null && root.addressModel.count > 0
         Layout.fillWidth: true
 
         ListView {
@@ -213,20 +188,19 @@ SettingsPage {
             Layout.preferredHeight: Math.min(contentHeight, Math.max(76, root.height - 230))
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            reuseItems: addressModel.category === AddressListModel.Change
-            model: addressModel
+            reuseItems: root.addressModel !== null && root.addressModel.category === AddressListModel.Change
+            model: root.addressModel
             spacing: 0
 
             delegate: AddressRow {
                 width: ListView.view.width
-                pendingLabel: root.pendingNote(address, label)
+                addressModel: root.addressModel
+                commitOnFocusLoss: root.visible && (!root.navigationStack || root.StackView.status === StackView.Active)
                 showDivider: index < addressList.count - 1
-                onNoteDraftEdited: (address, label) => root.updatePendingNote(address, label)
-                onNoteDraftDiscarded: (address) => root.clearPendingNote(address)
-                onEditLabelRequested: (address, label) => root.updateAddressLabel(address, label)
                 onDetailsRequested: (address, label, amount, hasAmount, category, scriptType, used) => {
                     root.selectedAddress = address;
-                    root.selectedLabel = root.pendingNote(address, label);
+                    root.selectedEditor = root.addressModel && category !== "change" ? root.addressModel.editLabel(address) : null;
+                    root.selectedLabel = label;
                     root.selectedAmount = amount;
                     root.selectedHasAmount = hasAmount;
                     root.selectedCategory = category;
@@ -236,7 +210,7 @@ SettingsPage {
                     // request model would go stale, since it cannot see
                     // requests added while the same address stays selected.
                     root.selectedHasPaymentRequest = root.wallet && root.wallet.receiveRequests
-                        ? root.wallet.receiveRequests.matchingEntriesForAddress(address).length > 0
+                        ? root.wallet.receiveRequests.firstRequestIdForAddress(address) !== ""
                         : false;
                     addressDetails.resetNoteEditor();
                     detailsPopup.open();

@@ -324,9 +324,9 @@ Para evitar pérdidas accidentales, se recomienda guardar una copia en un lugar 
     <name>CreateIntro</name>
     <message>
         <location filename="../pages/wallet/CreateIntro.qml" line="52"/>
-        <source>You are about to create 
+        <source>You are about to create&#32;
 a single-key bitcoin wallet</source>
-        <translation type="unfinished">Estás a punto de crear 
+        <translation type="unfinished">Estás a punto de crear&#32;
 una cartera Bitcoin de clave única</translation>
     </message>
     <message>
@@ -1167,19 +1167,19 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
     </message>
 </context>
 <context>
-    <name>OptionsQmlModel</name>
+    <name>SettingsModel</name>
     <message>
-        <location filename="../models/options_model.cpp" line="321"/>
+        <location filename="../models/settingsmodel.cpp" line="321"/>
         <source>The configured signer path does not exist.</source>
         <translation type="unfinished">La ruta configurada del firmante no existe.</translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="324"/>
+        <location filename="../models/settingsmodel.cpp" line="324"/>
         <source>The configured signer path is not a file.</source>
         <translation type="unfinished">La ruta configurada del firmante no es un archivo.</translation>
     </message>
     <message>
-        <location filename="../models/options_model.cpp" line="327"/>
+        <location filename="../models/settingsmodel.cpp" line="327"/>
         <source>The configured signer path is not executable.</source>
         <translation type="unfinished">La ruta configurada del firmante no es ejecutable.</translation>
     </message>
@@ -1512,7 +1512,7 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../models/options_model.cpp" line="437"/>
+        <location filename="../models/settingsmodel.cpp" line="437"/>
         <source>System default</source>
         <translation type="unfinished">Predeterminado del sistema</translation>
     </message>
@@ -2359,181 +2359,181 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
     </message>
 </context>
 <context>
-    <name>WalletQmlController</name>
+    <name>WalletController</name>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="163"/>
-        <location filename="../walletqmlcontroller.cpp" line="223"/>
+        <location filename="../walletcontroller.cpp" line="163"/>
+        <location filename="../walletcontroller.cpp" line="223"/>
         <source>Wallet creation failed.</source>
         <translation type="unfinished">No se pudo crear la billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="176"/>
+        <location filename="../walletcontroller.cpp" line="176"/>
         <source>Choose a wallet name.</source>
         <translation type="unfinished">Elige un nombre de billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="182"/>
+        <location filename="../walletcontroller.cpp" line="182"/>
         <source>Set an external signer path in Wallet settings first.</source>
         <translation type="unfinished">Primero establece la ruta del firmante externo en los ajustes de billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="190"/>
+        <location filename="../walletcontroller.cpp" line="190"/>
         <source>Connect an external signer and try again.</source>
         <translation type="unfinished">Conecta un firmante externo e inténtalo de nuevo.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="194"/>
+        <location filename="../walletcontroller.cpp" line="194"/>
         <source>More than one external signer was found. Connect only one device and try again.</source>
         <translation type="unfinished">Se encontró más de un firmante externo. Conecta solo un dispositivo e inténtalo de nuevo.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="283"/>
+        <location filename="../walletcontroller.cpp" line="283"/>
         <source>More than one external signer was found. Connect only one device.</source>
         <translation type="unfinished">Se encontró más de un firmante externo. Conecta solo un dispositivo.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="286"/>
+        <location filename="../walletcontroller.cpp" line="286"/>
         <source>The signer command did not return valid output. Check that the path is correct.</source>
         <translation type="unfinished">El comando del firmante no devolvió una salida válida. Verifica que la ruta sea correcta.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="317"/>
+        <location filename="../walletcontroller.cpp" line="317"/>
         <source>This wallet needs to be migrated</source>
         <translation type="unfinished">Esta billetera necesita ser migrada</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="320"/>
+        <location filename="../walletcontroller.cpp" line="320"/>
         <source>We couldn&apos;t find that file</source>
         <translation type="unfinished">No pudimos encontrar ese archivo</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="323"/>
+        <location filename="../walletcontroller.cpp" line="323"/>
         <source>A wallet with this name already exists</source>
         <translation type="unfinished">Ya existe una billetera con este nombre</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="326"/>
+        <location filename="../walletcontroller.cpp" line="326"/>
         <source>This wallet type is not supported</source>
         <translation type="unfinished">Este tipo de billetera no es compatible</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="328"/>
+        <location filename="../walletcontroller.cpp" line="328"/>
         <source>This wallet couldn&apos;t be imported</source>
         <translation type="unfinished">No se pudo importar esta billetera</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="339"/>
+        <location filename="../walletcontroller.cpp" line="339"/>
         <source>The selected backup appears to come from a legacy wallet format. It needs to be migrated before it can be used here.</source>
         <translation type="unfinished">El respaldo seleccionado parece provenir de un formato de billetera antiguo. Necesita ser migrado antes de poder usarse aquí.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="342"/>
+        <location filename="../walletcontroller.cpp" line="342"/>
         <source>The selected file is no longer available at that location. Choose the backup file again and retry.</source>
         <translation type="unfinished">El archivo seleccionado ya no está disponible en esa ubicación. Elige el archivo de respaldo de nuevo e inténtalo otra vez.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="345"/>
+        <location filename="../walletcontroller.cpp" line="345"/>
         <source>Importing this backup would create a wallet that already exists in your wallet directory. Remove or rename the existing wallet first, then try again.</source>
         <translation type="unfinished">Importar este respaldo crearía una billetera que ya existe en tu directorio de billeteras. Elimina o cambia el nombre de la billetera existente primero, luego inténtalo de nuevo.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="348"/>
+        <location filename="../walletcontroller.cpp" line="348"/>
         <source>The file looks like a wallet backup, but this application could not verify or open it in a supported format.</source>
         <translation type="unfinished">El archivo parece ser un respaldo de billetera, pero esta aplicación no pudo verificarlo o abrirlo en un formato compatible.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="350"/>
+        <location filename="../walletcontroller.cpp" line="350"/>
         <source>The selected file could not be restored as a wallet. Check that it is a valid wallet backup, then try another file.</source>
         <translation type="unfinished">El archivo seleccionado no se pudo restaurar como billetera. Verifica que sea un respaldo de billetera válido, luego intenta con otro archivo.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="361"/>
+        <location filename="../walletcontroller.cpp" line="361"/>
         <source>If this is a legacy wallet backup, migrate it with the wallet migration tool before importing it here.</source>
         <translation type="unfinished">Si este es un respaldo de billetera antiguo, mígralo con la herramienta de migración de billeteras antes de importarlo aquí.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="485"/>
+        <location filename="../walletcontroller.cpp" line="485"/>
         <source>Choose a wallet backup file.</source>
         <translation type="unfinished">Elige un archivo de respaldo de billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="490"/>
+        <location filename="../walletcontroller.cpp" line="490"/>
         <source>The selected wallet path does not exist.</source>
         <translation type="unfinished">La ruta de billetera seleccionada no existe.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="519"/>
+        <location filename="../walletcontroller.cpp" line="519"/>
         <source>Wallet import failed.</source>
         <translation type="unfinished">No se pudo importar la billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="635"/>
+        <location filename="../walletcontroller.cpp" line="635"/>
         <source>Choose a wallet to open.</source>
         <translation type="unfinished">Elige una billetera para abrir.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="644"/>
-        <location filename="../walletqmlcontroller.cpp" line="698"/>
+        <location filename="../walletcontroller.cpp" line="644"/>
+        <location filename="../walletcontroller.cpp" line="698"/>
         <source>The selected wallet is not available in the wallet directory.</source>
         <translation type="unfinished">La billetera seleccionada no está disponible en el directorio de billeteras.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="674"/>
+        <location filename="../walletcontroller.cpp" line="674"/>
         <source>Wallet could not be opened.</source>
         <translation type="unfinished">No se pudo abrir la billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="691"/>
+        <location filename="../walletcontroller.cpp" line="691"/>
         <source>Choose a wallet to update.</source>
         <translation type="unfinished">Elige una billetera para actualizar.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="713"/>
+        <location filename="../walletcontroller.cpp" line="713"/>
         <source>Wallet update failed.</source>
         <translation type="unfinished">No se pudo actualizar la billetera.</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="771"/>
-        <location filename="../walletqmlcontroller.cpp" line="786"/>
+        <location filename="../walletcontroller.cpp" line="771"/>
+        <location filename="../walletcontroller.cpp" line="786"/>
         <source>Single-key</source>
         <translation type="unfinished">Clave única</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="776"/>
+        <location filename="../walletcontroller.cpp" line="776"/>
         <source>External signer</source>
         <translation type="unfinished">Firmante externo</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="779"/>
+        <location filename="../walletcontroller.cpp" line="779"/>
         <source>Watch-only</source>
         <translation type="unfinished">Solo lectura</translation>
     </message>
     <message>
-        <location filename="../walletqmlcontroller.cpp" line="783"/>
+        <location filename="../walletcontroller.cpp" line="783"/>
         <source>Multi-key</source>
         <translation type="unfinished">Multiclave</translation>
     </message>
 </context>
 <context>
-    <name>WalletQmlModel</name>
+    <name>WalletModel</name>
     <message>
-        <location filename="../models/walletqmlmodel.cpp" line="736"/>
+        <location filename="../models/walletmodel.cpp" line="736"/>
         <source>External signer not available.</source>
         <translation type="unfinished">Firmante externo no disponible.</translation>
     </message>
     <message>
-        <location filename="../models/walletqmlmodel.cpp" line="742"/>
-        <location filename="../models/walletqmlmodel.cpp" line="756"/>
+        <location filename="../models/walletmodel.cpp" line="742"/>
+        <location filename="../models/walletmodel.cpp" line="756"/>
         <source>Couldn&apos;t prepare transaction for external signing.</source>
         <translation type="unfinished">No se pudo preparar la transacción para firma externa.</translation>
     </message>
     <message>
-        <location filename="../models/walletqmlmodel.cpp" line="768"/>
+        <location filename="../models/walletmodel.cpp" line="768"/>
         <source>External signer not found. Connect one device and try again.</source>
         <translation type="unfinished">Firmante externo no encontrado. Conecta un dispositivo e inténtalo de nuevo.</translation>
     </message>
     <message>
-        <location filename="../models/walletqmlmodel.cpp" line="771"/>
+        <location filename="../models/walletmodel.cpp" line="771"/>
         <source>External signer failed to sign. Try again.</source>
         <translation type="unfinished">El firmante externo no pudo firmar. Inténtalo de nuevo.</translation>
     </message>
@@ -2851,5 +2851,17 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
         <source>&amp;About Bitcoin Core</source>
         <translation type="unfinished">&amp;Acerca de Bitcoin Core</translation>
     </message>
+</context>
+<context>
+    <name>SpeedUpComplete</name>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="69"/><source>Replacement transaction update result</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="80"/><source>The replacement transaction is in the wallet&apos;s mempool. The wallet does not report peer relay.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="82"/><source>The replacement transaction is confirmed. The wallet does not report peer relay.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="84"/><source>The replacement is recorded by the wallet but is not currently in its mempool. Peer relay is unknown.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="86"/><source>The wallet reports that the replacement transaction is conflicted.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="88"/><source>The wallet reports that the replacement transaction is abandoned.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="90"/><source>The replacement transaction is saved to the wallet. Its mempool status could not be confirmed, and peer relay is unknown. Check Activity for updates.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="92"/><source>The wallet did not report a matching replacement transaction when checked. Submission and peer relay are unknown. Check Activity before retrying.</source><translation type="unfinished"></translation></message>
+    <message><location filename="../pages/wallet/SpeedUpComplete.qml" line="93"/><source>The wallet returned from the fee-bump operation, but its transaction record and submission status could not be confirmed. Peer relay is unknown. Check Activity before retrying.</source><translation type="unfinished"></translation></message>
 </context>
 </TS>

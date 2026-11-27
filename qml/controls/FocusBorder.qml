@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 
  Rectangle {
     id: root
@@ -28,5 +27,9 @@ import QtQuick.Controls 2.15
     Behavior on border.color {
         enabled: Theme.motion.animated
         ColorAnimation { duration: Theme.motion.normal }
+    }
+    Behavior on visible {
+        enabled: Theme.motion.animated
+        NumberAnimation { duration: 150 }
     }
 }

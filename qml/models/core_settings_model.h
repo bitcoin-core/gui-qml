@@ -6,8 +6,13 @@
 #define BITCOIN_QML_MODELS_CORE_SETTINGS_MODEL_H
 
 #include <qml/core_settings.h>
+#include <qml/ownedwork.h>
+#include <atomic>
+#include <memory>
+#include <optional>
 
 #include <QObject>
+#include <QPointer>
 #include <QHash>
 #include <QString>
 #include <QVariant>
@@ -23,6 +28,8 @@ class Node;
 } // namespace interfaces
 
 class CoreSettingsModel;
+struct CoreSettingsProjection;
+class CoreProxyDraft;
 
 class CoreSettingEntryModel : public QObject
 {
@@ -51,8 +58,7 @@ public:
     QString infoText() const;
     bool createsGuiOverride() const;
 
-    Q_INVOKABLE QString validate(const QString& value) const;
-    Q_INVOKABLE bool commitAddress(const QString& address);
+    Q_INVOKABLE quint64 requestAddress(const QString& address);
     Q_INVOKABLE QString defaultAddress() const;
 
 Q_SIGNALS:
@@ -70,103 +76,186 @@ class CoreSettingsModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QVariantMap statuses READ statuses NOTIFY statusesChanged)
-
+    Q_PROPERTY(bool pending READ pending NOTIFY operationChanged)
+    Q_PROPERTY(QString error READ error NOTIFY operationChanged)
+    Q_PROPERTY(StorageChoice storageChoice READ storageChoice NOTIFY operationChanged)
+    Q_PROPERTY(bool showCustomStorage READ showCustomStorage NOTIFY operationChanged)
+    Q_PROPERTY(QString customStorageDescription READ customStorageDescription NOTIFY operationChanged)
+    Q_PROPERTY(int customStorageSizeGB READ customStorageSizeGB NOTIFY operationChanged)
+    Q_PROPERTY(quint64 operationId READ operationId NOTIFY operationChanged)
+    Q_PROPERTY(OperationState operationState READ operationState NOTIFY operationChanged)
 public:
-    enum class ChangeOrigin {
-        User,
-        Preview,
-        Recommendation,
-    };
+    enum StorageChoice {FullStorage,ReducedStorage,CustomStorage};Q_ENUM(StorageChoice)
+    enum class ChangeOrigin {User,Preview,Recommendation};
+    enum OperationState {Idle,Pending,Applied,Rejected,Stale,Failed,Closed};
+    Q_ENUM(OperationState)
+    using BeforeChangeHandler=std::function<void(ChangeOrigin)>;
+    using AfterChangeHandler=std::function<void(const QmlCoreSettings::Change&,ChangeOrigin)>;
+    using Completion=std::function<void(bool)>;
+    struct EffectResult {QString error;std::optional<QmlCoreSettings::Values> values;QVariantMap statuses;std::shared_ptr<const void> presentation;};
+    using EffectContext=std::shared_ptr<const void>;
+    using Effect = std::function<EffectResult(const QmlCoreSettings::Change&, EffectContext)>;
+    void setEffect(Effect effect, std::function<EffectContext()> capture,
+                   std::function<void(EffectContext, const EffectResult&)> publish,
+                   std::function<void(EffectContext)> abort);
+    using EffectPort=std::function<void(const QmlCoreSettings::Change&,EffectContext,execution::OwnedWork::QueuePost,std::function<void(EffectResult)>,std::function<void(std::exception_ptr)>)>;
+    void setEffectPort(EffectPort effect,std::function<EffectContext()> capture,std::function<void(EffectContext,const EffectResult&)> publish,std::function<void(EffectContext)> abort={}){m_effect=std::move(effect);m_capture_effect=std::move(capture);m_publish_effect=std::move(publish);m_abort_effect=std::move(abort);}
 
-    using BeforeChangeHandler = std::function<void(ChangeOrigin)>;
-    using AfterChangeHandler = std::function<void(const QmlCoreSettings::Change&, ChangeOrigin)>;
-
-    explicit CoreSettingsModel(QObject* parent = nullptr);
-    CoreSettingsModel(QmlCoreSettings::Values values, QVariantMap statuses = {}, QObject* parent = nullptr);
-
+    explicit CoreSettingsModel(QObject* parent=nullptr);
+    CoreSettingsModel(QmlCoreSettings::Values values,QmlCoreSettings::StatusProjection statuses={},QObject* parent=nullptr);
+    ~CoreSettingsModel() override;
+    void configureServices(presentation::Post post, execution::Executor* executor = nullptr, execution::Lane lane = execution::Lane::Core);
+    void close();
+    void whenEffectsDrained(std::function<void()> done){if(m_work)m_work->close(std::move(done));else if(done)done();}
+    void whenEffectQueuesDrained(std::function<void()> done) { m_work->whenQueuesDrained(std::move(done)); }
+    bool presentationOpen() const {return !m_stopping;}
+    void setAdmissionReady(bool ready);
+    bool pending() const {return m_pending!=0;}
+    QString error() const {return m_error;}
+    quint64 operationId() const {return m_next;}
+    OperationState operationState() const {return m_operation_state;}
+    quint64 userRevision() const {return m_user_revision;}
+    quint64 publishedUserRevision() const {return m_published_user_revision;}
+    quint64 previewContext() const {return m_context->load();}
+    void invalidatePreviewContext(){++*m_context;}
+    bool publishedValuesChanged() const {return m_published_values_changed;}
+    QmlCoreSettings::Change publishedChange() const;
     Q_INVOKABLE QObject* entry(const QString& key);
+    Q_INVOKABLE void refresh();
     Q_INVOKABLE QVariantMap status(const QString& key) const;
-
-    const QmlCoreSettings::Values& values() const { return m_session.values(); }
-    const QSet<QString>& touchedSettings() const { return m_session.touchedSettings(); }
-    QVariantMap statuses() const { return m_session.statuses(); }
-
-    bool canEdit(const QString& name) const { return m_session.canEdit(name); }
-    bool isTouched(const QString& name) const { return m_session.isTouched(name); }
-    void markTouched(const QString& name) { m_session.markTouched(name); }
-    void clearTouched(const QString& name) { m_session.clearTouched(name); }
-    void clearTouchedSettings() { m_session.clearTouchedSettings(); }
-    void setTouchedSettings(const QSet<QString>& touched_settings) { m_session.setTouchedSettings(touched_settings); }
-    void setStatuses(const QVariantMap& statuses);
-
-    common::SettingsValue settingValue(const QString& name) const;
-    QString defaultProxyAddress() const { return m_session.defaultProxyAddress(); }
-    QString validateProxyLocation(const QString& location) const { return m_session.validateProxyLocation(location); }
-
-    QmlCoreSettings::Change changeListen(bool listen);
-    QmlCoreSettings::Change changeNatpmp(bool natpmp);
-    QmlCoreSettings::Change changeServer(bool server);
-    QmlCoreSettings::Change changePrune(bool prune);
-    QmlCoreSettings::Change changePruneSizeGB(int prune_size_gb);
-    QmlCoreSettings::Change changeProxyEnabled(bool enabled);
-    QmlCoreSettings::Change changeTorEnabled(bool enabled);
-    QmlCoreSettings::Change changeProxyLocation(const QString& location);
-    QmlCoreSettings::Change changeTorLocation(const QString& location);
-    QmlCoreSettings::Change changePruneRecommendation(bool prune, int prune_size_gb, bool mark_touched);
-    QmlCoreSettings::Change applyPreviewValuesPreservingTouched(const QmlCoreSettings::Values& values, const QVariantMap& statuses);
-
-    bool setListen(bool listen) { return QmlCoreSettings::ValuesChanged(changeListen(listen)); }
-    bool setNatpmp(bool natpmp) { return QmlCoreSettings::ValuesChanged(changeNatpmp(natpmp)); }
-    bool setServer(bool server) { return QmlCoreSettings::ValuesChanged(changeServer(server)); }
-    bool setPrune(bool prune) { return QmlCoreSettings::ValuesChanged(changePrune(prune)); }
-    bool setPruneSizeGB(int prune_size_gb) { return QmlCoreSettings::ValuesChanged(changePruneSizeGB(prune_size_gb)); }
-    bool setProxyEnabled(bool enabled) { return QmlCoreSettings::ValuesChanged(changeProxyEnabled(enabled)); }
-    bool setTorEnabled(bool enabled) { return QmlCoreSettings::ValuesChanged(changeTorEnabled(enabled)); }
-    bool commitProxyLocation(const QString& location) { return changeProxyLocation(location).accepted; }
-    bool commitTorLocation(const QString& location) { return changeTorLocation(location).accepted; }
-    void setPruneRecommendation(bool prune, int prune_size_gb, bool mark_touched)
-    {
-        changePruneRecommendation(prune, prune_size_gb, mark_touched);
-    }
-
-    bool writeToArgs(ArgsManager& args, const QString& name) const { return m_session.writeToArgs(args, name); }
-    bool writeTouchedToArgs(ArgsManager& args) const { return m_session.writeTouchedToArgs(args); }
-    bool writeToNode(interfaces::Node& node, ArgsManager& args, const QString& name) const
-    {
-        return m_session.writeToNode(node, args, name);
-    }
-    bool writeTouchedToNode(interfaces::Node& node, ArgsManager& args) const
-    {
-        return m_session.writeTouchedToNode(node, args);
-    }
-
-    void setBeforeChangeHandler(BeforeChangeHandler handler) { m_before_change = std::move(handler); }
-    void setAfterChangeHandler(AfterChangeHandler handler) { m_after_change = std::move(handler); }
-
+    //! A proxy draft of these settings; the caller owns it.
+    CoreProxyDraft* createProxyDraft();
+    const QmlCoreSettings::Values& values() const;
+    const QSet<QString>& touchedSettings() const;
+    QVariantMap statuses() const;
+    bool canEdit(const QString& name) const;
+    bool isTouched(const QString& name) const;
+    void markTouched(const QString& name);
+    void clearTouched(const QString& name);
+    void clearTouchedSettings();
+    void setTouchedSettings(const QSet<QString>& touched);
+    void setStatuses(const QmlCoreSettings::StatusProjection& statuses);
+    QString defaultProxyAddress() const;
+    QString pruneTargetText()const;
+    QString pruneTargetError()const;
+    StorageChoice storageChoice()const;
+    bool showCustomStorage()const;
+    QString customStorageDescription()const;
+    int64_t customStorageTarget()const;
+    int customStorageSizeGB()const;
+    Q_INVOKABLE void chooseStorage(StorageChoice choice);
+    Q_INVOKABLE void discardPruneInput();
+    quint64 changeListen(bool value);
+    quint64 changeNatpmp(bool value);
+    quint64 changeServer(bool value);
+    quint64 changePrune(bool value);
+    quint64 changePruneSizeGB(int value);
+    quint64 changePruneTargetText(const QString& text);
+    quint64 changeProxyEnabled(bool value);
+    quint64 changeTorEnabled(bool value);
+    quint64 changeProxyLocation(const QString& value);
+    quint64 changeTorLocation(const QString& value);
+    quint64 changePruneRecommendation(bool prune,int size,bool touched,std::optional<quint64> expected_user={});
+    quint64 applyPreviewValuesPreservingTouched(const QmlCoreSettings::Values& values,const QmlCoreSettings::StatusProjection& statuses,
+        Completion completion={},bool reset_touched=false,std::optional<quint64> expected_user={},std::optional<quint64> expected_context={});
+    void setBeforeChangeHandler(BeforeChangeHandler handler){m_before_change=std::move(handler);}
+    void setAfterChangeHandler(AfterChangeHandler handler){m_after_change=std::move(handler);}
 Q_SIGNALS:
     void statusesChanged();
-
+    void operationChanged();
+    // A follow-up preview can become the latest operation before observers
+    // receive the original user's outcome. Retain that outcome's own ticket.
+    void operationFinished(quint64 ticket, OperationState state);
 private:
     friend class CoreSettingEntryModel;
-
+    friend class CoreProxyDraft;
+    struct State;
+    using Mutation=std::function<QmlCoreSettings::Change(QmlCoreSettings::Session&)>;
+    void initializeServices(presentation::Post post, execution::Executor* executor = nullptr, execution::Lane lane = execution::Lane::Core);
+    quint64 mutate(ChangeOrigin origin,Mutation mutation,Completion completion={},std::optional<quint64> expected_user={},std::optional<quint64> expected_context={});
     CoreSettingEntryModel* ensureEntry(const QString& key);
     void notifyChange(const QmlCoreSettings::Change& change);
+    void publishDecision(std::shared_ptr<const CoreSettingsProjection> projection);
     void notifyStatusesChanged();
-
-    template <typename Mutation>
-    QmlCoreSettings::Change mutate(ChangeOrigin origin, Mutation mutation)
-    {
-        if (m_before_change) m_before_change(origin);
-        const QmlCoreSettings::Change change = mutation(m_session);
-        notifyChange(change);
-        if (change.accepted && m_after_change) m_after_change(change, origin);
-        return change;
-    }
-
-    QmlCoreSettings::Session m_session;
-    QHash<QString, CoreSettingEntryModel*> m_entries;
+    QmlCoreSettings::Values m_initial_values;
+    QVariantMap m_initial_statuses;
+    std::shared_ptr<const char> m_requested_status_identity;
+    QSet<QString> m_empty_touched;
+    std::shared_ptr<State> m_native;
+    std::shared_ptr<const CoreSettingsProjection> m_projection;
+    presentation::Post m_post;
+    std::shared_ptr<execution::Executor> m_owned_executor;
+    std::unique_ptr<execution::OwnedWork> m_work;
+    std::shared_ptr<std::atomic<quint64>> m_context{std::make_shared<std::atomic<quint64>>(0)};
+    QHash<QString,CoreSettingEntryModel*> m_entries;
+    EffectPort m_effect;
+    std::function<void(EffectContext)> m_abort_effect;
+    std::function<EffectContext()> m_capture_effect;
+    std::function<void(EffectContext,const EffectResult&)> m_publish_effect;
     BeforeChangeHandler m_before_change;
     AfterChangeHandler m_after_change;
+    quint64 m_next{0},m_next_user_ordinal{0},m_user_revision{0},m_published_user_revision{0};
+    size_t m_pending{0};
+    QString m_error;
+    OperationState m_operation_state{Idle};
+    bool m_stopping{false},m_published_values_changed{false},m_admission_ready{true};
 };
 
+class CoreProxyDraft : public QObject
+{
+    Q_OBJECT
+    //! The settings this draft edits. QML declares the draft and binds this.
+    Q_PROPERTY(CoreSettingsModel* source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(bool proxyEnabled READ proxyEnabled WRITE setProxyEnabled NOTIFY changed)
+    Q_PROPERTY(QString proxyAddress READ proxyAddress WRITE setProxyAddress NOTIFY changed)
+    Q_PROPERTY(bool torEnabled READ torEnabled WRITE setTorEnabled NOTIFY changed)
+    Q_PROPERTY(QString torAddress READ torAddress WRITE setTorAddress NOTIFY changed)
+    Q_PROPERTY(QString proxyError READ proxyError NOTIFY changed)
+    Q_PROPERTY(QString torError READ torError NOTIFY changed)
+    Q_PROPERTY(bool pending READ pending NOTIFY changed)
+    Q_PROPERTY(bool ready READ ready NOTIFY changed)
+    Q_PROPERTY(bool dirty READ dirty NOTIFY changed)
+    Q_PROPERTY(bool canApply READ canApply NOTIFY changed)
+    Q_PROPERTY(QString error READ error NOTIFY changed)
+    Q_PROPERTY(quint64 operationId READ operationId NOTIFY changed)
+    Q_PROPERTY(CoreSettingsModel::OperationState operationState READ operationState NOTIFY changed)
+public:
+    explicit CoreProxyDraft(QObject* parent=nullptr);
+    CoreSettingsModel* source() const{return m_source;}
+    void setSource(CoreSettingsModel* source);
+    bool proxyEnabled() const{return m_proxy_enabled;}
+    QString proxyAddress() const{return m_proxy_address;}
+    bool torEnabled() const{return m_tor_enabled;}
+    QString torAddress() const{return m_tor_address;}
+    void setProxyEnabled(bool value);
+    void setProxyAddress(const QString& value);
+    void setTorEnabled(bool value);
+    void setTorAddress(const QString& value);
+    QString proxyError() const{return m_pending?QString{}:m_proxy_error;}
+    QString torError() const{return m_pending?QString{}:m_tor_error;}
+    bool pending() const{return m_pending;}
+    bool ready() const{return m_ready;}
+    bool dirty() const{return m_dirty;}
+    bool canApply() const{return m_source&&m_source->presentationOpen()&&!m_source->pending()&&m_ready&&!m_pending&&m_valid&&m_operation_state!=CoreSettingsModel::Pending;}
+    QString error() const{return m_error;}
+    quint64 operationId() const{return m_operation_id;}
+    CoreSettingsModel::OperationState operationState() const{return m_operation_state;}
+    Q_INVOKABLE void reset();
+    //! Applies the draft; operationState follows it and applied() reports success.
+    Q_INVOKABLE bool requestApply();
+Q_SIGNALS:
+    void sourceChanged();
+    void changed();
+    //! The draft's own apply succeeded.
+    void applied();
+private:
+    void evaluate();
+    void startEvaluation();
+    void startReset();
+    QPointer<CoreSettingsModel> m_source;
+    quint64 m_revision{0},m_operation_id{0};
+    QString m_proxy_address,m_tor_address,m_proxy_error,m_tor_error,m_error;
+    bool m_proxy_enabled{false},m_tor_enabled{false},m_pending{false},m_dirty{false},m_valid{false},m_validation_inflight{false},m_ready{false},m_reset_inflight{false},m_reset_pending{false};
+    CoreSettingsModel::OperationState m_operation_state{CoreSettingsModel::Idle};
+};
 #endif // BITCOIN_QML_MODELS_CORE_SETTINGS_MODEL_H

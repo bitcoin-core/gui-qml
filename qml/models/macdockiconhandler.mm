@@ -7,7 +7,9 @@
 #include <AppKit/AppKit.h>
 #include <objc/runtime.h>
 
-static MacDockIconHandler *s_instance = nullptr;
+namespace appdesktop {
+namespace {
+MacDockIconHandler *s_instance = nullptr;
 
 bool dockClickHandler(id self, SEL _cmd, ...) {
     Q_UNUSED(self)
@@ -25,6 +27,8 @@ static void setupDockClickHandler() {
     class_replaceMethod(delClass, shouldHandle, (IMP)dockClickHandler, "B@:");
 }
 
+} // namespace
+
 MacDockIconHandler::MacDockIconHandler() : QObject()
 {
     setupDockClickHandler();
@@ -36,3 +40,5 @@ MacDockIconHandler *MacDockIconHandler::instance()
         s_instance = new MacDockIconHandler();
     return s_instance;
 }
+
+} // namespace appdesktop

@@ -6,8 +6,6 @@ project(BitcoinCoreApp
   LANGUAGES CXX
 )
 
-include(CMakeDependentOption)
-
 # Language setup
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_HOST_APPLE)
   # We do not use the install_name_tool when cross-compiling for macOS.
@@ -35,6 +33,14 @@ find_package(Qt 6.2 MODULE REQUIRED
 find_package(QRencode MODULE REQUIRED)
 
 option(ENABLE_TEST_AUTOMATION "Enable test automation bridge for QML UI testing" OFF)
+option(ENABLE_QML_LINT "Enable strict QML static analysis (Qt 6.10 or newer)" OFF)
+option(ENABLE_APP_COVERAGE "Instrument app and app tests with LLVM source coverage" OFF)
+if(ENABLE_APP_COVERAGE)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "ENABLE_APP_COVERAGE requires Clang and matching LLVM profile tools")
+  endif()
+  include(cmake/AppCoverage.cmake)
+endif()
 
 # Do not build any executable targets from bitcoin submodule
 set(BUILD_BENCH OFF)
@@ -52,17 +58,18 @@ set(BUILD_UTIL OFF)
 set(BUILD_UTIL_CHAINSTATE OFF)
 set(BUILD_WALLET_TOOL OFF)
 set(USE_QRCODE TRUE)
-# We need this libraries, can ignore the executable bitcoin-qt
-set(BUILD_GUI ON)
-set(ENABLE_WALLET ON)
-cmake_dependent_option(BUILD_APP_TESTS "Build tests for the app" ON "BUILD_GUI" OFF)
+set(BUILD_GUI OFF)
+option(ENABLE_WALLET "Build wallet support" ON)
+option(BUILD_APP_TESTS "Build tests for the app" ON)
 
 # Bitcoin Core codebase
 # Builds libraries: univalue, core_interface, bitcoin_node, bitcoin_wallet
 add_subdirectory(bitcoin)
 
-# Match Core's DEBUG_LOCKORDER and sanitizer settings.
-foreach(rule CMAKE_CXX_COMPILE_OBJECT CMAKE_CXX_CREATE_SHARED_LIBRARY CMAKE_CXX_LINK_EXECUTABLE)
+# Match Core's compiler launchers, DEBUG_LOCKORDER and sanitizer settings.
+# Core configures ccache in its directory; propagate it to the app and tests.
+foreach(rule CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER
+    CMAKE_CXX_COMPILE_OBJECT CMAKE_CXX_CREATE_SHARED_LIBRARY CMAKE_CXX_LINK_EXECUTABLE)
   get_directory_property(${rule} DIRECTORY bitcoin DEFINITION ${rule})
 endforeach()
 
@@ -72,12 +79,81 @@ set(CMAKE_AUTOMOC_MOC_OPTIONS "-p${CMAKE_CURRENT_SOURCE_DIR}")
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 # but don't let Qt interfere with bitcoin core libraries
-set_target_properties(bitcoin_wallet PROPERTIES AUTOUIC OFF)
+if(ENABLE_WALLET)
+  set_target_properties(bitcoin_wallet PROPERTIES AUTOUIC OFF)
+endif()
 
 # Compile Qt+QML sources
 set(CMAKE_AUTOMOC_MOC_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/qml")
 file(GLOB_RECURSE QML_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/qml/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/qml/*.h")
 list(FILTER QML_SOURCES EXCLUDE REGEX "androidnotifier\\.(cpp|h)$")
+# Wallet implementations and their moc objects must not enter a node-only link.
+if(NOT ENABLE_WALLET)
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/paymentimport[^/]*\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/paymentimportoperation\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletimporttarget\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletcontroller\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletnamescontroller\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletcreationcontroller\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletopenoperation\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletlifecycle\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletopening\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletreceiveadapter\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/receivetyperegistration\\.h$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/(walletreceivemodel|paymentrequesteditormodel|addressreservationmodel|receiptreconciliationmodel|paymentrequest(delete|view)controller)\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletsecurity\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletsend\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/wallettransaction\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletprepare\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/transactionattempt\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/psbtpolicy\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/psbtwork\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/psbtdocument\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/psbtsignatures\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/psbtworktypes\\.h$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletmessage\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletbump\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletreview\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletreceipts\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletrequestdata\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletrequests\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletreservations\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletreservationdata\\.h$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletbalanceadapter\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/activityfilterproxymodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/activitydetailmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/addresslistmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/bumptransactionmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/coinslistmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/psbtqmlmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/receiverequesthistorymodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/receiverequestoperation\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/feeestimatevalues\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/feeestimatereader\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/feeestimatepolicy\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/feeselectionmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/sendrecipient\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/sendrecipientslistmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/signverifymessagemodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/transaction\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/transactionactivity\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/transactionactivitymodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/transactionflow\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletlistmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletselectionmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletsecuritymodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletpasswordcontroller\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/(walletbackupmodel|walletbackupcontroller|feebumpmodel|feebumpcontroller)\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletcatalog\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/walletregistry\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/wallet(creation|restoration|operationpresentation|publication|identity)\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/wallet(creationmodel|operationmodel|operationpresentationmodel|provisioningcheck)\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletbalancereader\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/transactionreviewmodel\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/(walletsendhandle|walletpsbtoperation)\\.(cpp|h)$")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "qml/models/walletsenddraft\\.(cpp|h)$")
+endif()
 if(NOT ENABLE_TEST_AUTOMATION)
   list(FILTER QML_SOURCES EXCLUDE REGEX "qml/test/")
 endif()
@@ -106,6 +182,9 @@ list(APPEND QML_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/init/bitcoin-qt
 
 # Build QML library
 add_library(bitcoinqml STATIC ${QML_SOURCES})
+if(ENABLE_QML_LINT)
+  set_property(TARGET bitcoinqml APPEND PROPERTY AUTOMOC_MOC_OPTIONS "--output-json")
+endif()
 # Prevent Qt macros like "signal" from polluting bitcoin core code
 target_compile_definitions(bitcoinqml
   PUBLIC
@@ -141,7 +220,8 @@ target_link_libraries(bitcoinqml
     Qt6::Widgets
   PRIVATE
     bitcoin_cli
-    bitcoin_wallet
+    $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
+    $<$<PLATFORM_ID:Windows>:advapi32>
     $<$<PLATFORM_ID:Darwin>:-framework\ AppKit>
 )
 
@@ -157,23 +237,17 @@ qt6_add_resources(bitcoinqml "qml_gui_translations"
     FILES ${QML_GUI_QM_FILES}
 )
 
-# Embed bitcoin-qt translations built by the bitcoin submodule.
-# The submodule (BUILD_GUI=ON) compiles .ts -> .qm files into
-# ${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/ at build time. Derive the
-# embedded list from the submodule's current source list so Core translation
-# additions/removals do not leave stale resource inputs behind.
-include("${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/qt/locale/ts_files.cmake")
-set(BITCOIN_QT_QM_FILES)
-foreach(ts_file IN LISTS ts_files)
-    string(REGEX REPLACE "^bitcoin_(.+)\\.ts$" "\\1" tag "${ts_file}")
-    set(qm_file "${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/bitcoin_${tag}.qm")
-    set_source_files_properties(${qm_file} PROPERTIES
-        GENERATED TRUE
-        QT_RESOURCE_ALIAS "bitcoin_${tag}.qm"
-    )
-    list(APPEND BITCOIN_QT_QM_FILES ${qm_file})
-endforeach()
+# Build the Core catalogs directly from the pinned submodule source list.
+set(core_qt_locale_dir "${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/qt/locale")
+include("${core_qt_locale_dir}/ts_files.cmake")
+list(TRANSFORM ts_files PREPEND "${core_qt_locale_dir}/")
+qt6_add_translation(BITCOIN_QT_QM_FILES ${ts_files} OPTIONS -silent)
 unset(ts_files)
+unset(core_qt_locale_dir)
+foreach(qm_file IN LISTS BITCOIN_QT_QM_FILES)
+    get_filename_component(qm_name "${qm_file}" NAME)
+    set_source_files_properties("${qm_file}" PROPERTIES QT_RESOURCE_ALIAS "${qm_name}")
+endforeach()
 qt6_add_resources(bitcoinqml "bitcoin_qt_translations"
     PREFIX "/translations"
     FILES ${BITCOIN_QT_QM_FILES}
@@ -193,8 +267,6 @@ if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
     unset(qml_translation_srcs)
 endif()
 unset(warn_flags)
-
-add_dependencies(bitcoinqml bitcoin-qt)
 
 qt6_import_qml_plugins(bitcoinqml)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
@@ -223,9 +295,12 @@ target_link_libraries(bitcoin-core-app
     core_interface
     bitcoin_node
     bitcoinqml
-    bitcoinqt
 )
 qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+
+if(ENABLE_QML_LINT)
+  include(cmake/QmlLint.cmake)
+endif()
 
 if(ENABLE_TEST_AUTOMATION)
   get_target_property(qt_lib_type Qt6::Core TYPE)
@@ -240,3 +315,6 @@ if(BUILD_APP_TESTS)
   enable_testing()
   add_subdirectory(test)
 endif()
+
+include(cmake/Sanitizers.cmake)
+include(cmake/AppWindowsManifest.cmake)

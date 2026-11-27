@@ -22,6 +22,7 @@ TestCase {
     Component {
         id: fullWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -31,6 +32,7 @@ TestCase {
     Component {
         id: fullPreInitWizard
         OnboardingWizard {
+            settingsModel: optionsModel
             width: 640
             height: 665
             preInit: true
@@ -41,6 +43,7 @@ TestCase {
     Component {
         id: storageLocation
         OnboardingStorageLocation {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedChainstateSize: 8
@@ -50,6 +53,7 @@ TestCase {
     Component {
         id: storageAmount
         OnboardingStorageAmount {
+            settingsModel: optionsModel
             width: 640
             height: 665
             assumedBlockchainSize: 610
@@ -88,14 +92,25 @@ TestCase {
     Component {
         id: connection
         OnboardingConnection {
+            settingsModel: optionsModel
             width: 640
             height: 665
         }
     }
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
+        ApplicationModels.setPreInitForTest(true)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, optionsModel)
         optionsModel.clearCoreSettingStatusesForTest()
+        optionsModel.coreSettings.resetPruneDraftForTest()
+        optionsModel.resetSettingsEditorsForTest()
+        optionsModel.coreSettings.entry("proxy").enabled = false
+        optionsModel.coreSettings.entry("onion").enabled = false
+        optionsModel.coreSettings.entry("proxy").address = "127.0.0.1:9050"
+        optionsModel.coreSettings.entry("onion").address = "127.0.0.1:9050"
         optionsModel.existingProfile = false
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 2
@@ -104,6 +119,17 @@ TestCase {
 
     function cleanup() {
         Theme.motion.mode = motionMode
+        ApplicationModels.setPreInitForTest(false)
+        compare(ApplicationModels.optionsModel, optionsModel)
+        compare(ApplicationModels.onboardingOptionsModel, null)
+    }
+
+    function test_onboarding_uses_injected_model() {
+        const wizard = createTemporaryObject(fullPreInitWizard, this)
+        verify(wizard !== null)
+        compare(wizard.settingsModel, optionsModel)
+        compare(ApplicationModels.optionsModel, null)
+        compare(ApplicationModels.onboardingOptionsModel, wizard.settingsModel)
     }
 
     function triggerButton(rootItem, objectName) {
@@ -155,7 +181,7 @@ TestCase {
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
         const popup = openStorageSettings(page)
-        editStorageTarget(popup, "7")
+        editStorageTarget(popup, "6675")
         compare(optionsModel.pruneSizeGB, 7)
         compare(page.customStorage, true)
         compare(page.customStorageAmount, 7)
@@ -163,11 +189,11 @@ TestCase {
         mouseClick(findChild(page, "storageReduceOption"))
         compare(optionsModel.pruneSizeGB, 2)
         openStorageSettings(page)
-        editStorageTarget(popup, "10")
+        editStorageTarget(popup, "9536")
         compare(optionsModel.pruneSizeGB, 10)
         compare(page.customStorageAmount, 10)
         const custom = findChild(page, "storageCustomOption")
-        compare(custom.description, "Storing recent blocks up to 10 GB.")
+        compare(custom.description, "Storing recent blocks up to 9536 MiB.")
         compare(custom.checked, true)
 
         mouseClick(findChild(page, "storageReduceOption"))
@@ -176,27 +202,29 @@ TestCase {
         compare(optionsModel.pruneSizeGB, 10)
     }
 
-    function test_storage_popup_reopens_with_current_target_and_no_stale_error() {
+    function test_storage_popup_retains_invalid_input_until_explicit_restore() {
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
         const popup = openStorageSettings(page)
-        editStorageTarget(popup, "7")
+        editStorageTarget(popup, "6675")
         compare(optionsModel.pruneSizeGB, 7)
         mouseClick(findChild(page, "storageReduceOption"))
         compare(optionsModel.pruneSizeGB, 2)
         openStorageSettings(page)
-        compare(findChild(popup, "pruneTargetInput").text, "2")
-
-        editStorageTarget(popup, "200")
+        compare(findChild(popup, "pruneTargetInput").text, "1907")
+        editStorageTarget(popup, "549")
         compare(optionsModel.pruneSizeGB, 2)
         compare(page.customStorageAmount, 7)
         const settings = findChild(popup, "storageSettingsPage")
         verify(settings.pruneTargetError.length > 0)
+        compare(page.primaryButtonEnabled, false)
         openStorageSettings(page)
-        compare(findChild(popup, "pruneTargetInput").text, "2")
+        compare(findChild(popup, "pruneTargetInput").text, "549")
+        verify(settings.pruneTargetError.length > 0)
+        findChild(popup, "restoreValidPruneInput").clicked()
+        compare(findChild(popup, "pruneTargetInput").text, "1907")
         compare(settings.pruneTargetError, "")
-        popup.close()
-        tryCompare(popup, "visible", false)
+        popup.requestClose(); tryCompare(popup, "visible", false)
     }
 
     function test_preinit_onboarding_starts_at_cover() {
@@ -225,22 +253,10 @@ TestCase {
         compare(aboutPage.title, "About Bitcoin Core")
         compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.surfaceDivider)
 
-        findChild(aboutPage, "aboutDeveloperRow").clicked()
-        const developerPage = findChild(popup, "settingsDeveloper")
-        verify(developerPage !== null)
-        const developerSection = findChild(developerPage, "developerSettingsSection")
-        verify(developerSection !== null)
-        compare(developerSection.backgroundColor, Theme.color.surface2)
-        const dbcacheField = findChild(developerPage, "developerDbcacheField")
-        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
-        verify(dbcacheField !== null)
-        verify(scriptThreadsField !== null)
-        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
-        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
-        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
-        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
-        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
-        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+        const developerRow = findChild(aboutPage, "aboutDeveloperRow")
+        compare(developerRow.visible, false)
+        compare(developerRow.enabled, false)
+
     }
 
     function test_normal_onboarding_starts_at_cover() {
@@ -364,6 +380,49 @@ TestCase {
         compare(button.text, "Start")
     }
 
+    function test_dirty_proxy_exit_uses_one_disposition_data() {
+        return [{tag: "x-keep", escape: false, choice: "keep"}, {tag: "x-discard", escape: false, choice: "discard"}, {tag: "x-save", escape: false, choice: "save"}, {tag: "escape-keep", escape: true, choice: "keep"}, {tag: "escape-discard", escape: true, choice: "discard"}, {tag: "escape-save", escape: true, choice: "save"}]
+    }
+    function test_dirty_proxy_exit_uses_one_disposition(data) {
+        const page = createTemporaryObject(connection, this)
+        findChild(page, "connectionSettingsButton").clicked()
+        const popup = findChild(page, "onboardingConnectionSettingsPopup")
+        tryCompare(popup, "opened", true)
+        findChild(popup, "proxySettingsRow").clicked()
+        tryVerify(() => findChild(popup, "proxySettingsPage") !== null)
+        const proxy = findChild(popup, "proxySettingsPage")
+        tryCompare(proxy.proxyDraft, "ready", true)
+        const toggle = findChild(proxy, "proxyEnableSwitch")
+        toggle.checked = true; toggle.toggled()
+        const input = findChild(proxy, "proxyAddressInput")
+        input.text = "127.0.0.1:9155"; input.textEdited()
+        tryCompare(proxy.proxyDraft, "pending", false)
+        tryCompare(proxy, "proxyDraftDirty", true)
+        const effects = optionsModel.coreSettings.proxyApplyCallsForTest
+        if (data.escape) { popup.contentItem.forceActiveFocus(); keyClick(Qt.Key_Escape) }
+        else findChild(popup, "onboardingConnectionSettingsCloseButton").clicked()
+        compare(popup.opened, true)
+        const question = findChild(proxy, "discardProxyChangesPopup")
+        verify(question !== null); tryCompare(question, "opened", true)
+        compare(optionsModel.coreSettings.entry("proxy").enabled, false)
+        const action = data.choice === "keep" ? "discardProxyChangesCancelButton" : data.choice === "save" ? "discardProxyChangesSaveButton" : "discardProxyChangesConfirmButton"
+        tryVerify(() => findChild(question.contentItem, action) !== null)
+        findChild(question.contentItem, action).clicked()
+        if (data.choice === "keep") {
+            tryCompare(question, "opened", false)
+            compare(popup.visible, true)
+            compare(proxy.draftProxyAddress, "127.0.0.1:9155")
+            compare(proxy.proxyDraftDirty, true)
+            compare(optionsModel.coreSettings.entry("proxy").enabled, false)
+            compare(optionsModel.coreSettings.proxyApplyCallsForTest, effects)
+        } else {
+            tryCompare(popup, "visible", false)
+            compare(optionsModel.coreSettings.entry("proxy").enabled, data.choice === "save")
+            compare(optionsModel.coreSettings.proxyApplyCallsForTest, effects + (data.choice === "save" ? 1 : 0))
+            if (data.choice === "save") compare(optionsModel.coreSettings.entry("proxy").address, "127.0.0.1:9155")
+        }
+    }
+
     function test_onboarding_settings_open_in_modals() {
         const amountPage = createTemporaryObject(storageAmount, this)
         verify(amountPage !== null)
@@ -400,8 +459,10 @@ TestCase {
         verify(dialog.selectedFolder !== undefined)
         compare(dialog.fileMode, AppFileDialog.Directory)
 
+        verify(dialog.open())
         dialog.selectAndAccept("file:///tmp/first-datadir")
         compare(optionsModel.dataDir, "file:///tmp/first-datadir")
+        verify(dialog.open())
         dialog.selectAndAccept("file:///tmp/second-datadir")
         compare(optionsModel.dataDir, "file:///tmp/second-datadir")
     }
@@ -547,8 +608,8 @@ TestCase {
         verify(fullOption !== null)
         compare(reduceOption.enabled, true)
         compare(fullOption.enabled, false)
-        compare(reduceOption.description, "Uses about 14GB. For regular wallet use.")
-        compare(fullOption.description, "Uses about 622GB. Support the network.")
+        compare(reduceOption.description, "Uses about 14 GB. For regular wallet use.")
+        compare(fullOption.description, "Uses about 622 GB. Support the network.")
     }
 
     function test_existing_profile_storage_amount_keeps_full_storage_available() {
@@ -595,8 +656,6 @@ TestCase {
 
         const page = createTemporaryObject(storageOptions, this)
         verify(page !== null)
-        page.customStorage = true
-        page.customStorageAmount = 7
         wait(0)
 
         const reduceOption = findChild(page, "storageReduceOption")
@@ -616,21 +675,18 @@ TestCase {
         compare(info.text, text)
     }
 
-    function test_storage_settings_rejects_prune_target_above_available_space() {
-        optionsModel.prune = true
-        optionsModel.pruneSizeGB = 2
+    function test_storage_settings_stages_capacity_excess_and_blocks_completion() {
         optionsModel.setStorageStatusForTest(false, 123, "", "")
-
         const page = createTemporaryObject(storageSettings, this)
         verify(page !== null)
         const input = findChild(page, "pruneTargetInput")
         verify(input !== null)
-
-        input.text = "200"
-        input.editingFinished()
-
-        verify(page.pruneTargetError.indexOf("111 GB") !== -1)
-        compare(optionsModel.pruneSizeGB, 2)
+        input.text = "200000"; input.textEdited()
+        compare(optionsModel.pruneTargetText, "200000")
+        compare(optionsModel.pruneTargetError, "") // Valid Core policy, insufficient local space.
+        compare(optionsModel.storageEnoughForSelected, false)
+        compare(optionsModel.canFinish, false)
+        compare(optionsModel.settingsWritesForTest(), 0)
     }
 
     function test_custom_storage_option_shows_entered_target_and_reduce_can_reselect() {
@@ -640,8 +696,6 @@ TestCase {
 
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
-        page.customStorage = true
-        page.customStorageAmount = 7
         wait(0)
 
         const customOption = findChild(page, "storageCustomOption")
@@ -650,9 +704,9 @@ TestCase {
         verify(reduceOption !== null)
         compare(customOption.checked, true)
         compare(customOption.text, "Custom")
-        compare(customOption.description, "Storing recent blocks up to 7 GB.")
-        verify(reduceOption.description.indexOf("14GB") !== -1)
-        verify(reduceOption.description.indexOf("19GB") === -1)
+        compare(customOption.description, "Storing recent blocks up to 6675 MiB.")
+        verify(reduceOption.description.indexOf("14 GB") !== -1)
+        verify(reduceOption.description.indexOf("19 GB") === -1)
 
         reduceOption.clicked()
         wait(0)

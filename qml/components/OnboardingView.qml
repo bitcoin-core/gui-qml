@@ -22,6 +22,7 @@ Page {
     property string backButtonObjectName: "onboardingBackButton"
     property bool usesSharedNavigation: false
     property bool autoNavigateBack: true
+    property bool navigationBackEnabled: true
     property string heading: ""
     property string subheading: ""
     property string headingObjectName: ""
@@ -71,7 +72,7 @@ Page {
         while (ancestor && ancestor !== contentFrame) ancestor = ancestor.parent
         if (!ancestor) return
 
-        const flickable = scrollView.contentItem
+        const flickable = scrollView.contentItem as Flickable
         const position = item.mapToItem(contentFrame, 0, 0)
         const margin = 8
         let contentY = flickable.contentY
@@ -87,7 +88,7 @@ Page {
     Connections {
         target: root.Window.window
         function onActiveFocusItemChanged() {
-            Qt.callLater(root.ensureFocusedItemVisible)
+            if (root) Qt.callLater(root.ensureFocusedItemVisible)
         }
     }
 
@@ -135,8 +136,8 @@ Page {
         clip: true
         contentWidth: availableWidth
         contentHeight: contentFrame.height
-        onHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
-        onContentHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
+        onHeightChanged: if (root) Qt.callLater(root.ensureFocusedItemVisible)
+        onContentHeightChanged: if (root) Qt.callLater(root.ensureFocusedItemVisible)
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Item {

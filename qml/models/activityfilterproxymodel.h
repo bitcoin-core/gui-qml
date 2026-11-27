@@ -9,17 +9,37 @@
 
 #include <QByteArray>
 #include <QDate>
+#include <QLocale>
+#include <QTimeZone>
 #include <QHash>
 #include <QList>
 #include <QModelIndex>
-#include <QSortFilterProxyModel>
+#include <QAbstractProxyModel>
+#include <QTimer>
+#include <QPointer>
+#include <qml/models/activitysnapshot.h>
+#include <qml/models/activityexportoperation.h>
+#include <qml/guipresentation.h>
 #include <QString>
 
 #include <optional>
 
-class ActivityFilterProxyModel : public QSortFilterProxyModel
+class ActivityFilterProxyModel : public QAbstractProxyModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(QString error READ error NOTIFY stateChanged)
+    Q_PROPERTY(FileSaveOperation* exportOperation READ exportOperation NOTIFY exportChanged)
+    Q_PROPERTY(bool exportChoosing READ exportChoosing NOTIFY exportChanged)
+    Q_PROPERTY(bool exportBusy READ exportBusy NOTIFY exportChanged)
+    Q_PROPERTY(bool exportRejected READ exportRejected NOTIFY exportChanged)
+    Q_PROPERTY(QString exportError READ exportError NOTIFY exportChanged)
+    Q_PROPERTY(QString exportedPath READ exportedPath NOTIFY exportChanged)
+    // The last export the user asked for, until the result is dismissed.
+    Q_PROPERTY(bool exportResultShown READ exportResultShown NOTIFY exportChanged)
+    Q_PROPERTY(bool exportSucceeded READ exportSucceeded NOTIFY exportChanged)
+    Q_PROPERTY(QString exportResultTitle READ exportResultTitle NOTIFY exportChanged)
+    Q_PROPERTY(QString exportResultText READ exportResultText NOTIFY exportChanged)
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
@@ -66,7 +86,44 @@ public:
     Q_ENUM(GroupBy)
     enum SectionRole { SectionKeyRole = Qt::UserRole + 200, SectionLabelRole, DateTimeLabelRole };
 
+    using CsvResult = activityexport::Result;
+    using CsvRequest = activityexport::Request;
+    struct Services {
+        presentation::Post post;
+        std::function<QDate()> today;
+        std::function<CsvResult(const CsvRequest&)> write;
+        std::function<QLocale()> locale{};
+        std::function<QTimeZone()> timezone{};
+        bool automaticDateRefresh{true};
+    };
     explicit ActivityFilterProxyModel(QObject* parent = nullptr);
+    ActivityFilterProxyModel(Services services, QObject* parent = nullptr);
+    ~ActivityFilterProxyModel() override;
+    bool busy() const { return m_scheduled || bool(m_job) || m_source_loading; }
+    QString error() const { return m_error.isEmpty() ? m_source_error : m_error; }
+    bool exportChoosing() const { return bool(m_chooser_snapshot); }
+    bool exportBusy() const { return exportChoosing() || (m_export_operation && m_export_operation->busy()); }
+    ActivityExportOperation* exportOperation() const { return m_export_operation; }
+    ActivityExportResult exportResult() const { return m_export_result; }
+    bool exportRejected() const { return m_export_rejected; }
+    QString exportError() const { return m_export_error; }
+    bool exportResultShown() const { return m_export_result_shown; }
+    bool exportSucceeded() const { return m_export_succeeded; }
+    QString exportResultTitle() const;
+    QString exportResultText() const;
+    QString exportedPath() const { return m_exported_path; }
+    void close();
+    struct WorkReport { size_t examined{0}, prepared{0}, patches{0}, turns{0}, largestTurn{0}; bool delta{false}; };
+    WorkReport lastWork() const { return m_last_work; }
+    // Bounded clock handoff; manual clocks call this explicitly.
+    void refreshDate();
+    Q_INVOKABLE void clearDateFilter();
+    int rowCount(const QModelIndex& parent = {}) const override;
+    int columnCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : 1; }
+    QModelIndex index(int row, int column = 0, const QModelIndex& parent = {}) const override;
+    QModelIndex parent(const QModelIndex&) const override { return {}; }
+    QModelIndex mapToSource(const QModelIndex& proxy_index) const override;
+    QModelIndex mapFromSource(const QModelIndex& source_index) const override;
 
     QHash<int, QByteArray> roleNames() const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -115,9 +172,27 @@ public:
     GroupBy groupBy() const { return m_group_by; }
     void setGroupBy(GroupBy group_by);
 
-    Q_INVOKABLE bool exportCsv(const QString& path) const;
+    //! Captures the rows shown now for an export whose file is chosen next.
+    Q_INVOKABLE bool beginExport();
+    Q_INVOKABLE void cancelExport();
+    //! Exports the captured rows to \p path.
+    Q_INVOKABLE bool chooseExportFile(const QString& path);
+    //! Exports the rows shown now to \p path.
+    Q_INVOKABLE quint64 requestExportCsv(const QString& path);
+    Q_INVOKABLE void dismissExportResult();
+    //! The row menu acts on the row it opened for, even if the list changes
+    //! underneath it: open captures that row, close releases it.
+    Q_INVOKABLE bool openRowMenu(int row);
+    Q_INVOKABLE void closeRowMenu();
+    //! Copies the menu row's raw transaction. False when it can't start.
+    Q_INVOKABLE bool copyRowMenuRawTransaction();
+    static CsvResult WriteCsv(const CsvRequest& request);
 
 Q_SIGNALS:
+    void stateChanged();
+    void exportChanged();
+    void exportFinished(quint64 ticket, bool saved, const QString& path, const QString& error);
+    void copyFinished(bool copied, const QString& error);
     void searchTextChanged();
     void dateFilterChanged();
     void typeFilterChanged();
@@ -131,18 +206,57 @@ Q_SIGNALS:
     void pendingBalanceChanged();
     void groupByChanged();
 
-protected:
-    bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
-    bool lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const override;
-
 private:
-    bool typeMatches(const QModelIndex& source_index, TypeFilter type) const;
-    void updateAvailableMaxAmount();
-    void invalidatePendingBalance();
-    QString exportTypeLabelForIndex(const QModelIndex& proxy_index) const;
-    bool dateMatches(qint64 timestamp) const;
-    QString normalizedExportPath(const QString& path) const;
-
+    struct Parameters;
+    struct State;
+    struct Job;
+    struct Mailbox;
+    quint64 startExport(const QString& path, std::shared_ptr<const activityview::Hold> snapshot, int unit, bool captured);
+    void reload();
+    void start();
+    void receive();
+    void apply();
+    void finishClose();
+    void sourceChanged();
+    static void step(const std::shared_ptr<Job>& job);
+    static void patchRow(State& state, const QString& id, activityview::SharedRow row);
+    static bool typeMatches(const activityview::Row& row, TypeFilter type);
+    static bool dateMatches(qint64 timestamp, const Parameters& parameters);
+    static bool matches(const activityview::Row& row, const Parameters& parameters);
+    static QString orderKey(const activityview::Row& row);
+    static QString typeLabel(const activityview::Row& row);
+    static activityview::Row present(const activityview::Row& row, const Parameters& parameters);
+    Services m_services;
+    std::shared_ptr<Mailbox> m_mailbox;
+    std::shared_ptr<Job> m_job;
+    std::shared_ptr<const activityview::Hold> m_current, m_input, m_applied_input;
+    activityview::Tree m_root;
+    QHash<int, QByteArray> m_roles;
+    QTimer m_start_timer, m_apply_timer, m_date_timer;
+    QDate m_date_observed;
+    WorkReport m_last_work;
+    QPointer<QAbstractItemModel> m_deferred_source;
+    bool m_source_deferred{false};
+    quint64 m_generation{0}, m_settings_generation{0}, m_applied_settings{0}, m_source_intent{0};
+    bool m_scheduled{false}, m_closed{false}, m_source_loading{false}, m_in_update{false};
+    QString m_error, m_source_error;
+    size_t m_patch_position{0};
+    int m_transactions{0}, m_requests{0};
+    CAmount m_pending_total{0};
+    QString m_pending_text;
+    QPointer<ActivityExportOperation> m_export_operation;
+    quint64 m_export_ticket{0};
+    QString m_export_error, m_exported_path;
+    bool m_export_rejected{false};
+    bool m_export_result_shown{false}, m_export_succeeded{false};
+    ActivityExportResult m_export_result;
+    std::shared_ptr<const activityview::Hold> m_chooser_snapshot;
+    QPointer<QAbstractItemModel> m_chooser_source;
+    QString m_chooser_token;
+    quint64 m_chooser_sequence{0};
+    int m_chooser_unit{0};
+    std::shared_ptr<const activityview::Hold> m_context;
+    QString m_context_txid;
     QString m_search_text;
     DateFilter m_date_filter{DateAll};
     QList<int> m_type_filters;
@@ -150,7 +264,6 @@ private:
     CAmount m_min_amount{-1};
     CAmount m_max_amount{-1};
     CAmount m_available_max_amount{0};
-    mutable std::optional<CAmount> m_pending_balance;
     QList<QMetaObject::Connection> m_source_connections;
     QDate m_range_start;
     QDate m_range_end;

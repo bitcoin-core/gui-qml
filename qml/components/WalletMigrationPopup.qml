@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 
 import "../controls"
 
@@ -24,7 +23,11 @@ AlertPopup {
     title: titleText
     message: descriptionText
 
+    // Return outside a button must not start an update that cannot be undone.
+    returnAction: cancelAction
+
     AlertAction {
+        id: cancelAction
         text: qsTr("Cancel")
         role: AlertAction.Cancel
         enabled: !root.busy

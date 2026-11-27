@@ -16,9 +16,12 @@ SettingsPage {
     objectName: "walletPasswordSettingsPage"
 
     required property bool updating
-    property WalletQmlModel wallet: null
-    property string errorText: ""
-    property string successText: ""
+    property WalletModel wallet: null
+    readonly property WalletSecurityInterface security: wallet ? wallet.security : null
+    readonly property bool waitingForSave: password.saving
+    readonly property bool securityBusy: security !== null && security.busy
+    readonly property string errorText: password.errorText
+    readonly property string successText: password.passwordUpdated ? qsTr("Password updated successfully.") : ""
     readonly property string resultText: successText.length > 0 ? successText : errorText
     readonly property bool resultSuccess: successText.length > 0
 
@@ -41,56 +44,36 @@ SettingsPage {
         clearField(confirmPassword)
     }
 
-    function clearResult() {
-        root.errorText = ""
-        root.successText = ""
-    }
-
-    function handleSaveResult(ok) {
-        if (ok) {
-            root.errorText = ""
+    WalletPasswordController {
+        id: password
+        objectName: "walletPasswordController"
+        security: root.security
+        active: root.visible && root.wallet !== null && root.wallet.available
+        onSucceeded: function(kind) {
             root.clearPasswordFields()
-            if (root.updating) {
-                root.successText = qsTr("Password updated successfully.")
-            } else {
-                acknowledgement.checked = false
-                root.saved()
-            }
-        } else {
-            root.successText = ""
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
-            if (!root.updating) {
-                root.clearPasswordFields()
-            }
+            if (kind === SecurityOperation.Encrypt) root.saved()
         }
     }
+
+    onWalletChanged: root.clearPasswordFields()
 
     function focusInitialPasswordField() {
         const entry = root.updating ? currentPassword : newPassword
         if (root.visible && entry && entry.field) entry.field.forceActiveFocus()
     }
 
-    Component.onCompleted: {
-        if (root.wallet) root.wallet.clearSettingsError()
-        root.clearResult()
-        Qt.callLater(root.focusInitialPasswordField)
-    }
+    Component.onCompleted: Qt.callLater(root.focusInitialPasswordField)
     StackView.onActivated: Qt.callLater(root.focusInitialPasswordField)
     Component.onDestruction: root.clearPasswordFields()
     onVisibleChanged: {
-        if (!visible) {
-            root.clearPasswordFields()
-        } else {
-            Qt.callLater(root.focusInitialPasswordField)
-        }
+        if (!visible) root.clearPasswordFields()
+        else Qt.callLater(root.focusInitialPasswordField)
     }
 
     Connections {
         target: root.wallet
-
-        function onSettingsErrorChanged() {
-            root.successText = ""
-            root.errorText = root.wallet ? root.wallet.settingsError : ""
+        function onAvailableChanged() {
+            if (!root.wallet || !root.wallet.available) root.clearPasswordFields()
         }
     }
 
@@ -99,11 +82,12 @@ SettingsPage {
         Layout.fillWidth: true
         description: root.updating
             ? qsTr("Enter your current password, then choose a new password for this wallet.\n\nA secure password consists of ten or more random characters, or eight or more words.")
-            : qsTr("The password encrypts the wallet on your hard drive and helps prevent unwanted access.\n\nA secure password consists of ten or more random characters, or eight or more words.")
+            : qsTr("The password encrypts the wallet on your hard drive and helps prevent unwanted access.\n\nA secure password consists of ten or more random characters, or eight or more words.\n\nSetting a password creates new receiving and change keys. Your earlier backups may not cover later payments. Make a fresh backup afterward and keep your older backups.")
     }
 
     FormSection {
         id: passwordSection
+        enabled: root.wallet !== null && root.wallet.available && !root.securityBusy
         objectName: "walletPasswordFormSection"
         Layout.fillWidth: true
 
@@ -125,12 +109,13 @@ SettingsPage {
                 visibilityToggleObjectName: "walletPasswordCurrentVisibilityToggle"
                 placeholderText: qsTr("Enter current password…")
                 fieldBackgroundColor: Theme.color.surface2
-                onTextEdited: root.clearResult()
+                onTextEdited: password.clearResult()
                 onAccepted: newPassword.field.forceActiveFocus()
             }
 
             PasswordTextField {
                 id: newPassword
+                dropsLineEndings: true
                 objectName: "walletPasswordNewEntry"
                 width: parent.width
                 label: root.updating ? qsTr("New password") : qsTr("Choose a password")
@@ -139,12 +124,13 @@ SettingsPage {
                 visibilityToggleObjectName: "walletPasswordNewVisibilityToggle"
                 placeholderText: root.updating ? qsTr("Enter new password…") : qsTr("Enter password…")
                 fieldBackgroundColor: Theme.color.surface2
-                onTextEdited: root.clearResult()
+                onTextEdited: password.clearResult()
                 onAccepted: confirmPassword.field.forceActiveFocus()
             }
 
             PasswordTextField {
                 id: confirmPassword
+                dropsLineEndings: true
                 objectName: "walletPasswordConfirmEntry"
                 width: parent.width
                 label: root.updating ? qsTr("Confirm new password") : qsTr("Confirm password")
@@ -153,7 +139,7 @@ SettingsPage {
                 visibilityToggleObjectName: "walletPasswordConfirmVisibilityToggle"
                 placeholderText: root.updating ? qsTr("Enter new password again…") : qsTr("Enter password again…")
                 fieldBackgroundColor: Theme.color.surface2
-                onTextEdited: root.clearResult()
+                onTextEdited: password.clearResult()
             }
 
             // Consent in a form is a checkbox.
@@ -179,7 +165,10 @@ SettingsPage {
                 width: Math.min(320, parent.width)
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.updating ? qsTr("Update password") : qsTr("Set password")
-                enabled: walletController.initialized
+                enabled: ApplicationModels.walletController.initialized
+                    && root.wallet !== null && root.wallet.available && root.wallet.canManagePassphrase
+                    && root.security !== null && (root.updating ? root.security.canChangePassphrase : root.security.canEncrypt)
+                    && !root.securityBusy
                     && newPassword.text !== ""
                     && confirmPassword.text !== ""
                     && newPassword.text === confirmPassword.text
@@ -187,11 +176,8 @@ SettingsPage {
                         ? currentPassword.text !== ""
                         : acknowledgement.checked)
                 onClicked: {
-                    root.clearResult()
-                    const ok = root.updating
-                        ? root.wallet.changeWalletPassphrase(currentPassword.text, newPassword.text)
-                        : root.wallet.encryptWallet(newPassword.text)
-                    root.handleSaveResult(ok)
+                    if (root.updating) password.changePassphrase(currentPassword.text, newPassword.text, confirmPassword.text)
+                    else password.encrypt(newPassword.text, confirmPassword.text)
                 }
             }
         }

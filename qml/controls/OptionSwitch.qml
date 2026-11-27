@@ -38,6 +38,7 @@ Switch {
         height: 20
         color: Theme.color.accentForeground
         Behavior on x {
+            enabled: Theme.motion.animated
             SmoothedAnimation {
             }
         }

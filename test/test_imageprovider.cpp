@@ -94,4 +94,4 @@ BITCOINQML_REGISTER_QT_TEST(ImageProviderTests)
 #else
 QTEST_MAIN(ImageProviderTests)
 #endif
-#include "test_imageprovider.moc"
+#include <test_imageprovider.moc>

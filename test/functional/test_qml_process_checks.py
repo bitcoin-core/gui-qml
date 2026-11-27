@@ -23,6 +23,8 @@ class GuiProcessChecksTest(unittest.TestCase):
             "QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)",
             "qt.core.qobject.connect: QObject::connect: No such signal QPlatformNativeInterface::systemTrayWindowChanged(QScreen*)",
             "Running initialization in thread",
+            'qt.qpa.fonts: Populating font family aliases took 41 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost.',
+            'Populating font family aliases took 7 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost.',
         )
         for message in messages:
             for source in ("", " (qml/bitcoin.cpp:123)"):
@@ -41,6 +43,9 @@ class GuiProcessChecksTest(unittest.TestCase):
             "QObject::connect: No such signal Missing::other()",
             "Running initialization in thread: unexpected warning",
             "This plugin does not support application fonts\nUnexpected warning",
+            # A missing family the app itself names is a real problem.
+            'qt.qpa.fonts: Populating font family aliases took 41 ms. Replace uses of missing font family "BitcoinCoreSans" with one that exists to avoid this cost.',
+            'qt.qpa.fonts: Populating font family aliases took 41 ms. Replace uses of missing font family "Roboto Mono" with one that exists to avoid this cost.',
         ):
             with self.subTest(message=message):
                 self.assertTrue(unexpected_gui_stderr(message))

@@ -250,7 +250,7 @@ DesignSystemSection {
                     CoreText {
                         id: breakpointName
                         width: 200
-                        text: modelData[0]
+                        text: breakpointRow.modelData[0]
                         color: Theme.color.neutral7
                         textStyle: Theme.text.monoCaption
                         horizontalAlignment: Text.AlignLeft
@@ -260,7 +260,7 @@ DesignSystemSection {
 
                     CoreText {
                         width: Math.max(0, breakpointRow.width - breakpointName.width - breakpointRow.spacing)
-                        text: String(modelData[1])
+                        text: String(breakpointRow.modelData[1])
                         color: Theme.color.neutral9
                         textStyle: Theme.text.monoCaption
                         horizontalAlignment: Text.AlignLeft

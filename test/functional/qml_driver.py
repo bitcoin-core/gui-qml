@@ -19,6 +19,18 @@ class QmlDriverError(Exception):
     """Raised when the test bridge returns an error response."""
 
 
+def _typed_value(response):
+    value = response.get("value")
+    if response.get("valueType") == "quint64":
+        if not isinstance(value, str) or not value.isdecimal():
+            raise QmlDriverError("Bridge returned an invalid original uint64 value")
+        integer = int(value)
+        if integer >= 2**64:
+            raise QmlDriverError("Bridge original uint64 value overflowed")
+        return integer
+    return value
+
+
 class QmlDriver:
     """Drives the QML GUI via the TestBridge Unix domain socket."""
 
@@ -154,7 +166,35 @@ class QmlDriver:
             raise QmlDriverError(
                 f"get_property({object_name!r}, {prop!r}) failed: {resp['error']}"
             )
-        return resp["value"]
+        return _typed_value(resp)
+
+    def get_enum_property(self, object_name, prop):
+        """Observe the actual named Q_ENUM value, without hardcoded integers."""
+        resp = self._send({"cmd": "get_enum_property", "objectName": object_name, "prop": prop})
+        if "error" in resp:
+            raise QmlDriverError(f"get_enum_property({object_name!r}, {prop!r}) failed: {resp['error']}")
+        return resp
+
+    def get_model_row(self, object_name, prop, row=-1, role="", *, model_id=None, expected_rows=None,
+                      revision_property="", revision=None):
+        """Read one bounded cached role; reject another revision/inventory."""
+        command = {"cmd": "get_model_row", "objectName": object_name, "prop": prop, "row": row, "role": role}
+        if model_id is not None:
+            command["modelId"] = str(model_id)
+        if expected_rows is not None:
+            command["expectedRows"] = expected_rows
+        if revision_property:
+            if not isinstance(revision, int) or isinstance(revision, bool) or not 0 <= revision < 2**64:
+                raise QmlDriverError("An exact original revision is required")
+            command.update(revisionProperty=revision_property, revision=str(revision))
+        resp = self._send(command)
+        if "error" in resp:
+            raise QmlDriverError(f"get_model_row({object_name!r}, {prop!r}, {row!r}) failed: {resp['error']}")
+        resp["value"] = _typed_value(resp)
+        resp["modelId"] = int(resp["modelId"])
+        if resp.get("revision") is not None:
+            resp["revision"] = int(resp["revision"])
+        return resp
 
     def set_property(self, object_name, prop, value):
         """Set an arbitrary property on a named QML object."""
@@ -195,7 +235,7 @@ class QmlDriver:
             raise QmlDriverError(
                 f"invoke_property_object({object_name!r}, {prop!r}, {method!r}) failed: {resp['error']}"
             )
-        return resp.get("value")
+        return _typed_value(resp)
 
     def wait_for_property(self, object_name, prop, predicate_or_value, timeout_ms=5000):
         """Poll get_property until the condition is met or timeout expires.

@@ -12,13 +12,15 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include <QAbstractListModel>
 #include <QHash>
-#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
+
+namespace walletrequests { struct Snapshot; struct Record; }
 
 class ReceiveRequestHistoryModel : public QAbstractListModel
 {
@@ -46,17 +48,20 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    int count() const { return static_cast<int>(m_entries.size()); }
+    int count() const;
+
+    // The production owner prepares order, indices and display roles on Domain.
+    // Return the replaced reference so the caller can retire it off GUI.
+    std::shared_ptr<const walletrequests::Snapshot> setSnapshot(std::shared_ptr<const walletrequests::Snapshot> snapshot);
+    std::shared_ptr<const walletrequests::Snapshot> snapshot() const { return m_snapshot; }
+    std::shared_ptr<const walletrequests::Snapshot> releaseSnapshot(); // silent close handoff
+    const walletrequests::Record* preparedEntry(const QString& request_id) const;
+    Q_INVOKABLE QString firstRequestIdForAddress(const QString& address) const;
 
     void setEntries(std::vector<QmlRecentRequestEntry>&& entries);
     void prependOrReplace(const QmlRecentRequestEntry& entry);
     bool removeByRequestId(const QString& request_id);
     Q_INVOKABLE QVariantList matchingEntriesForAddress(const QString& address) const;
-    // Same match as matchingEntriesForAddress, but returns the entries so a
-    // caller can update and re-store them (used to sync a request label with an
-    // edited address book label).
-    std::vector<QmlRecentRequestEntry> entriesForAddress(const QString& address) const;
-    QSet<QString> requestAddresses() const;
 
     std::optional<QmlRecentRequestEntry> entryById(const QString& request_id) const;
     int64_t maxId() const;
@@ -76,6 +81,9 @@ private:
     int indexOfId(int64_t id) const;
     QVariant dataForEntry(const QmlRecentRequestEntry& entry, int role) const;
     QVariantMap entryMap(const QmlRecentRequestEntry& entry) const;
+    QVariant dataForRecord(const walletrequests::Record& record, int role) const;
+    QVariantMap recordMap(const walletrequests::Record& record) const;
+    std::shared_ptr<const walletrequests::Snapshot> m_snapshot;
 
     std::vector<QmlRecentRequestEntry> m_entries;
 };

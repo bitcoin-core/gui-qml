@@ -149,7 +149,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="${PWD}/bitcoin/depends/${HOST}/toolchain.cmake" \
             -DBUILD_APP_TESTS=ON \
-            -DBUILD_GUI=ON \
             -DENABLE_WALLET=ON \
             -DENABLE_IPC=OFF
 
@@ -162,6 +161,13 @@ jobs:
           mkdir -p "${BUILD_DIR}/test-reports"
           ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}" \
             --output-junit "${PWD}/${BUILD_DIR}/test-reports/ctest.xml"
+
+      # A crashed test child prints no stack; macOS keeps its crash report.
+      - name: Collect macOS crash reports
+        if: always() && runner.os == 'macOS'
+        run: |
+          mkdir -p "${BUILD_DIR}/test-reports/crash-reports"
+          find ~/Library/Logs/DiagnosticReports -name 'bitcoinqml_*' -exec cp {} "${BUILD_DIR}/test-reports/crash-reports/" \; || true
 
       - name: Upload test reports and failed profiles
         uses: actions/upload-artifact@v7

@@ -2,19 +2,25 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <node/caches.h>
 #include <QtTest/QtTest>
 
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <QDir>
+#include <QDataStream>
 #include <QFile>
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QThread>
 #include <QTimer>
-#include <qml/backendexecutor.h>
+#include <qml/asyncjoin.h>
+#include <qml/executor.h>
 #include <test/mocks/mocknode.h>
+#include <test/mocks/drainexecutors.h>
+#include <test/mocks/manualstartupexecution.h>
 #include <chainparams.h>
 #include <qml/core_settings.h>
 #include <qml/datadir.h>
@@ -22,7 +28,7 @@
 #include <qml/legacy_settings_migration.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/models/onboardingoptionsmodel.h>
-#include <qml/models/options_model.h>
+#include <qml/models/settingsmodel.h>
 #include <qml/models/settings_keys.h>
 #include <qml/onboarding_settings.h>
 #include <init.h>
@@ -32,12 +38,108 @@
 #include <util/translation.h>
 #include <util/string.h>
 
+#include <algorithm>
 #include <atomic>
+#include <array>
+#include <deque>
+#include <functional>
+#include <future>
 #include <stdexcept>
+
+#include <utility>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
 const TranslateFn G_TRANSLATION_FUN{nullptr};
 #endif
+
+namespace {
+// Preview owns real Core/filesystem/process effects; this fixture waits for
+// the original Native read without moving those effects onto the GUI lane.
+template<typename... Args>
+auto PreviewOnNative(Args&&... args)
+{
+    return std::async(std::launch::async, [&] {
+        return QmlOnboardingSettings::Preview(std::forward<Args>(args)...);
+    }).get();
+}
+template<typename Model>
+QString CheckedProxyLiteral(Model& owner,const QString& literal)
+{
+    auto* model=qobject_cast<CoreSettingsModel*>(owner.coreSettings());if(!model){QTest::qFail("Missing Core settings adapter",__FILE__,__LINE__);return QStringLiteral("Missing adapter");}
+    std::unique_ptr<CoreProxyDraft> draft{model->createProxyDraft()};if(!draft){QTest::qFail("Proxy draft rejected",__FILE__,__LINE__);return QStringLiteral("Draft rejected");}
+    if(!QTest::qWaitFor([&]{return !draft->pending();})){QTest::qFail("Proxy draft opening timed out",__FILE__,__LINE__);return QStringLiteral("Draft timeout");}
+    draft->setProxyEnabled(true);draft->setProxyAddress(literal);
+    if(!QTest::qWaitFor([&]{return !draft->pending();})){QTest::qFail("Proxy validation timed out",__FILE__,__LINE__);return QStringLiteral("Validation timeout");}
+    return draft->proxyError();
+}
+template<typename Model>
+bool AwaitProxyLocation(Model& owner,bool tor,const QString& literal)
+{
+    auto* model=qobject_cast<CoreSettingsModel*>(owner.coreSettings());if(!model)return false;
+    QSignalSpy outcomes{model,&CoreSettingsModel::operationFinished};
+    const auto ticket=tor?model->changeTorLocation(literal):model->changeProxyLocation(literal);if(!ticket)return false;
+    std::optional<CoreSettingsModel::OperationState> outcome;
+    if(!QTest::qWaitFor([&]{for(const auto& row:outcomes)if(row[0].toULongLong()==ticket){outcome=row[1].value<CoreSettingsModel::OperationState>();return true;}return false;})){QTest::qFail("Original proxy operation did not deliver its outcome",__FILE__,__LINE__);return false;}
+    return *outcome==CoreSettingsModel::Applied;
+}
+template<typename Model>
+bool AwaitCoreSettled(Model& owner)
+{
+    auto* model=qobject_cast<CoreSettingsModel*>(owner.coreSettings());
+    if(!model||!QTest::qWaitFor([&]{return !model->pending();})){QTest::qFail("Core settings outcome was not delivered",__FILE__,__LINE__);return false;}return true;
+}
+bool ApplyOnboardingModelRequest(const OnboardingOptionsModel& model,ArgsManager& args,QString* error)
+{
+    const auto request=model.applyRequest();
+    return QmlOnboardingSettings::ApplyToArgs(args,request.data_dir,request.touched_settings,request.values,error);
+}
+
+struct OnboardingStorageWork {
+    ManualStartupExecution worker;
+    std::deque<std::function<void()>> posts;
+
+    std::function<void()> takePost()
+    {
+        if (posts.empty()) return {};
+        auto next = std::move(posts.front());
+        posts.pop_front();
+        return next;
+    }
+
+    bool publish()
+    {
+        auto next = takePost();
+        if (!next) return false;
+        next();
+        return true;
+    }
+
+    bool settle()
+    {
+        for (int turn = 0; turn < 1024; ++turn) {
+            if (!step()) return worker.quiescent() && posts.empty();
+        }
+        return false;
+    }
+
+    bool driveToStorageCheck(OnboardingOptionsModel& model, const QString& path)
+    {
+        for (int turn = 0; turn < 1024; ++turn) {
+            if (model.dataDir() == path && !model.validationPending() && model.storageCheckPending() &&
+                worker.hasWork(execution::Lane::Core) && !worker.hasWork(execution::Lane::Utility) && posts.empty()) {
+                return true;
+            }
+            if (!step()) break;
+        }
+        return false;
+    }
+
+    bool step()
+    {
+        return publish() || worker.step(execution::Lane::Utility) || worker.step(execution::Lane::Core);
+    }
+};
+}
 
 class OptionsModelTests : public QObject
 {
@@ -56,6 +158,14 @@ private:
     QString m_original_organization;
     QString m_original_application;
 private Q_SLOTS:
+    void directorySelectionHasOneValidatedCommand()
+    {
+        const auto& meta = SettingsModel::staticMetaObject;
+        QCOMPARE(meta.indexOfMethod("setCustomDataDirArgs(QString)"), -1);
+        QCOMPARE(meta.indexOfMethod("setCustomDataDirString(QString)"), -1);
+        QVERIFY(meta.indexOfMethod("selectCustomDataDir(QString)") >= 0);
+        QVERIFY(meta.indexOfMethod("useDefaultDataDir()") >= 0);
+    }
     void initTestCase()
     {
         SelectParams(ChainType::REGTEST);
@@ -69,13 +179,15 @@ private Q_SLOTS:
         QCoreApplication::setOrganizationName(m_original_organization);
         QCoreApplication::setApplicationName(m_original_application);
     }
-    void proxyDisabledRemovesKey();
-    void torDisabledRemovesKey();
+    void proxyDisabledPersistsDisabledOverride();
+    void torDisabledPersistsDisabledOverride();
     void proxyEnabledWritesAddress();
     void proxyDirtySetAtRuntime();
     void proxyDirtyResetWhenReverted();
     void mempoolSizeLoadedFromSettings();
     void mempoolSizeWritesSetting();
+    void acceptedRuntimeWriteDrainsOnSharedQueues();
+    void acceptedCoreSettingCompletesAfterQuietClose();
     void mempoolSizeDoesNotRewriteUnchangedSetting();
     void legacyNumericSettingsWriteStrings();
     void externalSignerPathWritesSigner();
@@ -87,6 +199,9 @@ private Q_SLOTS:
     void signerDirtyResetWhenReverted();
     void externalSignerPathValidationRejectsMissingPath();
     void externalSignerPathValidationAcceptsExecutablePath();
+    void signerValidationKeepsLatestManualIntent();
+    void signerValidationReportsManualTransportRefusal();
+    void signerValidationRunsOnCoreWorker();
     void connectionDirtyTracksRestartSettings();
     void natpmpAppliesLiveWithoutRestartDirty();
     void storageDirtyIgnoresDisabledPruneSize();
@@ -135,9 +250,15 @@ private Q_SLOTS:
     void freshExplicitDatadirPreviewReportsFreshProfile();
     void onboardingPreviewDetectsSettingsJsonProfile();
     void onboardingPreviewDetectsChainDataWithoutCreatingBlocksDir();
+#ifdef ENABLE_WALLET
     void onboardingPreviewDetectsRootWalletProfile();
+#endif
+#ifdef ENABLE_WALLET
     void onboardingPreviewDetectsExplicitWalletDirProfile();
+#endif
+#ifdef ENABLE_WALLET
     void onboardingPreviewIgnoresEmptyExplicitWalletDir();
+#endif
     void onboardingPreviewIgnoresUnrecognizedWalletsEntry();
     void freshExplicitDatadirShowsFullOnboarding();
     void onboardingApplyWithoutTouchedSettingsOnlyAddsQmlOnboardedMarker();
@@ -147,37 +268,65 @@ private Q_SLOTS:
     void onboardingPreviewAppliesParameterInteractions();
     void storageSpaceCheckAcceptsExistingDirectory();
     void storageSpaceCheckRejectsExistingFile();
+    void onboardingStorageCheckDoesNotPublishStalePath();
+    void onboardingStorageProjectionCoalescesPublicPruneChoice();
     void thirdPartyTransactionLinksParseValidUrls();
     void moneyFontChoicePersists();
+    void rejectedDisplayRefreshDoesNotReenterItsFailure();
+    void databaseCacheMatchesCoreDefaultAndRange();
+    void unavailableLanguageDoesNotPersist_data();
+    void unavailableLanguageDoesNotPersist();
+    void displayReadbackRepairsInvalidStoredUnit_data();
+    void displayReadbackRepairsInvalidStoredUnit();
+    void languageReadbackRejectsUnavailablePersistedTag();
+    void invalidCoreLanguageDoesNotEraseAnIndependentGuiPreference();
+    void manualDisplayRefreshWaitsForPendingWrite();
+    void externalDisplayWriterIsObservedWithoutUserEdit();
     void hideAmountsPersists();
     void displayUnitUsesQtCompatibleSettingsKey();
     void displayUnitUsesLegacyQtFallback();
     void displayUnitPrefersQmlSettingOverLegacyQtFallback();
-    void sharedCoreSettingHelpersDeduplicateOverrides();
+    void sharedCoreSettingHelpersPreserveExplicitOverrides();
     void parameterInteractionOverridesPersistExplicitValues();
     void coreSettingsLegacyNumericOverridesWriteStrings();
     void coreSettingsModelEntryMutatesRuntimeModel();
     void coreSettingsSessionCommandLineSettingDoesNotWrite();
     void coreSettingsSessionDoesNotCopyUntouchedConfig();
     void coreSettingsSessionWritesTouchedConfigOverride();
-    void coreSettingsSessionRevertingToDefaultDeletesOverride();
+    void coreSettingsSessionRevertingToDefaultPersistsExplicitOverride();
     void coreSettingsSessionPruneDisabledPreservesPreviousValue();
     void coreSettingsSessionPruneEnabledClearsPreviousValue();
     void coreSettingsSessionProxyDisabledPreservesPreviousValue();
     void coreSettingsLoadPersistentPrunePreviousValue();
     void coreSettingsSessionPreviewRefreshPreservesTouchedValues();
     void coreSettingsSessionChangeReportsFieldDiffs();
-    void coreSettingsSessionProxyCommitAcceptsUnchangedAddressWithoutValueChange();
+    void coreSettingsSessionProxyCommitAcceptsUnchangedAddressAsExplicitIntent();
     void coreSettingStatusTracksSourcePrecedence();
     void runtimeCoreSettingStatusesRefreshAfterWrite();
     void commandLineOverriddenSettingDoesNotWrite();
     void runtimeCommandLineOverridesDisplayEffectiveValues();
     void runtimeParameterInteractionsDisplayEffectiveValues();
     void commandLineOverriddenSettingsPreservePersistentValues();
-    void revertingToConfigValueDeletesRwOverride();
-    void revertingToDefaultValueDeletesRwOverride();
+    void revertingToConfigValuePersistsExplicitOverride();
+    void revertingToDefaultValuePersistsExplicitOverride();
     void languageCommandLineOverrideDoesNotPersist();
     void legacyQtSettingsMigrateToCoreSettings();
+    void knownSavedProfileFinishesOnlyRemainingDirectoryAndCleanup();
+    void capturedResetKeepsOriginalBackupAcrossCompletion();
+    void capturedResetRejectsChangedLegacySource();
+    void corruptStoredPreferenceFailsWithoutDefaultFallback();
+    void migrationChecksExactReplacementAndSources_data();
+    void migrationChecksExactReplacementAndSources();
+    void migrationCleanupOnlyFollowsDurableWriteAndIsIdempotent();
+    void profileRecoveryDoesNotReplayChangedReplacement();
+    void savedProfileReadFailureNeverSelectsDefault_data();
+    void savedProfileReadFailureNeverSelectsDefault();
+    void legacyNativeOrganizationDomainMatchesWriter();
+    void failedProfileHandoffRetainsLegacyMigrationSource_data();
+    void failedProfileHandoffRetainsLegacyMigrationSource();
+    void failedOnboardingWriteKeepsLegacyProxyForRetry();
+    void coreApiHistoricalCacheMigration_data();
+    void coreApiHistoricalCacheMigration();
     void legacyQtSettingsPreviewDoesNotRemoveQSettings();
     void legacyQtSettingsCommandLineOverrideStillMigratesPersistentValue();
     void legacyQtSettingsBitcoinConfBlocksMigration();
@@ -287,11 +436,21 @@ private:
     QSettings::Format m_format;
 };
 
+QString HistoricalSettingsOrganization(QString organization)
+{
+#ifdef Q_OS_MACOS
+    if(QSettings::defaultFormat()==QSettings::NativeFormat){
+        if(organization==QStringLiteral("Bitcoin"))return QStringLiteral("bitcoin.org");
+        if(organization==QStringLiteral("BitcoinCore"))return QStringLiteral("bitcoincore.org");
+    }
+#endif
+    return organization;
+}
 class SavedNamedSettings
 {
 public:
     SavedNamedSettings(const QString& org, const QString& app)
-        : m_settings{QSettings::defaultFormat(), QSettings::UserScope, org, app}
+        : m_settings{QSettings::defaultFormat(), QSettings::UserScope, HistoricalSettingsOrganization(org), app}
     {
         for (const QString& key : m_settings.allKeys()) {
             m_values.insert(key, m_settings.value(key));
@@ -361,6 +520,7 @@ static std::vector<std::string> TestArgvWithDataDir(const QString& data_dir)
     };
 }
 
+#ifdef ENABLE_WALLET
 static void WriteSqliteWalletMarker(const QString& wallet_dir)
 {
     QVERIFY(QDir().mkpath(wallet_dir));
@@ -378,12 +538,22 @@ static void WriteSqliteWalletMarker(const QString& wallet_dir)
     wallet_file.close();
 }
 
+#endif
+
 static void PrepareArgsForDataDir(ArgsManager& args, const QString& data_dir)
 {
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, TestArgvWithDataDir(data_dir), parse_error), parse_error.c_str());
     SelectParams(args.GetChainType());
     args.SelectConfigNetwork(args.GetChainTypeString());
+}
+
+// Staging is deliberately read-only. Successful replacement-write fixtures own
+// their physical target directory; failure fixtures prepare their own barrier.
+static bool EnsureReplacementParent(ArgsManager& args)
+{
+    fs::path path;
+    return args.GetSettingsPath(&path) && QDir{}.mkpath(QFileInfo{QString::fromStdString(path.utf8string())}.absolutePath());
 }
 
 static common::SettingsValue ReadRwSetting(ArgsManager& args, const std::string& name)
@@ -410,9 +580,10 @@ static void PrepareRuntimePersistence(MockNode& node, ArgsManager& args, const Q
     InstallPersistentSettings(node, args);
 }
 
-void OptionsModelTests::proxyDisabledRemovesKey()
+void OptionsModelTests::proxyDisabledPersistsDisabledOverride()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     // Simulate a previously-saved proxy address so that m_proxy_enabled=true on construction.
     node.SetPersistentSetting("proxy", MakeAddress("127.0.0.1:9050"));
 
@@ -420,31 +591,33 @@ void OptionsModelTests::proxyDisabledRemovesKey()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxyEnabled());
 
-    // Disabling a proxy removes the override instead of storing an empty string.
+    // Disabling is an explicit false override; removing it is a separate editor intent.
     model.setProxyEnabled(false);
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     QVERIFY(!model.settingsPending());
     const auto proxy_write = ReadRwSetting(model_args, "proxy");
-    QVERIFY(proxy_write.isNull());
+    QVERIFY(proxy_write.isBool());
+    QVERIFY(!proxy_write.get_bool());
 }
 
-void OptionsModelTests::torDisabledRemovesKey()
+void OptionsModelTests::torDisabledPersistsDisabledOverride()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("onion", MakeAddress("127.0.0.1:9150"));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.torEnabled());
@@ -455,19 +628,21 @@ void OptionsModelTests::torDisabledRemovesKey()
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     QVERIFY(!model.settingsPending());
     const auto onion_write = ReadRwSetting(model_args, "onion");
-    QVERIFY(onion_write.isNull());
+    QVERIFY(onion_write.isBool());
+    QVERIFY(!onion_write.get_bool());
 }
 
 void OptionsModelTests::proxyEnabledWritesAddress()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     // Construct with no saved proxy — m_proxy_enabled=false, m_proxy_address="".
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
@@ -492,12 +667,13 @@ void OptionsModelTests::proxyEnabledWritesAddress()
 void OptionsModelTests::proxyDirtySetAtRuntime()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
@@ -510,13 +686,14 @@ void OptionsModelTests::proxyDirtySetAtRuntime()
 void OptionsModelTests::proxyDirtyResetWhenReverted()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     // Start onboarded with proxy disabled (no saved proxy).
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
@@ -543,13 +720,14 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
 void OptionsModelTests::mempoolSizeLoadedFromSettings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("maxmempool", MakeInt(456));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
@@ -558,12 +736,13 @@ void OptionsModelTests::mempoolSizeLoadedFromSettings()
 void OptionsModelTests::mempoolSizeWritesSetting()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -576,16 +755,121 @@ void OptionsModelTests::mempoolSizeWritesSetting()
     QCOMPARE(mempool_write.getInt<int64_t>(), int64_t{456});
 }
 
+void OptionsModelTests::acceptedRuntimeWriteDrainsOnSharedQueues()
+{
+    MockNode node;
+    ArgsManager args;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    {
+        SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(model.settingsReady());
+        QVERIFY(!model.settingsPending());
+        QVERIFY(model.dbcacheSizeMiB() != 701);
+        const auto path = directory.filePath(QStringLiteral("runtime-settings.json"));
+        QVERIFY(!QFile::exists(path));
+
+        model.setDbcacheSizeMiB(701);
+        QCOMPARE(model.dbcacheSizeMiB(), 701);
+        QVERIFY(model.settingsPending());
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsPending);
+        QVERIFY(!QFile::exists(path));
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        QSignalSpy published{&model, &SettingsModel::dbcacheSizeMiBChanged};
+        model.beginShutdown();
+        QCOMPARE(drained.size(), 0);
+        QVERIFY(shared.step(execution::Lane::Core));
+        QFile settings_file{path};
+        QVERIFY(settings_file.open(QIODevice::ReadOnly));
+        UniValue persisted;
+        const auto bytes = settings_file.readAll();
+        QVERIFY(persisted.read(std::string{bytes.constData(), size_t(bytes.size())}));
+        QCOMPARE(SettingToString(persisted["dbcache"]).value_or(""), std::string{"701"});
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsApplied);
+        QCOMPARE(drained.size(), 0);
+
+        QVERIFY(shared.step(execution::Lane::Utility));
+        while (graph.publish()) {}
+        QCOMPARE(drained.size(), 0); // Physical queue drain still has to run.
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
+        QCOMPARE(published.size(), 0);
+        QCOMPARE(model.dbcacheSizeMiB(), 701);
+        model.beginShutdown();
+        QCOMPARE(drained.size(), 1);
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
+void OptionsModelTests::acceptedCoreSettingCompletesAfterQuietClose()
+{
+    MockNode node;
+    ArgsManager args;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    {
+        SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+        const auto cleanup = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(model.settingsReady());
+        QVERIFY(!model.settingsPending());
+        const bool original = model.natpmp();
+        QVERIFY(args.GetPersistentSetting("natpmp").isNull());
+
+        model.setNatpmp(!original);
+        QVERIFY(model.settingsPending());
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsPending);
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        QSignalSpy published{&model, &SettingsModel::natpmpChanged};
+        model.beginShutdown();
+        QCOMPARE(drained.size(), 0);
+
+        // The original Utility decision can still queue the persistence
+        // effect after GUI admission closes.
+        while (shared.step(execution::Lane::Utility)) {}
+        while (graph.publish()) {}
+        QVERIFY(args.GetPersistentSetting("natpmp").isNull());
+        QCOMPARE(drained.size(), 0);
+        QVERIFY(shared.step(execution::Lane::Core));
+        const auto persisted = args.GetPersistentSetting("natpmp");
+        QVERIFY(persisted.isBool());
+        QCOMPARE(persisted.isTrue(), !original);
+        QCOMPARE(node.calls.mapPort.load(), 1);
+        QCOMPARE(model.settingsOperationState(), SettingsModel::SettingsApplied);
+        while (graph.publish()) {}
+        QCOMPARE(drained.size(), 0);
+
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
+        QCOMPARE(published.size(), 0);
+        QCOMPARE(model.natpmp(), original);
+        model.beginShutdown();
+        QCOMPARE(drained.size(), 1);
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
 void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("maxmempool", MakeInt(456));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -599,12 +883,13 @@ void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
 void OptionsModelTests::legacyNumericSettingsWriteStrings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -624,34 +909,36 @@ void OptionsModelTests::legacyNumericSettingsWriteStrings()
 void OptionsModelTests::externalSignerPathWritesSigner()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
-    model.setExternalSignerPath("hwi");
+    model.setExternalSignerPath(QCoreApplication::applicationFilePath());
     QTRY_VERIFY(!model.settingsPending());
-    QCOMPARE(model.externalSignerPath(), QString("hwi"));
+    QCOMPARE(model.externalSignerPath(), QCoreApplication::applicationFilePath());
     const auto signer_write = ReadRwSetting(model_args, "signer");
     QVERIFY(signer_write.isStr());
-    QCOMPARE(signer_write.get_str(), std::string{"hwi"});
+    QCOMPARE(signer_write.get_str(), QCoreApplication::applicationFilePath().toStdString());
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::externalSignerPathClearedRemovesKey()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("signer", MakeAddress("hwi"));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.externalSignerPath(), QString("hwi"));
@@ -667,19 +954,21 @@ void OptionsModelTests::externalSignerPathClearedRemovesKey()
 void OptionsModelTests::walletSettingsDirtyTracksExternalSignerPath()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("hwi");
+    model.setExternalSignerPath(QCoreApplication::applicationFilePath());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
+    QVERIFY2(!model.restartRequired(), "A confirmed live signer-path application must not request a restart.");
 
     model.setExternalSignerPath("");
     QTRY_VERIFY(!model.settingsPending());
@@ -689,13 +978,14 @@ void OptionsModelTests::walletSettingsDirtyTracksExternalSignerPath()
 void OptionsModelTests::signerPathLoadedFromSettings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("signer", MakeAddress("ledger-signer"));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.externalSignerPath(), QString("ledger-signer"));
@@ -704,39 +994,41 @@ void OptionsModelTests::signerPathLoadedFromSettings()
 void OptionsModelTests::signerPathWritesSetting()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.externalSignerPath().isEmpty());
 
-    model.setExternalSignerPath("ledger-signer");
+    model.setExternalSignerPath(QCoreApplication::applicationFilePath());
     QTRY_VERIFY(!model.settingsPending());
-    QCOMPARE(model.externalSignerPath(), QString("ledger-signer"));
+    QCOMPARE(model.externalSignerPath(), QCoreApplication::applicationFilePath());
     const auto signer_write = ReadRwSetting(model_args, "signer");
     QVERIFY(signer_write.isStr());
-    QCOMPARE(signer_write.get_str(), std::string{"ledger-signer"});
+    QCOMPARE(signer_write.get_str(), QCoreApplication::applicationFilePath().toStdString());
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::signerDirtySetAtRuntime()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("ledger-signer");
+    model.setExternalSignerPath(QCoreApplication::applicationFilePath());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
 }
@@ -744,17 +1036,18 @@ void OptionsModelTests::signerDirtySetAtRuntime()
 void OptionsModelTests::signerDirtyResetWhenReverted()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("ledger-signer");
+    model.setExternalSignerPath(QCoreApplication::applicationFilePath());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
 
@@ -766,12 +1059,13 @@ void OptionsModelTests::signerDirtyResetWhenReverted()
 void OptionsModelTests::externalSignerPathValidationRejectsMissingPath()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.requestExternalSignerPathValidation("/definitely/not/a/real/signer");
@@ -783,6 +1077,7 @@ void OptionsModelTests::externalSignerPathValidationRejectsMissingPath()
 void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     QTemporaryDir temp_dir;
     QVERIFY(temp_dir.isValid());
@@ -798,7 +1093,7 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.requestExternalSignerPathValidation(script_path);
@@ -806,16 +1101,188 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
     QVERIFY(model.externalSignerPathValidationError(script_path).isEmpty());
 }
 
+void OptionsModelTests::signerValidationKeepsLatestManualIntent()
+{
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    MockNode node;
+    const auto drain_node_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+
+    QTemporaryDir missing_paths;
+    {
+        SettingsModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QVERIFY(model.settingsReady());
+        QVERIFY(!model.settingsPending());
+        QVERIFY(!model.signerPathValidationPending());
+
+        QVERIFY(missing_paths.isValid());
+        const QString first_path = missing_paths.filePath(QStringLiteral("first-missing-signer"));
+        const QString latest_path = missing_paths.filePath(QStringLiteral("latest-missing-signer"));
+        QVERIFY(!QFileInfo::exists(first_path));
+        QVERIFY(!QFileInfo::exists(latest_path));
+        QSignalSpy validation_changed{&model, &SettingsModel::signerPathValidationChanged};
+
+        const auto core_submissions = shared.coreSubmissions();
+        model.requestExternalSignerPathValidation(first_path);
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(validation_changed.size(), 1);
+        QCOMPARE(shared.coreSubmissions(), core_submissions + 1);
+
+        model.requestExternalSignerPathValidation(latest_path);
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(validation_changed.size(), 2);
+        QCOMPARE(shared.coreSubmissions(), core_submissions + 1);
+
+        QVERIFY(shared.step(execution::Lane::Core));
+        QVERIFY(model.signerPathValidationPending());
+        QVERIFY(graph.posts.empty());
+        // The original effect has finished; its owned outcome is still held
+        // on Utility, independently of the subsequent GUI publication.
+        QVERIFY(shared.step(execution::Lane::Utility));
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(graph.posts.size(), size_t{1});
+        QVERIFY(graph.publish());
+        QVERIFY(model.signerPathValidationPending());
+        QVERIFY(model.signerPathError().isEmpty());
+        QCOMPARE(graph.posts.size(), size_t{1});
+
+        QVERIFY(graph.publish());
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(shared.coreSubmissions(), core_submissions + 2);
+        QVERIFY(shared.step(execution::Lane::Core));
+        QVERIFY(model.signerPathValidationPending());
+        QVERIFY(graph.posts.empty());
+        QVERIFY(shared.step(execution::Lane::Utility));
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(graph.posts.size(), size_t{1});
+        QVERIFY(graph.publish());
+
+        QVERIFY(!model.signerPathValidationPending());
+        QCOMPARE(model.signerPathError(), QStringLiteral("The configured signer path does not exist."));
+        QCOMPARE(model.externalSignerPathValidationError(first_path), QString{});
+        QCOMPARE(model.externalSignerPathValidationError(latest_path), QStringLiteral("The configured signer path does not exist."));
+        QCOMPARE(validation_changed.size(), 3);
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QCOMPARE(drained.size(), 0);
+        model.beginShutdown();
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
+void OptionsModelTests::signerValidationReportsManualTransportRefusal()
+{
+    OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    MockNode node;
+    const auto drain_node_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+
+    {
+        SettingsModel model(node, model_args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor());
+        QSignalSpy drained{&model, &SettingsModel::shutdownFinished};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QVERIFY(model.settingsReady());
+        QVERIFY(!model.settingsPending());
+
+        const QString path = QStringLiteral("rejected-signer-observation");
+        QSignalSpy validation_changed{&model, &SettingsModel::signerPathValidationChanged};
+        shared.reject_core = true;
+        model.requestExternalSignerPathValidation(path);
+        QVERIFY(model.signerPathValidationPending());
+        QCOMPARE(validation_changed.size(), 1);
+        QVERIFY(shared.quiescent());
+        QCOMPARE(graph.posts.size(), size_t{1});
+
+        QVERIFY(graph.publish());
+        QVERIFY(!model.signerPathValidationPending());
+        QCOMPARE(model.signerPathError(), QStringLiteral("Unable to validate the signer path."));
+        QCOMPARE(validation_changed.size(), 2);
+        QVERIFY(graph.settle());
+        QVERIFY(shared.quiescent());
+        QCOMPARE(drained.size(), 0);
+        model.beginShutdown();
+        QVERIFY(graph.settle());
+        QCOMPARE(drained.size(), 1);
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
+void OptionsModelTests::signerValidationRunsOnCoreWorker()
+{
+    QTemporaryDir settings_dir; QVERIFY(settings_dir.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    SavedSettingsFormat settings_format{QSettings::IniFormat};
+    MockNode node;
+    const auto drain_node_owner = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+
+    execution::Executor workers{execution::Executor::Config{}};
+    auto core = workers.makeQueue(execution::Lane::Core);
+    auto utility = workers.makeQueue(execution::Lane::Utility);
+    std::atomic<QThread*> core_thread{nullptr};
+    std::atomic<size_t> core_executions{0};
+    execution::Executor executor{[&](auto lane, auto, auto turn) {
+        if (lane != execution::Lane::Core) return utility.post(std::move(turn));
+        return core.post([&, turn = std::move(turn)] {
+            core_thread = QThread::currentThread();
+            ++core_executions;
+            turn();
+        });
+    }};
+    SettingsModel model(node, model_args, {}, &executor);
+    QVERIFY(QTest::qWaitFor([&] { return model.settingsReady() && !model.settingsPending(); }, 5000));
+
+    QTemporaryDir missing_paths;
+    QVERIFY(missing_paths.isValid());
+    const QString path = missing_paths.filePath(QStringLiteral("missing-signer"));
+    QVERIFY(!QFileInfo::exists(path));
+    const size_t core_executions_before = core_executions.load();
+    model.requestExternalSignerPathValidation(path);
+    QVERIFY(QTest::qWaitFor([&] { return !model.signerPathValidationPending(); }, 5000));
+    QCOMPARE(model.signerPathError(), QStringLiteral("The configured signer path does not exist."));
+    QCOMPARE(core_executions.load(), core_executions_before + 1);
+    QVERIFY(core_thread.load());
+    QVERIFY(core_thread.load() != QThread::currentThread());
+
+    QSignalSpy shutdown_finished{&model, &SettingsModel::shutdownFinished};
+    model.beginShutdown();
+    QTRY_COMPARE_WITH_TIMEOUT(shutdown_finished.size(), 1, 5000);
+    executor.stopAndJoin();
+    workers.stopAndJoin();
+}
+
 void OptionsModelTests::connectionDirtyTracksRestartSettings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("listen", common::SettingsValue{true});
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.connectionSettingsDirty());
@@ -835,10 +1302,11 @@ void OptionsModelTests::connectionDirtyTracksRestartSettings()
 void OptionsModelTests::natpmpAppliesLiveWithoutRestartDirty()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     ArgsManager args;
     QTemporaryDir directory;
     PrepareRuntimePersistence(node, args, directory);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     const bool initial = model.natpmp();
     std::vector<bool> applied;
@@ -864,12 +1332,13 @@ void OptionsModelTests::natpmpAppliesLiveWithoutRestartDirty()
 void OptionsModelTests::storageDirtyIgnoresDisabledPruneSize()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.prune());
@@ -886,13 +1355,14 @@ void OptionsModelTests::storageDirtyIgnoresDisabledPruneSize()
 void OptionsModelTests::pruneDisabledPreservesPreviousValue()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("prune", MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.prune());
@@ -907,18 +1377,20 @@ void OptionsModelTests::pruneDisabledPreservesPreviousValue()
     QVERIFY(previous_write.isStr());
     QCOMPARE(previous_write.get_str(), util::ToString(QmlCoreSettings::PruneGBToMiB(10)));
     const auto prune_write = ReadRwSetting(model_args, "prune");
-    QVERIFY(prune_write.isNull());
+    QVERIFY(prune_write.isStr());
+    QCOMPARE(prune_write.get_str(), std::string{"0"});
 }
 
 void OptionsModelTests::developerDirtyTracksRestartSettings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
@@ -937,12 +1409,13 @@ void OptionsModelTests::developerDirtyTracksRestartSettings()
 void OptionsModelTests::mempoolDirtyTracksRestartSettings()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
@@ -965,35 +1438,36 @@ void OptionsModelTests::mempoolDirtyTracksRestartSettings()
 void OptionsModelTests::proxyValidationAndCommit()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
-    QVERIFY(model.validateProxyLocation("127.0.0.1:9050").isEmpty());
-    QVERIFY(model.validateProxyLocation("[::1]:9050").isEmpty());
-    QVERIFY(model.validateProxyLocation("127.0.0.1").isEmpty());
-    QVERIFY(model.validateProxyLocation("[::1]").isEmpty());
-    QVERIFY(model.validateProxyLocation("proxy.example:9050").isEmpty());
-    QVERIFY(model.validateProxyLocation("proxy.example").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"127.0.0.1:9050").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"[::1]:9050").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"127.0.0.1").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"[::1]").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"proxy.example:9050").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"proxy.example").isEmpty());
 #ifdef HAVE_SOCKADDR_UN
-    QVERIFY(model.validateProxyLocation("unix:/tmp/bitcoin-core-proxy.sock").isEmpty());
+    QVERIFY(CheckedProxyLiteral(model,"unix:/tmp/bitcoin-core-proxy.sock").isEmpty());
 #else
-    QVERIFY(!model.validateProxyLocation("unix:/tmp/bitcoin-core-proxy.sock").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"unix:/tmp/bitcoin-core-proxy.sock").isEmpty());
 #endif
-    QVERIFY(!model.validateProxyLocation("abc..abc:23456").isEmpty());
-    QVERIFY(!model.validateProxyLocation("999.999.999.999:9050").isEmpty());
-    QVERIFY(!model.validateProxyLocation("127.0.0.1:0").isEmpty());
-    QVERIFY(!model.validateProxyLocation("127.0.0.1:65536").isEmpty());
-    QVERIFY(!model.validateProxyLocation("127.0.0.1:9050=ipv4").isEmpty());
-    QVERIFY(!model.validateProxyLocation("0=cjdns").isEmpty());
-    QVERIFY(!model.commitProxyLocation("999.999.999.999:9050"));
+    QVERIFY(!CheckedProxyLiteral(model,"abc..abc:23456").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"999.999.999.999:9050").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"127.0.0.1:0").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"127.0.0.1:65536").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"127.0.0.1:9050=ipv4").isEmpty());
+    QVERIFY(!CheckedProxyLiteral(model,"0=cjdns").isEmpty());
+    QVERIFY(!AwaitProxyLocation(model,false,"999.999.999.999:9050"));
     QVERIFY(model.proxyAddress().isEmpty());
 
-    QVERIFY(model.commitProxyLocation("proxy.example"));
+    QVERIFY(AwaitProxyLocation(model,false,"proxy.example"));
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.proxyAddress(), QString("proxy.example"));
 }
@@ -1001,13 +1475,14 @@ void OptionsModelTests::proxyValidationAndCommit()
 void OptionsModelTests::proxyDisabledPreservesPreviousValue()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("proxy", MakeAddress("127.0.0.1:9050"));
 
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.setProxyEnabled(false);
@@ -1018,7 +1493,8 @@ void OptionsModelTests::proxyDisabledPreservesPreviousValue()
     QVERIFY(previous_write.isStr());
     QCOMPARE(previous_write.get_str(), std::string{"127.0.0.1:9050"});
     const auto proxy_write = ReadRwSetting(model_args, "proxy");
-    QVERIFY(proxy_write.isNull());
+    QVERIFY(proxy_write.isBool());
+    QVERIFY(!proxy_write.get_bool());
 }
 
 void OptionsModelTests::customDataDirValidationRejectsFile()
@@ -1033,11 +1509,13 @@ void OptionsModelTests::customDataDirValidationRejectsFile()
 
     MockNode node;
 
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.selectCustomDataDir(file_path));
@@ -1065,7 +1543,8 @@ void OptionsModelTests::customDataDirSelectionCreatesDirectoryAndPersists()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    const auto drain_native_owners=DrainExecutorsBeforeNativeOwnerDestruction();
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
@@ -1100,7 +1579,8 @@ void OptionsModelTests::customDataDirSelectionPreservesExistingWalletDiscovery()
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    const auto drain_native_owners=DrainExecutorsBeforeNativeOwnerDestruction();
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
@@ -1223,12 +1703,14 @@ void OptionsModelTests::runtimeDataDirUsesExplicitDatadirOverSavedGuiSetting()
     PrepareArgsForDataDir(args, explicit_data_dir.path());
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.dataDir(), explicit_data_dir.path());
@@ -1420,9 +1902,9 @@ void OptionsModelTests::resetGuiSettingsClearsSettingsJson()
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("prune") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
-        QVERIFY(settings.rw_settings.count("onion") == 0);
+        QVERIFY(!settings.rw_settings.contains("prune"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
+        QVERIFY(!settings.rw_settings.contains("onion"));
     });
 }
 
@@ -1456,7 +1938,7 @@ void OptionsModelTests::resetGuiSettingsPreviewIgnoresSelectedCustomDataDirSetti
     std::vector<std::string> preview_argv = TestArgv();
     preview_argv.emplace_back("-resetguisettings");
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(preview_argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(preview_argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.listen);
@@ -1509,7 +1991,7 @@ void OptionsModelTests::resetGuiSettingsApplyClearsSelectedCustomDataDirSettings
     ArgsManager apply_args;
     QVERIFY2(PrepareTestArgs(apply_args, argv, parse_error), parse_error.c_str());
     QString apply_error;
-    QVERIFY2(model.applyToArgs(apply_args, &apply_error), qPrintable(apply_error));
+    QVERIFY2(ApplyOnboardingModelRequest(model,apply_args,&apply_error), qPrintable(apply_error));
 
     fs::path backup_path;
     QVERIFY(apply_args.GetSettingsPath(&backup_path, /*temp=*/false, /*backup=*/true));
@@ -1521,10 +2003,10 @@ void OptionsModelTests::resetGuiSettingsApplyClearsSelectedCustomDataDirSettings
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("listen") == 0);
-        QVERIFY(settings.rw_settings.count("natpmp") == 0);
-        QVERIFY(settings.rw_settings.count("server") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
+        QVERIFY(!settings.rw_settings.contains("listen"));
+        QVERIFY(!settings.rw_settings.contains("natpmp"));
+        QVERIFY(!settings.rw_settings.contains("server"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
     });
 }
 
@@ -1558,8 +2040,11 @@ void OptionsModelTests::resetGuiSettingsPreservesCommandLineOverrides()
     QString reset_error;
     QVERIFY2(QmlDataDir::ResetGuiSettings(args, &reset_error), qPrintable(reset_error));
 
+    QTemporaryFile unavailable_selection;
+    QVERIFY(unavailable_selection.open());
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, QmlDataDir::DefaultDataDirString())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, QmlOnboardingSettings::DataDirSelection{
+            unavailable_selection.fileName(), QmlOnboardingSettings::DataDirSource::Default})
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.proxy_enabled);
@@ -1602,7 +2087,7 @@ void OptionsModelTests::resetGuiSettingsPreservesBitcoinConfOverrides()
     std::vector<std::string> preview_argv = TestArgv();
     preview_argv.emplace_back("-resetguisettings");
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(preview_argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(preview_argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.server);
@@ -1649,8 +2134,8 @@ void OptionsModelTests::resetGuiSettingsExplicitDatadirClearsThatDatadirSettings
     check_args.SelectConfigNetwork(check_args.GetChainTypeString());
     QVERIFY2(check_args.ReadSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
     check_args.LockSettings([](common::Settings& settings) {
-        QVERIFY(settings.rw_settings.count("server") == 0);
-        QVERIFY(settings.rw_settings.count("proxy") == 0);
+        QVERIFY(!settings.rw_settings.contains("server"));
+        QVERIFY(!settings.rw_settings.contains("proxy"));
     });
 }
 
@@ -1805,7 +2290,7 @@ void OptionsModelTests::configuredDatadirPreviewKeepsConfigSource()
     QVERIFY(status.data_dir_source == QmlOnboardingSettings::DataDirSource::Config);
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(
+        PreviewOnNative(
             argv,
             /*can_listen_ipc=*/false,
             QmlOnboardingSettings::DataDirSelection{status.active_data_dir, status.data_dir_source})
@@ -1846,7 +2331,7 @@ void OptionsModelTests::configuredDatadirApplyDoesNotPersistGuiDataDir()
     QVERIFY(status.data_dir_source == QmlOnboardingSettings::DataDirSource::Config);
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(
+        PreviewOnNative(
             argv,
             /*can_listen_ipc=*/false,
             QmlOnboardingSettings::DataDirSelection{status.active_data_dir, status.data_dir_source})
@@ -1888,7 +2373,7 @@ void OptionsModelTests::explicitDatadirApplyDoesNotPersistGuiDataDir()
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
     QString apply_error;
-    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QVERIFY2(ApplyOnboardingModelRequest(model,args,&apply_error), qPrintable(apply_error));
 
     QVERIFY(!settings.contains(SettingsKeys::DATA_DIR));
     QCOMPARE(SettingToBool(args.GetPersistentSetting("qml_onboarded")), true);
@@ -1945,17 +2430,14 @@ void OptionsModelTests::asynchronousOnboardingPreparation()
     std::atomic_int calls{0};
     std::atomic_bool off_gui{false};
     const auto gui_thread = QThread::currentThread();
-    const auto drain_before_fixture_destruction = qScopeGuard([&] {
-        release.release();
-        bool drained{false};
-        BackendExecutor::shutdownAll(this, [&] { drained = true; });
-        QVERIFY(QTest::qWaitFor([&] { return drained; }, 5000));
-    });
+    const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    const auto unblock = qScopeGuard([&] { release.release(); });
     if (outcome == "settings-error") {
         QVERIFY(QDir().mkpath(data_dir.filePath("regtest/settings.json")));
     }
     QSignalSpy prepared{&model, &OnboardingOptionsModel::nodePrepared};
+    if(outcome!="settings-error")QTRY_VERIFY(model.canFinish());
     model.prepareNode(args, [&] {
         ++calls;
         off_gui = QThread::currentThread() != gui_thread;
@@ -1965,7 +2447,7 @@ void OptionsModelTests::asynchronousOnboardingPreparation()
         if (outcome == "unknown") throw 42;
         return outcome == "success";
     });
-    model.prepareNode(args, [&] { ++calls; return true; });
+    if(outcome!="settings-error")model.prepareNode(args, [&] { ++calls; return true; });
     if (outcome != "settings-error") {
         QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, 5000);
         bool heartbeat{false};
@@ -2117,7 +2599,7 @@ void OptionsModelTests::existingCoreProfileShowsFullOnboardingWithCurrentSetting
     QCOMPARE(status.active_data_dir, data_dir.path());
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.server);
@@ -2134,7 +2616,7 @@ void OptionsModelTests::freshExplicitDatadirPreviewReportsFreshProfile()
     QVERIFY(data_dir.isValid());
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(!preview.profile.existing_profile);
@@ -2163,7 +2645,7 @@ void OptionsModelTests::onboardingPreviewDetectsSettingsJsonProfile()
     QVERIFY2(write_args.WriteSettingsFile(&settings_errors), settings_errors.empty() ? "" : settings_errors.front().c_str());
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.profile.existing_profile);
@@ -2189,7 +2671,7 @@ void OptionsModelTests::onboardingPreviewDetectsChainDataWithoutCreatingBlocksDi
     QVERIFY(!QFileInfo::exists(blocks_dir));
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.profile.existing_profile);
@@ -2198,6 +2680,7 @@ void OptionsModelTests::onboardingPreviewDetectsChainDataWithoutCreatingBlocksDi
     QVERIFY(!QFileInfo::exists(blocks_dir));
 }
 
+#ifdef ENABLE_WALLET
 void OptionsModelTests::onboardingPreviewDetectsRootWalletProfile()
 {
     SavedGuiDataDirSettings saved_settings;
@@ -2207,7 +2690,7 @@ void OptionsModelTests::onboardingPreviewDetectsRootWalletProfile()
     WriteSqliteWalletMarker(wallet_dir);
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.profile.existing_profile);
@@ -2215,6 +2698,9 @@ void OptionsModelTests::onboardingPreviewDetectsRootWalletProfile()
     QVERIFY(preview.profile.has_wallet_data);
 }
 
+#endif
+
+#ifdef ENABLE_WALLET
 void OptionsModelTests::onboardingPreviewDetectsExplicitWalletDirProfile()
 {
     SavedGuiDataDirSettings saved_settings;
@@ -2227,7 +2713,7 @@ void OptionsModelTests::onboardingPreviewDetectsExplicitWalletDirProfile()
     std::vector<std::string> argv{TestArgvWithDataDir(data_dir.path())};
     argv.push_back("-walletdir=" + wallet_dir.path().toStdString());
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.profile.existing_profile);
@@ -2235,6 +2721,9 @@ void OptionsModelTests::onboardingPreviewDetectsExplicitWalletDirProfile()
     QVERIFY(preview.profile.has_wallet_data);
 }
 
+#endif
+
+#ifdef ENABLE_WALLET
 void OptionsModelTests::onboardingPreviewIgnoresEmptyExplicitWalletDir()
 {
     SavedGuiDataDirSettings saved_settings;
@@ -2246,13 +2735,15 @@ void OptionsModelTests::onboardingPreviewIgnoresEmptyExplicitWalletDir()
     std::vector<std::string> argv{TestArgvWithDataDir(data_dir.path())};
     argv.push_back("-walletdir=" + wallet_dir.path().toStdString());
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(!preview.profile.existing_profile);
     QVERIFY(!preview.profile.has_chain_data);
     QVERIFY(!preview.profile.has_wallet_data);
 }
+
+#endif
 
 void OptionsModelTests::onboardingPreviewIgnoresUnrecognizedWalletsEntry()
 {
@@ -2268,7 +2759,7 @@ void OptionsModelTests::onboardingPreviewIgnoresUnrecognizedWalletsEntry()
     junk_file.close();
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(!preview.profile.existing_profile);
@@ -2315,8 +2806,8 @@ void OptionsModelTests::onboardingApplyWithoutTouchedSettingsOnlyAddsQmlOnboarde
     bool has_listen_override{true};
     bool has_prune_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
-        has_prune_override = settings.rw_settings.count("prune") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
+        has_prune_override = settings.rw_settings.contains("prune");
     });
     QVERIFY(!has_listen_override);
     QVERIFY(!has_prune_override);
@@ -2381,7 +2872,7 @@ void OptionsModelTests::fullOnboardingApplyWritesQmlOnboardedMarker()
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
     QString apply_error;
-    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QVERIFY2(ApplyOnboardingModelRequest(model,args,&apply_error), qPrintable(apply_error));
     QCOMPARE(SettingToBool(args.GetPersistentSetting("qml_onboarded")), true);
     QCOMPARE(settings.value(SettingsKeys::DATA_DIR).toString(), data_dir.path());
 }
@@ -2398,7 +2889,7 @@ void OptionsModelTests::onboardingPreviewAppliesParameterInteractions()
     conf.close();
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgv(), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgv(), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.proxy_enabled);
@@ -2437,6 +2928,157 @@ void OptionsModelTests::storageSpaceCheckRejectsExistingFile()
     QVERIFY(!result.message.isEmpty());
 }
 
+void OptionsModelTests::onboardingStorageCheckDoesNotPublishStalePath()
+{
+    OnboardingStorageWork graph;
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir directories;
+    QVERIFY(directories.isValid());
+    const QString startup_path = QDir(directories.path()).filePath(QStringLiteral("startup"));
+    const QString latest_path = QDir(directories.path()).filePath(QStringLiteral("latest-existing"));
+    const QString stale_path = QDir(directories.path()).filePath(QStringLiteral("stale-new"));
+    QVERIFY(QDir().mkpath(startup_path));
+    QVERIFY(QDir().mkpath(latest_path));
+    QVERIFY(!QFileInfo::exists(stale_path));
+
+    {
+        OnboardingOptionsModel model{TestArgvWithDataDir(startup_path), /*can_listen_ipc=*/false, nullptr,
+            [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(graph.worker.quiescent());
+        QVERIFY(!model.validationPending());
+        QVERIFY(!model.storageCheckPending());
+        QCOMPARE(model.dataDir(), startup_path);
+        QCOMPARE(model.storagePathMessage(), QStringLiteral("Directory already exists."));
+
+        QSignalSpy storage_changed{&model, &OnboardingOptionsModel::storageStatusChanged};
+        QVERIFY(model.selectCustomDataDir(stale_path));
+        QVERIFY(graph.driveToStorageCheck(model, stale_path));
+        QVERIFY(!QFileInfo::exists(stale_path));
+        QVERIFY(model.storageCheckPending());
+        QCOMPARE(model.storagePathMessage(), QStringLiteral("Directory already exists."));
+
+        QVERIFY(model.selectCustomDataDir(latest_path));
+        QVERIFY(model.validationPending());
+        const int changes_before_stale_result = storage_changed.size();
+
+        // The first queued Core task is the stale-path disk result. Its outcome
+        // must not publish while the replacement path is being previewed.
+        QVERIFY(graph.worker.step(execution::Lane::Core));
+        QVERIFY(graph.posts.empty());
+        QVERIFY(graph.worker.step(execution::Lane::Utility));
+        auto disk_publication = graph.takePost();
+        QVERIFY(disk_publication);
+        disk_publication();
+        QVERIFY(model.validationPending());
+        QVERIFY(model.storageCheckPending());
+        QCOMPARE(model.storagePathMessage(), QStringLiteral("Directory already exists."));
+        QCOMPARE(storage_changed.size(), changes_before_stale_result);
+
+        QVERIFY(graph.driveToStorageCheck(model, latest_path));
+        QVERIFY(graph.worker.step(execution::Lane::Core));
+        QVERIFY(graph.posts.empty());
+        QVERIFY(graph.worker.step(execution::Lane::Utility));
+        QVERIFY(graph.publish());
+        QVERIFY(graph.settle());
+
+        QCOMPARE(model.dataDir(), latest_path);
+        QVERIFY(!model.validationPending());
+        QVERIFY(!model.storageCheckPending());
+        QCOMPARE(model.storagePathMessage(), QStringLiteral("Directory already exists."));
+        QVERIFY(model.storageErrorText().isEmpty());
+        QVERIFY(storage_changed.size() > changes_before_stale_result);
+        QVERIFY(graph.worker.quiescent());
+        model.beginShutdown();
+        QVERIFY(graph.settle());
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
+void OptionsModelTests::onboardingStorageProjectionCoalescesPublicPruneChoice()
+{
+    OnboardingStorageWork graph;
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir directories;
+    QVERIFY(directories.isValid());
+    const QString startup_path = QDir(directories.path()).filePath(QStringLiteral("startup"));
+    const QString selected_path = QDir(directories.path()).filePath(QStringLiteral("selected-new"));
+    QVERIFY(QDir().mkpath(startup_path));
+    QVERIFY(!QFileInfo::exists(selected_path));
+
+    {
+        OnboardingOptionsModel model{TestArgvWithDataDir(startup_path), /*can_listen_ipc=*/false, nullptr,
+            [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
+        const auto shutdown = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+        QVERIFY(graph.settle());
+        QVERIFY(graph.worker.quiescent());
+        QVERIFY(!model.validationPending());
+        QVERIFY(!model.storageCheckPending());
+
+        QSignalSpy storage_changed{&model, &OnboardingOptionsModel::storageStatusChanged};
+        QSignalSpy can_finish_changed{&model, &OnboardingOptionsModel::canFinishChanged};
+        QVERIFY(model.selectCustomDataDir(selected_path));
+        QVERIFY(graph.driveToStorageCheck(model, selected_path));
+        QVERIFY(graph.worker.step(execution::Lane::Core));
+        QVERIFY(graph.posts.empty());
+        QVERIFY(graph.worker.step(execution::Lane::Utility));
+        QVERIFY(graph.publish());
+        // Other lifecycle publications share this post port. Release them
+        // while holding every further Utility effect and its projection.
+        while (graph.publish()) {}
+        // The disk read is complete, but its derived presentation is pending.
+        QVERIFY(model.storageCheckPending());
+        QVERIFY(graph.posts.empty());
+
+        // Run the queued immutable projection and hold its GUI publication.
+        QVERIFY(graph.worker.step(execution::Lane::Utility));
+        QVERIFY(model.storageCheckPending());
+        auto old_projection = graph.takePost();
+        QVERIFY(old_projection);
+
+        const int statuses_before_user_choice = storage_changed.size();
+        const bool selected_prune_choice = !model.prune();
+        model.setPrune(selected_prune_choice);
+        QVERIFY(graph.settle());
+        QCOMPARE(model.prune(), selected_prune_choice);
+        QVERIFY(storage_changed.size() > statuses_before_user_choice);
+        const int statuses_before_old_publish = storage_changed.size();
+        const int finish_signals_before_old_publish = can_finish_changed.size();
+
+        old_projection();
+        QCOMPARE(model.prune(), selected_prune_choice);
+        QCOMPARE(storage_changed.size(), statuses_before_old_publish);
+        QCOMPARE(can_finish_changed.size(), finish_signals_before_old_publish);
+        QCOMPARE(graph.posts.size(), size_t{1});
+        QVERIFY(graph.publish()); // Admit the queued successor projection.
+        QVERIFY(graph.worker.step(execution::Lane::Utility));
+        auto successor_publication = graph.takePost();
+        QVERIFY(successor_publication);
+        const auto statuses_before_successor = storage_changed.size();
+        const auto finish_before_successor = can_finish_changed.size();
+        successor_publication();
+        QCOMPARE(storage_changed.size(), statuses_before_successor + 1);
+        QCOMPARE(can_finish_changed.size(), finish_before_successor + 1);
+        QVERIFY(graph.settle()); // Independent flow/pending transitions may notify readiness.
+
+        QCOMPARE(model.prune(), selected_prune_choice);
+        QVERIFY(!model.storageCheckPending());
+        QVERIFY(model.storageErrorText().isEmpty());
+        const int expected_selected_storage_gb = selected_prune_choice && model.pruneSizeGB() <= model.assumedBlockchainSize()
+            ? model.prunedStorageRequiredGB()
+            : model.fullStorageRequiredGB();
+        QCOMPARE(model.selectedStorageRequiredGB(), expected_selected_storage_gb);
+        QCOMPARE(storage_changed.size(), statuses_before_old_publish + 1);
+        QVERIFY(graph.worker.quiescent());
+        model.beginShutdown();
+        QVERIFY(graph.settle());
+    }
+    QVERIFY(graph.settle());
+    QVERIFY(graph.worker.quiescent());
+}
+
 void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
 {
 
@@ -2446,11 +3088,13 @@ void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
 
     MockNode node;
 
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     model.setThirdPartyTransactionUrls(
@@ -2463,7 +3107,11 @@ void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
         "not-a-url|"
         "https:///tx/%s");
     QTRY_VERIFY(!model.settingsPending());
-    const QVariantList links = model.thirdPartyTransactionLinks("abc");
+    std::unique_ptr<OptionsTransactionLinks> link_model{model.createTransactionLinks()};
+    QVERIFY(link_model);link_model->setTxid("abc");QTRY_VERIFY(!link_model->pending());
+    QVariantList links;for(int row=0;row<link_model->rowCount();++row)links.push_back(QVariantMap{
+        {"host",link_model->data(link_model->index(row),OptionsTransactionLinks::HostRole)},
+        {"url",link_model->data(link_model->index(row),OptionsTransactionLinks::UrlRole)}});
     QCOMPARE(links.size(), 2);
     const QVariantMap https_link = links.at(0).toMap();
     QCOMPARE(https_link.value("host").toString(), QString("example.com"));
@@ -2489,11 +3137,13 @@ void OptionsModelTests::moneyFontChoicePersists()
 
     MockNode node;
 
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.moneyFontChoice(), QString("embedded"));
@@ -2507,6 +3157,179 @@ void OptionsModelTests::moneyFontChoicePersists()
     } else {
         settings.remove(SettingsKeys::MONEY_FONT_CHOICE);
     }
+}
+
+
+
+void OptionsModelTests::rejectedDisplayRefreshDoesNotReenterItsFailure()
+{
+    SavedGuiDataDirSettings saved;MockNode node;ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    {SettingsModel model{node,args,[&](auto turn) { graph.posts.push_back(std::move(turn)); },&shared.executor()};bool delivering{false},reentered{false};int notices{0};
+     const auto finish=qScopeGuard([&]{disconnect(&model,nullptr,this,nullptr);model.beginShutdown();graph.settle();});
+     QVERIFY(graph.settle());shared.reject_core = true;
+     QVERIFY(model.settingsReady());
+     QCOMPARE(model.settingsOperationState(),SettingsModel::SettingsApplied);
+     const auto original=model.settingsOperationId();
+     QSignalSpy operations{&model,&SettingsModel::settingsOperationChanged};
+     connect(&model,&SettingsModel::settingsErrorChanged,this,[&]{reentered|=delivering;delivering=true;if(++notices<=2)model.refreshDisplaySettings();delivering=false;});
+     model.refreshDisplaySettings();QVERIFY(graph.settle());QVERIFY(!reentered);QCOMPARE(notices,1);QCOMPARE(model.settingsOperationId(),original);QVERIFY(!model.settingsPending());QVERIFY(!model.settingsError().isEmpty());
+     // A refused observation reports its diagnostic without inventing a user
+     // operation or replacing the original accepted operation's receipt.
+     QCOMPARE(model.settingsOperationState(),SettingsModel::SettingsApplied);
+     QCOMPARE(operations.count(),0);
+    }
+    QVERIFY(graph.settle());QVERIFY(graph.worker.quiescent());
+}
+
+void OptionsModelTests::databaseCacheMatchesCoreDefaultAndRange()
+{
+    SavedGuiDataDirSettings saved;
+    MockNode node;
+    const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    SettingsModel model{node, args};
+    QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    // Core's public default is an independent oracle; the 8 MiB coins
+    // sub-cache is not the total -dbcache bound.
+    const auto expected = node::GetDefaultDBCache() / 1_MiB;
+    QCOMPARE(model.dbcacheSizeMiB(), int(expected));
+    QVERIFY(model.maxDbcacheSizeMiB() >= model.dbcacheSizeMiB());
+    QVERIFY(model.maxDbcacheSizeMiB() >= 1636);
+    QCOMPARE(SettingTo<int64_t>(QmlCoreSettings::DefaultCoreSettingValue(QStringLiteral("dbcache"))).value_or(-1), int64_t(expected));
+    model.setDbcacheSizeMiB(1636);
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("dbcache")).value_or(-1), int64_t{1636});
+}
+void OptionsModelTests::unavailableLanguageDoesNotPersist_data()
+{
+    QTest::addColumn<QString>("literal");
+    QTest::newRow("not-installed") << QStringLiteral("not_an_installed_translation");
+    QTest::newRow("over-budget") << QString(65, QLatin1Char('x'));
+    QTest::newRow("embedded-null") << QString{QChar::Null};
+}
+void OptionsModelTests::unavailableLanguageDoesNotPersist()
+{
+    QFETCH(QString, literal);
+    SavedGuiDataDirSettings saved; QSettings settings;
+    settings.setValue(SettingsKeys::LANGUAGE, QString{}); settings.sync();
+    MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    OnboardingStorageWork graph;
+    { SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &graph.worker.executor()};
+      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+      QVERIFY(graph.settle()); QCOMPARE(model.language(), QString{});
+      model.setLanguage(literal); QVERIFY(graph.settle());
+      QCOMPARE(model.language(), QString{});
+      QVERIFY(!model.settingsError().isEmpty());
+      QVERIFY(args.GetPersistentSetting("lang").isNull());
+      settings.sync(); QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(), QString{});
+    }
+    QVERIFY(graph.settle()); QVERIFY(graph.worker.quiescent());
+}
+void OptionsModelTests::displayReadbackRepairsInvalidStoredUnit_data()
+{
+    QTest::addColumn<QVariant>("stored"); QTest::addColumn<int>("expected");
+    QTest::newRow("negative") << QVariant{-1} << 0;
+    QTest::newRow("above-catalog") << QVariant{99} << 0;
+    QTest::newRow("text") << QVariant{QStringLiteral("not-a-unit")} << 0;
+    QTest::newRow("integer-overflow") << QVariant{QStringLiteral("99999999999999999999")} << 0;
+    QTest::newRow("fractional") << QVariant{1.5} << 0;
+    QTest::newRow("valid-sat") << QVariant{3} << 3;
+}
+void OptionsModelTests::displayReadbackRepairsInvalidStoredUnit()
+{
+    QFETCH(QVariant, stored); QFETCH(int, expected);
+    SavedGuiDataDirSettings saved; QSettings settings;
+    settings.setValue(SettingsKeys::DISPLAY_UNIT, stored); settings.sync();
+    MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    SettingsModel model{node, args};
+    QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.displayUnit(), expected);
+    settings.sync(); QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), expected);
+    bool valid{false}; settings.value(SettingsKeys::DISPLAY_UNIT).toInt(&valid); QVERIFY(valid);
+    // A second independent model/restart sees the same canonical persisted unit.
+    SettingsModel restarted{node, args}; QTRY_VERIFY(restarted.settingsReady());
+    QTRY_VERIFY(!restarted.settingsPending()); QCOMPARE(restarted.displayUnit(), expected);
+}
+void OptionsModelTests::languageReadbackRejectsUnavailablePersistedTag()
+{
+    SavedGuiDataDirSettings saved; QSettings settings;
+    settings.setValue(SettingsKeys::LANGUAGE, QStringLiteral("invalid_locale_that_has_no_translation")); settings.sync();
+    MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    SettingsModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(model.availableLanguages().contains(model.language()));
+    QCOMPARE(model.language(), QString{});
+    settings.sync(); QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(), QString{});
+    QVERIFY(args.GetPersistentSetting("lang").isNull());
+}
+
+void OptionsModelTests::invalidCoreLanguageDoesNotEraseAnIndependentGuiPreference()
+{
+    SavedGuiDataDirSettings saved;QSettings settings;settings.setValue(SettingsKeys::LANGUAGE,QStringLiteral("de"));settings.sync();
+    MockNode node;const auto drain=DrainExecutorsBeforeNativeOwnerDestruction();ArgsManager args;QTemporaryDir directory;QVERIFY(directory.isValid());PrepareRuntimePersistence(node,args,directory);
+    args.LockSettings([](common::Settings& values){values.rw_settings["lang"]=std::string{"unavailable_external_core_language"};});
+    SettingsModel model{node,args};QTRY_VERIFY(model.settingsReady());QTRY_VERIFY(!model.settingsPending());
+    settings.sync();QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(),QStringLiteral("de"));
+    QCOMPARE(model.language(),QStringLiteral("unavailable_external_core_language"));QVERIFY(model.languageSummary().contains(QStringLiteral("Unavailable translation")));
+    QCOMPARE(SettingToString(args.GetPersistentSetting("lang")).value_or(""),std::string{"unavailable_external_core_language"});
+    model.setLanguage({});QTRY_VERIFY(!model.settingsPending());QCOMPARE(model.language(),QString{});
+}
+
+void OptionsModelTests::manualDisplayRefreshWaitsForPendingWrite()
+{
+    QTemporaryDir settings_dir; QVERIFY(settings_dir.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    SavedSettingsFormat settings_format{QSettings::IniFormat};
+    SavedGuiDataDirSettings saved; QSettings settings;
+    settings.setValue(SettingsKeys::DISPLAY_UNIT, 0); settings.sync();
+    MockNode node; ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory); OnboardingStorageWork graph;
+    auto& shared = graph.worker;
+    { SettingsModel model{node, args, [&](auto turn) { graph.posts.push_back(std::move(turn)); }, &shared.executor()};
+      const auto finish = qScopeGuard([&] { model.beginShutdown(); graph.settle(); });
+      QVERIFY(graph.settle()); model.setDisplayUnit(3);
+      // Finish background work, retain its GUI outcome, then change the store.
+      shared.drain(); QVERIFY(model.settingsPending());
+      settings.setValue(SettingsKeys::DISPLAY_UNIT, 1); settings.sync();
+      QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
+      QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
+      QCOMPARE(model.displayUnit(), 3); QVERIFY(model.settingsPending());
+      QVERIFY(graph.settle()); QCOMPARE(model.displayUnit(), 1); QVERIFY(!model.settingsPending());
+      settings.sync(); QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), 1);
+      model.beginShutdown(); QVERIFY(graph.settle());
+      const auto pending = shared.coreSubmissions();
+      QVERIFY(QMetaObject::invokeMethod(&model, "refreshDisplaySettings", Qt::DirectConnection));
+      QCOMPARE(shared.coreSubmissions(), pending);
+    }
+    QVERIFY(graph.settle()); QVERIFY(graph.worker.quiescent());
+}
+void OptionsModelTests::externalDisplayWriterIsObservedWithoutUserEdit()
+{
+    // The model observes external writers through a file watch. With the
+    // native macOS format the plist is written by cfprefsd some seconds
+    // after sync(), so the wait measured the daemon, not the model. An INI
+    // file is written by QSettings itself and the watch fires on sync().
+    QTemporaryDir settings_dir; QVERIFY(settings_dir.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    SavedSettingsFormat settings_format{QSettings::IniFormat};
+    SavedGuiDataDirSettings saved; QSettings settings;
+    settings.setValue(SettingsKeys::DISPLAY_UNIT, 0); settings.sync();
+    MockNode node; const auto drain = DrainExecutorsBeforeNativeOwnerDestruction();
+    ArgsManager args; QTemporaryDir directory; QVERIFY(directory.isValid());
+    PrepareRuntimePersistence(node, args, directory);
+    SettingsModel model{node, args}; QTRY_VERIFY(model.settingsReady()); QTRY_VERIFY(!model.settingsPending());
+    QSignalSpy changes{&model, &SettingsModel::displayUnitChanged};
+    { QSettings external; external.setValue(SettingsKeys::DISPLAY_UNIT, 2); external.sync(); }
+    QTRY_COMPARE(model.displayUnit(), 2); QTRY_VERIFY(!model.settingsPending()); QVERIFY(!changes.empty());
+    { QSettings external; external.remove(SettingsKeys::DISPLAY_UNIT); external.sync(); }
+    // Legacy fallback remains supported; removing a key is observed too.
+    QTRY_COMPARE(model.displayUnit(), QmlLegacySettings::ReadLegacyGuiDisplayUnit(QString::fromStdString(args.GetChainTypeString()), 0));
 }
 
 void OptionsModelTests::hideAmountsPersists()
@@ -2526,17 +3349,17 @@ void OptionsModelTests::hideAmountsPersists()
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
     {
-        OptionsQmlModel model(node, model_args);
+        SettingsModel model(node, model_args);
         QTRY_VERIFY(model.settingsReady());
         QCOMPARE(model.hideAmounts(), false);
-        QSignalSpy spy(&model, &OptionsQmlModel::hideAmountsChanged);
+        QSignalSpy spy(&model, &SettingsModel::hideAmountsChanged);
         model.setHideAmounts(true);
         model.setHideAmounts(true);
         QCOMPARE(spy.count(), 1);
         QTRY_VERIFY(!model.settingsPending());
         QCOMPARE(settings.value(SettingsKeys::HIDE_AMOUNTS).toBool(), true);
     }
-    OptionsQmlModel reloaded(node, model_args);
+    SettingsModel reloaded(node, model_args);
     QTRY_VERIFY(reloaded.settingsReady());
     QCOMPARE(reloaded.hideAmounts(), true);
 
@@ -2557,11 +3380,13 @@ void OptionsModelTests::displayUnitUsesQtCompatibleSettingsKey()
 
     MockNode node;
 
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
+
     ArgsManager model_args;
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, model_args, model_settings_dir);
-    OptionsQmlModel model(node, model_args);
+    SettingsModel model(node, model_args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(QString::fromUtf8(SettingsKeys::DISPLAY_UNIT), QStringLiteral("DisplayBitcoinUnit"));
@@ -2619,12 +3444,14 @@ DisplayBitcoinUnit=@Variant(\0\0\0\x7f\0\0\0\fBitcoinUnit\0\x3)
     args.SelectConfigNetwork(args.GetChainTypeString());
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 3);
@@ -2648,24 +3475,26 @@ void OptionsModelTests::displayUnitPrefersQmlSettingOverLegacyQtFallback()
     args.SelectConfigNetwork(args.GetChainTypeString());
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 1);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("mBTC"));
 }
 
-void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
+void OptionsModelTests::sharedCoreSettingHelpersPreserveExplicitOverrides()
 {
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QVariantMap status = QmlCoreSettings::CoreSettingStatus(args, QStringLiteral("listen"));
@@ -2675,9 +3504,10 @@ void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("listen"), common::SettingsValue{false}));
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
-    QVERIFY(!has_listen_override);
+    QVERIFY(has_listen_override);
+    QVERIFY(!SettingToBool(args.GetPersistentSetting("listen")).value_or(true));
 
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("listen"), common::SettingsValue{true}));
     common::SettingsValue listen_override;
@@ -2690,9 +3520,10 @@ void OptionsModelTests::sharedCoreSettingHelpersDeduplicateOverrides()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("maxmempool"), common::SettingsValue{DEFAULT_MAX_MEMPOOL_SIZE_MB}));
     bool has_mempool_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_mempool_override = settings.rw_settings.count("maxmempool") > 0;
+        has_mempool_override = settings.rw_settings.contains("maxmempool");
     });
-    QVERIFY(!has_mempool_override);
+    QVERIFY(has_mempool_override);
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("maxmempool")).value_or(-1), int64_t{DEFAULT_MAX_MEMPOOL_SIZE_MB});
 }
 
 void OptionsModelTests::parameterInteractionOverridesPersistExplicitValues()
@@ -2712,9 +3543,10 @@ void OptionsModelTests::parameterInteractionOverridesPersistExplicitValues()
     QVERIFY(QmlCoreSettings::WriteCoreSettingOverride(listen_args, QStringLiteral("listen"), common::SettingsValue{false}));
     bool has_listen_override{true};
     listen_args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
-    QVERIFY(!has_listen_override);
+    QVERIFY(has_listen_override);
+    QVERIFY(!SettingToBool(listen_args.GetPersistentSetting("listen")).value_or(true));
 
     ArgsManager mempool_args;
     mempool_args.SelectConfigNetwork("main");
@@ -2775,13 +3607,15 @@ void OptionsModelTests::coreSettingsModelEntryMutatesRuntimeModel()
     QVERIFY(PrepareTestArgs(args, TestArgv(), error));
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     auto* core_settings = qobject_cast<CoreSettingsModel*>(model.coreSettings());
@@ -2805,7 +3639,7 @@ void OptionsModelTests::coreSettingsSessionCommandLineSettingDoesNotWrite()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["listen"].push_back(common::SettingsValue{true});
+        settings.command_line_options["listen"].emplace_back(true);
     });
 
     QmlCoreSettings::Values values;
@@ -2819,7 +3653,7 @@ void OptionsModelTests::coreSettingsSessionCommandLineSettingDoesNotWrite()
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -2829,7 +3663,7 @@ void OptionsModelTests::coreSettingsSessionDoesNotCopyUntouchedConfig()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QmlCoreSettings::Session session{
@@ -2840,7 +3674,7 @@ void OptionsModelTests::coreSettingsSessionDoesNotCopyUntouchedConfig()
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -2850,7 +3684,7 @@ void OptionsModelTests::coreSettingsSessionWritesTouchedConfigOverride()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{false});
+        settings.ro_config[""]["listen"].emplace_back(false);
     });
 
     QmlCoreSettings::Session session{
@@ -2868,7 +3702,7 @@ void OptionsModelTests::coreSettingsSessionWritesTouchedConfigOverride()
     QVERIFY(listen_override.get_bool());
 }
 
-void OptionsModelTests::coreSettingsSessionRevertingToDefaultDeletesOverride()
+void OptionsModelTests::coreSettingsSessionRevertingToDefaultPersistsExplicitOverride()
 {
     ArgsManager args;
     args.SelectConfigNetwork("main");
@@ -2884,9 +3718,10 @@ void OptionsModelTests::coreSettingsSessionRevertingToDefaultDeletesOverride()
 
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
-    QVERIFY(!has_listen_override);
+    QVERIFY(has_listen_override);
+    QCOMPARE(SettingToBool(args.GetPersistentSetting("listen")).value_or(!DEFAULT_LISTEN), DEFAULT_LISTEN);
 }
 
 void OptionsModelTests::coreSettingsSessionPruneDisabledPreservesPreviousValue()
@@ -2905,11 +3740,12 @@ void OptionsModelTests::coreSettingsSessionPruneDisabledPreservesPreviousValue()
     bool has_prune_override{true};
     args.LockSettings([&](common::Settings& settings) {
         prune_prev = settings.rw_settings.at("prune-prev");
-        has_prune_override = settings.rw_settings.count("prune") > 0;
+        has_prune_override = settings.rw_settings.contains("prune");
     });
     QVERIFY(prune_prev.isStr());
     QCOMPARE(QString::fromStdString(prune_prev.get_str()), QString::number(QmlCoreSettings::PruneGBToMiB(10)));
-    QVERIFY(!has_prune_override);
+    QVERIFY(has_prune_override);
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("prune")).value_or(-1), int64_t{0});
 }
 
 void OptionsModelTests::coreSettingsSessionPruneEnabledClearsPreviousValue()
@@ -2931,7 +3767,7 @@ void OptionsModelTests::coreSettingsSessionPruneEnabledClearsPreviousValue()
     bool has_prune_prev{true};
     args.LockSettings([&](common::Settings& settings) {
         prune_setting = settings.rw_settings.at("prune");
-        has_prune_prev = settings.rw_settings.count("prune-prev") > 0;
+        has_prune_prev = settings.rw_settings.contains("prune-prev");
     });
     QVERIFY(prune_setting.isStr());
     QCOMPARE(QString::fromStdString(prune_setting.get_str()), QString::number(QmlCoreSettings::PruneGBToMiB(10)));
@@ -2954,15 +3790,17 @@ void OptionsModelTests::coreSettingsSessionProxyDisabledPreservesPreviousValue()
     bool has_proxy_override{true};
     args.LockSettings([&](common::Settings& settings) {
         proxy_prev = settings.rw_settings.at("proxy-prev");
-        has_proxy_override = settings.rw_settings.count("proxy") > 0;
+        has_proxy_override = settings.rw_settings.contains("proxy");
     });
     QCOMPARE(QString::fromStdString(proxy_prev.get_str()), QStringLiteral("10.0.0.2:9050"));
-    QVERIFY(!has_proxy_override);
+    QVERIFY(has_proxy_override);
+    QVERIFY(!SettingToBool(args.GetPersistentSetting("proxy")).value_or(true));
 }
 
 void OptionsModelTests::coreSettingsLoadPersistentPrunePreviousValue()
 {
     MockNode node;
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     node.SetPersistentSetting("prune-prev", MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
 
     const QmlCoreSettings::Values values = QmlCoreSettings::LoadPersistentValues(node);
@@ -3005,7 +3843,7 @@ void OptionsModelTests::coreSettingsSessionChangeReportsFieldDiffs()
     QVERIFY(session.isTouched(QStringLiteral("listen")));
 }
 
-void OptionsModelTests::coreSettingsSessionProxyCommitAcceptsUnchangedAddressWithoutValueChange()
+void OptionsModelTests::coreSettingsSessionProxyCommitAcceptsUnchangedAddressAsExplicitIntent()
 {
     QmlCoreSettings::Session session;
     const QString address = session.defaultProxyAddress();
@@ -3016,7 +3854,8 @@ void OptionsModelTests::coreSettingsSessionProxyCommitAcceptsUnchangedAddressWit
     QCOMPARE(change.setting_name, QStringLiteral("proxy"));
     QVERIFY(!QmlCoreSettings::ValuesChanged(change));
     QVERIFY(!QmlCoreSettings::ProxyAddressChanged(change));
-    QVERIFY(!session.isTouched(QStringLiteral("proxy")));
+    QVERIFY(session.isTouched(QStringLiteral("proxy")));
+    QVERIFY(change.force_write);
 }
 
 void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
@@ -3026,16 +3865,18 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
         });
 
         MockNode node;
+
+        const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
         InstallPersistentSettings(node, args);
 
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3049,17 +3890,19 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
             settings.rw_settings["listen"] = common::SettingsValue{false};
         });
 
         MockNode node;
+
+        const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
         InstallPersistentSettings(node, args);
 
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3071,18 +3914,20 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         ArgsManager args;
         args.SelectConfigNetwork("main");
         args.LockSettings([](common::Settings& settings) {
-            settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+            settings.ro_config[""]["listen"].emplace_back(true);
             settings.rw_settings["listen"] = common::SettingsValue{false};
-            settings.command_line_options["listen"].push_back(common::SettingsValue{true});
+            settings.command_line_options["listen"].emplace_back(true);
         });
 
         MockNode node;
+
+        const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
         InstallPersistentSettings(node, args);
 
         QTemporaryDir model_settings_dir;
         QVERIFY(model_settings_dir.isValid());
         PrepareRuntimePersistence(node, args, model_settings_dir);
-        OptionsQmlModel model(node, args);
+        SettingsModel model(node, args);
         QTRY_VERIFY(model.settingsReady());
         QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
@@ -3100,18 +3945,20 @@ void OptionsModelTests::runtimeCoreSettingStatusesRefreshAfterWrite()
     args.SelectConfigNetwork("main");
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.coreSettingStatus(QStringLiteral("maxmempool")).value("source").toString(), QString("default"));
 
-    QSignalSpy status_spy(&model, &OptionsQmlModel::coreSettingStatusesChanged);
+    QSignalSpy status_spy(&model, &SettingsModel::coreSettingStatusesChanged);
     model.setMaxMempoolSizeMB(456);
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(status_spy.count() > 0);
@@ -3125,17 +3972,19 @@ void OptionsModelTests::commandLineOverriddenSettingDoesNotWrite()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["listen"].push_back(common::SettingsValue{false});
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+        settings.command_line_options["listen"].emplace_back(false);
+        settings.ro_config[""]["listen"].emplace_back(true);
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
@@ -3156,13 +4005,13 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
         settings.rw_settings["server"] = common::SettingsValue{false};
-        settings.command_line_options["server"].push_back(common::SettingsValue{true});
+        settings.command_line_options["server"].emplace_back(true);
         settings.rw_settings["prune"] = MakeInt(0);
         settings.command_line_options["prune"].push_back(MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
         settings.rw_settings["proxy"] = common::SettingsValue{false};
-        settings.command_line_options["proxy"].push_back(common::SettingsValue{std::string{"10.0.0.1:9050"}});
+        settings.command_line_options["proxy"].emplace_back(std::string{"10.0.0.1:9050"});
         settings.rw_settings["onion"] = common::SettingsValue{false};
-        settings.command_line_options["onion"].push_back(common::SettingsValue{std::string{"127.0.0.1:9150"}});
+        settings.command_line_options["onion"].emplace_back(std::string{"127.0.0.1:9150"});
         settings.rw_settings["dbcache"] = MakeInt(300);
         settings.command_line_options["dbcache"].push_back(MakeInt(600));
         settings.rw_settings["par"] = MakeInt(1);
@@ -3170,16 +4019,18 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
         settings.rw_settings["maxmempool"] = MakeInt(300);
         settings.command_line_options["maxmempool"].push_back(MakeInt(500));
         settings.rw_settings["signer"] = common::SettingsValue{std::string{"saved-signer"}};
-        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"cli-signer"}});
+        settings.command_line_options["signer"].emplace_back(std::string{"cli-signer"});
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.server());
@@ -3203,25 +4054,27 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
 
 void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
 {
-
+    std::string parse_error;
+    {
     std::vector<std::string> proxy_argv = TestArgv();
     proxy_argv.emplace_back("-proxy=127.0.0.1:9050");
 
     ArgsManager proxy_args;
-    std::string parse_error;
     QVERIFY2(PrepareTestArgs(proxy_args, proxy_argv, parse_error), parse_error.c_str());
     SelectParams(proxy_args.GetChainType());
     proxy_args.SelectConfigNetwork(proxy_args.GetChainTypeString());
     InitParameterInteraction(proxy_args);
 
     MockNode proxy_node;
+
+    const auto drain_proxy_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(proxy_node, proxy_args);
     InstallRwSettingsWriter(proxy_node, proxy_args);
 
     QTemporaryDir proxy_model_settings_dir;
     QVERIFY(proxy_model_settings_dir.isValid());
     PrepareRuntimePersistence(proxy_node, proxy_args, proxy_model_settings_dir);
-    OptionsQmlModel proxy_model(proxy_node, proxy_args);
+    SettingsModel proxy_model(proxy_node, proxy_args);
     QTRY_VERIFY(proxy_model.settingsReady());
     QTRY_VERIFY(!proxy_model.settingsPending());
     QVERIFY(!proxy_model.listen());
@@ -3258,14 +4111,16 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     QVERIFY(!proxy_model.listen());
     QVERIFY(QFile::exists(proxy_model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     const auto disabled_write = ReadRwSetting(proxy_args, "listen");
-    QVERIFY(disabled_write.isNull());
+    QVERIFY(disabled_write.isBool());
+    QVERIFY(!disabled_write.get_bool());
 
     bool has_listen_override{true};
     proxy_args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
-    QVERIFY(!has_listen_override);
+    QVERIFY(has_listen_override);
 
+    } // Retire the first facade before its borrowed Node's global drain.
     std::vector<std::string> blocksonly_argv = TestArgv();
     blocksonly_argv.emplace_back("-blocksonly");
 
@@ -3276,12 +4131,14 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     InitParameterInteraction(blocksonly_args);
 
     MockNode blocksonly_node;
+
+    const auto drain_blocksonly_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(blocksonly_node, blocksonly_args);
 
     QTemporaryDir blocksonly_model_settings_dir;
     QVERIFY(blocksonly_model_settings_dir.isValid());
     PrepareRuntimePersistence(blocksonly_node, blocksonly_args, blocksonly_model_settings_dir);
-    OptionsQmlModel blocksonly_model(blocksonly_node, blocksonly_args);
+    SettingsModel blocksonly_model(blocksonly_node, blocksonly_args);
     QTRY_VERIFY(blocksonly_model.settingsReady());
     QTRY_VERIFY(!blocksonly_model.settingsPending());
     QCOMPARE(blocksonly_model.maxMempoolSizeMB(), static_cast<int>(DEFAULT_BLOCKSONLY_MAX_MEMPOOL_SIZE_MB));
@@ -3299,11 +4156,11 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
         settings.rw_settings["server"] = common::SettingsValue{false};
-        settings.command_line_options["server"].push_back(common::SettingsValue{true});
+        settings.command_line_options["server"].emplace_back(true);
         settings.rw_settings["prune"] = MakeInt(0);
         settings.command_line_options["prune"].push_back(MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
         settings.rw_settings["proxy"] = common::SettingsValue{std::string{"127.0.0.1:9050"}};
-        settings.command_line_options["proxy"].push_back(common::SettingsValue{std::string{"10.0.0.1:9050"}});
+        settings.command_line_options["proxy"].emplace_back(std::string{"10.0.0.1:9050"});
         settings.rw_settings["dbcache"] = MakeInt(300);
         settings.command_line_options["dbcache"].push_back(MakeInt(600));
         settings.rw_settings["par"] = MakeInt(1);
@@ -3311,16 +4168,18 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
         settings.rw_settings["maxmempool"] = MakeInt(300);
         settings.command_line_options["maxmempool"].push_back(MakeInt(500));
         settings.rw_settings["signer"] = common::SettingsValue{std::string{"saved-signer"}};
-        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"cli-signer"}});
+        settings.command_line_options["signer"].emplace_back(std::string{"cli-signer"});
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
 
@@ -3352,24 +4211,26 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
-void OptionsModelTests::revertingToConfigValueDeletesRwOverride()
+void OptionsModelTests::revertingToConfigValuePersistsExplicitOverride()
 {
 
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.ro_config[""]["listen"].push_back(common::SettingsValue{true});
+        settings.ro_config[""]["listen"].emplace_back(true);
         settings.rw_settings["listen"] = common::SettingsValue{false};
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
@@ -3378,10 +4239,11 @@ void OptionsModelTests::revertingToConfigValueDeletesRwOverride()
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     const auto listen_write = ReadRwSetting(args, "listen");
-    QVERIFY(listen_write.isNull());
+    QVERIFY(listen_write.isBool());
+    QVERIFY(listen_write.get_bool());
 }
 
-void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
+void OptionsModelTests::revertingToDefaultValuePersistsExplicitOverride()
 {
 
     ArgsManager args;
@@ -3391,13 +4253,15 @@ void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
@@ -3406,7 +4270,10 @@ void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     const auto mempool_write = ReadRwSetting(args, "maxmempool");
-    QVERIFY(mempool_write.isNull());
+    // maxmempool is a native integer setting; only dbcache/par/prune use
+    // the legacy numeric-string persistence representation.
+    QVERIFY(mempool_write.isNum());
+    QCOMPARE(mempool_write.getInt<int>(), DEFAULT_MAX_MEMPOOL_SIZE_MB);
 }
 
 void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
@@ -3420,16 +4287,18 @@ void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
     ArgsManager args;
     args.SelectConfigNetwork("main");
     args.LockSettings([](common::Settings& settings) {
-        settings.command_line_options["lang"].push_back(common::SettingsValue{std::string{"fr"}});
+        settings.command_line_options["lang"].emplace_back(std::string{"fr"});
     });
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
 
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QString("fr"));
@@ -3445,6 +4314,90 @@ void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
     } else {
         settings.remove(SettingsKeys::LANGUAGE);
     }
+}
+
+void OptionsModelTests::failedProfileHandoffRetainsLegacyMigrationSource_data()
+{
+    QTest::addColumn<bool>("invalid_batch");
+    QTest::newRow("replacement-write-fails") << false;
+    QTest::newRow("whole-setup-validation-rejects") << true;
+}
+
+void OptionsModelTests::failedProfileHandoffRetainsLegacyMigrationSource()
+{
+    QFETCH(bool, invalid_batch);
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"), QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue(QStringLiteral("nDatabaseCache"), 600);
+    legacy.settings().setValue(QStringLiteral("fListen"), false);
+    legacy.settings().sync();
+    QCOMPARE(legacy.settings().status(), QSettings::NoError);
+    QTemporaryDir directory; QVERIFY(directory.isValid());
+    ArgsManager args; PrepareArgsForDataDir(args, directory.path());
+    if (invalid_batch) {
+        auto values = QmlCoreSettings::LoadEffectiveValues(args);
+        values.proxy_enabled = true;
+        values.proxy_address = QStringLiteral("invalid:0");
+        QString error;
+        QVERIFY(!QmlOnboardingSettings::ApplyToArgs(args, directory.path(), {QStringLiteral("proxy")}, values, &error));
+        QVERIFY(!error.isEmpty());
+    } else {
+        QVERIFY(EnsureReplacementParent(args));
+        fs::path target; QVERIFY(args.GetSettingsPath(&target));
+        QVERIFY(QDir{}.mkdir(QString::fromStdString(target.utf8string())+QStringLiteral(".tmp")));
+        const auto migration = QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist);
+        QVERIFY(migration.settings_changed);
+        QVERIFY2(migration.error.isEmpty(), qPrintable(migration.error));
+        std::vector<std::string> errors;
+        QVERIFY(!args.WriteSettingsFile(&errors));
+        QVERIFY(!errors.empty());
+    }
+    legacy.settings().sync();
+    QCOMPARE(legacy.settings().value(QStringLiteral("nDatabaseCache")).toInt(), 600);
+    QVERIFY(legacy.settings().contains(QStringLiteral("fListen")));
+    QCOMPARE(legacy.settings().value(QStringLiteral("fListen")).toBool(), false);
+}
+
+// #1073: onboarding whose settings.json.tmp cannot be created must keep the
+// legacy proxy, and a retry once the target is writable migrates it.
+void OptionsModelTests::failedOnboardingWriteKeepsLegacyProxyForRetry()
+{
+    SavedGuiDataDirSettings saved_settings;
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"), QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue(QStringLiteral("fUseProxy"), true);
+    legacy.settings().setValue(QStringLiteral("addrProxy"), QStringLiteral("10.23.45.67:9150"));
+    legacy.settings().sync();
+    QTemporaryDir directory; QVERIFY(directory.isValid());
+    // Each attempt is a fresh onboarding: preview, then persist its values.
+    const auto attempt = [&] {
+        const auto preview = PreviewOnNative(TestArgvWithDataDir(directory.path()), /*can_listen_ipc=*/false, directory.path());
+        ArgsManager args; PrepareArgsForDataDir(args, directory.path());
+        QmlOnboardingSettings::ApplyRequest request; request.data_dir = {directory.path(), QmlOnboardingSettings::DataDirSource::ExplicitArg};
+        request.values = preview.values;
+        return std::pair{preview.values, QmlOnboardingSettings::PersistProfile(args, request)};
+    };
+    fs::path target;
+    {ArgsManager args; PrepareArgsForDataDir(args, directory.path()); QVERIFY(EnsureReplacementParent(args)); QVERIFY(args.GetSettingsPath(&target));}
+    const auto settings_file = QString::fromStdString(target.utf8string());
+    // A directory in its place makes Core's settings.json.tmp write fail.
+    QVERIFY(QDir{}.mkdir(settings_file + QStringLiteral(".tmp")));
+    const auto [preview, failed] = attempt();
+    QVERIFY(preview.proxy_enabled); QCOMPARE(preview.proxy_address, QStringLiteral("10.23.45.67:9150"));
+    QVERIFY(!failed.completed); QVERIFY(!failed.replacement_written); QVERIFY(!failed.error.isEmpty());
+    QVERIFY(!QFileInfo::exists(settings_file));
+    legacy.settings().sync();
+    QVERIFY(legacy.settings().value(QStringLiteral("fUseProxy")).toBool());
+    QCOMPARE(legacy.settings().value(QStringLiteral("addrProxy")).toString(), QStringLiteral("10.23.45.67:9150"));
+
+    QVERIFY(QDir{}.rmdir(settings_file + QStringLiteral(".tmp")));
+    const auto [retry_preview, retried] = attempt();
+    QVERIFY(retry_preview.proxy_enabled); QCOMPARE(retry_preview.proxy_address, QStringLiteral("10.23.45.67:9150"));
+    QVERIFY2(retried.completed, qPrintable(retried.error)); QVERIFY(retried.replacement_written);
+    ArgsManager args; PrepareArgsForDataDir(args, directory.path()); std::vector<std::string> errors; QVERIFY(args.ReadSettingsFile(&errors));
+    QCOMPARE(QString::fromStdString(args.GetPersistentSetting("proxy").get_str()), QStringLiteral("10.23.45.67:9150"));
+    legacy.settings().sync();
+    QVERIFY(!legacy.settings().contains(QStringLiteral("fUseProxy"))); QVERIFY(!legacy.settings().contains(QStringLiteral("addrProxy")));
 }
 
 void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
@@ -3475,6 +4428,11 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
         QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist)
     };
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    std::vector<std::string> replacement_errors;
+    QVERIFY(EnsureReplacementParent(args));
+    QVERIFY(args.WriteSettingsFile(&replacement_errors));
+    QString cleanup_error;
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,result,&cleanup_error),qPrintable(cleanup_error));
     QVERIFY(result.settings_changed);
 
     common::SettingsValue dbcache;
@@ -3497,9 +4455,9 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
         proxy = core_settings.rw_settings.at("proxy");
         onion_prev = core_settings.rw_settings.at("onion-prev");
         language = core_settings.rw_settings.at("lang");
-        has_natpmp = core_settings.rw_settings.count("natpmp") > 0;
-        has_onion = core_settings.rw_settings.count("onion") > 0;
-        has_prune_prev = core_settings.rw_settings.count("prune-prev") > 0;
+        has_natpmp = core_settings.rw_settings.contains("natpmp");
+        has_onion = core_settings.rw_settings.contains("onion");
+        has_prune_prev = core_settings.rw_settings.contains("prune-prev");
     });
 
     QVERIFY(dbcache.isStr());
@@ -3531,11 +4489,13 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
     QVERIFY(!settings.contains(QStringLiteral("language")));
 
     MockNode node;
+
+    const auto drain_node_owner=DrainExecutorsBeforeNativeOwnerDestruction();
     InstallPersistentSettings(node, args);
     QTemporaryDir model_settings_dir;
     QVERIFY(model_settings_dir.isValid());
     PrepareRuntimePersistence(node, args, model_settings_dir);
-    OptionsQmlModel model(node, args);
+    SettingsModel model(node, args);
     QTRY_VERIFY(model.settingsReady());
     QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QStringLiteral("de"));
@@ -3553,7 +4513,7 @@ void OptionsModelTests::legacyQtSettingsPreviewDoesNotRemoveQSettings()
     QTemporaryDir data_dir;
     QVERIFY(data_dir.isValid());
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false, data_dir.path())
     };
 
     QVERIFY2(preview.ok, qPrintable(preview.error));
@@ -3587,6 +4547,11 @@ void OptionsModelTests::legacyQtSettingsCommandLineOverrideStillMigratesPersiste
         QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist)
     };
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    std::vector<std::string> replacement_errors;
+    QVERIFY(EnsureReplacementParent(args));
+    QVERIFY(args.WriteSettingsFile(&replacement_errors));
+    QString cleanup_error;
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,result,&cleanup_error),qPrintable(cleanup_error));
     QVERIFY(result.settings_changed);
 
     QCOMPARE(SettingToBool(args.GetPersistentSetting("listen")).value(), false);
@@ -3619,14 +4584,19 @@ void OptionsModelTests::legacyQtSettingsBitcoinConfBlocksMigration()
         QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist)
     };
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    std::vector<std::string> replacement_errors;
+    QVERIFY(EnsureReplacementParent(args));
+    QVERIFY(args.WriteSettingsFile(&replacement_errors));
+    QString cleanup_error;
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,result,&cleanup_error),qPrintable(cleanup_error));
     QVERIFY(!result.settings_changed);
 
     bool has_listen_override{true};
     args.LockSettings([&](common::Settings& core_settings) {
-        has_listen_override = core_settings.rw_settings.count("listen") > 0;
+        has_listen_override = core_settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
-    QVERIFY(!legacy_settings.settings().contains(QStringLiteral("fListen")));
+    QVERIFY(legacy_settings.settings().contains(QStringLiteral("fListen"))); // Unimported source remains recoverable.
 }
 
 void OptionsModelTests::onboardingApplyMigratesLegacySettingsBeforeTouchedOverrides()
@@ -3649,21 +4619,25 @@ void OptionsModelTests::onboardingApplyMigratesLegacySettingsBeforeTouchedOverri
     QVERIFY(model.server());
 
     model.setListen(true);
+    QVERIFY(AwaitCoreSettled(model));
     QVERIFY(model.listen());
 
     ArgsManager args;
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
     QString apply_error;
-    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QVERIFY2(ApplyOnboardingModelRequest(model,args,&apply_error), qPrintable(apply_error));
 
     bool has_listen_override{true};
-    common::SettingsValue server;
+    common::SettingsValue listen, server;
     args.LockSettings([&](common::Settings& core_settings) {
-        has_listen_override = core_settings.rw_settings.count("listen") > 0;
+        has_listen_override = core_settings.rw_settings.contains("listen");
+        listen = core_settings.rw_settings.at("listen");
         server = core_settings.rw_settings.at("server");
     });
-    QVERIFY(!has_listen_override);
+    // R33 retains an explicit GUI command even when it equals the default.
+    QVERIFY(has_listen_override);
+    QCOMPARE(SettingToBool(listen).value(), true);
     QCOMPARE(SettingToBool(server).value(), true);
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("fListen")));
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("server")));
@@ -3680,7 +4654,7 @@ void OptionsModelTests::onboardingPreviewHelperReadsSelectedDatadirConfig()
     conf.close();
 
     const QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(TestArgv(), /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(TestArgv(), /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QCOMPARE(preview.core_setting_statuses.value(QStringLiteral("listen")).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("bitcoin_conf"));
@@ -3729,11 +4703,11 @@ void OptionsModelTests::onboardingApplyDoesNotCopyUntouchedConfig()
     std::string parse_error;
     QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
     QString apply_error;
-    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QVERIFY2(ApplyOnboardingModelRequest(model,args,&apply_error), qPrintable(apply_error));
 
     bool has_listen_override{false};
     args.LockSettings([&](common::Settings& settings) {
-        has_listen_override = settings.rw_settings.count("listen") > 0;
+        has_listen_override = settings.rw_settings.contains("listen");
     });
     QVERIFY(!has_listen_override);
 }
@@ -3751,7 +4725,7 @@ void OptionsModelTests::onboardingApplyWritesTouchedConfigOverride()
 
     const std::vector<std::string> argv = TestArgv();
     QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(!preview.values.listen);
@@ -3786,7 +4760,7 @@ void OptionsModelTests::onboardingApplyWritesTouchedParameterInteractionOverride
 
     const std::vector<std::string> argv = TestArgv();
     QmlOnboardingSettings::PreviewResult preview{
-        QmlOnboardingSettings::Preview(argv, /*can_listen_ipc=*/false, data_dir.path())
+        PreviewOnNative(argv, /*can_listen_ipc=*/false, data_dir.path())
     };
     QVERIFY2(preview.ok, qPrintable(preview.error));
     QVERIFY(preview.values.proxy_enabled);
@@ -3812,9 +4786,9 @@ void OptionsModelTests::onboardingApplyWritesTouchedParameterInteractionOverride
         if (const auto* value = common::FindKey(settings.rw_settings, "listen")) {
             listen_override = *value;
         }
-        has_forced_listen = settings.forced_settings.count("listen") > 0;
-        has_forced_natpmp = settings.forced_settings.count("natpmp") > 0;
-        has_forced_discover = settings.forced_settings.count("discover") > 0;
+        has_forced_listen = settings.forced_settings.contains("listen");
+        has_forced_natpmp = settings.forced_settings.contains("natpmp");
+        has_forced_discover = settings.forced_settings.contains("discover");
     });
 
     QVERIFY(listen_override.isBool());
@@ -3824,10 +4798,204 @@ void OptionsModelTests::onboardingApplyWritesTouchedParameterInteractionOverride
     QVERIFY(!has_forced_discover);
 }
 
+
+void OptionsModelTests::coreApiHistoricalCacheMigration_data()
+{
+    QTest::addColumn<int>("version"); QTest::addColumn<int>("cache"); QTest::addColumn<qlonglong>("expected"); QTest::addColumn<bool>("persisted");
+    QTest::newRow("old-default") << 120000 << 100 << static_cast<qlonglong>(node::GetDefaultDBCache() / 1_MiB) << false;
+    QTest::newRow("old-custom") << 120000 << 101 << qlonglong{101} << true;
+    QTest::newRow("new-custom") << 130000 << 100 << qlonglong{100} << true;
+}
+void OptionsModelTests::coreApiHistoricalCacheMigration()
+{
+    QFETCH(int, version); QFETCH(int, cache); QFETCH(qlonglong, expected); QFETCH(bool, persisted);
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"), QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue(QStringLiteral("nSettingsVersion"), version);
+    legacy.settings().setValue(QStringLiteral("nDatabaseCache"), cache);
+    QTemporaryDir directory; QVERIFY(directory.isValid());
+    ArgsManager args; PrepareArgsForDataDir(args, directory.path());
+    const auto result = QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist);
+    QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+    std::vector<std::string> replacement_errors;
+    QVERIFY(EnsureReplacementParent(args));
+    QVERIFY(args.WriteSettingsFile(&replacement_errors));
+    QString cleanup_error;
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,result,&cleanup_error),qPrintable(cleanup_error));
+    QCOMPARE(result.settings_changed, persisted);
+    const auto stored = args.GetPersistentSetting("dbcache");
+    if (persisted) QCOMPARE(SettingTo<int64_t>(stored).value_or(-1), expected);
+    else {
+        QVERIFY(stored.isNull());
+        QCOMPARE(SettingTo<int64_t>(QmlCoreSettings::DefaultCoreSettingValue(QStringLiteral("dbcache"))).value_or(-1), expected);
+    }
+    QVERIFY(!legacy.settings().contains(QStringLiteral("nDatabaseCache")));
+}
+
+void OptionsModelTests::knownSavedProfileFinishesOnlyRemainingDirectoryAndCleanup()
+{
+    QTemporaryDir directory;QVERIFY(directory.isValid());
+    static bool reject=true;
+    static const auto format=QSettings::registerFormat(QStringLiteral("r35-recoverable-write"),
+        [](QIODevice& device,QSettings::SettingsMap& values){if(device.size()==0)return true;QDataStream stream{&device};stream>>values;return stream.status()==QDataStream::Ok;},
+        [](QIODevice& device,const QSettings::SettingsMap& values){if(reject)return false;QDataStream stream{&device};stream<<values;return stream.status()==QDataStream::Ok;});
+    QVERIFY(format!=QSettings::InvalidFormat);QSettings::setPath(format,QSettings::UserScope,directory.filePath(QStringLiteral("gui")));
+    SavedSettingsFormat saved_format{format};reject=true;const auto restore=qScopeGuard([]{reject=true;});
+    const auto config_path=directory.filePath(QStringLiteral("bitcoin.conf"));QFile config{config_path};QVERIFY(config.open(QIODevice::WriteOnly));
+    QVERIFY(config.write(QStringLiteral("regtest=1\ndatadir=%1\n").arg(directory.path()).toUtf8())>0);config.close();
+    ArgsManager args;std::string error;QVERIFY2(PrepareTestArgs(args,{"bitcoinqml","-conf="+config_path.toStdString()},error),error.c_str());
+    QmlOnboardingSettings::ApplyRequest request;request.data_dir={QmlDataDir::DefaultDataDirString(),QmlOnboardingSettings::DataDirSource::UserSelection};
+    auto original=QmlOnboardingSettings::PersistProfile(args,request);
+    QVERIFY(!original.completed);QVERIFY(original.replacement_written);QVERIFY(!original.directory_saved);QVERIFY(!original.error.isEmpty());
+    fs::path path;QVERIFY(args.GetSettingsPath(&path));QFile file{QString::fromStdString(path.utf8string())};QVERIFY(file.open(QIODevice::ReadOnly));const auto replacement=file.readAll();file.close();
+    reject=false;const auto finished=QmlOnboardingSettings::CompleteProfile(args,original);
+    QVERIFY2(finished.completed,qPrintable(finished.error));QVERIFY(finished.directory_saved);QVERIFY(finished.cleanup_completed);
+    QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),replacement);
+}
+void OptionsModelTests::capturedResetKeepsOriginalBackupAcrossCompletion()
+{
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"),QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt-regtest")};
+    SavedNamedSettings legacy_default{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt")};
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;PrepareArgsForDataDir(args,directory.path());
+    QmlCoreSettings::SetRwSetting(args,QStringLiteral("dbcache"),common::SettingsValue{int64_t{512}});
+    QmlCoreSettings::SetRwSetting(args,QStringLiteral("prune"),common::SettingsValue{int64_t{953}});
+    std::vector<std::string> errors;QVERIFY(EnsureReplacementParent(args));QVERIFY(args.WriteSettingsFile(&errors));
+    fs::path path;QVERIFY(args.GetSettingsPath(&path));QFile before{QString::fromStdString(path.utf8string())};QVERIFY(before.open(QIODevice::ReadOnly));const auto original_bytes=before.readAll();before.close();
+    args.ForceSetArg("-resetguisettings","1");QmlOnboardingSettings::ApplyRequest request;request.data_dir={directory.path(),QmlOnboardingSettings::DataDirSource::ExplicitArg};
+    const auto original=QmlOnboardingSettings::PersistProfile(args,request);QVERIFY2(original.completed,qPrintable(original.error));
+    const auto complete=QmlOnboardingSettings::CompleteProfile(args,original);QVERIFY2(complete.completed,qPrintable(complete.error));
+    QFile backup{QString::fromStdString(path.utf8string())+QStringLiteral(".bak")};QVERIFY(backup.open(QIODevice::ReadOnly));QCOMPARE(backup.readAll(),original_bytes);
+    QVERIFY(args.GetPersistentSetting("dbcache").isNull());QVERIFY(args.GetPersistentSetting("prune").isNull());
+}
+void OptionsModelTests::capturedResetRejectsChangedLegacySource()
+{
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"),QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt-regtest")};
+    SavedNamedSettings legacy_default{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt")};
+    legacy.settings().setValue(QStringLiteral("nDatabaseCache"),600);legacy.settings().sync();
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;PrepareArgsForDataDir(args,directory.path());
+    const auto reset=QmlLegacySettings::CaptureResetSettings(args);QVERIFY(reset.error.isEmpty());
+    QmlCoreSettings::SetRwSetting(args,QStringLiteral("qml_onboarded"),common::SettingsValue{false});
+    QmlLegacySettings::CaptureMigrationTarget(args,reset);std::vector<std::string> errors;QVERIFY(EnsureReplacementParent(args));QVERIFY(args.WriteSettingsFile(&errors));
+    legacy.settings().setValue(QStringLiteral("nDatabaseCache"),601);legacy.settings().sync();QString error;
+    QVERIFY(!QmlLegacySettings::CompleteCoreSettingsMigration(args,reset,&error));QVERIFY(!error.isEmpty());
+    QCOMPARE(legacy.settings().value(QStringLiteral("nDatabaseCache")).toInt(),601);
+}
+
+void OptionsModelTests::corruptStoredPreferenceFailsWithoutDefaultFallback()
+{
+    SavedSettingsFormat format{QSettings::IniFormat};const auto application=QCoreApplication::applicationName();
+    QCoreApplication::setApplicationName(QStringLiteral("R35MalformedStoredProfile"));
+    const auto restore=qScopeGuard([&]{QCoreApplication::setApplicationName(application);});
+    QSettings settings;const auto path=settings.fileName();QVERIFY(QDir{}.mkpath(QFileInfo(path).absolutePath()));
+    QFile corrupt{path};QVERIFY(corrupt.open(QIODevice::WriteOnly));QVERIFY(corrupt.write("[unterminated\nstrDataDir=/original/profile\n")>0);corrupt.close();
+    const auto remove=qScopeGuard([&]{QFile::remove(path);});
+    const auto source=QmlDataDir::ReadGuiDataDirWithSource();QVERIFY(!source.error.isEmpty());QVERIFY(source.path.isEmpty());
+    const auto startup=QmlOnboardingSettings::ResolveOnboardingStartupStatus({"bitcoin-qt","-regtest"},false);
+    QVERIFY(!startup.ok);QVERIFY(!startup.error.isEmpty());
+}
+
+void OptionsModelTests::migrationChecksExactReplacementAndSources_data()
+{
+    QTest::addColumn<QString>("change");
+    for(const auto* name:{"replacement-missing","replacement-changed","proxy-enabled-inserted","source-version-changed","source-value-changed"})
+        QTest::newRow(name)<<QString::fromLatin1(name);
+}
+void OptionsModelTests::migrationChecksExactReplacementAndSources()
+{
+    QFETCH(QString,change);
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"),QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue("nDatabaseCache",600);
+    legacy.settings().setValue("addrProxy",QStringLiteral("10.23.45.67:9150"));legacy.settings().sync();
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;PrepareArgsForDataDir(args,directory.path());
+    const auto migration=QmlLegacySettings::MigrateCoreSettings(args,QmlLegacySettings::MigrationMode::Persist);
+    QVERIFY2(migration.error.isEmpty(),qPrintable(migration.error));QVERIFY(migration.settings_changed);
+    // Source remains intact even after staging has supplied Core's next values.
+    QCOMPARE(legacy.settings().value("nDatabaseCache").toInt(),600);
+    std::vector<std::string> errors;QVERIFY(EnsureReplacementParent(args));QVERIFY(args.WriteSettingsFile(&errors));
+    fs::path target;QVERIFY(args.GetSettingsPath(&target));
+    if(change=="replacement-missing")QVERIFY(QFile::remove(QString::fromStdString(target.utf8string())));
+    else if(change=="replacement-changed"){QmlCoreSettings::SetRwSetting(args,QStringLiteral("dbcache"),common::SettingsValue{int64_t{700}});QVERIFY(args.WriteSettingsFile(&errors));}
+    else if(change=="proxy-enabled-inserted")legacy.settings().setValue("fUseProxy",true);
+    else if(change=="source-version-changed")legacy.settings().setValue("nSettingsVersion",1);
+    else legacy.settings().setValue("nDatabaseCache",601);
+    legacy.settings().sync();QString error;
+    QVERIFY(!QmlLegacySettings::CompleteCoreSettingsMigration(args,migration,&error));QVERIFY(!error.isEmpty());
+    QVERIFY(legacy.settings().contains("nDatabaseCache"));QVERIFY(legacy.settings().contains("addrProxy"));
+}
+void OptionsModelTests::migrationCleanupOnlyFollowsDurableWriteAndIsIdempotent()
+{
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"),QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue("nDatabaseCache",600);legacy.settings().setValue("fListen",false);legacy.settings().sync();
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;PrepareArgsForDataDir(args,directory.path());
+    const auto migration=QmlLegacySettings::MigrateCoreSettings(args,QmlLegacySettings::MigrationMode::Persist);
+    QVERIFY(migration.settings_changed);QString error;
+    QVERIFY(!QmlLegacySettings::CompleteCoreSettingsMigration(args,migration,&error));
+    QCOMPARE(legacy.settings().value("nDatabaseCache").toInt(),600);
+    std::vector<std::string> errors;QVERIFY(EnsureReplacementParent(args));QVERIFY(args.WriteSettingsFile(&errors));
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,migration,&error),qPrintable(error));
+    legacy.settings().sync();QVERIFY(!legacy.settings().contains("nDatabaseCache"));
+    QVERIFY(!legacy.settings().contains("fListen"));
+    QVERIFY2(QmlLegacySettings::CompleteCoreSettingsMigration(args,migration,&error),qPrintable(error));
+    QVERIFY(args.ReadSettingsFile(&errors));
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("dbcache")).value_or(-1),int64_t{600});
+    QCOMPARE(SettingToBool(args.GetPersistentSetting("listen")).value_or(true),false);
+}
+void OptionsModelTests::profileRecoveryDoesNotReplayChangedReplacement()
+{
+    SavedGuiDataDirSettings saved_settings;
+    SavedNamedSettings current{QStringLiteral("BitcoinCore"),QStringLiteral("BitcoinCore-App-regtest")};
+    SavedNamedSettings legacy{QStringLiteral("Bitcoin"),QStringLiteral("Bitcoin-Qt-regtest")};
+    legacy.settings().setValue("nDatabaseCache",600);legacy.settings().sync();
+    QTemporaryDir directory;QVERIFY(directory.isValid());ArgsManager args;PrepareArgsForDataDir(args,directory.path());
+    QmlOnboardingSettings::ApplyRequest request;request.data_dir={directory.path(),QmlOnboardingSettings::DataDirSource::ExplicitArg};
+    request.values=QmlCoreSettings::LoadEffectiveValues(args);
+    const auto original=QmlOnboardingSettings::PersistProfile(args,request);
+    QVERIFY2(original.completed,qPrintable(original.error));QVERIFY(original.replacement_written);
+    QmlCoreSettings::SetRwSetting(args,QStringLiteral("dbcache"),common::SettingsValue{int64_t{701}});
+    std::vector<std::string> errors;QVERIFY(EnsureReplacementParent(args));QVERIFY(args.WriteSettingsFile(&errors));
+    const auto queried=QmlOnboardingSettings::QueryProfile(args,original);
+    QVERIFY(!queried.completed);QVERIFY(queried.replacement_written);QVERIFY(!queried.error.isEmpty());
+    const auto completed=QmlOnboardingSettings::CompleteProfile(args,original);
+    QVERIFY(!completed.completed);QVERIFY(completed.replacement_written);
+    QVERIFY(args.ReadSettingsFile(&errors));QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("dbcache")).value_or(-1),int64_t{701});
+}
+void OptionsModelTests::savedProfileReadFailureNeverSelectsDefault_data()
+{
+    QTest::addColumn<QVariant>("stored");
+    QTest::newRow("empty-present")<<QVariant{QStringLiteral("")};
+    QTest::newRow("wrong-type")<<QVariant{42};
+    QTest::newRow("unavailable-drive")<<QVariant{QStringLiteral("/a-disconnected-bitcoin-profile-r35")};
+}
+void OptionsModelTests::savedProfileReadFailureNeverSelectsDefault()
+{
+    QFETCH(QVariant,stored);SavedGuiDataDirSettings saved;QSettings settings;
+    settings.setValue(SettingsKeys::DATA_DIR,stored);settings.sync();
+    const auto status=QmlOnboardingSettings::ResolveOnboardingStartupStatus({"bitcoin-qt","-regtest"},false);
+    QVERIFY(!status.ok);QVERIFY(!status.error.isEmpty());
+    QCOMPARE(settings.value(SettingsKeys::DATA_DIR),stored);
+    if(stored.typeId()==QMetaType::QString&&!stored.toString().isEmpty())QVERIFY(status.error.contains(stored.toString()));
+}
+void OptionsModelTests::legacyNativeOrganizationDomainMatchesWriter()
+{
+    // This is a real NativeFormat component control, including Darwin's
+    // organizationDomain selection. Restore the one historical key exactly.
+    SavedSettingsFormat format{QSettings::NativeFormat};
+    const auto organization=QCoreApplication::organizationName();const auto domain=QCoreApplication::organizationDomain();const auto application=QCoreApplication::applicationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("Bitcoin"));QCoreApplication::setOrganizationDomain(QStringLiteral("bitcoin.org"));QCoreApplication::setApplicationName(QStringLiteral("Bitcoin-Qt"));
+    QSettings writer;const bool present=writer.contains(SettingsKeys::DATA_DIR);const auto original=writer.value(SettingsKeys::DATA_DIR);
+    const auto restore=qScopeGuard([&]{if(present)writer.setValue(SettingsKeys::DATA_DIR,original);else writer.remove(SettingsKeys::DATA_DIR);writer.sync();QCoreApplication::setOrganizationName(organization);QCoreApplication::setOrganizationDomain(domain);QCoreApplication::setApplicationName(application);});
+    QTemporaryDir directory;QVERIFY(directory.isValid());writer.setValue(SettingsKeys::DATA_DIR,directory.path());writer.sync();QCOMPARE(writer.status(),QSettings::NoError);
+    QCOMPARE(QmlLegacySettings::ReadLegacyGuiDataDir(),directory.path());
+}
+
 #ifdef BITCOINQML_NO_TEST_MAIN
 #include <test/qt_test_registry.h>
 BITCOINQML_REGISTER_QT_TEST(OptionsModelTests)
 #else
 QTEST_MAIN(OptionsModelTests)
 #endif
-#include "test_options_model.moc"
+#include <test_options_model.moc>

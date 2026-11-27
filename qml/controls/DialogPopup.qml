@@ -156,7 +156,7 @@ Popup {
         if (!focused || contains(focused)) return
         returnFocusItem = focused
         returnFocusWindow = window
-        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason
+        returnFocusReason = focused.visualFocus === true ? Qt.TabFocusReason : Qt.OtherFocusReason // qmllint disable missing-property
         let page = focused
         while (page && !isPage(page)) page = page.parent
         returnFocusPage = page
@@ -193,6 +193,13 @@ Popup {
         const target = initialFocusItem ? initialFocusItem : contentItem
         if (target) target.forceActiveFocus(Qt.PopupFocusReason)
     }
+    // Focus the content unless focus is already inside the popup, for
+    // example on a field the user tabbed to during the enter transition.
+    function focusContentUnlessInside() {
+        const window = contentItem ? contentItem.Window.window : null
+        const focused = window ? window.activeFocusItem : null
+        if (!focused || !contains(focused)) focusContent()
+    }
 
     onAboutToShow: {
         const window = contentItem ? contentItem.Window.window : null
@@ -210,7 +217,11 @@ Popup {
         }
         exiting = false
     }
-    onOpened: focusContent()
+    // Take the keyboard as soon as the popup is shown, not when its enter
+    // transition ends: keys typed during the fade-in otherwise went to the
+    // field behind it. Focus already inside the popup is left where it is.
+    onVisibleChanged: if (visible && !exiting) focusContentUnlessInside()
+    onOpened: focusContentUnlessInside()
     onAboutToHide: exiting = true
     onClosed: {
         exiting = false

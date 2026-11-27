@@ -27,43 +27,33 @@ FormSection {
     property color feeColor: Theme.color.info
     property color dataColor: Theme.color.neutral8
     property color unknownColor: Theme.color.neutral6
-    readonly property var inputEntries: flow.inputs || []
-    // Select the visible outputs in one binding. Separate group/threshold
-    // bindings can briefly expose every output while a new snapshot arrives.
-    readonly property var outputPresentation: {
-        const snapshot = flow
-        const group = FlowLayout.outputGroup(snapshot.outputs || [])
-        const collapsible = (snapshot.outputs || []).length > 10 && group !== null
-        return { group: group, collapsible: collapsible,
-            entries: FlowLayout.outputs(snapshot, collapsible && !outputsExpanded ? group : null) }
-    }
-    readonly property var nonWalletOutputGroup: outputPresentation.group
-    readonly property bool canCollapseOutputs: outputPresentation.collapsible
-    readonly property var outputEntries: outputPresentation.entries.map(function(entry) {
-        return entry.kind === "output-group" && nonWalletOutputGroup
-            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.localizedDisplayWithUnit : ""}) : entry
-    })
+    readonly property var presentation: flow.presentation || ({})
+    readonly property var inputEntries: presentation.inputs || []
+    readonly property bool canCollapseOutputs: !!presentation.canCollapseOutputs
+    readonly property var outputEntries: (canCollapseOutputs && !outputsExpanded
+        ? presentation.collapsedOutputs : presentation.expandedOutputs) || []
+    readonly property var presentationFacts: (canCollapseOutputs && !outputsExpanded
+        ? presentation.collapsedFacts : presentation.expandedFacts) || ({})
     readonly property real diagramWidth: Math.max(560, width - 48)
     readonly property real inputCardWidth: diagramWidth * 0.35
     readonly property real outputCardWidth: diagramWidth * 0.35
     property var nodeMeasurements: ({ inputs: [], outputs: [] })
     property var ribbonObjects: []
     readonly property var geometry: FlowLayout.calculate(inputEntries, outputEntries,
-        nodeMeasurements.inputs, nodeMeasurements.outputs, diagramWidth, !!flow.complete)
+        nodeMeasurements.inputs, nodeMeasurements.outputs, diagramWidth, presentationFacts)
     signal paymentRequestRequested(string requestId)
     onTransactionIdChanged: outputsExpanded = false
     Component.onDestruction: ribbonInstantiator.active = false
-
-    BitcoinAmount {
-        id: groupedAmount
-        unit: root.displayUnit
-        satoshi: root.nonWalletOutputGroup && root.nonWalletOutputGroup.amountKnown ? root.nonWalletOutputGroup.amountSat : 0
-    }
 
     function updateNodeMeasurements() {
         // Coalesce a layout pass into one geometry update, rather than
         // recalculating every ribbon once for each input/output card.
         nodeMeasurements = { inputs: nodeHeights(inputs), outputs: nodeHeights(outputs) }
+    }
+    Timer {
+        id: measurementUpdate
+        interval: 0
+        onTriggered: root.updateNodeMeasurements()
     }
     function nodeHeights(repeater) {
         const result = []
@@ -82,13 +72,25 @@ FormSection {
     description: (inputCount === 1 ? qsTr("1 input") : qsTr("%1 inputs").arg(inputCount)) + " · "
         + (outputCount === 1 ? qsTr("1 output") : qsTr("%1 outputs").arg(outputCount))
     descriptionObjectName: "transactionFlowCounts"
-    readonly property int inputCount: flow.inputCount || inputEntries.length
-    readonly property int outputCount: flow.outputCount || (flow.outputs || []).length
+    // Counts describe the whole transaction; the bounded presentation may group entries.
+    readonly property int inputCount: root.presentation.inputCount || 0
+    readonly property int outputCount: root.presentation.outputCount || 0
     headerTrailingItem: LinkButton {
         objectName: "transactionFlowOutputsToggle"
         visible: root.canCollapseOutputs
-        text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
+        text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs")
+            : root.presentation.presentationLimited ? qsTr("Expand output preview") : qsTr("Show all outputs")
         onClicked: root.outputsExpanded = !root.outputsExpanded
+    }
+
+    CoreText {
+        objectName: "transactionFlowPreviewNotice"
+        visible: !!root.presentation.presentationLimited
+        Layout.fillWidth: true
+        text: qsTr("This diagram groups additional entries. Full inputs and outputs are listed in transaction details.")
+        color: Theme.color.neutral7
+        textStyle: Theme.text.caption
+        wrap: true
     }
 
     Item {
@@ -121,12 +123,6 @@ FormSection {
                         y: 36
                         width: root.diagramWidth
                         height: root.geometry.height
-                        Shape {
-                            id: ribbons
-                            objectName: "transactionFlowRibbons"
-                            anchors.fill: parent
-                            data: root.ribbonObjects
-                        }
                         Instantiator {
                             id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
@@ -149,13 +145,22 @@ FormSection {
                                 root.ribbonObjects = root.ribbonObjects.filter(function(item) { return item !== object })
                             }
                         }
+                        // Release the Instantiator's model references before Shape
+                        // destroys the paths it owns. Reversing this declaration
+                        // order leaks the delegate contexts in Qt 6.10.2.
+                        Shape {
+                            id: ribbons
+                            objectName: "transactionFlowRibbons"
+                            anchors.fill: parent
+                            data: root.ribbonObjects
+                        }
                         // Keep the cards alive when unit changes publish new
                         // snapshots, so amount labels retain their previous frame.
                         Repeater {
                             id: inputs
                             model: root.inputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowInput_" + index
@@ -164,7 +169,7 @@ FormSection {
                                 hidesAmount: root.hidesAmounts
                                 input: true
                                 width: root.inputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 y: root.geometry.inputs[index] ? root.geometry.inputs[index].y : 0
                                 walletName: root.walletName
                                 accentColor: root.ownershipColor(entry.ownership)
@@ -174,8 +179,8 @@ FormSection {
                         Repeater {
                             id: outputs
                             model: root.outputEntries.length
-                            onItemAdded: Qt.callLater(root.updateNodeMeasurements)
-                            onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
+                            onItemAdded: measurementUpdate.restart()
+                            onItemRemoved: measurementUpdate.restart()
                             delegate: TransactionFlowNode {
                                 required property int index
                                 objectName: "transactionFlowOutput_" + index
@@ -183,7 +188,7 @@ FormSection {
                                 displayUnit: root.displayUnit
                                 hidesAmount: root.hidesAmounts
                                 width: root.outputCardWidth
-                                onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
+                                onImplicitHeightChanged: measurementUpdate.restart()
                                 x: root.geometry.outputX
                                 y: root.geometry.outputs[index] ? root.geometry.outputs[index].y : 0
                                 walletName: root.walletName
@@ -214,10 +219,11 @@ FormSection {
                     model: [{ label: qsTr("Wallet-owned"), color: root.walletColor },
                         { label: qsTr("Not wallet-owned"), color: root.externalColor }, { label: qsTr("Fee"), color: root.feeColor }]
                     delegate: Row {
+                        id: legendEntry
                         required property var modelData
                         spacing: Theme.space.s
-                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: modelData.color }
-                        CoreText { text: modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
+                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: legendEntry.modelData.color }
+                        CoreText { text: legendEntry.modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
                     }
                 }
             }

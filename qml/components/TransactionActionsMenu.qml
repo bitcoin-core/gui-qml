@@ -14,15 +14,21 @@ ContextMenu {
     id: root
 
     property string txid: ""
-    // Returns the raw transaction hex for txid, or "" when unavailable.
-    property var rawTransaction: null
+    // The host copies the raw transaction asynchronously, so the hex never
+    // passes through QML and a late result cannot target another row.
+    property bool showsCopyRawTransaction: false
+    property bool copyRawTransactionEnabled: true
     property string itemObjectNamePrefix: "transaction"
     property var clipboard: Clipboard
-    readonly property var explorerLinks: txid.length > 0 ? optionsModel.thirdPartyTransactionLinks(txid) : []
+    readonly property OptionsTransactionLinks transactionLinks: OptionsTransactionLinks {
+        source: ApplicationModels.optionsModel
+        txid: root.txid
+    }
 
     // Explorer links send the transaction ID to a third party, so the host
     // confirms them.
     signal explorerLinkRequested(string url)
+    signal copyRawTransactionRequested()
 
     ContextMenuButton {
         objectName: root.itemObjectNamePrefix + "CopyTransactionId"
@@ -32,17 +38,19 @@ ContextMenu {
     }
     ContextMenuButton {
         objectName: root.itemObjectNamePrefix + "CopyRawTransaction"
-        visible: typeof root.rawTransaction === "function"
+        visible: root.showsCopyRawTransaction
+        enabled: root.copyRawTransactionEnabled
         text: qsTr("Copy raw transaction hex")
         iconSource: "qrc:/icons/copy.svg"
+        // Request before closing: the host may release per-opening state on close.
+        autoClose: false
         onTriggered: {
-            const hex = root.rawTransaction(root.txid)
-            if (hex.length === 0) return
-            root.clipboard.setText(hex)
+            root.copyRawTransactionRequested()
+            root.close()
         }
     }
     ContextMenuDivider {
-        visible: root.explorerLinks.length > 0
+        visible: explorerLinkRepeater.count > 0
     }
     // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
     // The preferred width stands in for its implicit width, which a Column
@@ -57,19 +65,22 @@ ContextMenu {
             }
             return widest
         }
-        visible: root.explorerLinks.length > 0
+        visible: explorerLinkRepeater.count > 0
 
         Repeater {
             id: explorerLinkRepeater
-            model: root.explorerLinks
+            model: root.transactionLinks ? root.transactionLinks.links : null
             delegate: ContextMenuButton {
-                required property var modelData
                 required property int index
+                required property string host
+                required property string url
                 objectName: "transactionExplorerLink_" + index
                 width: parent ? parent.width : 0
-                text: qsTr("Show in %1").arg(modelData.host)
+                text: qsTr("Show in %1").arg(host)
                 iconSource: "image://images/export"
-                onTriggered: root.explorerLinkRequested(modelData.url)
+                enabled: root.transactionLinks && !root.transactionLinks.pending
+                    && root.transactionLinks.error.length === 0
+                onTriggered: root.explorerLinkRequested(url)
             }
         }
     }

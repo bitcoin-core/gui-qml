@@ -81,6 +81,7 @@ TestCase {
     }
 
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
     }
 
@@ -242,8 +243,11 @@ TestCase {
         verify(primaryField !== null)
         verify(detailField !== null)
 
+        // The split's window is not the test case's: give it the keyboard
+        // first. Qt 6.2 on xcb reports it active before its focus-in arrives.
+        host.Window.window.requestActivate()
         primaryField.forceActiveFocus()
-        verify(primaryField.activeFocus)
+        tryVerify(() => primaryField.activeFocus)
         split.showDetail()
         verify(detailField.activeFocus)
 

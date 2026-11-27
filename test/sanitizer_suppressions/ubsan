@@ -1,0 +1,12 @@
+# Append these to bitcoin/test/sanitizer_suppressions/ubsan for GUI tests.
+# Qt's integer hash deliberately multiplies unsigned values modulo 2^64.
+unsigned-integer-overflow:*/qhashfunctions.h
+# Qt's QBitArray::testBit narrows the byte index from qsizetype (qbitarray.h:92).
+implicit-signed-integer-truncation:*/qbitarray.h
+# QtTest uses ushort(-1) when a synthesized non-text key has no character.
+implicit-signed-integer-truncation:*/QtTest/qtestkeyboard.h
+# Core's SplitMix64 is a free function; its deliberate unsigned wrap is not
+# matched by the inherited InsecureRandomContext::SplitMix64 rule.
+unsigned-integer-overflow:SplitMix64
+# Core's inline PopCount helper has no function symbol for its inherited rule.
+unsigned-integer-overflow:*/util/bitset.h

@@ -36,4 +36,4 @@ BITCOINQML_REGISTER_QT_TEST(QtMessageFilterTests)
 #else
 QTEST_MAIN(QtMessageFilterTests)
 #endif
-#include "test_qtmessagefilter.moc"
+#include <test_qtmessagefilter.moc>

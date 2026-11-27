@@ -1,0 +1,71 @@
+// Copyright (c) 2026 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+#ifndef BITCOIN_QML_MODELS_REQUESTIMAGEEXPORTOPERATION_H
+#define BITCOIN_QML_MODELS_REQUESTIMAGEEXPORTOPERATION_H
+
+#include <qml/models/backuppolicy.h>
+#include <qml/models/filesaveoperation.h>
+#include <qml/requestsharing.h>
+
+#include <QObject>
+#include <QUrl>
+
+class RequestImageExportError {
+    Q_GADGET
+public:
+    enum Code { None, Source, Rejected, InvalidPath, Inspection, UnsupportedTarget, WalletFile, Encoding, Changed, Install, Unknown, Cancelled, Chooser };
+    Q_ENUM(Code)
+};
+namespace requestimageexport {
+struct Services {
+    std::function<backup::Proposal(const QUrl&)> inspect;
+    // Native only. The adapter must call Grant::admit immediately before the
+    // final installation, after encoding and target-version validation.
+    std::function<backup::WriteResult(const backup::Proposal&, bool, const QImage&, const std::shared_ptr<requestshare::Grant>&)> write;
+};
+}
+//! What one QR image export ended with.
+struct RequestImageExportResult {
+    QString operationId, requestId, payloadRevision, finalPath;
+    bool present{false}, admitted{false}, written{false}, outcomeKnown{true};
+};
+
+/** Original request, payload and target consent. A chooser or confirmation
+ * holds no action lease. Native preparation/install owns its actual result. */
+class RequestImageExportOperation final : public FileSaveOperation
+{
+    Q_OBJECT
+    //! The operation waits for the view to choose a file.
+    Q_PROPERTY(bool choosing READ choosing NOTIFY changed)
+public:
+    enum Phase { Checking, Preparing, Choosing, Inspecting, Confirming, Writing, Cancelling, Completed, Failed, OutcomeUnknown, Cancelled };
+    Q_ENUM(Phase)
+    RequestImageExportOperation(int64_t id, requestshare::Services services, std::shared_ptr<requestshare::View> view,
+        std::optional<requestshare::Source> expected = {}, QObject* parent = nullptr);
+    ~RequestImageExportOperation() override;
+    QString operationId() const { return m_id; }
+    Phase phase() const;
+    bool busy() const override { return phase() < Completed; }
+    bool choosing() const { return phase() == Choosing; }
+    bool confirmationRequired() const override { return phase() == Confirming; }
+    bool replacing() const override;
+    QString finalPath() const override;
+    bool saved() const override { return phase() == Completed; }
+    RequestImageExportError::Code errorCode() const;
+    QString error() const override;
+    RequestImageExportResult result() const;
+    Q_INVOKABLE bool choose(const QUrl& destination);
+    bool confirm() override;
+    bool cancel() override;
+    Q_INVOKABLE void chooserFailed();
+Q_SIGNALS:
+    void commandRejected(const QString& command);
+private:
+    struct Cell;
+    struct Work;
+    const QString m_id;
+    const std::shared_ptr<Cell> m_cell;
+    const std::shared_ptr<Work> m_work;
+};
+#endif // BITCOIN_QML_MODELS_REQUESTIMAGEEXPORTOPERATION_H

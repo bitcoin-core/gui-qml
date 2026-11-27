@@ -105,4 +105,4 @@ BITCOINQML_REGISTER_QT_TEST(PeerStatsUtilTests)
 #else
 QTEST_MAIN(PeerStatsUtilTests)
 #endif
-#include "test_peerstatsutil.moc"
+#include <test_peerstatsutil.moc>

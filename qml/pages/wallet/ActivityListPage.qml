@@ -13,8 +13,8 @@ import "../../components"
 Page {
     id: root
     objectName: "activityPage"
-    property var wallet: null
-    property bool exportSucceeded: true
+    property WalletModel wallet: null
+    readonly property FileSaveOperation csvExport: activityFilterProxy.exportOperation
     property bool ready: false
     readonly property bool activitySourceEmpty: !wallet || wallet.transactionActivityModel.count === 0
     readonly property bool typeFilterActive: activityFilterProxy.typeFilters.length > 0
@@ -31,7 +31,9 @@ Page {
     background: Rectangle { color: Theme.color.background }
     padding: 0
     Component.onCompleted: ready = true
+    onVisibleChanged: if (!visible && ready) { activityRowMenu.close(); cancelExportSelection() }
     onWalletChanged: if (ready) {
+        cancelExportSelection()
         activityRowMenu.close()
         activityRequestMenu.close()
         clearFilters()
@@ -61,44 +63,29 @@ Page {
     }
 
     function emptyActivityTitle() {
-        if (wallet && wallet.transactionActivityModel.loadError) return qsTr("Activity could not be loaded")
+        if (activityFilterProxy.error) return qsTr("Activity could not be loaded")
+        if (activityFilterProxy.busy) return qsTr("Loading wallet activity…")
         if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return qsTr("Loading wallet activity…")
         if (activitySourceEmpty)
-            return nodeModel.blockSyncActive ? qsTr("Syncing wallet activity…") : qsTr("No activity yet")
+            return ApplicationModels.nodeModel.blockSyncActive ? qsTr("Syncing wallet activity…") : qsTr("No activity yet")
         return qsTr("No activity matches your filters.")
     }
     function emptyActivityDescription() {
-        if (wallet && wallet.transactionActivityModel.loadError) return wallet.transactionActivityModel.loadError
+        if (activityFilterProxy.error) return activityFilterProxy.error
+        if (activityFilterProxy.busy) return ""
         if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return ""
         if (activitySourceEmpty)
-            return nodeModel.blockSyncActive ? qsTr("Transactions may appear as your wallet catches up.")
+            return ApplicationModels.nodeModel.blockSyncActive ? qsTr("Transactions may appear as your wallet catches up.")
                 : qsTr("Your transactions and payment requests will appear here.")
         return qsTr("Try changing your search, date, type, or amount filters.")
     }
-    function exportResultTitle() { return exportSucceeded ? qsTr("Export complete") : qsTr("Export failed") }
-    function exportResultDescription() {
-        return exportSucceeded ? qsTr("Your Activity CSV has been saved.")
-            : qsTr("The Activity CSV could not be saved. Check the file path and try again.")
-    }
 
-    function normalizeLocalPath(path) {
-        var value = String(path)
-        if (value.indexOf("file:///") === 0) {
-            if (Qt.platform.os === "windows") {
-                return decodeURIComponent(value.substring(8))
-            }
-            return decodeURIComponent(value.substring(7))
-        }
-        if (value.indexOf("file://") === 0) {
-            return decodeURIComponent(value.substring(7))
-        }
-        return value
+    function cancelExportSelection() {
+        activityFilterProxy.cancelExport()
+        exportDialog.close()
     }
-
-    function exportActivity(path) {
-        const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
-        exportSucceeded = ok
-        exportResultPopup.open()
+    function beginExportSelection() {
+        if (activityFilterProxy.beginExport()) exportDialog.open()
     }
 
     // A filter popup right-aligns to its button, but a wide popup on a
@@ -117,13 +104,14 @@ Page {
     }
 
     // A QDate read back from the model reaches QML as a JS Date at UTC
-    // midnight; rebuild it at local midnight on the same calendar day so
+    // midnight; rebuild it at local noon on the same calendar day (local
+    // midnight is skipped in some zones on a clock change) so
     // seeding the calendar does not read it a day early west of UTC (the
     // read-side mirror of the Apply path, which hands the model ISO
     // strings for the same reason).
     function modelDateToLocal(date) {
         return (date && !isNaN(date.getTime()))
-            ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+            ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12)
             : null
     }
 
@@ -147,31 +135,29 @@ Page {
         id: activityFilterProxy
         objectName: "activityFilterProxyModel"
         sourceModel: root.wallet ? root.wallet.transactionActivityModel : null
-        displayUnit: optionsModel.displayUnit
+        displayUnit: ApplicationModels.optionsModel.displayUnit
         groupBy: activitySettings.activityGrouping === "day" ? ActivityFilterProxyModel.Day : ActivityFilterProxyModel.Month
     }
     BitcoinAmount {
         id: lowerAmountFormatter
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
         satoshi: Math.round(amountSlider.lowerValue)
     }
     BitcoinAmount {
         id: upperAmountFormatter
-        unit: optionsModel.displayUnit
+        unit: ApplicationModels.optionsModel.displayUnit
         satoshi: Math.round(amountSlider.upperValue)
     }
-    AppSettings {
-        id: activitySettings
-        property string activityGrouping: "month"
-        property string activityDisplayDensity: "comfortable"
-    }
+    AppPreferences { id: activitySettings }
     AppFileDialog {
         id: exportDialog
         objectName: "activityExportDialog"
         defaultSuffix: "csv"
+        confirmOverwrite: false
         fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("Comma separated file (*.csv)")]
-        onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
+        onAccepted: activityFilterProxy.chooseExportFile(exportDialog.selectedFile.toString())
+        onRejected: activityFilterProxy.cancelExport()
     }
     TextField {
         id: automationExportPathField
@@ -193,6 +179,17 @@ Page {
         anchors.left: parent.left
         anchors.right: parent.right
         spacing: 0
+
+        InfoBanner {
+            objectName: "outgoingNoteStatus"
+            visible: root.wallet !== null && root.wallet.recipientLabelsError.length > 0
+            Layout.fillWidth: true
+            Layout.leftMargin: root.activitySideInset
+            Layout.rightMargin: root.activitySideInset
+            Layout.bottomMargin: visible ? Theme.space.l : 0
+            title: qsTr("Outgoing notes")
+            message: root.wallet ? root.wallet.recipientLabelsError : ""
+        }
 
         RowLayout {
             Layout.fillWidth: true
@@ -339,6 +336,7 @@ Page {
                 id: listView
                 objectName: "activityListView"
                 function ensureFocusedItemVisible() {
+                    heldContentY = NaN // Keyboard navigation is the user's own scrolling.
                     const window = root.Window.window
                     const item = window ? window.activeFocusItem : null
                     let ancestor = item
@@ -353,6 +351,47 @@ Page {
                     listView.contentY = Math.max(listView.originY,
                         Math.min(y, listView.originY + listView.contentHeight - listView.height))
                 }
+                // A confirmation re-groups the list: rows move out of Pending into
+                // their dated groups. Qt keeps each visible row on screen as it moves,
+                // so the view follows the row up the list and jumps. The list stays
+                // where the user left it instead, at the top or further down. Only the
+                // position is held while the move is applied; the rows still move.
+                // The user always wins: a drag, a flick, the scroll bar or the wheel
+                // ends the hold.
+                property real heldContentY: NaN
+                readonly property bool userScrolling: moving || dragging || (ScrollBar.vertical && ScrollBar.vertical.pressed)
+                function holdPosition() {
+                    if (isNaN(heldContentY) && !userScrolling) heldContentY = contentY
+                    if (!isNaN(heldContentY)) holdPositionTimer.restart()
+                }
+                // While the list lays out the moved rows its content height is only an
+                // estimate, and Qt clamps the position to it and does not come back.
+                // So hold the exact position meanwhile and clamp only once settled.
+                function restorePosition(settled) {
+                    const held = heldContentY
+                    if (isNaN(held)) return
+                    if (userScrolling) { heldContentY = NaN; return }
+                    const highest = Math.max(originY, originY + contentHeight - height)
+                    const target = settled === true ? Math.max(originY, Math.min(held, highest)) : held
+                    if (contentY !== target) contentY = target
+                }
+                onContentYChanged: restorePosition(false)
+                onUserScrollingChanged: if (userScrolling) heldContentY = NaN
+                Timer {
+                    id: holdPositionTimer
+                    interval: 400
+                    onTriggered: { listView.restorePosition(true); listView.heldContentY = NaN }
+                }
+                Connections {
+                    target: activityFilterProxy
+                    function onRowsAboutToBeMoved() { listView.holdPosition() }
+                    function onModelAboutToBeReset() { listView.holdPosition() }
+                    function onLayoutAboutToBeChanged() { listView.holdPosition() }
+                    function onRowsMoved() { listView.restorePosition(false); listView.holdPosition() }
+                    function onModelReset() { listView.restorePosition(false); listView.holdPosition() }
+                    function onLayoutChanged() { listView.restorePosition(false); listView.holdPosition() }
+                    function onDataChanged() { if (!isNaN(listView.heldContentY)) listView.holdPosition() }
+                }
                 Timer {
                     id: focusScrollTimer
                     interval: 0
@@ -363,11 +402,20 @@ Page {
                     function onActiveFocusItemChanged() { focusScrollTimer.restart() }
                 }
                 anchors.fill: parent
+                anchors.topMargin: activityRefreshError.visible ? activityRefreshError.height + 8 : 0
                 clip: true
-                model: activityFilterProxy
-                reuseItems: true
+                model: root.visible ? activityFilterProxy : null
+                reuseItems: false
                 boundsBehavior: Flickable.StopAtBounds
+                // Nothing on this page uses the current item. Left at its default it
+                // is the first row and is pushed down by every row inserted above
+                // it; when a confirmation re-groups the list, the view then jumps
+                // to that row instead of staying where the user left it.
+                currentIndex: -1
+                highlightFollowsCurrentItem: false
                 ScrollBar.vertical: ScrollBar {}
+                // Constant: rewriting it while the hidden page's model releases
+                // its rows reads a row without its attached object and crashes.
                 section.property: "sectionLabel"
                 section.criteria: ViewSection.FullString
                 section.delegate: Item {
@@ -406,8 +454,20 @@ Page {
                 delegate: Item {
                     id: activityDelegate
                     required property var model
+                    required property int index
                     width: listView.width
-                    height: activityRow.implicitHeight
+                    height: activityRow.implicitHeight + (activityPreviewNotice.visible ? activityPreviewNotice.implicitHeight + Theme.space.m : 0)
+                    CoreText {
+                        id: activityPreviewNotice
+                        anchors.top: activityRow.bottom
+                        anchors.topMargin: Theme.space.xs
+                        x: root.activitySideInset
+                        width: root.activityContentWidth
+                        visible: activityDelegate.model.presentationLimited === true
+                        text: qsTr("A preview is shown. Open the transaction for complete details.")
+                        textStyle: Theme.text.description
+                        color: Theme.color.neutral7
+                    }
                     ActivityRow {
                         id: activityRow
                         isCompact: activitySettings.activityDisplayDensity === "compact"
@@ -436,8 +496,13 @@ Page {
                         onContextMenuRequested: function(x, y) {
                             const menu = activityRow.isPendingRequest ? activityRequestMenu : activityRowMenu
                             const point = activityRow.mapToItem(menu.parent, x, y)
-                            if (activityRow.isPendingRequest) activityRequestMenu.requestId = activityRow.requestId
-                            else activityRowMenu.txid = activityRow.txid
+                            if (activityRow.isPendingRequest) {
+                                activityRequestMenu.requestId = activityRow.requestId
+                            } else {
+                                // The proxy keeps a delayed raw copy bound to this row.
+                                if (!activityFilterProxy.openRowMenu(activityDelegate.index)) return
+                                activityRowMenu.txid = activityRow.txid
+                            }
                             menu.x = point.x
                             menu.y = point.y
                             menu.open()
@@ -450,13 +515,30 @@ Page {
                 }
             }
 
+            InfoBanner {
+                id: activityRefreshError
+                objectName: "activityRefreshError"
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: root.activitySideInset
+                anchors.rightMargin: root.activitySideInset
+                visible: !!root.wallet && activityFilterProxy.count > 0 && !!root.wallet.transactionActivityModel.loadError
+                bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+                message: root.wallet ? root.wallet.transactionActivityModel.loadError : ""
+                messageObjectName: "activityRefreshErrorText"
+                primaryButtonText: qsTr("Try again")
+                primaryButtonOutlined: true
+                onPrimaryClicked: if (root.wallet) root.wallet.transactionActivityModel.reload()
+            }
+
             ColumnLayout {
                 objectName: "activityEmptyState"
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
                 anchors.topMargin: 64
                 width: Math.min(root.activityContentWidth, 440)
-                visible: walletController.initialized && activityFilterProxy.count === 0
+                visible: ApplicationModels.walletController.initialized && activityFilterProxy.count === 0
                 spacing: 10
                 CoreText {
                     objectName: "activityEmptyStateTitle"
@@ -482,7 +564,7 @@ Page {
             }
 
             Column {
-                visible: !walletController.initialized
+                visible: !ApplicationModels.walletController.initialized
                 anchors.top: parent.top
                 anchors.topMargin: 28
                 x: root.activitySideInset
@@ -502,9 +584,9 @@ Page {
         backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
         itemObjectNamePrefix: "activity"
-        rawTransaction: function(txid) {
-            return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
-        }
+        onClosed: activityFilterProxy.closeRowMenu()
+        showsCopyRawTransaction: true
+        onCopyRawTransactionRequested: activityFilterProxy.copyRowMenuRawTransaction()
         onExplorerLinkRequested: function(url) { explorerLinkPopup.openLink(url) }
     }
 
@@ -512,18 +594,38 @@ Page {
         id: activityRequestMenu
         objectName: "activityRequestContextMenu"
         property string requestId: ""
+        // Typed request sharing owns its copy receipt; the menu stays open
+        // until the copy is performed or reports its error.
+        readonly property RequestSharingModel requestSharing: root.wallet && root.wallet.receive && requestId.length > 0
+            ? root.wallet.receive.sharingRequest(requestId, activityRequestMenu) : null
+        Binding { target: activityRequestMenu.requestSharing; property: "active"; value: root.visible && activityRequestMenu.opened; when: activityRequestMenu.requestSharing !== null }
         backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
         showsCopyRequest: true
-        copyRequestEnabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
+        copyRequestEnabled: requestSharing
+            ? requestSharing.canCopyUri && (!requestSharing.lastOperation || !requestSharing.lastOperation.busy)
+            : !!root.wallet && !root.wallet.receiveRequestReconciliationPending
+        copyRequestClosesMenu: requestSharing === null
+        copyRequestErrorText: requestSharing && requestSharing.lastOperation ? requestSharing.lastOperation.errorText : ""
         copyRequestObjectName: "activityCopyPaymentRequest"
         deleteObjectName: "activityDeletePaymentRequest"
         onCopyRequestRequested: {
+            if (requestSharing) {
+                requestSharing.copyUri()
+                return
+            }
             const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRequestMenu.requestId) : ""
             if (uri.length === 0) return
             Clipboard.setText(uri)
         }
-        onDeleteRequested: deleteRequestConfirmation.confirmDelete(root.wallet, activityRequestMenu.requestId)
+        Connections {
+            target: activityRequestMenu.requestSharing ? activityRequestMenu.requestSharing.lastOperation : null
+            function onChanged() {
+                const operation = activityRequestMenu.requestSharing ? activityRequestMenu.requestSharing.lastOperation : null
+                if (operation && operation.result.present && operation.result.performed) activityRequestMenu.close()
+            }
+        }
+        onDeleteRequested: deleteRequestConfirmation.confirmDelete(activityRequestMenu.requestId)
     }
 
     // The explorer receives the transaction ID, so opening it is confirmed.
@@ -535,11 +637,7 @@ Page {
     PaymentRequestDeleteConfirmation {
         id: deleteRequestConfirmation
         objectName: "activityDeletePaymentRequestConfirmation"
-        onDeleted: function(requestId) {
-            for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
-                if (request && request.id === requestId) request.clear()
-            }
-        }
+        receive: root.wallet ? root.wallet.receive : null
     }
 
     ContextMenu {
@@ -562,6 +660,7 @@ Page {
             onActivated: function(value) {
                 activitySettings.activityGrouping = value
                 moreMenu.close()
+                listView.heldContentY = NaN
                 listView.positionViewAtBeginning()
             }
         }
@@ -583,15 +682,38 @@ Page {
         ContextMenuDivider {}
         ContextMenuButton {
             objectName: "activityExportButton"
+            enabled: !activityFilterProxy.exportBusy && !activityFilterProxy.busy
             text: qsTr("Export CSV…")
             iconSource: "qrc:/icons/export"
             onTriggered: {
                 if (automationExportPathField.text.length > 0) {
                     const path = automationExportPathField.text
                     automationExportPathField.text = ""
-                    root.exportActivity(path)
-                } else exportDialog.open()
+                    activityFilterProxy.requestExportCsv(path)
+                } else root.beginExportSelection()
             }
+        }
+    }
+
+    Instantiator {
+        model: root.csvExport ? [root.csvExport] : []
+        delegate: SaveConfirmationPopup {
+            required property FileSaveOperation modelData
+            objectName: "activityCsvDestinationConfirmation"
+            // Keeps the overlay when the page leaves the window. A popup whose parent
+            // goes null there loses its window while its item is still in the overlay,
+            // and a hover event then crashes Qt 6.8.4 and newer.
+            Binding on parent {
+                when: root.Overlay.overlay !== null
+                value: root.Overlay.overlay
+                restoreMode: Binding.RestoreNone
+            }
+            operation: modelData
+            saveTitle: qsTr("Save Activity CSV?")
+            replaceTitle: qsTr("Replace Activity CSV?")
+            pathObjectName: "activityCsvFinalDestination"
+            approveObjectName: "activityCsvApproveDestination"
+            refuseObjectName: "activityCsvRefuseDestination"
         }
     }
 
@@ -599,16 +721,19 @@ Page {
         id: exportResultPopup
         objectName: "activityExportResultPopup"
         parent: Overlay.overlay
-        tone: root.exportSucceeded ? AlertPopup.Success : AlertPopup.Error
-        iconSource: root.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
-        title: root.exportResultTitle()
+        visible: activityFilterProxy.exportResultShown
+        tone: activityFilterProxy.exportSucceeded ? AlertPopup.Success : AlertPopup.Error
+        iconSource: activityFilterProxy.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
+        title: activityFilterProxy.exportResultTitle
         titleObjectName: "activityExportResultTitle"
-        message: root.exportResultDescription()
+        message: activityFilterProxy.exportResultText
         messageObjectName: "activityExportResultDescription"
 
         AlertAction {
             text: qsTr("Close")
             buttonObjectName: "activityExportResultCloseButton"
+            closesPopup: false
+            onTriggered: activityFilterProxy.dismissExportResult()
         }
     }
 
@@ -746,13 +871,14 @@ Page {
                     textStyle: Theme.text.menuItemStrong
                     // Nothing to reset until a date has been picked.
                     enabled: calendar.hasSelection
+                        || activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
                     textColor: !enabled ? Theme.color.disabledContent
                         : down || hovered ? Theme.color.neutral9 : Theme.color.neutral7
                     // Clear the picked dates and drop the applied filter,
                     // but stay in the calendar so a new range can be picked.
                     onClicked: {
                         calendar.reset()
-                        activityFilterProxy.dateFilter = ActivityFilterProxyModel.DateAll
+                        activityFilterProxy.clearDateFilter()
                     }
                 }
 
@@ -819,15 +945,7 @@ Page {
         modal: true
         dim: false
 
-        function seedRange() {
-            const maximum = activityFilterProxy.availableMaxAmount
-            amountSlider.setValues(Math.min(Math.max(0, activityFilterProxy.minAmount), maximum),
-                activityFilterProxy.maxAmount < 0 ? maximum : Math.min(activityFilterProxy.maxAmount, maximum))
-        }
-        onAboutToShow: {
-            x = root.filterPopupX(amountFilterButton, amountPopup)
-            seedRange()
-        }
+        onAboutToShow: x = root.filterPopupX(amountFilterButton, amountPopup)
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -846,9 +964,12 @@ Page {
                 id: amountSlider
                 objectName: "activityAmountRangeSlider"
                 Layout.fillWidth: true
-                valuesHidden: optionsModel.hideAmounts
+                valuesHidden: ApplicationModels.optionsModel.hideAmounts
                 minValue: 0
-                maxValue: activityFilterProxy.availableMaxAmount
+                maxValue: Math.max(activityFilterProxy.availableMaxAmount,
+                                   activityFilterProxy.minAmount, activityFilterProxy.maxAmount)
+                selectedLower: Math.max(0, activityFilterProxy.minAmount)
+                selectedUpper: activityFilterProxy.maxAmount < 0 ? Math.max(activityFilterProxy.availableMaxAmount, activityFilterProxy.minAmount) : activityFilterProxy.maxAmount
                 Accessible.name: qsTr("Activity amount range")
                 first.onMoved: root.applyAmountRange()
                 second.onMoved: root.applyAmountRange()

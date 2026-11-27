@@ -10,12 +10,13 @@ bridge enabled and connects a QmlDriver instance.
 
 import argparse
 import os
+from pathlib import Path
 import shutil
+import tempfile
 import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 
 from qml_driver import QmlDriver, QmlDriverError
@@ -23,6 +24,29 @@ from qml_driver import QmlDriver, QmlDriverError
 
 # How long to wait for the GUI process to start (seconds).
 GUI_STARTUP_TIMEOUT = 30
+
+
+_owned_directories: dict[Path, tuple[int, int]] = {}
+
+
+def create_test_directory(*, prefix, dir=None):
+    path = Path(tempfile.mkdtemp(prefix=prefix, dir=dir)).resolve()
+    stat = path.stat()
+    _owned_directories[path] = (stat.st_dev, stat.st_ino)
+    return str(path)
+
+
+def cleanup_test_directory(directory):
+    path = Path(directory)
+    # Never follow a replacement symlink or accept a caller-supplied parent.
+    if path.is_symlink() or path != path.resolve() or path not in _owned_directories:
+        raise AssertionError(f"Refusing cleanup of unowned directory: {path}")
+    if path.exists():
+        stat = path.stat()
+        if (stat.st_dev, stat.st_ino) != _owned_directories[path]:
+            raise AssertionError(f"Refusing cleanup of replaced directory: {path}")
+        shutil.rmtree(path)
+    del _owned_directories[path]
 
 
 def pick_unused_port():
@@ -91,8 +115,16 @@ def qsettings_sandbox_args(env, config_home):
 
 
 def qml_qpa_platform():
-    """Return the Qt platform plugin for QML functional tests."""
-    return os.getenv("QML_TEST_QPA_PLATFORM", os.getenv("QT_QPA_PLATFORM", "offscreen"))
+    """Return the Qt platform plugin for QML functional tests.
+
+    The default offscreen platform has an 800x800 screen. The app clamps its
+    window to the screen, so use a desktop-sized one.
+    """
+    platform = os.getenv("QML_TEST_QPA_PLATFORM", os.getenv("QT_QPA_PLATFORM", "offscreen"))
+    if platform == "offscreen" and os.name != "nt":
+        screen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "offscreen_screen.json")
+        return f"offscreen:configfile={screen}"
+    return platform
 
 
 def has_cli_arg(args, name):
@@ -160,7 +192,7 @@ class QmlTestHarness:
             if tmpdir is not None:
                 self.tmpdir = tmpdir
             elif datadir is None:
-                self.tmpdir = tempfile.mkdtemp(prefix="qml_test_bridge_")
+                self.tmpdir = create_test_directory(prefix="qml_test_bridge_")
             else:
                 self.tmpdir = None
 
@@ -188,6 +220,7 @@ class QmlTestHarness:
 
         env = dict(os.environ)
         env["QT_QPA_PLATFORM"] = qml_qpa_platform()
+        env.setdefault("BITCOIN_QML_TEST_NO_ANIMATIONS", "1")
         settings_args = []
         if self.config_home:
             settings_args = qsettings_sandbox_args(env, self.config_home)
@@ -265,7 +298,7 @@ class QmlTestHarness:
         if self.driver:
             self.driver.close()
         if cleanup and self.tmpdir and self._owns_tmpdir:
-            shutil.rmtree(self.tmpdir, ignore_errors=True)
+            cleanup_test_directory(self.tmpdir)
             self.tmpdir = None
 
     def _candidate_debug_logs(self):
@@ -328,6 +361,10 @@ class QmlTestHarness:
             try:
                 gui = self.reconnect(timeout=1)
                 gui.wait_for_object("mainPageStack", timeout_ms=1000)
+                # The short timeout bounds each probe only. Later commands
+                # wait up to their own timeout_ms, so restore the normal one.
+                gui.timeout = GUI_STARTUP_TIMEOUT
+                gui.sock.settimeout(GUI_STARTUP_TIMEOUT)
                 return gui
             except Exception as err:
                 last_error = err

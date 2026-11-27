@@ -1,246 +1,131 @@
-// Copyright (c) 2024-2026 The Bitcoin Core developers
+// Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
-import "../../controls"
 import "../../components"
+import "../../controls"
 
 Page {
     id: root
-    objectName: "requestPaymentPage"
-    property var wallet: null
-    property var request: wallet ? wallet.currentPaymentRequest : null
-    property var clipboard: Clipboard
-    property var presentedRequest: null
-    property bool pendingNextAddress: false
-    property string pendingAddressType: ""
-    property string addressErrorText: ""
-    readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
-    readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
-    readonly property alias requestModal: requestModal
-    readonly property alias draftCard: card
-    signal addressHistoryRequested()
+    property WalletModel wallet: null
+    property bool walletViewActive: true
+    readonly property WalletReceiveModel receive: wallet ? wallet.receive : null
+    // Without a loaded wallet there is nothing to receive into.
+    readonly property bool walletLoaded: receive !== null
+    readonly property bool noWalletsAvailable: ApplicationModels.walletController.noWalletsFound
+    readonly property ReceiveAuthorizationPrompt prompt: receive ? receive.reservation.prompt : null
     signal paymentRequestCreated()
-    background: Rectangle { color: Theme.color.background }
+    signal addressHistoryRequested()
+    signal walletSelectionRequested()
+    objectName: "receivePage"
     padding: 0
-
-    function ensureReceivingAddress(next, type) {
-        if (!wallet) return
-        pendingNextAddress = !!next
-        pendingAddressType = type || ""
-        if (wallet.ensureReceivingAddress(pendingNextAddress, pendingAddressType)) root.addressErrorText = ""
-        else if (wallet.receivingAddress.needsUnlock) passphrasePopup.open()
-        //: Error shown in Receive when preparing an address for a payment request fails.
-        else root.addressErrorText = qsTr("A receiving address could not be generated. Please try again.")
+    background: Rectangle { color: Theme.color.background }
+    onVisibleChanged: if (visible && receive) {
+        if (receive.reservation.selectedRequestId.length > 0) createdRequest.openRequest(receive.reservation.selectedRequestId)
+        else receive.ensureAddress()
     }
-
-    function prepareReceivingAddress() {
-        const type = root.request && !root.request.id && root.wallet && root.wallet.receivingAddress.address === ""
-            ? root.request.addressType.toLowerCase() : ""
-        root.ensureReceivingAddress(false, type)
-    }
-
-    // The Addresses page may bring an existing request into Receive.
-    // Saved requests always use the same modal, including this entry point.
-    onVisibleChanged: {
-        if (visible) Qt.callLater(function() {
-            if (root.visible) root.prepareReceivingAddress()
-            if (root.visible && root.request && root.request.id && !requestModal.visible) {
-                root.presentedRequest = root.request
-                requestModal.openRequest(root.request.id)
-            }
-        })
-    }
-    Component.onCompleted: Qt.callLater(function() {
-        if (root.visible) root.prepareReceivingAddress()
-    })
-
-    Item {
-        objectName: "requestHistoryCount"
-        visible: false
-        property int count: root.wallet ? root.wallet.receiveRequests.count : 0
-    }
-
+    Component.onCompleted: if (visible && receive) receive.ensureAddress()
     ScrollView {
         id: scroll
         anchors.fill: parent
         clip: true
         contentWidth: availableWidth
-        contentHeight: content.implicitHeight + 48
+        contentHeight: column.height + 48
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ColumnLayout {
-            id: content
+            id: column
             width: scroll.availableWidth
-            spacing: 24
+            spacing: Theme.space.xl
+            CoreText { Layout.fillWidth: true; Layout.topMargin: Theme.space.xxl; text: qsTr("Receive bitcoin"); textStyle: Theme.text.headline }
+            PageHeading {
+                objectName: "receiveEmptyHeading"
+                visible: !root.walletLoaded
+                Layout.fillWidth: true
+                title: root.noWalletsAvailable ? "" : qsTr("No wallet selected")
+                description: root.noWalletsAvailable
+                    ? qsTr("Add a wallet to receive bitcoin.")
+                    : qsTr("Select a wallet to receive bitcoin.")
+                titleAlignment: Text.AlignHCenter
+            }
+            NeutralButton {
+                objectName: "receiveEmptyAction"
+                buttonSize: NeutralButton.Large
+                visible: !root.walletLoaded
+                Layout.preferredWidth: 220
+                Layout.alignment: Qt.AlignHCenter
+                text: root.noWalletsAvailable ? qsTr("Add wallet…") : qsTr("Select wallet…")
+                onClicked: root.walletSelectionRequested()
+            }
             RowLayout {
-                objectName: "receivePageHeader"
+                visible: root.walletLoaded
+                NeutralButton { objectName: "receiveNewRequestButton"; text: qsTr("New request"); enabled: root.receive !== null && !root.receive.replacementPending; onClicked: root.receive.newRequest() }
+                NeutralButton { objectName: "receiveNextAddressButton"; text: qsTr("Next address"); enabled: root.receive !== null && !root.receive.reservation.busy; onClicked: root.receive.nextAddress() }
+                NeutralButton { objectName: "receiveViewAddressesButton"; text: qsTr("View addresses"); onClicked: root.addressHistoryRequested() }
+            }
+            ContextMenuPicker {
+                objectName: "receiveAddressTypePicker"
+                visible: root.walletLoaded
                 Layout.fillWidth: true
-                Layout.preferredWidth: root.headerContentWidth
-                Layout.maximumWidth: root.headerContentWidth
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: 28
-                CoreText {
-                    Layout.fillWidth: true
-                    text: qsTr("Receive bitcoin")
-                    textStyle: Theme.text.headline
-                    horizontalAlignment: Text.AlignLeft
-                }
-                OverflowMenuButton {
-                    id: receiveAddressSettingsButton
-                    objectName: "receiveAddressSettingsButton"
-                    iconSource: "qrc:/icons/address-settings.svg"
-                    iconSize: 28
-                    Accessible.name: qsTr("Address settings")
-                    checked: receiveAddressTypeMenu.opened
-                    onClicked: receiveAddressTypeMenu.opened ? receiveAddressTypeMenu.close() : receiveAddressTypeMenu.open()
-                    ContextMenu {
-                        id: receiveAddressTypeMenu
-                        objectName: "receiveAddressTypeMenu"
-                        x: receiveAddressSettingsButton.width - width
-                        y: receiveAddressSettingsButton.height + 8
-                        minMenuWidth: 320
-                        modal: true
-                        dim: false
-                        ContextMenuPicker {
-                            objectName: "receiveAddressTypePicker"
-                            title: qsTr("Address type")
-                            textRole: "label"
-                            valueRole: "id"
-                            subtitleRole: "description"
-                            objectNameRole: "objectName"
-                            subtitleObjectNameRole: "subtitleObjectName"
-                            model: root.wallet ? root.wallet.availableReceiveAddressTypes().map(function(type) {
-                                return {
-                                    id: type.id,
-                                    label: type.label,
-                                    description: type.description,
-                                    objectName: "receiveAddressType_" + type.id,
-                                    subtitleObjectName: "receiveAddressTypeDescription_" + type.id
-                                }
-                            }) : []
-                            currentValue: root.wallet && root.wallet.receivingAddress
-                                ? root.wallet.receivingAddress.addressType.toLowerCase() : ""
-                            enabled: walletController.initialized
-                            onActivated: function(value) {
-                                receiveAddressTypeMenu.close()
-                                root.ensureReceivingAddress(false, value)
-                            }
-                        }
-                    }
-                }
-                OverflowMenuButton {
-                    id: receiveMoreButton
-                    objectName: "receiveMoreButton"
-                    Layout.leftMargin: 6
-                    checked: receiveMoreMenu.opened
-                    onClicked: receiveMoreMenu.opened ? receiveMoreMenu.close() : receiveMoreMenu.open()
-                    ContextMenu {
-                        id: receiveMoreMenu
-                        objectName: "receiveMoreMenu"
-                        x: receiveMoreButton.width - width
-                        y: receiveMoreButton.height + 8
-                        modal: true
-                        dim: false
-                        ContextMenuButton {
-                            objectName: "requestPaymentHistoryButton"
-                            text: qsTr("View addresses")
-                            onTriggered: root.addressHistoryRequested()
-                        }
-                        ContextMenuDivider {}
-                        ContextMenuButton {
-                            objectName: "receiveClearFormButton"
-                            text: qsTr("Clear form")
-                            iconSource: "qrc:/icons/cross"
-                            enabled: !!root.request && !root.request.id
-                            onTriggered: card.clearForm()
-                        }
-                    }
-                }
+                title: qsTr("Address type")
+                textRole: "label"
+                valueRole: "id"
+                subtitleRole: "description"
+                model: root.wallet ? root.wallet.receiveAddressTypes : []
+                currentValue: root.receive ? root.receive.reservation.addressType : ""
+                enabled: root.receive !== null && !root.receive.reservation.busy && !root.receive.replacementPending
+                onActivated: function(value) { root.receive.chooseAddressType(value) }
             }
-            ColumnLayout {
-                objectName: "receiveWorkspace"
-                Layout.preferredWidth: root.headerContentWidth
-                Layout.maximumWidth: root.headerContentWidth
+            CoreText { Layout.fillWidth: true; text: root.receive ? root.receive.reservation.error.message || root.receive.error.message : ""; visible: text.length > 0; color: Theme.color.dangerText }
+            NeutralButton {
+                objectName: "receiveRetryAddressButton"
+                text: qsTr("Retry address")
+                visible: root.receive !== null && (root.receive.reservation.phase === AddressReservationModel.Failed || root.receive.reservation.phase === AddressReservationModel.Cancelled)
+                onClicked: root.receive.reservation.retry()
+            }
+            ReceiveRequestEditorCard {
+                visible: root.walletLoaded
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 24
-                PaymentRequestCard {
-                    id: card
-                    Layout.preferredWidth: 532
-                    Layout.minimumWidth: 300
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    wallet: root.wallet
-                    request: root.request
-                    addressErrorText: root.addressErrorText
-                    clipboard: root.clipboard
-                    enabled: walletController.initialized
-                    onRetryAddressRequested: root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
-                    onCreated: function(requestId) {
-                        root.presentedRequest = root.request
-                        root.paymentRequestCreated()
-                        requestModal.openRequest(requestId)
-                    }
-                }
+                viewActive: root.visible && root.walletViewActive
+                closable: false
+                receive: root.receive
+                editor: root.receive ? root.receive.editor : null
+                onRequestAgain: function(id) { if (root.receive) root.receive.useTemplate(id) }
             }
         }
     }
-    PaymentRequestModal {
-        id: requestModal
-        parent: Overlay.overlay
-        wallet: root.wallet
-        onClosed: {
-            if (root.presentedRequest && root.request === root.presentedRequest) root.request.clear()
-            root.presentedRequest = null
-            card.resetFields()
-            if (root.visible) root.prepareReceivingAddress()
-        }
-    }
-    Connections {
-        target: root.wallet ? root.wallet.receivingAddress : null
-        function onPaymentReceivedChanged() {
-            if (root.wallet.receivingAddress.paymentReceived) {
-                Qt.callLater(function() { if (root.visible) root.ensureReceivingAddress(false, "") })
-            }
-        }
-    }
+    // The reservation asks for the wallet password; its prompt decides
+    // whether this shows.
     WalletPassphrasePopup {
-        id: passphrasePopup
+        id: password
         parent: Overlay.overlay
-        //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
+        width: Math.min(420, parent ? parent.width - 32 : 420)
+        shown: root.visible && root.prompt !== null && root.prompt.active
+        popupObjectName: "receivePassphrasePopup"
+        passphraseFieldObjectName: "receivePassphraseField"
+        errorTextObjectName: "receivePassphraseError"
+        cancelButtonObjectName: "receivePassphraseCancelButton"
+        confirmButtonObjectName: "receivePassphraseConfirmButton"
         titleText: qsTr("Enter wallet password")
-        //: Explains why the wallet password is needed to prepare a payment request.
         descriptionText: qsTr("Enter your wallet password to create a receiving address.")
-        //: Button that unlocks the wallet and generates the address for a payment request.
         confirmText: qsTr("Unlock and create address")
-        onSubmitted: function(passphrase) {
-            if (root.wallet.ensureReceivingAddressWithPassphrase(passphrase, root.pendingNextAddress, root.pendingAddressType)) {
-                root.addressErrorText = ""
-                close()
-            //: Error shown when an address cannot be generated after unlocking the wallet.
-            } else errorText = root.wallet.receivingAddress.unlockError || qsTr("The receiving address could not be created.")
-        }
+        busy: root.receive !== null && root.receive.reservation.busy
+        errorText: root.prompt ? root.prompt.errorText : ""
+        onSubmitted: function(text) { if (root.prompt && root.prompt.active) root.prompt.answer(text) }
+        onCloseRequested: if (root.prompt && root.prompt.active) root.prompt.cancel()
     }
     Connections {
-        target: walletController
-        function onOpenReceiveRequested(wallet) {
-            if (wallet !== root.wallet) return
-            Qt.callLater(function() {
-                card.resetFields()
-                if (root.visible) root.prepareReceivingAddress()
-            })
+        target: root.receive
+        function onExistingRequestRequested(id) { if (root.visible && root.walletViewActive) createdRequest.openRequest(id) }
+        function onRequestPersisted(result) {
+            if (!root.visible || !root.walletViewActive || !result.requestSaved || !root.receive || !root.receive.editor || root.receive.editor.editorId !== result.editorId) return
+            const original = root.wallet
+            const owner = root.receive
+            root.paymentRequestCreated()
+            if (root && root.wallet === original && root.receive === owner) createdRequest.openRequest(result.requestId)
         }
     }
-    onWalletChanged: {
-        root.addressErrorText = ""
-        passphrasePopup.close()
-        requestModal.close()
-        if (root.request) root.request.clear()
-        card.resetFields()
-        Qt.callLater(function() { if (root.visible) root.ensureReceivingAddress(false, "") })
-    }
+    ReceiveRequestModal { id: createdRequest; wallet: root.wallet; contextActive: root.walletViewActive }
 }

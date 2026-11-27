@@ -198,4 +198,4 @@ BITCOINQML_REGISTER_QT_TEST(OnboardingStorageTests)
 #else
 QTEST_MAIN(OnboardingStorageTests)
 #endif
-#include "test_onboarding_storage.moc"
+#include <test_onboarding_storage.moc>

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "tests": [
+    {
+      "id": "wallet-capability",
+      "suite": "unit",
+      "class": "AppModeTests",
+      "tests": ["walletCapabilityGuardsActivation"],
+      "expected": 1
+    },
+    {
+      "id": "one-satoshi",
+      "suite": "unit",
+      "class": "AmountParseTests",
+      "tests": ["exactInput:btc-one-sat"],
+      "expected": 1
+    },
+    {
+      "id": "form-control",
+      "suite": "qml",
+      "file": "tst_formcontrols.qml",
+      "tests": ["FormControls::test_formRowLoadsAndDisablesTrailingControl"],
+      "expected": 1
+    }
+  ]
+}

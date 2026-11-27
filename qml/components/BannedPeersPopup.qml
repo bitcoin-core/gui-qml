@@ -13,12 +13,23 @@ DialogPopup {
     id: root
     objectName: "bannedPeersPopup"
 
-    property var model: banListModel
+    property var model: ApplicationModels.banListModel
 
     function unbanPeer(row) {
         if (!root.model.unbanAt(row)) {
             unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
             unbanActionError.open()
+        }
+    }
+
+    // Admission succeeds before the node applies the unban; report a late failure.
+    Connections {
+        target: root.model
+        function onUnbanFinished(success) {
+            if (!success && root.opened) {
+                unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+                unbanActionError.open()
+            }
         }
     }
 
@@ -132,7 +143,7 @@ DialogPopup {
     AlertPopup {
         id: unbanActionError
         objectName: "unbanActionErrorPopup"
-        parent: root.parent ? root.parent : root
+        parent: root.parent ? root.parent : root.contentItem
         title: qsTr("Peer action failed")
         messageObjectName: "actionErrorMessage"
 

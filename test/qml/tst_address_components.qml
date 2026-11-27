@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 import QtQuick.Layouts 1.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
@@ -22,6 +23,7 @@ TestCase {
 
     // Tests the digit roll and copy feedback, so motion stays on.
     function init() {
+        testSetup.failOnWarnings()
         motionMode = Theme.motion.mode
         Theme.motion.mode = "full"
     }
@@ -343,7 +345,8 @@ TestCase {
         label.amountOverride = "87654321"
         optionsModel.displayUnit = BitcoinAmount.SAT
         tryCompare(label, "animating", true)
-        wait(110)
+        label.rollProgress = 0.25
+        label.shiftProgress = 0.5
         const currentWidth = label.implicitWidth
         label.amountOverride = "12345678"
         optionsModel.displayUnit = BitcoinAmount.BTC
@@ -416,6 +419,8 @@ TestCase {
             address: "abcdefghijklmnopqrst"
         }
     }
+
+    Component { id: receiveSignalSpy; SignalSpy { signalName: "receiveRequested" } }
 
     function test_addressDetails_request_button_views_existing_request() {
         const details = createTemporaryObject(detailsComponent, host)
@@ -628,17 +633,24 @@ TestCase {
         verify(list !== null)
         compare(list.clip, true)
 
-        page.updatePendingNote("bcrt1qdraftaddress", "Draft note")
-        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Draft note")
+        page.addressModel.resetForTest()
+        const address = page.addressModel.addressAt(0)
+        const editor = page.addressModel.editLabel(address)
+        verify(editor !== null)
+        tryCompare(editor, "phase", TextEditSessionModel.Editing)
+        editor.text.edit("Draft note")
+        tryCompare(editor, "dirty", true)
+        compare(editor.text.text, "Draft note")
         page.addressModel.refresh()
-        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Draft note")
-
-        page.selectedAddress = "bcrt1qdraftaddress"
-        page.selectedLabel = "Saved note"
+        compare(page.addressModel.labelEditor(address), editor)
+        compare(editor.text.text, "Draft note")
         page.addressModel.setAddressLabelSucceeds = true
-        verify(page.updateAddressLabel("bcrt1qdraftaddress", "Draft note"))
-        compare(page.selectedLabel, "Draft note")
-        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Saved note")
+        editor.save()
+        tryVerify(() => editor.saveResult.persisted)
+        tryCompare(editor, "dirty", false)
+        compare(page.addressModel.labelAt(0), "Draft note")
+        compare(editor.text.text, "Draft note")
+        compare(editor.committedText, "Draft note")
         page.addressModel.setAddressLabelSucceeds = false
     }
 
@@ -678,7 +690,7 @@ TestCase {
         targetNote.forceActiveFocus()
         tryCompare(targetNote, "activeFocus", true)
 
-        compare(page.addressModel.labelAt(0), "Draft for the first address")
+        tryVerify(() => page.addressModel.labelAt(0) === "Draft for the first address")
         compare(page.addressModel.labelAt(targetIndex), targetLabel)
         compare(list.reuseItems, false)
 
@@ -824,4 +836,157 @@ TestCase {
         noteField.forceActiveFocus(Qt.TabFocusReason)
         verify(!noteField.activeFocus)
     }
+    Component { id: noteWindowComponent; Window { width: 720; height: 800; visible: false } }
+    function clickNoteControl(root, name) {
+        const item = findChild(root, name)
+        verify(item !== null)
+        // Newly visible conflict buttons still share their old positions
+        // until the parent layouts polish. Click their actual final bounds.
+        for (let parent = item.parent; parent; parent = parent.parent) verify(waitForItemPolished(parent))
+        verify(waitForItemPolished(item))
+        tryVerify(function() {
+            if (!item.visible || !item.enabled || item.width <= 0 || item.height <= 0) return false
+            for (let parent = item.parent; parent; parent = parent.parent) {
+                if (!parent.clip) continue
+                const point = item.mapToItem(parent, item.width / 2, item.height / 2)
+                if (point.x < 0 || point.y < 0 || point.x >= parent.width || point.y >= parent.height) return false
+            }
+            const window = item.Window.window
+            if (!window) return false
+            const center = item.mapToItem(window.contentItem, item.width / 2, item.height / 2)
+            return center.x >= 0 && center.y >= 0 && center.x < window.contentItem.width && center.y < window.contentItem.height
+        })
+        mouseClick(item, item.width / 2, item.height / 2)
+    }
+    function textEditorFixture() {
+        const model = testWalletModel.addressListModel
+        model.resetForTest()
+        model.setAddressLabelSucceeds = true
+        const address = model.addressAt(0)
+        const editor = model.editLabel(address)
+        verify(editor !== null)
+        tryCompare(editor, "phase", TextEditSessionModel.Editing)
+        const window = createTemporaryObject(noteWindowComponent, this)
+        verify(window !== null)
+        window.show()
+        tryCompare(window, "visible", true)
+        const details = createTemporaryObject(detailsComponent, window.contentItem, {width: 640, address: address, editor: editor})
+        verify(details !== null)
+        verify(waitForItemPolished(details))
+        return {model: model, editor: editor, details: details, address: address, window: window}
+    }
+    function editDetails(fixture, value) {
+        const field = findObject(fixture.details, "addressDetailsNoteField")
+        verify(field !== null)
+        fixture.window.requestActivate()
+        tryCompare(fixture.window, "active", true)
+        field.forceActiveFocus()
+        tryCompare(field, "activeFocus", true)
+        verify(testSetup.replaceText(field, value))
+        tryCompare(fixture.editor.text, "text", value)
+        tryCompare(fixture.editor, "dirty", true)
+        return field
+    }
+    function test_typed_note_close_requires_save_discard_or_keep_data() {
+        return [{tag: "save", button: "addressNoteSaveAndCloseButton", saved: true, closed: true},
+                {tag: "discard", button: "addressNoteDiscardAndCloseButton", saved: false, closed: true},
+                {tag: "keep", button: "addressNoteKeepEditingButton", saved: false, closed: false}]
+    }
+    function test_typed_note_close_requires_save_discard_or_keep(data) {
+        const fixture = textEditorFixture()
+        const original = fixture.model.labelAt(0)
+        editDetails(fixture, "Exact private draft")
+        compare(fixture.model.labelAt(0), original)
+        clickNoteControl(fixture.details, "addressDetailsCloseButton")
+        tryVerify(() => fixture.editor.closePrompt !== null)
+        const prompt = findChild(fixture.details, "addressNoteClosePrompt")
+        verify(prompt !== null)
+        tryCompare(prompt, "opened", true)
+        clickNoteControl(prompt, data.button)
+        tryCompare(fixture.editor, "phase", data.closed ? TextEditSessionModel.Closed : TextEditSessionModel.Editing)
+        compare(fixture.model.labelAt(0), data.saved ? "Exact private draft" : original)
+        if (data.saved) verify(fixture.editor.saveResult.persisted)
+        if (!data.closed) {
+            compare(fixture.editor.text.text, "Exact private draft")
+            verify(fixture.editor.dirty)
+            fixture.editor.discard()
+            tryCompare(fixture.editor, "dirty", false)
+        }
+    }
+    function test_typed_note_failure_keeps_draft_and_retry_owns_result() {
+        const fixture = textEditorFixture()
+        const original = fixture.model.labelAt(0)
+        fixture.model.setAddressLabelSucceeds = false
+        const field = editDetails(fixture, "Must survive failure")
+        const save = findObject(fixture.details, "addressDetailsSaveNoteButton")
+        tryCompare(save, "enabled", true)
+        clickNoteControl(fixture.details, "addressDetailsSaveNoteButton")
+        tryVerify(() => fixture.editor.saveResult.present)
+        compare(fixture.editor.saveResult.persisted, false)
+        compare(fixture.model.labelAt(0), original)
+        compare(field.text, "Must survive failure")
+        verify(fixture.editor.error.message.length > 0)
+        verify(fixture.editor.dirty)
+        fixture.model.setAddressLabelSucceeds = true
+        tryCompare(save, "enabled", true)
+        clickNoteControl(fixture.details, "addressDetailsSaveNoteButton")
+        tryVerify(() => fixture.editor.saveResult.persisted)
+        compare(fixture.model.labelAt(0), "Must survive failure")
+        compare(field.text, "Must survive failure")
+        compare(fixture.editor.error.message, "")
+    }
+    function test_typed_note_external_change_requires_explicit_choice_data() {
+        return [{tag: "keep-edit", button: "addressDetailsKeepEditedNoteButton", draft: "My draft", dirty: true},
+                {tag: "use-current", button: "addressDetailsUseCurrentNoteButton", draft: "External note", dirty: false}]
+    }
+    function test_typed_note_external_change_requires_explicit_choice(data) {
+        const fixture = textEditorFixture()
+        const field = editDetails(fixture, "My draft")
+        const operation = fixture.model.setAddressLabel(fixture.address, "External note")
+        verify(operation !== null)
+        fixture.editor.refresh()
+        tryCompare(fixture.editor, "conflict", true)
+        compare(field.text, "My draft")
+        compare(fixture.editor.committedText, "External note")
+        compare(findObject(fixture.details, "addressDetailsSaveNoteButton").enabled, false)
+        clickNoteControl(fixture.details, data.button)
+        tryCompare(fixture.editor, "conflict", false)
+        tryCompare(field, "text", data.draft)
+        compare(fixture.editor.dirty, data.dirty)
+        compare(fixture.model.labelAt(0), "External note")
+        fixture.editor.discard()
+        tryCompare(field, "text", "External note")
+    }
+
+    function test_note_failure_remains_scoped_when_another_address_saves() {
+        const fixture = textEditorFixture()
+        const original = fixture.model.labelAt(0)
+        fixture.model.setAddressLabelSucceeds = false
+        editDetails(fixture, "First failed draft")
+        clickNoteControl(fixture.details, "addressDetailsSaveNoteButton")
+        tryVerify(() => fixture.editor.saveResult.present)
+        const failure = fixture.editor.error.message
+        verify(failure.length > 0)
+        fixture.model.setAddressLabelSucceeds = true
+        const other = fixture.model.editLabel(fixture.model.addressAt(1))
+        verify(other !== null)
+        tryCompare(other, "phase", TextEditSessionModel.Editing)
+        other.text.edit("Second committed note")
+        other.save()
+        tryVerify(() => other.saveResult.persisted)
+        compare(fixture.model.labelAt(1), "Second committed note")
+        compare(fixture.model.labelAt(0), original)
+        compare(fixture.editor.text.text, "First failed draft")
+        compare(fixture.editor.error.message, failure)
+        compare(fixture.editor.saveResult.persisted, false)
+        verify(fixture.editor.dirty)
+        fixture.editor.requestClose()
+        tryVerify(() => fixture.editor.closePrompt !== null)
+        fixture.editor.closePrompt.answer(TextEditClosePrompt.Discard)
+        tryCompare(fixture.editor, "phase", TextEditSessionModel.Closed)
+        compare(fixture.editor.error.message, "")
+        compare(fixture.editor.saveResult.persisted, false)
+        compare(fixture.editor.saveResult.error.message, failure)
+    }
+
 }

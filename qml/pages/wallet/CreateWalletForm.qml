@@ -3,49 +3,47 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
-import "../../controls"
 import "../../components"
 
 OnboardingView {
     id: root
+    readonly property CreateWalletFields fieldsView: root.loadedChildView as CreateWalletFields
     objectName: "createWalletFormPage"
     showNavigationBar: false
     usesSharedNavigation: true
     property bool watchOnly: false
     property bool modalView: false
     property bool creating: false
-    property string nameError: ""
-    readonly property bool validXpub: loadedChildView
-        && loadedChildView.xpubText.trim().length >= 100
-        && walletController.validateXpub(loadedChildView.xpubText.trim())
-    readonly property bool passwordsMatch: loadedChildView
-        && loadedChildView.passwordText.length > 0
-        && loadedChildView.passwordText === loadedChildView.confirmText
-    readonly property bool canCreate: loadedChildView && walletController.initialized && !creating
-        && !walletController.walletLoadInProgress && loadedChildView.walletName.trim().length > 0
-        && (watchOnly ? validXpub : loadedChildView.encryptWallet
-            ? passwordsMatch && loadedChildView.passwordLossAcknowledged
-            : loadedChildView.unencryptedWalletAcknowledged)
+    readonly property WalletCreationModel editor: WalletCreationModel {
+        creation: ApplicationModels.walletController ? ApplicationModels.walletController.creation : null
+    }
+    property WalletOperationModel operation: editor ? editor.operation : null
+    readonly property string nameError: editor ? editor.name.error : qsTr("Wallet creation is unavailable.")
+    readonly property bool validXpub: editor && !editor.pendingValidation && editor.extendedPublicKey.error.length === 0
+        && editor.extendedPublicKey.text.length > 0
+    readonly property bool passwordsMatch: root.fieldsView
+        && root.fieldsView.passwordText.length > 0
+        && root.fieldsView.passwordText === root.fieldsView.confirmText
+    readonly property bool canCreate: root.fieldsView && editor && editor.canCreate && !creating
+        && (watchOnly ? validXpub : root.fieldsView.encryptWallet
+            ? passwordsMatch && root.fieldsView.passwordLossAcknowledged
+            : root.fieldsView.unencryptedWalletAcknowledged)
 
     signal cancel()
-    signal createRequested(string name, string xpub, string passphrase)
+    signal operationSubmitted(WalletOperationModel operation)
 
     function submit() {
         if (!canCreate) return
-        const availabilityError = walletController.walletNameAvailabilityError(loadedChildView.walletName)
-        if (availabilityError.length > 0) {
-            nameError = availabilityError
-            return
-        }
-        createRequested(loadedChildView.walletName.trim(), loadedChildView.xpubText.trim(),
-            watchOnly || !loadedChildView.encryptWallet ? "" : loadedChildView.passwordText)
+        const accepted = editor.create(watchOnly || !root.fieldsView.encryptWallet ? "" : root.fieldsView.passwordText,
+            watchOnly || !root.fieldsView.encryptWallet ? "" : root.fieldsView.confirmText)
+        clearSecrets()
+        if (accepted) operationSubmitted(accepted)
     }
 
     function clearSecrets() {
-        if (loadedChildView) loadedChildView.clearSecrets()
+        if (root.fieldsView) root.fieldsView.clearSecrets()
     }
 
     title: ""
@@ -58,179 +56,29 @@ OnboardingView {
         ? (navigationStack.canGoBack !== undefined
             ? navigationStack.canGoBack : navigationStack.depth > 1) : false
     showCloseButton: modalView && !creating
-    primaryButtonText: creating ? qsTr("Creating…") : qsTr("Create wallet")
+    primaryButtonText: creating ? qsTr("Creating…") : editor && editor.pendingValidation ? qsTr("Checking…") : qsTr("Create wallet")
     primaryButtonObjectName: "createWalletFormCreateButton"
     primaryButtonEnabled: canCreate
     onCloseClicked: root.cancel()
     onPrimaryClicked: {
         if (!root.canCreate) return
-        if (root.watchOnly || root.loadedChildView.encryptWallet) root.submit()
-        else root.loadedChildView.openUnencryptedWarning()
+        if (root.watchOnly || root.fieldsView.encryptWallet) root.submit()
+        else root.fieldsView.openUnencryptedWarning()
     }
 
-    Component.onCompleted: {
-        walletController.clearWalletCreateStatus()
-        walletController.clearWalletLoadStatus()
-    }
-    Component.onDestruction: clearSecrets()
+    Component.onCompleted: if (editor) editor.chooseKind(watchOnly ? WalletCreationModel.WatchOnly : WalletCreationModel.Software)
+    Component.onDestruction: { clearSecrets(); if (editor) editor.discard() }
 
-    childView: ColumnLayout {
-        id: fields
-        property alias walletName: nameEntry.text
-        property alias xpubText: xpubEntry.text
-        property alias encryptWallet: encryptCheck.checked
-        property alias passwordText: passwordEntry.text
-        property alias confirmText: confirmEntry.text
-        readonly property bool passwordLossAcknowledged: acknowledgement.checked
-        readonly property bool unencryptedWalletAcknowledged: unencryptedAcknowledgement.checked
-
-        function clearSecrets() {
-            passwordEntry.text = ""
-            confirmEntry.text = ""
-        }
-        function openUnencryptedWarning() {
-            unencryptedWarning.open()
-        }
-
-        spacing: 16
-
-        LabeledTextField {
-            id: nameEntry
-            objectName: "createWalletNameEntry"
-            Layout.fillWidth: true
-            label: qsTr("Wallet name")
-            fieldObjectName: "createWalletNameInput"
-            placeholderText: qsTr("e.g. My bitcoin wallet")
-            supportingText: qsTr("You cannot change this later.")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            onTextEdited: {
-                root.nameError = ""
-                walletController.clearWalletCreateStatus()
-                walletController.clearWalletLoadStatus()
-            }
-        }
-
-        // Consent in a form is a checkbox; nothing applies until Create.
-        FormSection {
-            objectName: "createWalletSecuritySection"
-            visible: !root.watchOnly
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            showBackground: false
-            title: qsTr("Security")
-            rowSpacing: 16
-
-            CheckBox {
-                id: encryptCheck
-                objectName: "createWalletEncryptCheckBox"
-                Layout.fillWidth: true
-                text: qsTr("Encrypt this wallet with a strong password.")
-                description: qsTr("Recommended")
-                checked: true
-                onCheckedChanged: {
-                    if (!checked) acknowledgement.checked = false
-                    if (checked) unencryptedAcknowledgement.checked = false
-                }
-            }
-
-            PasswordTextField {
-                id: passwordEntry
-                objectName: "createWalletPasswordEntry"
-                visible: encryptCheck.checked
-                Layout.fillWidth: true
-                label: qsTr("Password")
-                fieldObjectName: "createWalletPasswordInput"
-                placeholderText: qsTr("Enter password…")
-                fieldSurface: true
-                labelSpacing: 6
-                messageSpacing: 8
-                fieldBackgroundColor: Theme.color.surface2
-                onTextEdited: walletController.clearWalletCreateStatus()
-            }
-            PasswordTextField {
-                id: confirmEntry
-                objectName: "createWalletConfirmPasswordEntry"
-                visible: encryptCheck.checked
-                Layout.fillWidth: true
-                label: qsTr("Confirm password")
-                fieldObjectName: "createWalletPasswordRepeatInput"
-                placeholderText: qsTr("Enter password again…")
-                fieldSurface: true
-                labelSpacing: 6
-                messageSpacing: 8
-                fieldBackgroundColor: Theme.color.surface2
-                errorText: text.length > 0 && passwordEntry.text !== text
-                    ? qsTr("Passwords don't match") : ""
-                onTextEdited: walletController.clearWalletCreateStatus()
-            }
-
-            CheckBox {
-                id: acknowledgement
-                objectName: "createWalletPasswordConfirmToggle"
-                visible: encryptCheck.checked
-                Layout.fillWidth: true
-                text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-            }
-
-            CheckBox {
-                id: unencryptedAcknowledgement
-                objectName: "createWalletUnencryptedConfirmToggle"
-                visible: !encryptCheck.checked
-                Layout.fillWidth: true
-                text: qsTr("I understand this wallet will be unencrypted. Anyone with access to its file may be able to spend my bitcoin. I cannot set a password later.")
-            }
-        }
-
-        LabeledTextArea {
-            id: xpubEntry
-            objectName: "createWalletXpubEntry"
-            visible: root.watchOnly
-            Layout.fillWidth: true
-            label: qsTr("Extended public key (xpub)")
-            inputObjectName: "watchOnlyXpubInput"
-            placeholderText: qsTr("Enter your key…")
-            supportingText: qsTr("Only public information is imported. Private keys stay with your signer.")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            errorText: text.trim().length > 0 && !root.validXpub
-                ? qsTr("Enter a valid extended public key (xpub)") : ""
-            onTextEdited: walletController.clearWalletLoadStatus()
-        }
-
-        CoreText {
-            objectName: "createWalletFormErrorText"
-            visible: text.length > 0
-            Layout.fillWidth: true
-            text: root.nameError.length > 0 ? root.nameError
-                : root.watchOnly ? walletController.walletLoadError : walletController.walletCreateError
-            color: Theme.color.dangerText
-            textStyle: Theme.text.caption
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignLeft
-        }
-
-        AlertPopup {
-            id: unencryptedWarning
-            objectName: "createWalletUnencryptedWarning"
-            parent: Overlay.overlay
-            title: qsTr("Create without encryption?")
-            message: qsTr("This wallet file will be unencrypted. Anyone with access to it may be able to spend your bitcoin. You won't be able to set a password later.")
-            AlertAction {
-                text: qsTr("Cancel")
-                role: AlertAction.Cancel
-                buttonObjectName: "createWalletWarningCancelButton"
-            }
-            AlertAction {
-                text: qsTr("Create wallet")
-                role: AlertAction.Normal
-                buttonObjectName: "createWalletWarningConfirmButton"
-                onTriggered: root.submit()
-            }
-        }
+    childView: CreateWalletFields {
+        watchOnly: root.watchOnly
+        nameError: root.nameError
+        validXpub: root.validXpub
+        xpubChecked: root.editor !== null && !root.editor.pendingValidation
+        operation: root.operation
+        submissionError: root.editor ? root.editor.error.message : ""
+        onNameIntent: function(value) { if (root.editor) root.editor.name.edit(value) }
+        onKeyIntent: function(value) { if (root.editor) root.editor.extendedPublicKey.edit(value) }
+        onEncryptionIntent: function(value) { if (root.editor) root.editor.setEncryptRequested(value) }
+        onSubmitRequested: root.submit()
     }
 }

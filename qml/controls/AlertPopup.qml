@@ -32,6 +32,16 @@ DialogPopup {
         : Theme.color.neutral9
     property string errorText: ""
     property string errorTextObjectName: "alertErrorText"
+    property var errorDetailsModel: null
+    property bool showErrorDetails: false
+    // Hides the error once the user has answered it, such as by editing the
+    // field it is about. A new error shows again.
+    property bool errorDismissed: false
+    readonly property string shownErrorText: errorDismissed ? "" : errorText
+    onErrorTextChanged: {
+        showErrorDetails = false
+        errorDismissed = false
+    }
     // Extra controls between the message and the actions, such as a field.
     property alias content: contentColumn.data
     default property alias actions: actionStore.data
@@ -42,6 +52,14 @@ DialogPopup {
     // Answered by Return outside a button; defaults to the only Normal action,
     // so Return never confirms a destructive action.
     property AlertAction returnAction: null
+    // Bind to show the alert from state, such as a controller's prompt:
+    //     shown: review.prompt === TransactionReviewController.Password
+    // A bound alert opens and closes only with this property. Where it would
+    // close itself (an action that closes it, Escape) it emits
+    // closeRequested() instead; the owner answers and its state closes it.
+    property var shown: undefined
+    readonly property bool bound: shown !== undefined
+    signal closeRequested()
 
     property var visibleActions: [defaultAction]
     readonly property real minimumActionWidth: {
@@ -87,9 +105,23 @@ DialogPopup {
         }
     }
 
+    function followShown() {
+        if (!bound) return
+        if (shown) {
+            if (!visible) open()
+        } else if (visible) {
+            close()
+        }
+    }
+
+    function requestClose() {
+        if (bound) closeRequested()
+        else close()
+    }
+
     function trigger(action) {
         if (!action.enabled) return
-        if (action.closesPopup) close()
+        if (action.closesPopup) requestClose()
         action.triggered()
         // A disabled action can leave focus on the popup shell, outside the
         // content's key handlers. Keep Escape and Return inside the content.
@@ -99,7 +131,7 @@ DialogPopup {
     function focusAction(action, reason) {
         const index = visibleActions.indexOf(action)
         const delegate = index >= 0 ? actionRepeater.itemAt(index) : null
-        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason)
+        if (delegate) delegate.button.forceActiveFocus(reason === undefined ? Qt.OtherFocusReason : reason) // qmllint disable missing-property
     }
 
     function cancelAction() {
@@ -129,7 +161,7 @@ DialogPopup {
         const window = contentItem ? contentItem.Window.window : null
         const focused = window ? window.activeFocusItem : null
         // Check boxes and switches ignore Return; it shouldn't submit past them.
-        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return
+        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return // qmllint disable missing-property
         const action = acceptAction()
         if (action) trigger(action)
     }
@@ -140,11 +172,15 @@ DialogPopup {
         if (action) {
             trigger(action)
         } else if (dismissible) {
-            close()
+            requestClose()
         }
     }
 
-    Component.onCompleted: refreshActions()
+    Component.onCompleted: {
+        refreshActions()
+        followShown()
+    }
+    onShownChanged: followShown()
     onAboutToShow: refreshActions()
     onActionListChanged: refreshActions()
 
@@ -251,11 +287,38 @@ DialogPopup {
                 objectName: root.errorTextObjectName
                 Layout.fillWidth: true
                 visible: text.length > 0
-                text: root.errorText
+                text: root.shownErrorText
                 color: Theme.color.danger
                 textStyle: Theme.text.description
                 wrapMode: Text.WordWrap
                 horizontalAlignment: root.messageAlignment
+            }
+
+            TextButton {
+                objectName: root.errorTextObjectName + "DetailsButton"
+                visible: root.shownErrorText.length > 0 && root.errorDetailsModel !== null
+                text: root.showErrorDetails ? qsTr("Hide details") : qsTr("Show details")
+                onClicked: root.showErrorDetails = !root.showErrorDetails
+            }
+
+            ListView {
+                id: errorDetails
+                objectName: root.errorTextObjectName + "Details"
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 120 : 0
+                visible: root.showErrorDetails && root.shownErrorText.length > 0 && root.errorDetailsModel !== null
+                model: root.errorDetailsModel
+                clip: true
+                reuseItems: true
+                cacheBuffer: 0
+                delegate: CoreText {
+                    required property string content
+                    width: errorDetails.width
+                    text: content
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                    textStyle: Theme.text.description
+                }
             }
         }
 
@@ -291,26 +354,28 @@ DialogPopup {
                     // it explicitly so `visibleActions[index]` resolves.
                     required property int index
 
-                    readonly property AlertAction alertAction: root.visibleActions[index]
-                    readonly property bool neutralAction: alertAction.role === AlertAction.Cancel
-                        || alertAction.role === AlertAction.Neutral
+                    // Null while a shrinking action list retires this delegate.
+                    readonly property AlertAction alertAction: index < root.visibleActions.length ? root.visibleActions[index] : null
+                    readonly property bool neutralAction: alertAction !== null && (alertAction.role === AlertAction.Cancel
+                        || alertAction.role === AlertAction.Neutral)
                     readonly property Item button: neutralAction ? neutralButton : primaryButton
 
                     width: actionRow.stacked ? actionRow.width
                         : Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
                     height: Theme.size.controlLarge
 
+                    enabled: alertAction !== null && alertAction.enabled
                     function triggerAction() {
-                        root.trigger(alertAction)
+                        if (alertAction) root.trigger(alertAction)
                     }
 
                     NeutralButton {
                         id: neutralButton
                         anchors.fill: parent
                         visible: actionDelegate.neutralAction
-                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
-                        text: actionDelegate.alertAction.text
-                        enabled: actionDelegate.alertAction.enabled
+                        objectName: visible && actionDelegate.alertAction ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction ? actionDelegate.alertAction.text : ""
+                        enabled: actionDelegate.enabled
                         buttonSize: NeutralButton.Large
                         onClicked: actionDelegate.triggerAction()
                     }
@@ -320,10 +385,10 @@ DialogPopup {
                         anchors.fill: parent
                         horizontalPadding: Theme.space.xl
                         visible: !actionDelegate.neutralAction
-                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
-                        text: actionDelegate.alertAction.text
-                        enabled: actionDelegate.alertAction.enabled
-                        destructive: actionDelegate.alertAction.role === AlertAction.Destructive
+                        objectName: visible && actionDelegate.alertAction ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction ? actionDelegate.alertAction.text : ""
+                        enabled: actionDelegate.enabled
+                        destructive: actionDelegate.alertAction !== null && actionDelegate.alertAction.role === AlertAction.Destructive
                         onClicked: actionDelegate.triggerAction()
                     }
                 }

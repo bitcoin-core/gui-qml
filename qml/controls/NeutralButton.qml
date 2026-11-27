@@ -65,13 +65,16 @@ AbstractButton {
         implicitWidth: contentRow.implicitWidth
         implicitHeight: contentRow.implicitHeight
 
+        // The row fills the button; spacers centre the content and the label
+        // elides only when the button is narrower than the content. A width
+        // bound to the row's own implicit width loops on Qt 6.2.
         RowLayout {
             id: contentRow
-            anchors.centerIn: parent
-            width: Math.min(implicitWidth, parent.width)
-            spacing: root.text.length > 0 && root.iconSource.toString().length > 0
-                ? root.contentSpacing : 0
+            anchors.fill: parent
+            spacing: 0
+            Item { Layout.fillWidth: true; Layout.preferredWidth: 0 }
             Icon {
+                Layout.rightMargin: root.text.length > 0 ? root.contentSpacing : 0
                 visible: root.iconSource.toString().length > 0
                 source: root.iconSource
                 size: root.iconSize
@@ -80,6 +83,7 @@ AbstractButton {
             CoreText {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
+                Layout.maximumWidth: implicitWidth
                 wrap: false
                 elide: Text.ElideRight
                 visible: root.text.length > 0
@@ -88,6 +92,7 @@ AbstractButton {
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
             }
+            Item { Layout.fillWidth: true; Layout.preferredWidth: 0 }
         }
     }
 

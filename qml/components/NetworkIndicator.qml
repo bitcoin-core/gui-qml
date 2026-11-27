@@ -3,10 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import "../controls"
 
-import org.bitcoincore.qt 1.0
 
 // A status badge, not a control: it takes no focus or clicks.
 Control {
@@ -16,7 +16,7 @@ Control {
     property color textColor: Theme.color.accentForeground
     property bool shorten: false
     property bool show: true
-    property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
+    property var chainModelRef: typeof chainModel !== "undefined" ? ApplicationModels.chainModel : null
     property var textStyle: Theme.text.description
     topPadding: Theme.space.xxs
     bottomPadding: Theme.space.xxs
@@ -50,15 +50,13 @@ Control {
     states: [
         State {
             name: "MAIN"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: false
             }
         },
         State {
             name: "TEST"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Testnet") : qsTr("Test network")
                 bgColor: Theme.color.success
@@ -66,8 +64,7 @@ Control {
         },
         State {
             name: "TESTNET4"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Testnet4") : qsTr("Test network (v4)")
                 bgColor: Theme.color.success
@@ -75,8 +72,7 @@ Control {
         },
         State {
             name: "SIGNET"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Signet") : qsTr("Signet network")
                 bgColor: Theme.color.warning
@@ -85,8 +81,7 @@ Control {
         },
         State {
             name: "REGTEST"
-            PropertyChanges {
-                target: root
+            PropertyChanges { target: root;
                 visible: true
                 text: shorten ? qsTr("Regtest") : qsTr("Regtest mode")
                 bgColor: Theme.color.info

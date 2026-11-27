@@ -14,6 +14,8 @@
 namespace {
 constexpr int EXISTING_PROFILE_MINIMUM_REQUIRED_GB{1};
 
+int SumGB(int left,int right){return int(std::clamp<int64_t>(int64_t{left}+right,0,std::numeric_limits<int>::max()));}
+
 int BytesToGB(uint64_t bytes)
 {
     return static_cast<int>(std::min<uint64_t>(bytes / GB_BYTES, std::numeric_limits<int>::max()));
@@ -31,21 +33,25 @@ namespace QmlOnboardingStorage {
 Info Evaluate(const State& state)
 {
     Info info;
-    info.full_required_gb = state.assumed_blockchain_size_gb + state.assumed_chainstate_size_gb;
-    info.pruned_required_gb = state.prune_size_gb + state.assumed_chainstate_size_gb;
+    info.full_required_gb = SumGB(state.assumed_blockchain_size_gb,state.assumed_chainstate_size_gb);
+    info.pruned_required_gb = SumGB(state.prune_size_gb,state.assumed_chainstate_size_gb);
+    info.reduced_required_gb=SumGB(DEFAULT_PRUNE_TARGET_GB,state.assumed_chainstate_size_gb);
     info.minimum_required_gb = state.existing_profile
         ? EXISTING_PROFILE_MINIMUM_REQUIRED_GB
-        : DEFAULT_PRUNE_TARGET_GB + state.assumed_chainstate_size_gb;
-    const int selected_fresh_required_gb = state.prune && state.prune_size_gb <= state.assumed_blockchain_size_gb
+        : SumGB(DEFAULT_PRUNE_TARGET_GB,state.assumed_chainstate_size_gb);
+    const int selected_fresh_required_gb = state.prune && !state.manual_pruning && state.prune_size_gb <= state.assumed_blockchain_size_gb
         ? info.pruned_required_gb
         : info.full_required_gb;
     info.selected_required_gb = state.existing_profile ? info.minimum_required_gb : selected_fresh_required_gb;
     info.available_gb = BytesToGB(state.available_bytes);
-    info.enough_for_selected = state.result_valid && state.available_bytes >= GBToBytes(info.selected_required_gb);
+    info.enough_for_selected = state.result_valid && !state.check_pending && state.error_text.isEmpty() && state.available_bytes >= GBToBytes(info.selected_required_gb);
     info.enough_for_full = state.existing_profile
         ? info.enough_for_selected
-        : state.result_valid && state.available_bytes >= GBToBytes(info.full_required_gb);
+        : state.result_valid && !state.check_pending && state.error_text.isEmpty() && state.available_bytes >= GBToBytes(info.full_required_gb);
 
+    const auto enough=[&](int required){return state.result_valid&&!state.check_pending&&state.error_text.isEmpty()&&state.available_bytes>=GBToBytes(state.existing_profile?info.minimum_required_gb:required);};
+    info.enough_for_reduced=enough(info.reduced_required_gb);
+    info.enough_for_custom=enough(state.custom_manual_pruning?info.full_required_gb:SumGB(state.custom_prune_size_gb,state.assumed_chainstate_size_gb));
     if (state.check_pending) {
         info.status = QStringLiteral("checking");
         info.available_text = QObject::tr("Checking available storage…");
@@ -72,10 +78,10 @@ Info Evaluate(const State& state)
 
 bool ShouldRecommendPrune(const State& state)
 {
-    if (!state.result_valid || !state.error_text.isEmpty()) return false;
+    if (state.check_pending || !state.result_valid || !state.error_text.isEmpty()) return false;
     if (state.existing_profile) return false;
-    const int full_required_gb = state.assumed_blockchain_size_gb + state.assumed_chainstate_size_gb;
-    return state.available_bytes < GBToBytes(full_required_gb + 10);
+    const int full_required_gb = SumGB(state.assumed_blockchain_size_gb,state.assumed_chainstate_size_gb);
+    return state.available_bytes < GBToBytes(SumGB(full_required_gb,10));
 }
 
 } // namespace QmlOnboardingStorage

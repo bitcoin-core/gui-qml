@@ -167,6 +167,34 @@ TestCase {
         }
     }
 
+    Component {
+        id: enterTransitionComponent
+        DialogPopup {
+            title: "Fields"
+            implicitWidth: 400
+            // Tests run with motion off; give this popup its own fade-in.
+            enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 400 } }
+            initialFocusItem: firstField
+            contentItem: Column {
+                TextField { id: firstField; objectName: "enterFirstField" }
+                TextField { objectName: "enterSecondField" }
+            }
+        }
+    }
+
+    function test_focus_moved_during_the_enter_transition_stays() {
+        const popup = createTemporaryObject(enterTransitionComponent, testCase)
+        const first = findChild(popup.contentItem, "enterFirstField")
+        const second = findChild(popup.contentItem, "enterSecondField")
+        popup.open()
+        tryCompare(first, "activeFocus", true)
+        verify(!popup.opened, "the enter transition is still running")
+        keyClick(Qt.Key_Tab)
+        compare(second.activeFocus, true)
+        tryCompare(popup, "opened", true)
+        compare(second.activeFocus, true)
+    }
+
     function test_initial_focus_item() {
         const popup = createTemporaryObject(dialogComponent, testCase)
         popup.initialFocusItem = findChild(popup.contentItem, "dialogFirstButton")
@@ -209,6 +237,80 @@ TestCase {
         tryCompare(popup, "opened", false)
         compare(cancelCount, 1)
         tryCompare(trigger, "activeFocus", true)
+    }
+
+    Component {
+        id: boundAlertComponent
+        AlertPopup {
+            property bool prompt: false
+            property int closeRequests: 0
+            title: "Send all funds?"
+            shown: prompt
+            onCloseRequested: closeRequests += 1
+            AlertAction { text: "Back"; role: AlertAction.Cancel; buttonObjectName: "boundCancelButton"; onTriggered: testCase.cancelCount += 1 }
+            AlertAction { text: "Send"; buttonObjectName: "boundConfirmButton"; closesPopup: false; onTriggered: testCase.applyCount += 1 }
+        }
+    }
+
+    Component {
+        id: boundNoActionComponent
+        AlertPopup {
+            property bool prompt: true
+            property int closeRequests: 0
+            title: "Notice"
+            actionList: []
+            shown: prompt
+            onCloseRequested: closeRequests += 1
+        }
+    }
+
+    // A bound alert follows its state; its actions and Escape only ask.
+    function test_bound_alert_follows_shown_and_requests_close() {
+        const popup = createTemporaryObject(boundAlertComponent, testCase)
+        verify(popup !== null)
+        compare(popup.bound, true)
+        compare(popup.opened, false)
+        popup.prompt = true
+        tryCompare(popup, "opened", true)
+
+        findChild(popup.contentItem, "boundCancelButton").clicked()
+        compare(cancelCount, 1)
+        compare(popup.closeRequests, 1)
+        compare(popup.visible, true)
+
+        tryCompare(popup.contentItem, "activeFocus", true)
+        keyClick(Qt.Key_Escape)
+        compare(cancelCount, 2)
+        compare(popup.closeRequests, 2)
+        compare(popup.visible, true)
+
+        findChild(popup.contentItem, "boundConfirmButton").clicked()
+        compare(applyCount, 1)
+        compare(popup.closeRequests, 2)
+
+        popup.prompt = false
+        tryCompare(popup, "visible", false)
+        popup.prompt = true
+        tryCompare(popup, "opened", true)
+    }
+
+    function test_bound_alert_opens_when_created_shown_and_escape_without_cancel_asks() {
+        const popup = createTemporaryObject(boundNoActionComponent, testCase)
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        tryCompare(popup.contentItem, "activeFocus", true)
+        keyClick(Qt.Key_Escape)
+        compare(popup.closeRequests, 1)
+        compare(popup.visible, true)
+        popup.prompt = false
+        tryCompare(popup, "visible", false)
+    }
+
+    function test_unbound_alert_keeps_closing_itself() {
+        const popup = openDialog(alertComponent)
+        compare(popup.bound, false)
+        findChild(popup.contentItem, "alertRemoveButton").clicked()
+        tryCompare(popup, "opened", false)
     }
 
     function test_alert_ignores_outside_press() {

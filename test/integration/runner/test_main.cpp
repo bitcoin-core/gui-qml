@@ -2,8 +2,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <test/integration/fixture/test_application.h>
 #include <test/integration/fixture/test_process.h>
+#ifdef ENABLE_WALLET
+#include <test/integration/fixture/test_wallet.h>
+#endif
 #include <test/integration/runner/test_cases.h>
 
 #include <QCoreApplication>
@@ -24,6 +29,12 @@
 #include <utility>
 #include <vector>
 
+#ifdef __GLIBC__
+#include <execinfo.h>
+#include <csignal>
+#include <unistd.h>
+#endif
+
 namespace {
 struct RunnerOptions {
     const IntegrationTestModule* module{nullptr};
@@ -31,8 +42,11 @@ struct RunnerOptions {
     QString profile;
     QString profile_dir;
     QString selector;
+    std::optional<int> stage;
+    std::optional<std::pair<int, int>> shard;
     int timeout_ms{120'000};
     bool discover{false};
+    bool prepare_wallet{false};
     bool list_functions{false};
     bool list_modules{false};
     bool help{false};
@@ -63,12 +77,13 @@ QStringList TestFunctions(const QObject& tests)
 
 std::vector<IntegrationCase> TestCases(const IntegrationTestModule* selected_module,
                                      std::optional<WalletMode> wallet_mode, const QString& filter,
-                                     const QString& profile_dir, bool list_functions = false)
+                                     const QString& profile_dir, std::optional<int> stage, bool list_functions = false)
 {
     std::vector<IntegrationCase> cases;
     BitcoinQmlApplication app;
     for (const auto& module : IntegrationTestModules()) {
         if (selected_module && &module != selected_module) continue;
+        if (stage && module.stage != *stage) continue;
         for (const auto mode : module.wallet_modes) {
             if (wallet_mode && mode != *wallet_mode) continue;
             // Constructors and data functions only describe tests. Discovery
@@ -102,6 +117,18 @@ QString CaseName(const IntegrationCase& test)
     if (!test.module) return "selection";
     return QString::fromUtf8(test.module->name) + "." + WalletModeName(test.mode) + "." +
            (test.selector.isEmpty() ? "discovery" : test.selector);
+}
+
+void SelectShard(std::vector<IntegrationCase>& cases, const RunnerOptions& options)
+{
+    if (!options.shard) return;
+    const auto [index, count] = *options.shard;
+    int position{0};
+    std::erase_if(cases, [&](const IntegrationCase& test) {
+        const bool other_shard = position++ % count != index;
+        // Discovery failures must remain visible even when selecting a shard.
+        return !test.result && other_shard;
+    });
 }
 
 QStringList ChildOptions(const QStringList& arguments)
@@ -185,7 +212,8 @@ private Q_SLOTS:
     void run_data()
     {
         QTest::addColumn<int>("index");
-        m_cases = TestCases(m_options.module, m_options.wallet_mode, m_options.selector, m_options.profile_dir);
+        m_cases = TestCases(m_options.module, m_options.wallet_mode, m_options.selector, m_options.profile_dir, m_options.stage);
+        SelectShard(m_cases, m_options);
         if (m_cases.empty()) {
             m_cases.push_back({nullptr, WalletMode::Disabled, {},
                                IntegrationTestResult{IntegrationTestStatus::Failed, "No tests match the selected module, wallet mode, and test function/data row"}});
@@ -250,6 +278,26 @@ std::optional<RunnerOptions> ParseOptions(int& argc, char* argv[])
                 std::cerr << "Unknown integration module: " << name << '\n';
                 return std::nullopt;
             }
+        } else if (argument.starts_with("--stage=")) {
+            const auto value = argument.substr(std::string_view{"--stage="}.size());
+            if (options.stage || value.size() != 1 || value[0] < '1' || value[0] > '9') {
+                std::cerr << "Specify --stage=1 through --stage=9 once.\n";
+                return std::nullopt;
+            }
+            options.stage = value[0] - '0';
+        } else if (argument == "--test-prepare-funded-wallet") {
+            options.prepare_wallet = true;
+        } else if (argument.starts_with("--shard=")) {
+            const auto parts = QString::fromUtf8(argv[i] + std::string_view{"--shard="}.size()).split('/');
+            bool index_ok{false};
+            bool count_ok{false};
+            const int index = parts.value(0).toInt(&index_ok);
+            const int count = parts.value(1).toInt(&count_ok);
+            if (options.shard || parts.size() != 2 || !index_ok || !count_ok || index < 0 || count <= 0 || index >= count) {
+                std::cerr << "Specify --shard=INDEX/COUNT once, with 0 <= INDEX < COUNT.\n";
+                return std::nullopt;
+            }
+            options.shard = std::pair{index, count};
         } else if (argument.starts_with("--wallet=")) {
             const auto value = argument.substr(std::string_view{"--wallet="}.size());
             if (options.wallet_mode || (value != "disabled" && value != "enabled")) {
@@ -281,9 +329,22 @@ std::optional<RunnerOptions> ParseOptions(int& argc, char* argv[])
     }
     argc = output_index;
     argv[argc] = nullptr;
+    if (options.prepare_wallet && (options.profile.isEmpty() || options.discover || !options.selector.isEmpty() ||
+                                   options.wallet_mode != WalletMode::Enabled)) {
+        std::cerr << "Preparing a wallet requires an enabled-wallet child profile without a test selector.\n";
+        return std::nullopt;
+    }
+    if (options.shard && (!options.profile.isEmpty() || options.discover)) {
+        std::cerr << "Shards select parent test cases, not child processes.\n";
+        return std::nullopt;
+    }
     if (options.module && options.wallet_mode &&
         std::find(options.module->wallet_modes.begin(), options.module->wallet_modes.end(), *options.wallet_mode) == options.module->wallet_modes.end()) {
         std::cerr << "Module " << options.module->name << " does not support wallets " << WalletModeName(*options.wallet_mode) << '\n';
+        return std::nullopt;
+    }
+    if (options.stage && options.module && options.module->stage != *options.stage) {
+        std::cerr << "The selected module does not belong to the selected stage\n";
         return std::nullopt;
     }
     return options;
@@ -293,8 +354,9 @@ void PrintModules(bool help)
 {
     if (help) {
         std::cout << "Run one integration test suite with isolated application processes.\n"
-                     "Options: --module=NAME --wallet=disabled|enabled --list-modules\n"
+                     "Options: --stage=1..9 --module=NAME --wallet=disabled|enabled --list-modules\n"
                      "         --test=FUNCTION[:ROW] (select a function or data row)\n"
+                     "         --shard=INDEX/COUNT (zero-based partition of selected cases)\n"
                      "         --profile-dir=PATH (retain failed profiles here)\n"
                      "Omitted options select all modules and their supported wallet modes.\n"
                      "QML_TEST_TIMEOUT sets the child timeout in milliseconds (default: 120000).\n"
@@ -302,7 +364,7 @@ void PrintModules(bool help)
                      "Use -functions to list functions and -datatags to list individual rows.\n";
     }
     for (const auto& entry : IntegrationTestModules()) {
-        std::cout << entry.name << ':';
+        std::cout << entry.name << " (stage " << entry.stage << "):";
         for (const auto mode : entry.wallet_modes) std::cout << ' ' << WalletModeName(mode);
         std::cout << '\n';
     }
@@ -314,7 +376,8 @@ int RunParent(int argc, char* argv[], const RunnerOptions& options)
     QCoreApplication app(argc, argv);
     if (!PrepareReports(app.arguments())) return EXIT_FAILURE;
     if (options.list_functions) {
-        const auto cases = TestCases(options.module, options.wallet_mode, options.selector, options.profile_dir, true);
+        auto cases = TestCases(options.module, options.wallet_mode, options.selector, options.profile_dir, options.stage, !options.shard);
+        SelectShard(cases, options);
         for (const auto& test : cases) std::cout << CaseName(test).toStdString() << "()\n";
         return cases.empty() ? EXIT_FAILURE : EXIT_SUCCESS;
     }
@@ -332,12 +395,39 @@ int RunDiscovery(int argc, char* argv[], const RunnerOptions& options)
     return QTest::qExec(tests.get(), QStringList{QString::fromUtf8(argv[0]), "-datatags"});
 }
 
+#ifdef __GLIBC__
+//! A crashed child prints no stack otherwise. The parent shows its stderr.
+void PrintBacktrace(int signal_number)
+{
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    constexpr char message[]{"Crash backtrace:\n"};
+    if (write(STDERR_FILENO, message, sizeof(message) - 1) >= 0) backtrace_symbols_fd(frames, count, STDERR_FILENO);
+    signal(signal_number, SIG_DFL);
+    raise(signal_number);
+}
+
+void InstallCrashBacktrace()
+{
+    // The first call loads libgcc, which must not happen in the handler.
+    void* frame[1];
+    backtrace(frame, 1);
+    for (const int signal_number : {SIGSEGV, SIGBUS}) {
+        // Keep a sanitizer's handler.
+        if (const auto previous = signal(signal_number, PrintBacktrace); previous != SIG_DFL) signal(signal_number, previous);
+    }
+}
+#endif
+
 int RunChild(int argc, char* argv[], const RunnerOptions& options)
 {
+#ifdef __GLIBC__
+    InstallCrashBacktrace();
+#endif
     QStringList arguments;
     for (int i{0}; i < argc; ++i) arguments.push_back(QString::fromUtf8(argv[i]));
     const auto child_options = ChildOptions(arguments);
-    if (!options.module || !options.wallet_mode || (!options.discover && options.selector.isEmpty()) ||
+    if (!options.module || !options.wallet_mode || (!options.discover && !options.prepare_wallet && options.selector.isEmpty()) ||
         child_options != arguments.mid(1) || options.list_functions) {
         std::cerr << "A child requires a module, wallet mode, and a test or discovery request\n";
         return EXIT_FAILURE;
@@ -361,7 +451,17 @@ int RunChild(int argc, char* argv[], const RunnerOptions& options)
     if (options.discover) return RunDiscovery(argc, argv, options);
 
     TestApplication app{*options.wallet_mode, profile};
-    return app.runTests(argv[0], {"-qml_onboarded=1"}, [&](BitcoinQmlApplication& application) {
+    QStringList startup_arguments{"-qml_onboarded=1"};
+    if (options.module->arguments) startup_arguments.append(options.module->arguments(options.selector));
+    return app.runTests(argv[0], startup_arguments, [&](BitcoinQmlApplication& application) {
+        if (options.prepare_wallet) {
+#ifdef ENABLE_WALLET
+            auto* wallet = qmltest::CreateWallet(application, "funded");
+            return wallet && qmltest::FundWallet(application, *wallet) ? EXIT_SUCCESS : EXIT_FAILURE;
+#else
+            return EXIT_FAILURE;
+#endif
+        }
         const auto tests = options.module->create(application, *options.wallet_mode);
         return QTest::qExec(tests.get(), QStringList{QString::fromUtf8(argv[0]), options.selector, "-o", "qt-results.xml,xml"} + child_options);
     });
@@ -370,13 +470,26 @@ int RunChild(int argc, char* argv[], const RunnerOptions& options)
 
 int main(int argc, char* argv[])
 {
+    // Integration cases drive the complete application before and after this
+    // child re-exec, so they keep production-like motion. Instant visibility
+    // changes during shutdown crash Qt Quick's teardown binding cascade on
+    // 6.4.2/6.10.2; the component QML suites keep motion disabled (ctest env).
+    qunsetenv("BITCOIN_QML_TEST_NO_ANIMATIONS");
+    // Transition animations are irrelevant to assertions and make teardown flaky on Qt 6.2.
     const auto options = ParseOptions(argc, argv);
     if (!options) return EXIT_FAILURE;
     if (options->list_modules) {
         PrintModules(options->help);
         return EXIT_SUCCESS;
     }
-    if (options->profile.isEmpty()) return RunParent(argc, argv, *options);
+    // Qt Test's 5-minute watchdog covers one test function. The parent's runs a
+    // whole group of cases, which takes longer on a slow machine; a hung case
+    // is caught by its child's own watchdog and by the CTest timeout.
+    if (options->profile.isEmpty()) {
+        qputenv("QTEST_FUNCTION_TIMEOUT", "1500000");
+        return RunParent(argc, argv, *options);
+    }
+    qputenv("QTEST_FUNCTION_TIMEOUT", "300000");
     return RunChild(argc, argv, *options);
 }
 

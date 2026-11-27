@@ -6,6 +6,7 @@
 #define BITCOIN_QML_BUILDINFO_H
 
 #include <clientversion.h>
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <QObject>
 #include <QString>
@@ -15,6 +16,7 @@ class BuildInfo : public QObject
     Q_OBJECT
     Q_PROPERTY(bool isDebug READ isDebug CONSTANT)
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
+    Q_PROPERTY(bool externalSignerSupport READ externalSignerSupport CONSTANT)
 
 public:
     explicit BuildInfo(QObject* parent = nullptr) : QObject(parent) {}
@@ -29,6 +31,13 @@ public:
     }
 
     QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
+    bool externalSignerSupport() const {
+#ifdef ENABLE_EXTERNAL_SIGNER
+        return true;
+#else
+        return false;
+#endif
+    }
 };
 
 #endif // BITCOIN_QML_BUILDINFO_H

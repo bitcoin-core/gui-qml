@@ -2,139 +2,186 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <qml/atomicsharedptr.h>
 #include <qml/models/blockclockmodel.h>
-
 #include <qml/models/blockclockhistory.h>
-
+#include <qml/guipresentation.h>
+#include <qml/retainedsnapshot.h>
 #include <algorithm>
-#include <utility>
-
-#include <QMetaObject>
+#include <QPointer>
 #include <QTime>
 
-BlockClockModel::BlockClockModel(std::shared_ptr<BlockClockHistory> history, bool start_timer,
-                                 CurrentTimeProvider current_time_provider, QObject* parent)
+struct BlockClockModel::Native {
+    std::shared_ptr<BlockClockHistory> history;
+    struct Wake {
+        std::atomic_bool closed{false}, pending{false};
+    };
+    const std::shared_ptr<Wake> wake{std::make_shared<Wake>()};
+    std::atomic<qint64> period{0};
+    std::atomic<quint64> revision{0}, interest{0};
+    ownership::AtomicSharedPtr<const blockclock::Projection> published;
+    QList<qint64> timestamps;
+    bool registered{false}, have_snapshot{false};
+    quint64 callback_token{0};
+    quint64 next_serial{0}, captured_generation{0};
+    ~Native() { if (registered) history->clearChangedCallback(callback_token); }
+};
+
+BlockClockModel::BlockClockModel(std::shared_ptr<BlockClockHistory> history, PresentationServices& services,
+                                 bool start_timer, CurrentTimeProvider current_time_provider, QObject* parent)
     : QObject{parent},
-      m_history{history ? std::move(history) : std::make_shared<BlockClockHistory>()},
-      m_current_time_provider{std::move(current_time_provider)},
-      m_clock_timer{this}
+      m_post{presentation::ReliablePost(services.ports().post)},
+      m_observation_post{services.observationPost()},
+      m_retire_value{services.valueRetirement()},
+      m_current_time_provider{std::move(current_time_provider)}, m_clock_timer{this}
 {
-    if (!m_current_time_provider) {
-        m_current_time_provider = [] { return QDateTime::currentDateTime(); };
+    connect(&services, &PresentationServices::closed, this, &BlockClockModel::close);
+    if (services.isClosed()) {
+        close();
+        return;
     }
-
-    m_clock_timer.setSingleShot(true);
-    m_clock_timer.setTimerType(Qt::PreciseTimer);
+    if (!m_current_time_provider) m_current_time_provider = [] { return QDateTime::currentDateTime(); };
+    if (!history) history = std::make_shared<BlockClockHistory>();
+    m_native = m_observation_post ? execution::RetainSnapshot<Native>(m_retire_value, [&] {
+        auto value = std::make_unique<Native>(); value->history = history; return value;
+    }) : nullptr;
+    if (!m_native) m_error = tr("Block history background services are unavailable.");
+    m_clock_timer.setSingleShot(true); m_clock_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_clock_timer, &QTimer::timeout, this, [this] {
-        const QDateTime current_time{m_current_time_provider()};
-        updateCurrentTime(current_time);
-        scheduleNextClockUpdate(current_time);
+        const QPointer<BlockClockModel> observer{this};
+        const auto now = m_current_time_provider(); updateCurrentTime(now);
+        if (observer) observer->scheduleNextClockUpdate(now);
     });
-    const QDateTime current_time{m_current_time_provider()};
-    updateCurrentTime(current_time);
-    if (start_timer) scheduleNextClockUpdate(current_time);
-    m_history->setChangedCallback([this] { scheduleHistoryRefresh(); });
+    const auto now = m_current_time_provider();
+    updateCurrentTime(now);
+    if (start_timer) scheduleNextClockUpdate(now);
 }
-
-BlockClockModel::~BlockClockModel()
-{
-    stop();
-}
-
+BlockClockModel::~BlockClockModel() { close(); }
 void BlockClockModel::stop()
 {
-    if (m_stopped) return;
-    m_stopped = true;
-    // The cache invokes this callback under its mutex. Detaching therefore
-    // finishes any in-flight event posting before this QObject can be destroyed.
-    m_history->setChangedCallback({});
-    m_clock_timer.stop();
+    if (std::exchange(m_stopped, true)) return;
+    if (m_native) m_native->wake->closed.store(true);
+    if (m_query) m_query->close();
+    m_query.reset(); m_pending = false; m_clock_timer.stop();
 }
-
-void BlockClockModel::scheduleHistoryRefresh()
+void BlockClockModel::close()
 {
-    if (m_history_refresh_pending.exchange(true)) return;
-    QMetaObject::invokeMethod(this, [this] {
-        // Changes arriving during consumption schedule the next refresh.
-        m_history_refresh_pending = false;
-        refreshHistory();
-    }, Qt::QueuedConnection);
+    stop();
+    m_projection.reset(); m_native.reset();
 }
-
 qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
 {
-    const qint64 seconds_since_midnight{current_time.time().msecsSinceStartOfDay() / 1000};
-    return current_time.toSecsSinceEpoch() - (seconds_since_midnight % PERIOD_SECONDS);
+    const qint64 seconds = current_time.time().msecsSinceStartOfDay() / 1000;
+    return current_time.toSecsSinceEpoch() - seconds % PERIOD_SECONDS;
 }
-
-void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
+void BlockClockModel::updateCurrentTime(const QDateTime& now)
 {
     if (m_stopped) return;
-    const qint64 period_start{PeriodStartFor(current_time)};
-    if (m_timeline.period_start != period_start) {
-        m_timeline.period_start = period_start;
-        // Keep the previous period for ordinary backwards clock/DST changes,
-        // and retain future timestamps so rollover needs no backend reads.
-        m_history->setRetentionStart(period_start - PERIOD_SECONDS);
-        if (auto snapshot = m_history->takeSnapshot()) m_cached_block_timestamps = std::move(*snapshot);
-        replaceBlockHistory(m_cached_block_timestamps, /*period_changed=*/true);
-        Q_EMIT periodChanged();
+    const auto period = PeriodStartFor(now);
+    const bool changed = period != m_period_start;
+    if (changed) {
+        m_period_start = period; ++m_revision;
+        if (m_native) {
+            // This is an atomic scalar request only. All history locks, map
+            // pruning and complete snapshot work belong to the Native reader.
+            m_native->history->requestRetentionStart(period - PERIOD_SECONDS);
+            m_native->period.store(period); m_native->revision.store(m_revision);
+        }
     }
-
-    const qreal fraction{fractionForTimestamp(current_time.toSecsSinceEpoch())};
-    if (!qFuzzyCompare(m_current_time_fraction + 1.0, fraction + 1.0)) {
-        m_current_time_fraction = fraction;
-        Q_EMIT currentTimeFractionChanged();
-    }
+    const auto fraction = fractionForTimestamp(now.toSecsSinceEpoch());
+    const bool time_changed = !qFuzzyCompare(m_current_time_fraction + 1.0, fraction + 1.0);
+    m_current_time_fraction = fraction;
+    const QPointer<BlockClockModel> observer{this};
+    if (changed) { refreshHistory(); if (!observer || m_stopped) return; Q_EMIT periodChanged(); if (!observer || m_stopped) return;
+        Q_EMIT blockSnapshotChanged(); if (!observer || m_stopped) return; }
+    if (time_changed) Q_EMIT currentTimeFractionChanged();
 }
-
-void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
+void BlockClockModel::scheduleNextClockUpdate(const QDateTime& now)
 {
     if (m_stopped) return;
-    const QTime time{current_time.time()};
-    const int milliseconds_into_minute{time.second() * 1000 + time.msec()};
-    m_clock_timer.start(CLOCK_UPDATE_INTERVAL_MS - milliseconds_into_minute);
+    m_clock_timer.start(CLOCK_UPDATE_INTERVAL_MS - now.time().second() * 1000 - now.time().msec());
 }
-
 void BlockClockModel::refreshHistory()
 {
-    if (m_stopped) return;
-    auto snapshot{m_history->takeSnapshot()};
-    if (!snapshot) return;
-    m_cached_block_timestamps = std::move(*snapshot);
-    updateCurrentTime(m_current_time_provider());
-    replaceBlockHistory(m_cached_block_timestamps);
-}
-
-void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps, bool period_changed)
-{
-    const qint64 period_end{m_timeline.period_start + PERIOD_SECONDS};
-    std::sort(block_timestamps.begin(), block_timestamps.end());
-    block_timestamps.erase(std::remove_if(block_timestamps.begin(), block_timestamps.end(), [this, period_end](qint64 timestamp) {
-        return timestamp < m_timeline.period_start || timestamp >= period_end;
-    }), block_timestamps.end());
-
-    if (m_timeline.block_timestamps == block_timestamps && !period_changed) return;
-    const auto previous_fractions{m_block_time_fractions};
-    m_timeline.block_timestamps = std::move(block_timestamps);
-    rebuildBlockTimeFractions();
-    if (previous_fractions != m_block_time_fractions) Q_EMIT blockTimeFractionsChanged();
-}
-
-void BlockClockModel::rebuildBlockTimeFractions()
-{
-    m_block_time_fractions.clear();
-    m_block_time_fractions.reserve(m_timeline.block_timestamps.size());
-    for (qint64 timestamp : m_timeline.block_timestamps) {
-        m_block_time_fractions.push_back(fractionForTimestamp(timestamp));
+    if (m_stopped || !m_native) return;
+    if (!m_query) {
+        const QPointer<BlockClockModel> observer{this};
+        const auto state = m_native;
+        const auto wake = state->wake;
+        const auto post = m_post;
+        m_query = std::make_shared<execution::SnapshotQuery<blockclock::Snapshot>>([state, wake, observer, post, retire = m_retire_value] {
+                if (wake->closed.load()) throw execution::NotStarted{execution::NotStarted::Cause::Cancelled};
+                const auto revision = state->revision.load();
+                const auto period = state->period.load();
+                const auto interest = state->interest.load();
+                try {
+                    if (!state->registered) {
+                        state->callback_token = state->history->installChangedCallback([wake, observer, post] {
+                            if (wake->closed.load() || wake->pending.exchange(true)) return;
+                            try { post([wake, observer] {
+                                wake->pending.store(false);
+                                if (!wake->closed.load() && observer) {
+                                    observer->updateCurrentTime(observer->m_current_time_provider());
+                                    if (observer && !observer->m_stopped) observer->refreshHistory();
+                                }
+                            }); } catch (...) { wake->pending.store(false); }
+                        });
+                        state->registered = true;
+                    }
+                    state->history->applyRequestedRetention();
+                    if (auto snapshot = state->history->takeSnapshotWithGeneration(!state->have_snapshot)) { state->timestamps = std::move(snapshot->first); state->captured_generation = snapshot->second; state->have_snapshot = true; }
+                    const auto previous = state->published.load();
+                    auto frame = execution::RetainSnapshot<blockclock::Projection>(retire, [&] {
+                        auto value = std::make_unique<blockclock::Projection>();
+                        const auto count = std::count_if(state->timestamps.cbegin(), state->timestamps.cend(), [period](auto timestamp) { return timestamp >= period && timestamp < period + PERIOD_SECONDS; });
+                        const auto bytes = size_t(count) * sizeof(qreal);
+                        if (bytes > 8 * 1024 * 1024) throw std::length_error("Block history presentation is too large");
+                        value->fractions.reserve(count);
+                        value->period = period; value->revision = revision; value->interest = interest;
+                        value->history_generation = state->captured_generation;
+                        value->serial = ++state->next_serial; value->previous_serial = previous ? previous->serial : 0;
+                        for (auto timestamp : state->timestamps) if (timestamp >= period && timestamp < period + PERIOD_SECONDS)
+                            value->fractions.append(qreal(timestamp - period) / PERIOD_SECONDS);
+                        std::sort(value->fractions.begin(), value->fractions.end());
+                        value->changed = previous ? previous->fractions != value->fractions : !value->fractions.empty();
+                        return value;
+                    });
+                    if (!frame) throw std::runtime_error("Block history projection retention unavailable");
+                    return blockclock::Snapshot{std::move(frame)};
+                } catch (...) {
+                    auto failed = std::make_shared<blockclock::Projection>(); failed->failed = true; failed->revision = revision; failed->period = period;
+                    failed->interest = interest;
+                    return blockclock::Snapshot{std::move(failed)};
+                }
+            }, [observer, post] { post([observer] { if (observer) observer->publishHistory(); }); }, m_observation_post);
     }
+    const bool changed = !std::exchange(m_pending, true);
+    m_native->interest.fetch_add(1);
+    m_query->discardReadFailure();
+    m_query->request();
+    if (changed) Q_EMIT historyStateChanged();
 }
-
+void BlockClockModel::publishHistory()
+{
+    if (m_stopped || !m_query) return;
+    const auto result = m_query->take(); if (!result) return;
+    if (!result->snapshot || !*result->snapshot) {
+        m_pending = false; m_error = tr("Block history could not be loaded. Try again in a moment.");
+        Q_EMIT historyStateChanged(); return;
+    }
+    const auto frame = *result->snapshot;
+    if (frame->revision != m_revision || frame->period != m_period_start || frame->interest != m_native->interest.load()) return;
+    if (frame->failed) { m_pending = false; m_error = tr("Block history could not be loaded. Try again in a moment."); Q_EMIT historyStateChanged(); return; }
+    if (frame->history_generation != m_native->history->generation()) { m_query->request(); return; }
+    if (frame->previous_serial != (m_projection ? m_projection->serial : 0)) { m_query->request(); return; }
+    const bool source_changed = frame->changed || !m_projection || m_projection->period != frame->period;
+    m_projection = frame; m_native->published.store(frame); m_pending = false; m_error.clear();
+    const QPointer<BlockClockModel> observer{this};
+    if (source_changed) { Q_EMIT blockSnapshotChanged(); if (!observer || m_stopped) return; }
+    if (frame->changed) { Q_EMIT blockTimeFractionsChanged(); if (!observer || m_stopped) return; }
+    Q_EMIT historyStateChanged();
+}
 qreal BlockClockModel::fractionForTimestamp(qint64 timestamp) const
 {
-    if (m_timeline.period_start == 0) return 0.0;
-    return std::clamp<qreal>(
-        static_cast<qreal>(timestamp - m_timeline.period_start) / PERIOD_SECONDS,
-        0.0,
-        1.0);
+    return !m_period_start ? 0.0 : std::clamp(qreal(timestamp - m_period_start) / PERIOD_SECONDS, 0.0, 1.0);
 }
