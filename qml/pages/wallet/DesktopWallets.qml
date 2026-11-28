@@ -33,6 +33,9 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
+    signal paymentRequestOutcome(string outcome)
+    signal paymentRequestAcceptable()
+    signal walletSelectionClosed()
 
     function viewForWallet(wallet) {
         if (!wallet) return null
@@ -155,6 +158,23 @@ Page {
 
     function openActivity() {
         if (root.activeView) root.showWalletTab(WalletView.Activity)
+    }
+
+    function walletSelectionOpen() {
+        return walletSelect.visible
+    }
+
+    function canAcceptPaymentUri(waitForSend) {
+        return root.activeView !== null
+            && (!waitForSend || root.activeView.sendPage.visible)
+            && root.activeView.sendPage.canAcceptPaymentRequest()
+    }
+
+    function applyIncomingPaymentUri(uri, source) {
+        if (!root.activeView) return false
+        root.showWalletTab(WalletView.Send)
+        root.activeView.sendPage.applyPaymentRequest(uri, source)
+        return true
     }
 
     function openSend() {
@@ -286,6 +306,7 @@ Page {
                 x: 0
                 y: parent.height + 2 + verticalOffset
 
+                onClosed: root.walletSelectionClosed()
                 onAddWallet: {
                     root.addWallet()
                 }
@@ -461,6 +482,8 @@ Page {
                         if (active) root.showSettingsSection("wallet")
                     }
                     onWalletSelectionRequested: root.openWalletSelection()
+                    onPaymentRequestOutcome: (outcome) => root.paymentRequestOutcome(outcome)
+                    onPaymentRequestAcceptable: root.paymentRequestAcceptable()
 
                     Connections {
                         target: wallet

@@ -247,6 +247,11 @@ def run_tests():
         gui.invoke("sendNoteInput", "forceActiveFocus")
         gui.wait_for_property("sendNoteInput", "activeFocus", True)
         gui.invoke("sendNoteInput", "paste")
+        # The new Pay to label would replace the one from the previous request.
+        gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", True)
+        assert gui.get_property("sendPaymentRequestPayTo", "value") == "drop-url"
+        gui.click("sendPaymentUriOverwriteConfirmButton")
+        gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", False)
         gui.wait_for_property(
             "sendPaymentRequestPayTo", "value", "field-paste", timeout_ms=5000,
         )

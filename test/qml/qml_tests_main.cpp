@@ -44,6 +44,7 @@
 #include <qml/controls/linegraph.h>
 #include <qml/globalsettings.h>
 #include <qml/motionpreference.h>
+#include <qml/paymenturihandler.h>
 
 class MockAppMode : public QObject
 {
@@ -1151,6 +1152,15 @@ private:
     bool m_descending{true};
 };
 
+class MockImportedPsbt : public QObject
+{
+    Q_OBJECT
+
+public:
+    using QObject::QObject;
+    Q_INVOKABLE void clear() {}
+};
+
 class MockWalletQmlModel : public QObject
 {
     Q_OBJECT
@@ -1165,6 +1175,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
+    Q_PROPERTY(QObject* importedPsbt READ importedPsbt CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(QObject* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
@@ -1235,6 +1246,7 @@ public:
     bool m_available{true};
     QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
+    MockImportedPsbt* m_imported_psbt{new MockImportedPsbt(this)};
     QObject* m_recipients{nullptr};
     QObject* m_maximum_recipient{nullptr};
     QMetaObject::Connection m_maximum_amount_connection;
@@ -1269,6 +1281,7 @@ public:
 
     QObject* transactionActivityModel() const { return m_transaction_activity_model; }
     QObject* bumpModel() const { return m_bump_model; }
+    QObject* importedPsbt() const { return m_imported_psbt; }
     QObject* recipients() const { return m_recipients; }
     QObject* coinsListModel() const { return m_coins_list_model; }
     QObject* currentTransaction() const { return m_current_transaction; }
@@ -4259,6 +4272,19 @@ public:
     }
 };
 
+//! The production queue, filled from QML because tests have no command line.
+class TestPaymentUriHandler : public PaymentUriHandler
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void queueForTest(const QString& uri) { queueRequest(uri); }
+    Q_INVOKABLE void clearForTest()
+    {
+        while (hasPendingRequest()) completePendingRequest();
+    }
+};
+
 //! Stands in for the real UrlOpener so the popup's success and failure paths
 //! can be driven without launching a browser. Mirrors the production scheme
 //! allowlist so a test cannot pass on a URL the real opener would reject.
@@ -4441,6 +4467,7 @@ public Q_SLOTS:
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
         static MockUrlOpener url_opener;
+        static TestPaymentUriHandler payment_uri_handler;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
@@ -4540,6 +4567,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
         engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
         engine->rootContext()->setContextProperty(QStringLiteral("testResources"), &test_resources);
+        engine->rootContext()->setContextProperty(QStringLiteral("paymentUriHandler"), &payment_uri_handler);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }

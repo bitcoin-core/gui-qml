@@ -19,6 +19,8 @@ TestCase {
     property bool walletAvailable: true
     property bool preInitOnboardingRan: false
     property var windowUnderTest: null
+    // Queued before the window is created, as the command line does.
+    property var paymentUris: []
 
     SignalSpy {
         id: shutdownSpy
@@ -45,10 +47,14 @@ TestCase {
         nodeModel.setStartupErrorForTest("")
         desktopWindowBehaviorModel.minimizeOnClose = false
         shutdownSpy.clear()
+        paymentUriHandler.clearForTest()
+        paymentUris = []
     }
 
     function createMain(wallet_enabled, preinit_onboarding_ran, no_wallets_found, wallet_dir_loaded, initialized) {
+        const uris = paymentUris
         cleanup()
+        for (const uri of uris) paymentUriHandler.queueForTest(uri)
         walletAvailable = wallet_enabled
         preInitOnboardingRan = preinit_onboarding_ran || false
         walletController.reset()
@@ -316,5 +322,150 @@ TestCase {
         verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "walletBadge") !== null)
         verify(findChild(window, "createWalletWizard") === null)
+    }
+
+    function test_payment_uri_leaves_queue_once_applied() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        tryCompare(review, "opened", true)
+        compare(paymentUriHandler.hasPendingRequest, true)
+        findChild(review, "paymentRequestReviewApplyButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+        compare(testSendRecipient.address.address, "bcrt1qroutingaddress")
+        compare(window.paymentUriDeliveryInFlight, false)
+    }
+
+    function test_payment_uri_kept_when_its_wallet_view_closes() {
+        testSendRecipient.address.setAddress("bcrt1qexistingaddress")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        // The review holds the request.
+        tryCompare(window, "paymentUriDeliveryInFlight", true)
+        wait(50)
+        compare(window.paymentUriDeliveryInFlight, true)
+
+        walletController.setOpenWallets([])
+        tryCompare(window, "paymentUriDeliveryInFlight", false)
+        compare(paymentUriHandler.hasPendingRequest, true)
+        compare(paymentUriHandler.pendingRequest(), "bitcoin:bcrt1qroutingaddress")
+        compare(testSendRecipient.address.address, "bcrt1qexistingaddress")
+    }
+
+    function test_payment_uri_interrupted_by_leaving_send_waits_for_send() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        tryCompare(review, "opened", true)
+
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+        wait(50)
+        compare(sendPage.visible, false)
+        compare(review.opened, false)
+        compare(paymentUriHandler.hasPendingRequest, true)
+
+        wallets.openSend()
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qroutingaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_payment_uri_waits_for_the_uri_importer() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        const importer = findChild(sendPage, "sendUriImportPopup")
+        verify(review !== null)
+        verify(importer !== null)
+        tryCompare(review, "opened", true)
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+
+        wallets.openUriImporter()
+        tryCompare(importer, "opened", true)
+        wait(50)
+        compare(review.visible, false)
+
+        importer.close()
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qroutingaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_payment_uri_waits_for_the_psbt_importer() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const sendPage = wallets.activeView.sendPage
+        const review = findChild(sendPage, "sendPaymentRequestReviewPopup")
+        const psbtOpen = findChild(sendPage, "sendPsbtOpenDialog")
+        verify(review !== null)
+        verify(psbtOpen !== null)
+        tryCompare(review, "opened", true)
+        wallets.openReceive()
+        tryCompare(review, "visible", false)
+
+        wallets.openPsbtImporter()
+        tryCompare(psbtOpen, "visible", true)
+        wait(50)
+        compare(review.visible, false)
+
+        psbtOpen.close()
+        tryCompare(psbtOpen, "visible", false)
+        tryCompare(review, "opened", true)
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_payment_uri_queued_after_startup_is_delivered() {
+        testSendRecipient.address.setAddress("")
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        wait(50)
+        compare(review.opened, false)
+
+        paymentUriHandler.queueForTest("bitcoin:bcrt1qlateaddress")
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qlateaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_escape_on_wallet_disabled_notice_reports_the_next_request() {
+        paymentUris = ["bitcoin:bcrt1qfirstaddress", "bitcoin:bcrt1qsecondaddress"]
+        const window = createMain(false)
+        const popup = findChild(window, "paymentUriWalletDisabledPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+
+        // Escape on the notice runs AlertPopup.cancel().
+        popup.cancel()
+        tryVerify(function() { return paymentUriHandler.pendingRequest() === "bitcoin:bcrt1qsecondaddress" })
+        tryCompare(popup, "opened", true)
+
+        popup.cancel()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
     }
 }
