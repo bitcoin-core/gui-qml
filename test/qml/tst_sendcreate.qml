@@ -720,6 +720,31 @@ TestCase {
         compare(testSendRecipient.label, "My edited note")
     }
 
+    function test_imported_payment_request_markup_is_shown_literally() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
+            {width: testCase.width, height: testCase.height, visible: true})
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+
+        const label = "<b>Alice</b>"
+        // Rich text would reserve the image size and try to load it.
+        const message = "<img src=\"http://127.0.0.1:9/pixel.png\" width=\"400\" height=\"400\">"
+        sendPage.applyPaymentRequestFromText(
+            "bitcoin:bcrt1qreplacement?label=" + encodeURIComponent(label)
+                + "&message=" + encodeURIComponent(message),
+            "clipboard")
+
+        const payToText = findChild(page, "sendPaymentRequestPayToValue")
+        const messageText = findChild(page, "sendPaymentRequestMessageTextValue")
+        verify(payToText !== null)
+        verify(messageText !== null)
+        tryCompare(payToText, "text", label)
+        compare(payToText.textFormat, Text.PlainText)
+        tryCompare(messageText, "text", message)
+        compare(messageText.textFormat, Text.PlainText)
+        verify(messageText.contentHeight < 400)
+    }
+
     function test_send_payment_uri_paste_confirms_overwriting_note() {
         testSendRecipient.label = "My private note"
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
