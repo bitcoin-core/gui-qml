@@ -305,7 +305,7 @@ TestCase {
         tryCompare(popup, "opened", true)
 
         tryCompare(popup, "informationRowCount", 4)
-        tryCompare(popup, "lastInformationValueWrapMode", Text.WordWrap)
+        tryCompare(popup, "lastInformationValueWrapMode", Text.WrapAtWordBoundaryOrAnywhere)
         for (let i = 0; i < 20; ++i) {
             if (popup.lastInformationValueLineCount > 1) {
                 return

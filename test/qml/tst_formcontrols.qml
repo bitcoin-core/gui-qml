@@ -219,6 +219,19 @@ TestCase {
     }
 
     Component {
+        id: wrappingValueRowComponent
+
+        ValueRow {
+            objectName: "exampleWrappingValueRow"
+            width: 480
+            title: "Message"
+            value: "https://example.com/" + "a".repeat(200)
+            valueMaximumWidth: 200
+            valueWrap: true
+        }
+    }
+
+    Component {
         id: linkRowComponent
 
         LinkRow {
@@ -661,6 +674,16 @@ TestCase {
 
         row.value = "v32.0"
         compare(value.text, "v32.0")
+    }
+
+    function test_wrappingValueRowBreaksTextWithoutSpaces() {
+        const row = createTemporaryObject(wrappingValueRowComponent, host)
+        verify(row !== null)
+        const value = findChild(row, "exampleWrappingValueRowValue")
+        verify(value !== null)
+        tryVerify(function() { return value.lineCount > 1 })
+        verify(value.width <= 200)
+        verify(value.contentWidth <= value.width)
     }
 
     function test_pageHeadingAlignsDescriptionWithTitle() {

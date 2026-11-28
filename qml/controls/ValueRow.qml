@@ -38,7 +38,7 @@ FormRow {
             color: root.valueColor
             textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
-            wrap: root.valueWrap
+            wrapMode: root.valueWrap ? Text.WrapAtWordBoundaryOrAnywhere : Text.NoWrap
             elide: root.valueWrap ? Text.ElideNone : Text.ElideMiddle
         }
 
